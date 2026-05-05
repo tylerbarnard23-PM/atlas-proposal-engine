@@ -48,16 +48,33 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const bodyMarkup = renderToStaticMarkup(React.createElement(ProposalPdfTemplate, props));
   const html = buildPrintableHtml(props, bodyMarkup);
 
-  // Lazy-load puppeteer so it isn't bundled into edge runtimes.
-  const puppeteer = (await import("puppeteer")).default;
-  const { resolveChromiumExecutable, ChromiumNotFoundError } = await import("@/pdf/chromiumPath");
-  const executablePath = resolveChromiumExecutable();
-  if (!executablePath) {
-    return NextResponse.json({ error: new ChromiumNotFoundError().message }, { status: 500 });
+  // Lazy-load puppeteer-core so the import isn't pulled into edge bundles.
+  const puppeteer = (await import("puppeteer-core")).default;
+
+  // Pick a Chromium binary based on environment:
+  //  - On Vercel (or any AWS Lambda env), use @sparticuz/chromium (serverless-safe).
+  //  - Locally, find a system Chrome via the host-path resolver.
+  const isServerless = !!process.env.AWS_LAMBDA_FUNCTION_NAME || !!process.env.VERCEL;
+  let executablePath: string | undefined;
+  let launchArgs: string[];
+  let headlessMode: boolean | "shell" = true;
+  if (isServerless) {
+    const chromium = (await import("@sparticuz/chromium")).default;
+    executablePath = await chromium.executablePath();
+    launchArgs = chromium.args;
+    headlessMode = chromium.headless as boolean | "shell";
+  } else {
+    const { resolveChromiumExecutable, ChromiumNotFoundError } = await import("@/pdf/chromiumPath");
+    const local = resolveChromiumExecutable();
+    if (!local) {
+      return NextResponse.json({ error: new ChromiumNotFoundError().message }, { status: 500 });
+    }
+    executablePath = local;
+    launchArgs = ["--no-sandbox", "--disable-setuid-sandbox", "--font-render-hinting=none"];
   }
   const browser = await puppeteer.launch({
-    args: ["--no-sandbox", "--disable-setuid-sandbox", "--font-render-hinting=none"],
-    headless: true,
+    args: launchArgs,
+    headless: headlessMode,
     executablePath,
   });
   try {
