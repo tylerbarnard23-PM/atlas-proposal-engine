@@ -1,0 +1,85 @@
+import type {
+  ClientProfile,
+  AdvisorProfile,
+  Account,
+  Holding,
+  Recommendation,
+  Disclosure,
+  ComplianceCheck,
+} from "@/domain/types";
+
+export interface ReadinessInputs {
+  client: ClientProfile;
+  advisor: AdvisorProfile;
+  accounts: Account[];
+  holdings: Holding[];
+  recommendations: Recommendation[];
+  disclosures: Disclosure[];
+  unverifiedHoldingsCount: number;
+  staleValuationsCount: number;
+  marketDataIssuesCount: number;
+  insightsReviewedCount: number;
+  totalInsightsCount: number;
+}
+
+export function evaluateReadiness(inp: ReadinessInputs): ComplianceCheck[] {
+  const checks: ComplianceCheck[] = [];
+  checks.push({
+    code: "client_profile",
+    label: "Client profile complete",
+    passed: !!inp.client.fullName && !!inp.client.baseCurrency && !!inp.client.countryOfResidence,
+  });
+  checks.push({
+    code: "advisor_profile",
+    label: "Advisor profile complete",
+    passed: !!inp.advisor.name && !!inp.advisor.firmName,
+  });
+  checks.push({
+    code: "accounts_present",
+    label: "At least one account added",
+    passed: inp.accounts.length > 0,
+  });
+  checks.push({
+    code: "holdings_present",
+    label: "At least one holding added",
+    passed: inp.holdings.length > 0,
+  });
+  checks.push({
+    code: "output_currency",
+    label: "Output currency selected",
+    passed: !!inp.client.proposalOutputCurrency,
+  });
+  checks.push({
+    code: "unverified_holdings",
+    label: "No unverified holdings",
+    passed: inp.unverifiedHoldingsCount === 0,
+    detail: inp.unverifiedHoldingsCount > 0 ? `${inp.unverifiedHoldingsCount} holding(s) await advisor review` : undefined,
+  });
+  checks.push({
+    code: "stale_valuations",
+    label: "Stale valuations reviewed",
+    passed: inp.staleValuationsCount === 0,
+    detail: inp.staleValuationsCount > 0 ? `${inp.staleValuationsCount} stale valuation(s)` : undefined,
+  });
+  checks.push({
+    code: "market_data",
+    label: "Market data issues reviewed",
+    passed: inp.marketDataIssuesCount === 0,
+    detail: inp.marketDataIssuesCount > 0 ? `${inp.marketDataIssuesCount} market data warning(s)` : undefined,
+  });
+  checks.push({
+    code: "approved_recs",
+    label: "At least one approved recommendation included in PDF",
+    passed: inp.recommendations.some((r) => r.approvedByAdvisor && r.includeInPdf),
+  });
+  checks.push({
+    code: "disclosures_included",
+    label: "Required disclosures included",
+    passed: inp.disclosures.length > 0,
+  });
+  return checks;
+}
+
+export function readinessOk(checks: ComplianceCheck[]): boolean {
+  return checks.every((c) => c.passed);
+}
