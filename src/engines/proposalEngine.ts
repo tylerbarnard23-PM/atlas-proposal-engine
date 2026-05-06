@@ -51,7 +51,10 @@ export function applyRecToValue(value: number, rec: Recommendation, isLiability:
   switch (rec.type) {
     case "sell":
     case "raise_cash":
-      return 0;
+      // With an action amount (dollars or %), treat as a partial sale —
+      // matches natural advisor language like "sell 40% of AAPL". Without
+      // an amount, fully exit the position.
+      return amount != null ? Math.max(0, value - amount) : 0;
     case "reduce":
     case "reduce_concentration":
       return amount != null ? Math.max(0, value - amount) : value * 0.5;
