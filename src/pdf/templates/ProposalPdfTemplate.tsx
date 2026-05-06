@@ -40,25 +40,41 @@ interface AllocationSlice {
 
 // Static SVG pie chart sized for the PDF print layout. No JS, no measurement
 // dependencies — works under React's renderToStaticMarkup + Puppeteer.
+//
+// Slices preserve their original index from the input array as their color
+// index, so a slice's color matches its position in the legend even when
+// other slices in the same dataset have zero value (e.g. the proposed view
+// where Equity drops to 0% and Cash absorbs everything — Cash should still
+// be drawn in its legend color, not in palette[0]).
 function PdfPieChart({ data, size = 168 }: { data: AllocationSlice[]; size?: number }) {
-  const slices = data.filter((d) => d.value > 0);
+  const indexed = data.map((slice, originalIndex) => ({ ...slice, originalIndex }));
+  const slices = indexed.filter((d) => d.value > 0);
   if (slices.length === 0) return null;
   const cx = size / 2;
   const cy = size / 2;
   const r = (size / 2) - 1;
   const total = slices.reduce((a, s) => a + s.value, 0);
 
-  // 100% in a single slice can't be drawn as one arc path — render a circle.
+  // 100% in a single slice can't be drawn as one arc path — render a circle
+  // using the surviving slice's legend color.
   if (slices.length === 1) {
+    const only = slices[0];
     return (
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden>
-        <circle cx={cx} cy={cy} r={r} fill={PIE_PALETTE[0]} stroke="#fff" strokeWidth={1.5} />
+        <circle
+          cx={cx}
+          cy={cy}
+          r={r}
+          fill={PIE_PALETTE[only.originalIndex % PIE_PALETTE.length]}
+          stroke="#fff"
+          strokeWidth={1.5}
+        />
       </svg>
     );
   }
 
   let cursor = -Math.PI / 2; // start at 12 o'clock
-  const paths = slices.map((slice, i) => {
+  const paths = slices.map((slice) => {
     const angle = (slice.value / total) * Math.PI * 2;
     const a1 = cursor;
     const a2 = cursor + angle;
@@ -69,7 +85,15 @@ function PdfPieChart({ data, size = 168 }: { data: AllocationSlice[]; size?: num
     const y2 = cy + r * Math.sin(a2);
     const largeArc = angle > Math.PI ? 1 : 0;
     const d = `M ${cx.toFixed(3)},${cy.toFixed(3)} L ${x1.toFixed(3)},${y1.toFixed(3)} A ${r},${r} 0 ${largeArc} 1 ${x2.toFixed(3)},${y2.toFixed(3)} Z`;
-    return <path key={`${slice.label}-${i}`} d={d} fill={PIE_PALETTE[i % PIE_PALETTE.length]} stroke="#fff" strokeWidth={1.25} />;
+    return (
+      <path
+        key={slice.label}
+        d={d}
+        fill={PIE_PALETTE[slice.originalIndex % PIE_PALETTE.length]}
+        stroke="#fff"
+        strokeWidth={1.25}
+      />
+    );
   });
 
   return (
@@ -457,9 +481,11 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
               <AllocationList rows={allocProposedClassOrdered} currency={reportingCurrency} />
             </div>
             <div className="pdf-stat-hint" style={{ marginTop: 8 }}>
-              {approvedRecs.some((r) => r.proposedValue != null)
-                ? "Approved recommendations applied where a proposed value was specified."
-                : "No approved recommendations carried explicit proposed values; the proposed view mirrors current. Add proposed values to recommendations to see allocation shifts."}
+              {proposedRecs.length === 0
+                ? "Approve a recommendation with a linked holding to see its effect on the proposed allocation."
+                : deltas.length > 0
+                ? `${proposedRecs.length} approved recommendation${proposedRecs.length === 1 ? "" : "s"} applied. Sales credit cash; purchases debit it.`
+                : "Approved recommendations had no allocation impact (advisory-only or net-flat actions)."}
             </div>
           </div>
         </div>
