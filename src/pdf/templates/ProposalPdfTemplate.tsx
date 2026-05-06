@@ -14,8 +14,95 @@ import { ACCOUNT_TYPE_LABELS } from "@/domain/accountTaxonomy";
 import { PDF_BASE_CSS } from "../styles/pdfStyles";
 import { formatCurrency, formatDate, formatPercent } from "@/utils/formatting";
 import { sumBy, groupBy } from "@/utils/numbers";
-import { netWorth } from "@/engines/proposalEngine";
+import { applyRecommendationsToProposed, netWorth } from "@/engines/proposalEngine";
 import { dataQualityScore } from "@/engines/dataQualityEngine";
+
+// Print-safe palette used by both the pie chart and the allocation list. Order
+// is significant — pie slices and bar rows pick by index so colors match.
+const PIE_PALETTE = [
+  "#172F52", // navy-700
+  "#456FAE", // navy-400
+  "#947629", // gold-500
+  "#D2B45A", // gold-300
+  "#3E4659", // ink-600
+  "#647088", // slatey-500
+  "#226039", // positive
+  "#7A2222", // negative
+  "#7B5B0F", // warning
+  "#1F3F6E", // navy-600
+];
+
+interface AllocationSlice {
+  label: string;
+  value: number;
+  pct: number;
+}
+
+// Static SVG pie chart sized for the PDF print layout. No JS, no measurement
+// dependencies — works under React's renderToStaticMarkup + Puppeteer.
+function PdfPieChart({ data, size = 168 }: { data: AllocationSlice[]; size?: number }) {
+  const slices = data.filter((d) => d.value > 0);
+  if (slices.length === 0) return null;
+  const cx = size / 2;
+  const cy = size / 2;
+  const r = (size / 2) - 1;
+  const total = slices.reduce((a, s) => a + s.value, 0);
+
+  // 100% in a single slice can't be drawn as one arc path — render a circle.
+  if (slices.length === 1) {
+    return (
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden>
+        <circle cx={cx} cy={cy} r={r} fill={PIE_PALETTE[0]} stroke="#fff" strokeWidth={1.5} />
+      </svg>
+    );
+  }
+
+  let cursor = -Math.PI / 2; // start at 12 o'clock
+  const paths = slices.map((slice, i) => {
+    const angle = (slice.value / total) * Math.PI * 2;
+    const a1 = cursor;
+    const a2 = cursor + angle;
+    cursor = a2;
+    const x1 = cx + r * Math.cos(a1);
+    const y1 = cy + r * Math.sin(a1);
+    const x2 = cx + r * Math.cos(a2);
+    const y2 = cy + r * Math.sin(a2);
+    const largeArc = angle > Math.PI ? 1 : 0;
+    const d = `M ${cx.toFixed(3)},${cy.toFixed(3)} L ${x1.toFixed(3)},${y1.toFixed(3)} A ${r},${r} 0 ${largeArc} 1 ${x2.toFixed(3)},${y2.toFixed(3)} Z`;
+    return <path key={`${slice.label}-${i}`} d={d} fill={PIE_PALETTE[i % PIE_PALETTE.length]} stroke="#fff" strokeWidth={1.25} />;
+  });
+
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden>
+      {paths}
+    </svg>
+  );
+}
+
+function PdfPieLegend({ data }: { data: AllocationSlice[] }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: "8.5pt" }}>
+      {data.slice(0, 10).map((slice, i) => (
+        <div key={slice.label} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span
+            style={{
+              display: "inline-block",
+              width: 8,
+              height: 8,
+              borderRadius: 2,
+              background: PIE_PALETTE[i % PIE_PALETTE.length],
+              flexShrink: 0,
+            }}
+          />
+          <span style={{ color: "var(--ink-700)", flex: 1 }}>{slice.label}</span>
+          <span style={{ color: "var(--ink-900)", fontVariantNumeric: "tabular-nums" }}>
+            {formatPercent(slice.pct, 1)}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export interface ProposalPdfTemplateProps {
   client: ClientProfile;
@@ -62,6 +149,20 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
   const allocCountry = summarize(holdings, (h) => h.country ?? "Unknown");
   const investible = holdings.filter((h) => !h.isLiability);
   const totalInvestible = sumBy(investible, (h) => h.reportingMarketValue ?? h.nativeMarketValue);
+
+  // Proposed allocation reflects approved recommendations that specify a
+  // proposedValue. Recommendations without a proposedValue leave the
+  // corresponding holding unchanged in the proposed view.
+  const proposedHoldings = applyRecommendationsToProposed(holdings, approvedRecs);
+  const allocProposedClass = summarize(proposedHoldings, (h) => ASSET_CLASS_LABELS[h.assetClass] ?? "Other");
+
+  // Align legend ordering with the current allocation so colors stay stable
+  // across the Current → Proposed pair (a label keeps the same color even if
+  // its rank changes between the two pies).
+  const orderIndex = new Map(allocClass.map((s, i) => [s.label, i] as const));
+  const allocProposedClassOrdered = [...allocProposedClass].sort(
+    (a, b) => (orderIndex.get(a.label) ?? 99) - (orderIndex.get(b.label) ?? 99)
+  );
 
   const dq = dataQualityScore(holdings.flatMap((h) => h.dataQuality));
   const stale = holdings.filter((h) => h.priceFreshness === "stale").length;
@@ -302,18 +403,46 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
 
   // ---------- BEFORE / AFTER ALLOCATION ----------
   if (enabled("before_after_allocation")) {
+    const proposedTotal = sumBy(proposedHoldings.filter((h) => !h.isLiability), (h) => h.reportingMarketValue ?? h.nativeMarketValue);
+    const currentTotal = totalInvestible;
     pages.push(
       <PageWrap key="ba" title="Before / After Allocation" eyebrow="06">
         <p className="pdf-text">High-level allocation comparison. Detailed line-by-line changes appear in the Recommendations section.</p>
         <div className="pdf-grid-2" style={{ marginTop: 12 }}>
-          <div className="pdf-card">
+          <div className="pdf-card pdf-avoid-break">
             <div className="pdf-stat-label">Current</div>
-            <AllocationList rows={allocClass} currency={reportingCurrency} />
+            <div className="pdf-stat-value" style={{ fontSize: "16pt", marginTop: 2 }}>
+              {formatCurrency(currentTotal, reportingCurrency, { compact: true })}
+            </div>
+            <div style={{ display: "flex", gap: 16, alignItems: "center", marginTop: 10 }}>
+              <PdfPieChart data={allocClass} size={148} />
+              <div style={{ flex: 1 }}>
+                <PdfPieLegend data={allocClass} />
+              </div>
+            </div>
+            <div style={{ marginTop: 10 }}>
+              <AllocationList rows={allocClass} currency={reportingCurrency} />
+            </div>
           </div>
-          <div className="pdf-card">
+          <div className="pdf-card pdf-avoid-break">
             <div className="pdf-stat-label">Proposed</div>
-            <AllocationList rows={allocClass} currency={reportingCurrency} />
-            <div className="pdf-stat-hint" style={{ marginTop: 8 }}>Approved recommendations applied. Sub-asset shifts reflected when proposed values are specified.</div>
+            <div className="pdf-stat-value" style={{ fontSize: "16pt", marginTop: 2 }}>
+              {formatCurrency(proposedTotal, reportingCurrency, { compact: true })}
+            </div>
+            <div style={{ display: "flex", gap: 16, alignItems: "center", marginTop: 10 }}>
+              <PdfPieChart data={allocProposedClassOrdered} size={148} />
+              <div style={{ flex: 1 }}>
+                <PdfPieLegend data={allocProposedClassOrdered} />
+              </div>
+            </div>
+            <div style={{ marginTop: 10 }}>
+              <AllocationList rows={allocProposedClassOrdered} currency={reportingCurrency} />
+            </div>
+            <div className="pdf-stat-hint" style={{ marginTop: 8 }}>
+              {approvedRecs.some((r) => r.proposedValue != null)
+                ? "Approved recommendations applied where a proposed value was specified."
+                : "No approved recommendations carried explicit proposed values; the proposed view mirrors current. Add proposed values to recommendations to see allocation shifts."}
+            </div>
           </div>
         </div>
       </PageWrap>
