@@ -26,11 +26,58 @@ export const DEFAULT_PROPOSAL_SECTIONS: ProposalSection[] = [
   { key: "appendix_compliance", label: "Appendix — Compliance Checklist", enabled: false },
 ];
 
+// Compute the post-rec value for a single holding given its current value,
+// the recommendation, and whether the holding is a liability. Pure function:
+// no cash flow side-effects, no mutation. Used by both the engine
+// (applyRecommendationsToProposed) and the UI (per-rec effect summary on
+// recommendation cards) so the two stay in sync.
+export function applyRecToValue(value: number, rec: Recommendation, isLiability: boolean): number {
+  if (rec.proposedValue != null) return rec.proposedValue;
+
+  // Resolve the effective dollar magnitude, honoring the % vs. $ unit.
+  let amount: number | null = null;
+  if (rec.actionAmount != null) {
+    const raw = Math.abs(rec.actionAmount);
+    amount = rec.actionAmountUnit === "percent" ? Math.abs(value) * (raw / 100) : raw;
+  }
+  // Signed equivalent for types that need direction (rebalance).
+  const signedAmount =
+    rec.actionAmount != null
+      ? rec.actionAmountUnit === "percent"
+        ? Math.abs(value) * (rec.actionAmount / 100)
+        : rec.actionAmount
+      : null;
+
+  switch (rec.type) {
+    case "sell":
+    case "raise_cash":
+      return 0;
+    case "reduce":
+    case "reduce_concentration":
+      return amount != null ? Math.max(0, value - amount) : value * 0.5;
+    case "pay_down_debt":
+      if (isLiability) return amount != null ? Math.min(0, value + amount) : value * 0.5;
+      return value;
+    case "increase":
+    case "buy":
+      return amount != null ? value + amount : value;
+    case "rebalance":
+      return signedAmount != null ? value + signedAmount : value;
+    case "tax_loss_harvest":
+    case "replace_high_fee_fund":
+    case "improve_asset_location":
+      // Net-flat on allocation: same exposure, different vehicle/lot.
+      return value;
+    default:
+      return value;
+  }
+}
+
 // Apply approved recommendations to produce the proposed holdings view.
 // Hierarchy of intent for any single recommendation:
 //   1. Explicit proposedValue → set the holding to that value.
 //   2. Recommendation type → infer effect (sell zeroes, reduce subtracts, etc.).
-//   3. actionAmount when type implies signed delta.
+//   3. actionAmount (with optional percent unit) when type implies signed delta.
 // Multiple recs on the same holding compose in order. Recs with no
 // relatedHoldingId are advisory-only and don't shift the proposed allocation.
 //
@@ -68,40 +115,7 @@ export function applyRecommendationsToProposed(
 
     for (const rec of recs) {
       const before = value;
-      if (rec.proposedValue != null) {
-        value = rec.proposedValue;
-      } else {
-        const amount = rec.actionAmount != null ? Math.abs(rec.actionAmount) : null;
-        switch (rec.type) {
-          case "sell":
-          case "raise_cash":
-            value = 0;
-            break;
-          case "reduce":
-          case "reduce_concentration":
-            value = amount != null ? Math.max(0, value - amount) : value * 0.5;
-            break;
-          case "pay_down_debt":
-            // Liabilities are stored negative; paying down moves value toward 0.
-            if (h.isLiability) {
-              value = amount != null ? Math.min(0, value + amount) : value * 0.5;
-            }
-            break;
-          case "increase":
-          case "buy":
-            if (amount != null) value += amount;
-            break;
-          case "rebalance":
-            if (rec.actionAmount != null) value += rec.actionAmount;
-            break;
-          case "tax_loss_harvest":
-          case "replace_high_fee_fund":
-          case "improve_asset_location":
-            // Net-flat on allocation: same exposure, different vehicle/lot.
-            break;
-          // Other advisory types leave allocation unchanged.
-        }
-      }
+      value = applyRecToValue(value, rec, !!h.isLiability);
 
       // Record the cash side of this rec.
       const change = value - before;

@@ -416,6 +416,7 @@ export interface Recommendation {
   currentValue?: number;
   proposedValue?: number;
   actionAmount?: number;
+  actionAmountUnit?: "amount" | "percent";
   currency: CurrencyCode;
   rationale: string;
   clientBenefit?: string;

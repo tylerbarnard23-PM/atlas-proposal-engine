@@ -140,6 +140,11 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
   const isDraft = variant === "draft";
 
   const enabled = (key: string) => sections.find((s) => s.key === key)?.enabled !== false;
+  // Any advisor-approved rec drives the Proposed view's math. The
+  // Include-in-PDF toggle only controls whether the rec's prose appears in
+  // the Recommendations section — it should not silently zero out the
+  // before/after analysis.
+  const proposedRecs = recommendations.filter((r) => r.approvedByAdvisor);
   const approvedRecs = recommendations.filter((r) => r.approvedByAdvisor && r.includeInPdf);
   const remainingRecs = recommendations.filter((r) => !r.approvedByAdvisor && r.includeInPdf);
 
@@ -150,10 +155,11 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
   const investible = holdings.filter((h) => !h.isLiability);
   const totalInvestible = sumBy(investible, (h) => h.reportingMarketValue ?? h.nativeMarketValue);
 
-  // Proposed allocation reflects approved recommendations that specify a
-  // proposedValue. Recommendations without a proposedValue leave the
-  // corresponding holding unchanged in the proposed view.
-  const proposedHoldings = applyRecommendationsToProposed(holdings, approvedRecs, accounts);
+  // Proposed allocation reflects every advisor-approved recommendation,
+  // independent of whether it's included in the PDF prose. Each rec's
+  // intent is interpreted by applyRecommendationsToProposed (sell zeroes,
+  // reduce subtracts, increase/buy adds, with offsetting cash flow).
+  const proposedHoldings = applyRecommendationsToProposed(holdings, proposedRecs, accounts);
   const allocProposedClass = summarize(proposedHoldings, (h) => ASSET_CLASS_LABELS[h.assetClass] ?? "Other");
 
   // Align legend ordering with the current allocation so colors stay stable

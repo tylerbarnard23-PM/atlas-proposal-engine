@@ -12,8 +12,9 @@ import { Button } from "@/components/ui/Button";
 import { Input, Label, Select, Textarea } from "@/components/ui/Input";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Drawer } from "@/components/ui/Drawer";
-import type { Recommendation, RecommendationStatus, RecommendationType } from "@/domain/types";
-import { safeId, todayIso } from "@/utils/formatting";
+import type { Holding, Recommendation, RecommendationStatus, RecommendationType } from "@/domain/types";
+import { applyRecToValue } from "@/engines/proposalEngine";
+import { formatCurrency, safeId, todayIso } from "@/utils/formatting";
 
 const TYPES: RecommendationType[] = [
   "buy", "sell", "hold", "reduce", "increase", "rebalance", "transfer",
@@ -38,9 +39,14 @@ export default function RecommendationsPage() {
 
 function Inner() {
   const recs = useAtlasStore((s) => s.recommendations);
+  const holdings = useAtlasStore((s) => s.holdings);
   const upsert = useAtlasStore((s) => s.upsertRecommendation);
   const remove = useAtlasStore((s) => s.removeRecommendation);
   const [editing, setEditing] = React.useState<Recommendation | null>(null);
+  const holdingsById = React.useMemo(
+    () => Object.fromEntries(holdings.map((h) => [h.id, h])),
+    [holdings]
+  );
 
   function newRec() {
     setEditing({
@@ -63,7 +69,7 @@ function Inner() {
       <PageHeader
         eyebrow="Advisor Recommendations"
         title="Recommendation Builder"
-        description="Only advisor-approved recommendations marked Include in PDF appear in the final client proposal."
+        description="Approving a recommendation reshapes the Before / After allocation immediately. The Include-in-PDF toggle controls only whether its prose appears in the final document."
         actions={
           <>
             <Link href="/insights">
@@ -97,43 +103,61 @@ function Inner() {
         />
       ) : (
         <div className="space-y-3">
-          {recs.map((r) => (
-            <Card key={r.id}>
-              <CardBody>
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <Badge tone="navy">{r.type.replace(/_/g, " ")}</Badge>
-                      <Badge tone={r.status === "approved" ? "positive" : r.status === "needs_review" ? "warning" : "neutral"}>
-                        {r.status.replace("_", " ")}
-                      </Badge>
-                      <Badge tone="neutral">{r.priority} priority</Badge>
-                      {r.includeInPdf && <Badge tone="gold">In PDF</Badge>}
+          {recs.map((r) => {
+            const linked = r.relatedHoldingId ? holdingsById[r.relatedHoldingId] : undefined;
+            const effect = describeRecEffect(r, linked);
+            return (
+              <Card key={r.id}>
+                <CardBody>
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge tone="navy">{r.type.replace(/_/g, " ")}</Badge>
+                        <Badge tone={r.approvedByAdvisor ? "positive" : "warning"}>
+                          {r.approvedByAdvisor ? "Approved" : "Not approved"}
+                        </Badge>
+                        <Badge tone="neutral">{r.priority} priority</Badge>
+                        {r.includeInPdf && <Badge tone="gold">In PDF prose</Badge>}
+                      </div>
+                      <h4 className="font-serif text-lg text-ink-900 mt-1.5">{r.title}</h4>
+                      <p className="text-sm text-ink-600 mt-1 leading-relaxed">{r.rationale}</p>
+                      <div
+                        className={`mt-2 text-[12px] tabular px-2.5 py-1.5 rounded-md inline-block ${
+                          effect.tone === "positive"
+                            ? "bg-positive-50 text-positive-600"
+                            : effect.tone === "negative"
+                            ? "bg-negative-50 text-negative-600"
+                            : effect.tone === "warning"
+                            ? "bg-warning-50 text-warning-600"
+                            : "bg-slatey-100 text-ink-700"
+                        }`}
+                      >
+                        {r.approvedByAdvisor ? "↻ " : "○ "}
+                        {effect.label}
+                      </div>
                     </div>
-                    <h4 className="font-serif text-lg text-ink-900 mt-1.5">{r.title}</h4>
-                    <p className="text-sm text-ink-600 mt-1 leading-relaxed">{r.rationale}</p>
+                    <div className="flex flex-col gap-2 shrink-0">
+                      <Button size="sm" variant="secondary" onClick={() => setEditing(r)}>Edit</Button>
+                      <Button
+                        size="sm"
+                        variant={r.approvedByAdvisor ? "secondary" : "primary"}
+                        onClick={() =>
+                          upsert({
+                            ...r,
+                            approvedByAdvisor: !r.approvedByAdvisor,
+                            status: !r.approvedByAdvisor ? "approved" : r.status,
+                            includeInPdf: !r.approvedByAdvisor ? true : r.includeInPdf,
+                          })
+                        }
+                      >
+                        {r.approvedByAdvisor ? "Unapprove" : "Approve"}
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex flex-col gap-2 shrink-0">
-                    <Button size="sm" variant="secondary" onClick={() => setEditing(r)}>Edit</Button>
-                    <Button
-                      size="sm"
-                      variant={r.approvedByAdvisor ? "secondary" : "primary"}
-                      onClick={() =>
-                        upsert({
-                          ...r,
-                          approvedByAdvisor: !r.approvedByAdvisor,
-                          status: !r.approvedByAdvisor ? "approved" : r.status,
-                          includeInPdf: !r.approvedByAdvisor ? true : r.includeInPdf,
-                        })
-                      }
-                    >
-                      {r.approvedByAdvisor ? "Unapprove" : "Approve"}
-                    </Button>
-                  </div>
-                </div>
-              </CardBody>
-            </Card>
-          ))}
+                </CardBody>
+              </Card>
+            );
+          })}
         </div>
       )}
 
@@ -179,42 +203,32 @@ function RecForm({
     ? linkedHolding.reportingMarketValue ?? linkedHolding.nativeMarketValue
     : undefined;
 
-  // Hint sentence describing what the engine will do with this rec given its
-  // type + amount + linked holding. Helps advisors understand the proposed view.
+  // Single source of truth for the effect summary — runs the same per-rec
+  // engine helper used by applyRecommendationsToProposed and the card-level
+  // summary, so the form, the cards, and the proposal can never disagree.
   const effectHint = React.useMemo(() => {
     if (!value.relatedHoldingId) {
       return "Without a linked holding, this recommendation will appear in the proposal text but won't shift the Before / After allocation.";
     }
-    if (value.proposedValue != null) {
-      return `Proposed view will set this holding's value to ${value.proposedValue.toLocaleString()}.`;
+    if (!linkedHolding || currentValue == null) {
+      return "Linked holding no longer exists.";
     }
-    const amt = value.actionAmount != null ? Math.abs(value.actionAmount).toLocaleString() : null;
-    switch (value.type) {
-      case "sell":
-      case "raise_cash":
-        return "Proposed view will zero out this holding.";
-      case "reduce":
-      case "reduce_concentration":
-        return amt
-          ? `Proposed view will reduce this holding by ${amt}.`
-          : "No action amount set — proposed view will halve this holding.";
-      case "increase":
-      case "buy":
-        return amt
-          ? `Proposed view will increase this holding by ${amt}.`
-          : "Set an action amount to shift the Before / After allocation.";
-      case "rebalance":
-        return value.actionAmount != null
-          ? `Proposed view will adjust this holding by ${value.actionAmount.toLocaleString()} (signed).`
-          : "Set a signed action amount (positive = add, negative = trim).";
-      case "tax_loss_harvest":
-      case "replace_high_fee_fund":
-      case "improve_asset_location":
-        return "Net-flat on allocation — same exposure, different vehicle/lot.";
-      default:
-        return "Allocation unchanged unless you set a proposed value.";
+    const after = applyRecToValue(currentValue, value, !!linkedHolding.isLiability);
+    if (Math.abs(after - currentValue) < 1 && value.proposedValue == null) {
+      switch (value.type) {
+        case "tax_loss_harvest":
+        case "replace_high_fee_fund":
+        case "improve_asset_location":
+          return "Net-flat on allocation — same exposure, different vehicle/lot.";
+        default:
+          return "No allocation shift yet — set an action amount or proposed value.";
+      }
     }
-  }, [value.type, value.actionAmount, value.proposedValue, value.relatedHoldingId]);
+    const delta = after - currentValue;
+    const cashDirection = delta < 0 ? "credit" : "debit";
+    const cashAbs = formatCurrency(Math.abs(delta), linkedHolding.currency, { compact: true });
+    return `${linkedHolding.assetName}: ${formatCurrency(currentValue, linkedHolding.currency, { compact: true })} → ${formatCurrency(after, linkedHolding.currency, { compact: true })}. Cash ${cashDirection} ${cashAbs} in the same account.`;
+  }, [value, linkedHolding, currentValue]);
 
   return (
     <div className="space-y-3">
@@ -262,15 +276,39 @@ function RecForm({
         <div className="grid grid-cols-2 gap-3 mt-3">
           <div>
             <Label>Action amount (optional)</Label>
-            <Input
-              type="number"
-              value={value.actionAmount ?? ""}
-              onChange={(e) =>
-                onChange({ actionAmount: e.target.value === "" ? undefined : Number(e.target.value) })
-              }
-              placeholder={value.type === "rebalance" ? "Signed (negative trims)" : "e.g. 50000"}
-              disabled={!value.relatedHoldingId && value.type !== "buy"}
-            />
+            <div className="flex gap-1.5">
+              <Input
+                type="number"
+                value={value.actionAmount ?? ""}
+                onChange={(e) =>
+                  onChange({ actionAmount: e.target.value === "" ? undefined : Number(e.target.value) })
+                }
+                placeholder={
+                  value.actionAmountUnit === "percent"
+                    ? "e.g. 40 for 40%"
+                    : value.type === "rebalance"
+                    ? "Signed (negative trims)"
+                    : "e.g. 50000"
+                }
+                disabled={!value.relatedHoldingId && value.type !== "buy"}
+              />
+              <Select
+                className="w-20"
+                value={value.actionAmountUnit ?? "amount"}
+                onChange={(e) =>
+                  onChange({ actionAmountUnit: e.target.value as "amount" | "percent" })
+                }
+                aria-label="Action amount unit"
+              >
+                <option value="amount">$</option>
+                <option value="percent">%</option>
+              </Select>
+            </div>
+            <div className="text-2xs text-ink-500 mt-1">
+              {value.actionAmountUnit === "percent"
+                ? "Percent of the linked holding's current value."
+                : "Absolute amount in the recommendation's currency."}
+            </div>
           </div>
           <div>
             <Label>Proposed value (override)</Label>
@@ -283,6 +321,9 @@ function RecForm({
               placeholder="e.g. 0 to fully sell"
               disabled={!value.relatedHoldingId}
             />
+            <div className="text-2xs text-ink-500 mt-1">
+              Wins over the action amount if both are set.
+            </div>
           </div>
         </div>
 
@@ -301,26 +342,73 @@ function RecForm({
       <Textarea rows={2} value={value.taxNote ?? ""} onChange={(e) => onChange({ taxNote: e.target.value })} />
       <Label>Implementation step</Label>
       <Textarea rows={2} value={value.implementationStep ?? ""} onChange={(e) => onChange({ implementationStep: e.target.value })} />
-      <label className="flex items-center gap-2 text-[13px]">
-        <input
-          type="checkbox"
-          checked={value.includeInPdf}
-          onChange={(e) => onChange({ includeInPdf: e.target.checked })}
-        />
-        Include in client PDF
-      </label>
-      <label className="flex items-center gap-2 text-[13px]">
-        <input
-          type="checkbox"
-          checked={value.approvedByAdvisor}
-          onChange={(e) => onChange({ approvedByAdvisor: e.target.checked })}
-        />
-        Advisor approved
-      </label>
+      <div className="border-t border-ink-100 pt-3 space-y-2">
+        <label className="flex items-start gap-2 text-[13px]">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={value.approvedByAdvisor}
+            onChange={(e) => onChange({ approvedByAdvisor: e.target.checked })}
+          />
+          <div>
+            <div className="font-medium text-ink-900">Advisor approved</div>
+            <div className="text-2xs text-ink-500">Approving applies this recommendation to the Before / After allocation immediately.</div>
+          </div>
+        </label>
+        <label className="flex items-start gap-2 text-[13px]">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={value.includeInPdf}
+            onChange={(e) => onChange({ includeInPdf: e.target.checked })}
+          />
+          <div>
+            <div className="font-medium text-ink-900">Include in client PDF</div>
+            <div className="text-2xs text-ink-500">Adds this recommendation's prose to the Recommendations section. Independent of the math toggle above.</div>
+          </div>
+        </label>
+      </div>
       <div className="flex gap-2 pt-3 border-t border-ink-100">
         <Button onClick={onSave}>Save</Button>
         <Button variant="ghost" onClick={onRemove}>Delete</Button>
       </div>
     </div>
   );
+}
+
+// Tiny effect summary used on each recommendation card. Calls the same
+// per-rec helper the engine uses so the UI never drifts from the math.
+function describeRecEffect(
+  rec: Recommendation,
+  linked: Holding | undefined
+): { label: string; tone: "neutral" | "positive" | "negative" | "warning" } {
+  if (!rec.relatedHoldingId) {
+    return { label: "Advisory only — no allocation impact.", tone: "neutral" };
+  }
+  if (!linked) {
+    return { label: "Linked holding no longer exists.", tone: "warning" };
+  }
+  const before = linked.reportingMarketValue ?? linked.nativeMarketValue;
+  const after = applyRecToValue(before, rec, !!linked.isLiability);
+  const delta = after - before;
+  if (Math.abs(delta) < 1 && rec.proposedValue == null) {
+    return {
+      label: `${linked.assetName}: no shift yet — set an action amount or proposed value.`,
+      tone: "warning",
+    };
+  }
+  const cashDelta = linked.isLiability && delta > 0 ? -delta : -delta; // sale credits cash
+  const cashLabel =
+    cashDelta === 0
+      ? ""
+      : ` · Cash ${cashDelta > 0 ? "+" : "−"}${formatCurrency(Math.abs(cashDelta), linked.currency, { compact: true })}`;
+  const sign = delta < 0 ? "−" : "+";
+  return {
+    label: `${linked.assetName}: ${formatCurrency(before, linked.currency, { compact: true })} → ${formatCurrency(
+      after,
+      linked.currency,
+      { compact: true }
+    )} (${sign}${formatCurrency(Math.abs(delta), linked.currency, { compact: true })})${cashLabel}`,
+    tone: delta < 0 ? "negative" : "positive",
+  };
 }
