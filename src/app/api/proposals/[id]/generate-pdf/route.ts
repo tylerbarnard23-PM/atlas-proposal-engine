@@ -52,17 +52,25 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const puppeteer = (await import("puppeteer-core")).default;
 
   // Pick a Chromium binary based on environment:
-  //  - On Vercel (or any AWS Lambda env), use @sparticuz/chromium (serverless-safe).
-  //  - Locally, find a system Chrome via the host-path resolver.
+  //  - On Vercel / AWS Lambda, use @sparticuz/chromium-min and fetch the
+  //    binary tarball from the matching Sparticuz GitHub release. This keeps
+  //    the function bundle small and avoids the Node 24 + bundled-binary
+  //    extraction issues that produced cold-start 500s.
+  //  - Locally, find the host's installed Chrome via chromiumPath.ts.
   const isServerless = !!process.env.AWS_LAMBDA_FUNCTION_NAME || !!process.env.VERCEL;
   let executablePath: string | undefined;
   let launchArgs: string[];
   let headlessMode: boolean | "shell" = true;
   if (isServerless) {
-    const chromium = (await import("@sparticuz/chromium")).default;
-    executablePath = await chromium.executablePath();
+    const chromium = (await import("@sparticuz/chromium-min")).default;
+    const tarball =
+      process.env.CHROMIUM_TARBALL_URL ??
+      "https://github.com/Sparticuz/chromium/releases/download/v148.0.0/chromium-v148.0.0-pack.x64.tar";
+    executablePath = await chromium.executablePath(tarball);
     launchArgs = chromium.args;
-    headlessMode = chromium.headless as boolean | "shell";
+    // chromium-min v148 dropped the static `headless` property; "shell" is
+    // the recommended mode for the bundled binary.
+    headlessMode = "shell";
   } else {
     const { resolveChromiumExecutable, ChromiumNotFoundError } = await import("@/pdf/chromiumPath");
     const local = resolveChromiumExecutable();
@@ -72,11 +80,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     executablePath = local;
     launchArgs = ["--no-sandbox", "--disable-setuid-sandbox", "--font-render-hinting=none"];
   }
-  const browser = await puppeteer.launch({
-    args: launchArgs,
-    headless: headlessMode,
-    executablePath,
-  });
+  let browser: Awaited<ReturnType<typeof puppeteer.launch>>;
+  try {
+    browser = await puppeteer.launch({
+      args: launchArgs,
+      headless: headlessMode,
+      executablePath,
+    });
+  } catch (err) {
+    console.error("[generate-pdf] puppeteer.launch failed", err);
+    return NextResponse.json(
+      { error: `Browser launch failed: ${(err as Error).message ?? "unknown"}` },
+      { status: 500 }
+    );
+  }
   try {
     const page = await browser.newPage();
     await page.emulateMediaType("print");
@@ -104,7 +121,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       },
     });
   } catch (err) {
-    return NextResponse.json({ error: (err as Error).message ?? "PDF generation failed" }, { status: 500 });
+    console.error("[generate-pdf] PDF generation failed", err);
+    return NextResponse.json(
+      { error: (err as Error).message ?? "PDF generation failed" },
+      { status: 500 }
+    );
   } finally {
     await browser.close().catch(() => {});
   }

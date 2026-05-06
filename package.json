@@ -2,6 +2,9 @@
   "name": "atlas-proposal-engine",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -10,12 +13,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@sparticuz/chromium-min": "^148.0.0",
     "@tanstack/react-table": "^8.20.5",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "lucide-react": "^0.468.0",
     "next": "^15.1.12",
-    "@sparticuz/chromium": "^131.0.1",
     "papaparse": "^5.4.1",
     "pdf-parse": "^1.1.1",
     "puppeteer-core": "^23.11.1",

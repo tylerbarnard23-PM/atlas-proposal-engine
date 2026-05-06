@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["puppeteer-core", "@sparticuz/chromium", "pdf-parse"],
+  serverExternalPackages: ["puppeteer-core", "@sparticuz/chromium-min", "pdf-parse"],
   experimental: {
     serverActions: { bodySizeLimit: "25mb" },
   },
