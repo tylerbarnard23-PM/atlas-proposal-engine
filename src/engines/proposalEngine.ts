@@ -1,4 +1,4 @@
-import type { Holding, Proposal, ProposalSection, Recommendation } from "@/domain/types";
+import type { Account, Holding, Proposal, ProposalSection, Recommendation } from "@/domain/types";
 import { sumBy } from "@/utils/numbers";
 
 export const DEFAULT_PROPOSAL_SECTIONS: ProposalSection[] = [
@@ -33,10 +33,19 @@ export const DEFAULT_PROPOSAL_SECTIONS: ProposalSection[] = [
 //   3. actionAmount when type implies signed delta.
 // Multiple recs on the same holding compose in order. Recs with no
 // relatedHoldingId are advisory-only and don't shift the proposed allocation.
+//
+// Cash flow: every value change on an asset holding produces an offsetting
+// cash flow in the same account (sale → cash credit, purchase → cash debit).
+// Pay-down-debt on a liability uses cash from that account to retire debt.
+// Net cash deltas are applied to the account's existing cash holding when one
+// exists; otherwise a synthetic "Net Proposed Cash" line is added so the
+// proposed total equals the current total (modulo external cash flows).
 export function applyRecommendationsToProposed(
   current: Holding[],
-  approvedRecommendations: Recommendation[]
+  approvedRecommendations: Recommendation[],
+  accounts: Account[] = []
 ): Holding[] {
+  const accountById = new Map(accounts.map((a) => [a.id, a] as const));
   const byHolding = new Map<string, Recommendation[]>();
   for (const rec of approvedRecommendations) {
     if (!rec.relatedHoldingId) continue;
@@ -45,54 +54,133 @@ export function applyRecommendationsToProposed(
     byHolding.set(rec.relatedHoldingId, arr);
   }
 
-  return current.map((h) => {
+  // First pass: compute new values for each touched holding and record the
+  // resulting cash impact per account.
+  const newValueById = new Map<string, number>();
+  const cashByAccount = new Map<string, number>();
+  const bump = (acctId: string, delta: number) =>
+    cashByAccount.set(acctId, (cashByAccount.get(acctId) ?? 0) + delta);
+
+  for (const h of current) {
     const recs = byHolding.get(h.id);
-    if (!recs?.length) return h;
+    if (!recs?.length) continue;
     let value = h.reportingMarketValue ?? h.nativeMarketValue;
 
     for (const rec of recs) {
+      const before = value;
       if (rec.proposedValue != null) {
         value = rec.proposedValue;
-        continue;
+      } else {
+        const amount = rec.actionAmount != null ? Math.abs(rec.actionAmount) : null;
+        switch (rec.type) {
+          case "sell":
+          case "raise_cash":
+            value = 0;
+            break;
+          case "reduce":
+          case "reduce_concentration":
+            value = amount != null ? Math.max(0, value - amount) : value * 0.5;
+            break;
+          case "pay_down_debt":
+            // Liabilities are stored negative; paying down moves value toward 0.
+            if (h.isLiability) {
+              value = amount != null ? Math.min(0, value + amount) : value * 0.5;
+            }
+            break;
+          case "increase":
+          case "buy":
+            if (amount != null) value += amount;
+            break;
+          case "rebalance":
+            if (rec.actionAmount != null) value += rec.actionAmount;
+            break;
+          case "tax_loss_harvest":
+          case "replace_high_fee_fund":
+          case "improve_asset_location":
+            // Net-flat on allocation: same exposure, different vehicle/lot.
+            break;
+          // Other advisory types leave allocation unchanged.
+        }
       }
-      const amount = rec.actionAmount != null ? Math.abs(rec.actionAmount) : null;
-      switch (rec.type) {
-        case "sell":
-        case "raise_cash":
-          value = 0;
-          break;
-        case "reduce":
-        case "reduce_concentration":
-          value = amount != null ? Math.max(0, value - amount) : value * 0.5;
-          break;
-        case "pay_down_debt":
-          // Paying down debt reduces a liability balance (stored as negative)
-          // toward zero; for an asset holding, treat as no-op.
-          if (h.isLiability) {
-            value = amount != null ? Math.min(0, value + amount) : value * 0.5;
-          }
-          break;
-        case "increase":
-        case "buy":
-          if (amount != null) value += amount;
-          break;
-        case "rebalance":
-          // Signed delta when actionAmount is provided (positive = add, negative = trim).
-          if (rec.actionAmount != null) value += rec.actionAmount;
-          break;
-        case "tax_loss_harvest":
-        case "replace_high_fee_fund":
-        case "improve_asset_location":
-          // Net-flat on allocation: same exposure, different vehicle/lot.
-          break;
-        // hold, transfer, consolidate_accounts, currency_hedge, custom, review_*,
-        // and other advisory types leave allocation unchanged unless an
-        // explicit proposedValue is provided.
+
+      // Record the cash side of this rec.
+      const change = value - before;
+      if (h.isLiability) {
+        // change is positive when paying down debt (moving toward 0). Cash
+        // leaves the account by the same magnitude.
+        if (change > 0) bump(h.accountId, -change);
+      } else if (h.assetClass !== "cash") {
+        // Asset trades produce cash in the opposite direction.
+        if (change !== 0) bump(h.accountId, -change);
       }
     }
 
-    return { ...h, reportingMarketValue: value, nativeMarketValue: value };
+    newValueById.set(h.id, value);
+  }
+
+  // Second pass: write the new values into a result list.
+  const result: Holding[] = current.map((h) => {
+    const newVal = newValueById.get(h.id);
+    return newVal === undefined
+      ? h
+      : { ...h, reportingMarketValue: newVal, nativeMarketValue: newVal };
   });
+
+  // Third pass: apply each account's net cash delta.
+  for (const [accountId, delta] of cashByAccount) {
+    if (Math.abs(delta) < 1) continue; // ignore sub-dollar noise
+    const account = accountById.get(accountId);
+    const cashIdx = result.findIndex(
+      (h) => h.accountId === accountId && h.assetClass === "cash" && !h.isLiability
+    );
+    if (cashIdx >= 0) {
+      const existing = result[cashIdx];
+      const updated: Holding = {
+        ...existing,
+        reportingMarketValue: (existing.reportingMarketValue ?? existing.nativeMarketValue) + delta,
+        nativeMarketValue: existing.nativeMarketValue + delta,
+        valuationSource: {
+          ...existing.valuationSource,
+          note: [existing.valuationSource.note, "Adjusted by proposed actions"]
+            .filter(Boolean)
+            .join(" · "),
+        },
+        advisorNotes: [existing.advisorNotes, "Includes proposed-action cash flow"]
+          .filter(Boolean)
+          .join("\n"),
+      };
+      result[cashIdx] = updated;
+    } else {
+      const fallbackCurrency = account?.baseCurrency ?? "USD";
+      result.push({
+        id: `synth_cash_${accountId}`,
+        accountId,
+        assetName: "Net Proposed Cash",
+        assetClass: "cash",
+        subAssetClass: "cash_equivalents",
+        country: account?.country,
+        currency: fallbackCurrency,
+        nativeMarketValue: delta,
+        reportingMarketValue: delta,
+        liquidity: "cash",
+        valuationDate: new Date().toISOString().slice(0, 10),
+        valuationSource: {
+          kind: "advisor_entered",
+          asOf: new Date().toISOString(),
+          confidence: "high",
+          note: "Synthetic cash position: net of proposed actions in this account",
+        },
+        quoteType: "advisor_entered",
+        priceFreshness: "manual",
+        advisorVerification: "advisor_reviewed",
+        dataQuality: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+    }
+  }
+
+  return result;
 }
 
 export function netWorth(holdings: Holding[]): { gross: number; liabilities: number; net: number } {

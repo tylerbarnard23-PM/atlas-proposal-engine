@@ -153,7 +153,7 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
   // Proposed allocation reflects approved recommendations that specify a
   // proposedValue. Recommendations without a proposedValue leave the
   // corresponding holding unchanged in the proposed view.
-  const proposedHoldings = applyRecommendationsToProposed(holdings, approvedRecs);
+  const proposedHoldings = applyRecommendationsToProposed(holdings, approvedRecs, accounts);
   const allocProposedClass = summarize(proposedHoldings, (h) => ASSET_CLASS_LABELS[h.assetClass] ?? "Other");
 
   // Align legend ordering with the current allocation so colors stay stable
