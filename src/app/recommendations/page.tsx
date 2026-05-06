@@ -168,6 +168,54 @@ function RecForm({
   onSave: () => void;
   onRemove: () => void;
 }) {
+  const holdings = useAtlasStore((s) => s.holdings);
+  const accounts = useAtlasStore((s) => s.accounts);
+  const accountById = React.useMemo(
+    () => Object.fromEntries(accounts.map((a) => [a.id, a])),
+    [accounts]
+  );
+  const linkedHolding = holdings.find((h) => h.id === value.relatedHoldingId);
+  const currentValue = linkedHolding
+    ? linkedHolding.reportingMarketValue ?? linkedHolding.nativeMarketValue
+    : undefined;
+
+  // Hint sentence describing what the engine will do with this rec given its
+  // type + amount + linked holding. Helps advisors understand the proposed view.
+  const effectHint = React.useMemo(() => {
+    if (!value.relatedHoldingId) {
+      return "Without a linked holding, this recommendation will appear in the proposal text but won't shift the Before / After allocation.";
+    }
+    if (value.proposedValue != null) {
+      return `Proposed view will set this holding's value to ${value.proposedValue.toLocaleString()}.`;
+    }
+    const amt = value.actionAmount != null ? Math.abs(value.actionAmount).toLocaleString() : null;
+    switch (value.type) {
+      case "sell":
+      case "raise_cash":
+        return "Proposed view will zero out this holding.";
+      case "reduce":
+      case "reduce_concentration":
+        return amt
+          ? `Proposed view will reduce this holding by ${amt}.`
+          : "No action amount set — proposed view will halve this holding.";
+      case "increase":
+      case "buy":
+        return amt
+          ? `Proposed view will increase this holding by ${amt}.`
+          : "Set an action amount to shift the Before / After allocation.";
+      case "rebalance":
+        return value.actionAmount != null
+          ? `Proposed view will adjust this holding by ${value.actionAmount.toLocaleString()} (signed).`
+          : "Set a signed action amount (positive = add, negative = trim).";
+      case "tax_loss_harvest":
+      case "replace_high_fee_fund":
+      case "improve_asset_location":
+        return "Net-flat on allocation — same exposure, different vehicle/lot.";
+      default:
+        return "Allocation unchanged unless you set a proposed value.";
+    }
+  }, [value.type, value.actionAmount, value.proposedValue, value.relatedHoldingId]);
+
   return (
     <div className="space-y-3">
       <Label>Title</Label>
@@ -188,6 +236,61 @@ function RecForm({
       </Select>
       <Label>Currency</Label>
       <Input value={value.currency} onChange={(e) => onChange({ currency: e.target.value })} />
+
+      <div className="border-t border-ink-100 pt-3">
+        <Label>Linked holding</Label>
+        <Select
+          value={value.relatedHoldingId ?? ""}
+          onChange={(e) => onChange({ relatedHoldingId: e.target.value || undefined })}
+        >
+          <option value="">— None (advisory only) —</option>
+          {holdings.map((h) => {
+            const acct = accountById[h.accountId];
+            return (
+              <option key={h.id} value={h.id}>
+                {h.assetName} {h.identifier ? `(${h.identifier.value})` : ""} · {acct?.name ?? "—"}
+              </option>
+            );
+          })}
+        </Select>
+        {linkedHolding && currentValue != null && (
+          <div className="text-2xs text-ink-500 mt-1.5">
+            Current value: {currentValue.toLocaleString()} {linkedHolding.currency}
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-3 mt-3">
+          <div>
+            <Label>Action amount (optional)</Label>
+            <Input
+              type="number"
+              value={value.actionAmount ?? ""}
+              onChange={(e) =>
+                onChange({ actionAmount: e.target.value === "" ? undefined : Number(e.target.value) })
+              }
+              placeholder={value.type === "rebalance" ? "Signed (negative trims)" : "e.g. 50000"}
+              disabled={!value.relatedHoldingId && value.type !== "buy"}
+            />
+          </div>
+          <div>
+            <Label>Proposed value (override)</Label>
+            <Input
+              type="number"
+              value={value.proposedValue ?? ""}
+              onChange={(e) =>
+                onChange({ proposedValue: e.target.value === "" ? undefined : Number(e.target.value) })
+              }
+              placeholder="e.g. 0 to fully sell"
+              disabled={!value.relatedHoldingId}
+            />
+          </div>
+        </div>
+
+        <div className="text-2xs text-ink-600 bg-slatey-50 border border-ink-100 rounded p-2 mt-2 leading-relaxed">
+          <span className="font-semibold text-ink-800">Effect on Before / After:</span> {effectHint}
+        </div>
+      </div>
+
       <Label>Rationale</Label>
       <Textarea rows={4} value={value.rationale} onChange={(e) => onChange({ rationale: e.target.value })} />
       <Label>Client benefit</Label>

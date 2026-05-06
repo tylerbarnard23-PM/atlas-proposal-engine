@@ -26,19 +26,72 @@ export const DEFAULT_PROPOSAL_SECTIONS: ProposalSection[] = [
   { key: "appendix_compliance", label: "Appendix — Compliance Checklist", enabled: false },
 ];
 
+// Apply approved recommendations to produce the proposed holdings view.
+// Hierarchy of intent for any single recommendation:
+//   1. Explicit proposedValue → set the holding to that value.
+//   2. Recommendation type → infer effect (sell zeroes, reduce subtracts, etc.).
+//   3. actionAmount when type implies signed delta.
+// Multiple recs on the same holding compose in order. Recs with no
+// relatedHoldingId are advisory-only and don't shift the proposed allocation.
 export function applyRecommendationsToProposed(
   current: Holding[],
   approvedRecommendations: Recommendation[]
 ): Holding[] {
-  // Naive proposed view: use proposedValue when provided to override reportingMarketValue.
+  const byHolding = new Map<string, Recommendation[]>();
+  for (const rec of approvedRecommendations) {
+    if (!rec.relatedHoldingId) continue;
+    const arr = byHolding.get(rec.relatedHoldingId) ?? [];
+    arr.push(rec);
+    byHolding.set(rec.relatedHoldingId, arr);
+  }
+
   return current.map((h) => {
-    const rec = approvedRecommendations.find((r) => r.relatedHoldingId === h.id && r.proposedValue != null);
-    if (!rec) return h;
-    return {
-      ...h,
-      reportingMarketValue: rec.proposedValue,
-      nativeMarketValue: rec.proposedValue!,
-    };
+    const recs = byHolding.get(h.id);
+    if (!recs?.length) return h;
+    let value = h.reportingMarketValue ?? h.nativeMarketValue;
+
+    for (const rec of recs) {
+      if (rec.proposedValue != null) {
+        value = rec.proposedValue;
+        continue;
+      }
+      const amount = rec.actionAmount != null ? Math.abs(rec.actionAmount) : null;
+      switch (rec.type) {
+        case "sell":
+        case "raise_cash":
+          value = 0;
+          break;
+        case "reduce":
+        case "reduce_concentration":
+          value = amount != null ? Math.max(0, value - amount) : value * 0.5;
+          break;
+        case "pay_down_debt":
+          // Paying down debt reduces a liability balance (stored as negative)
+          // toward zero; for an asset holding, treat as no-op.
+          if (h.isLiability) {
+            value = amount != null ? Math.min(0, value + amount) : value * 0.5;
+          }
+          break;
+        case "increase":
+        case "buy":
+          if (amount != null) value += amount;
+          break;
+        case "rebalance":
+          // Signed delta when actionAmount is provided (positive = add, negative = trim).
+          if (rec.actionAmount != null) value += rec.actionAmount;
+          break;
+        case "tax_loss_harvest":
+        case "replace_high_fee_fund":
+        case "improve_asset_location":
+          // Net-flat on allocation: same exposure, different vehicle/lot.
+          break;
+        // hold, transfer, consolidate_accounts, currency_hedge, custom, review_*,
+        // and other advisory types leave allocation unchanged unless an
+        // explicit proposedValue is provided.
+      }
+    }
+
+    return { ...h, reportingMarketValue: value, nativeMarketValue: value };
   });
 }
 
