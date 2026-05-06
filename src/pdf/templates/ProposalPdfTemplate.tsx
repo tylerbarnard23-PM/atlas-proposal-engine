@@ -405,6 +405,18 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
   if (enabled("before_after_allocation")) {
     const proposedTotal = sumBy(proposedHoldings.filter((h) => !h.isLiability), (h) => h.reportingMarketValue ?? h.nativeMarketValue);
     const currentTotal = totalInvestible;
+    // Compute per-asset-class percentage-point shifts between current and proposed.
+    const currentByLabel = new Map(allocClass.map((s) => [s.label, s.pct]));
+    const proposedByLabel = new Map(allocProposedClass.map((s) => [s.label, s.pct]));
+    const allLabels = new Set<string>([...currentByLabel.keys(), ...proposedByLabel.keys()]);
+    const deltas = Array.from(allLabels)
+      .map((label) => {
+        const cur = currentByLabel.get(label) ?? 0;
+        const prop = proposedByLabel.get(label) ?? 0;
+        return { label, current: cur, proposed: prop, delta: prop - cur };
+      })
+      .filter((d) => Math.abs(d.delta) >= 0.05) // ignore sub-5bps noise
+      .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
     pages.push(
       <PageWrap key="ba" title="Before / After Allocation" eyebrow="06">
         <p className="pdf-text">High-level allocation comparison. Detailed line-by-line changes appear in the Recommendations section.</p>
@@ -445,6 +457,29 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
             </div>
           </div>
         </div>
+
+        {deltas.length > 0 && (
+          <div className="pdf-card pdf-avoid-break" style={{ marginTop: 14 }}>
+            <div className="pdf-stat-label">Top allocation shifts</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "6pt", marginTop: 8 }}>
+              {deltas.slice(0, 8).map((d) => {
+                const positive = d.delta > 0;
+                return (
+                  <span
+                    key={d.label}
+                    className={`pdf-pill ${positive ? "pos" : "neg"}`}
+                    style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
+                  >
+                    {positive ? "▲" : "▼"} {d.label} {positive ? "+" : "−"}{Math.abs(d.delta).toFixed(1)} pts
+                  </span>
+                );
+              })}
+            </div>
+            <div className="pdf-stat-hint" style={{ marginTop: 6 }}>
+              Percentage-point shift in asset-class weight from Current to Proposed.
+            </div>
+          </div>
+        )}
       </PageWrap>
     );
   }
@@ -453,7 +488,17 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
   if (enabled("currency_exposure")) {
     pages.push(
       <PageWrap key="ccy" title="Currency Exposure" eyebrow="07">
-        <AllocationList rows={allocCurrency} currency={reportingCurrency} />
+        <div className="pdf-grid-2 pdf-avoid-break" style={{ alignItems: "center" }}>
+          <div style={{ display: "flex", justifyContent: "center" }}>
+            <PdfPieChart data={allocCurrency} size={200} />
+          </div>
+          <div>
+            <PdfPieLegend data={allocCurrency} />
+          </div>
+        </div>
+        <div style={{ marginTop: 14 }}>
+          <AllocationList rows={allocCurrency} currency={reportingCurrency} />
+        </div>
         <p className="pdf-text" style={{ marginTop: 14 }}>
           Currency exposure is computed from native-denominated holdings, converted to {reportingCurrency} using ECB reference rates. Hedging positions, if any, are presented separately in the appendix.
         </p>
@@ -465,7 +510,17 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
   if (enabled("country_exposure")) {
     pages.push(
       <PageWrap key="country" title="Country Exposure" eyebrow="08">
-        <AllocationList rows={allocCountry} currency={reportingCurrency} />
+        <div className="pdf-grid-2 pdf-avoid-break" style={{ alignItems: "center" }}>
+          <div style={{ display: "flex", justifyContent: "center" }}>
+            <PdfPieChart data={allocCountry} size={200} />
+          </div>
+          <div>
+            <PdfPieLegend data={allocCountry} />
+          </div>
+        </div>
+        <div style={{ marginTop: 14 }}>
+          <AllocationList rows={allocCountry} currency={reportingCurrency} />
+        </div>
         <p className="pdf-text" style={{ marginTop: 14 }}>
           Country exposure reflects each holding's primary country of issuance, not the underlying revenue or operational footprint. Cross-border tax, reporting, and succession considerations may apply.
         </p>

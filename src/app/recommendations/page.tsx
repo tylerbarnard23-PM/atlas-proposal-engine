@@ -1,10 +1,12 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
+import { Lightbulb, Plus } from "lucide-react";
 import { useAtlasStore } from "@/store/useStore";
 import { ClientOnly } from "@/components/layout/ClientOnly";
 import { PageHeader } from "@/components/ui/Section";
-import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
+import { Card, CardBody } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input, Label, Select, Textarea } from "@/components/ui/Input";
@@ -62,14 +64,36 @@ function Inner() {
         eyebrow="Advisor Recommendations"
         title="Recommendation Builder"
         description="Only advisor-approved recommendations marked Include in PDF appear in the final client proposal."
-        actions={<Button onClick={newRec}>New recommendation</Button>}
+        actions={
+          <>
+            <Link href="/insights">
+              <Button variant="secondary" iconLeft={<Lightbulb className="h-4 w-4" />}>
+                Browse insights
+              </Button>
+            </Link>
+            <Button onClick={newRec} iconLeft={<Plus className="h-4 w-4" />}>
+              New recommendation
+            </Button>
+          </>
+        }
       />
 
       {recs.length === 0 ? (
         <EmptyState
           title="No recommendations yet"
-          description="Convert an insight or create one manually."
-          action={<Button onClick={newRec}>New recommendation</Button>}
+          description="Two ways to add one: write a recommendation directly, or open Insights and convert any rules-based observation into a draft you can edit and approve."
+          action={
+            <div className="flex flex-wrap gap-2 justify-center">
+              <Button onClick={newRec} iconLeft={<Plus className="h-4 w-4" />}>
+                Write a recommendation
+              </Button>
+              <Link href="/insights">
+                <Button variant="secondary" iconLeft={<Lightbulb className="h-4 w-4" />}>
+                  Browse insights
+                </Button>
+              </Link>
+            </div>
+          }
         />
       ) : (
         <div className="space-y-3">

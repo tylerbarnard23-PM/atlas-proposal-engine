@@ -1,20 +1,25 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
+import { Plus, FilePlus2, Wallet } from "lucide-react";
 import { useAtlasStore } from "@/store/useStore";
 import { ClientOnly } from "@/components/layout/ClientOnly";
 import { useNormalizedHoldings } from "@/hooks/useNormalizedHoldings";
 import { PageHeader, SectionDivider } from "@/components/ui/Section";
-import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
+import { Card, CardBody } from "@/components/ui/Card";
 import { Drawer } from "@/components/ui/Drawer";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Input, Label, Select } from "@/components/ui/Input";
+import { Input, Label, Select, Textarea } from "@/components/ui/Input";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { HoldingsTable } from "@/components/tables/HoldingsTable";
-import { ACCOUNT_TYPE_LABELS } from "@/domain/accountTaxonomy";
+import { ACCOUNT_TYPE_GROUPS, ACCOUNT_TYPE_LABELS } from "@/domain/accountTaxonomy";
 import { ASSET_CLASS_LABELS } from "@/domain/assetTaxonomy";
-import type { Holding } from "@/domain/types";
-import { formatCurrency, formatDate } from "@/utils/formatting";
+import { COUNTRIES } from "@/domain/countryConfigs";
+import { CURRENCIES } from "@/domain/currencyConfigs";
+import type { Account, AccountType, AssetClass, Holding } from "@/domain/types";
+import { formatCurrency, formatDate, safeId, todayIso } from "@/utils/formatting";
 import { QuoteTypeBadge, ValuationSourceLine } from "@/components/ui/SourceTag";
 
 export default function AccountsAssetsPage() {
@@ -27,46 +32,136 @@ export default function AccountsAssetsPage() {
 
 function Inner() {
   const accounts = useAtlasStore((s) => s.accounts);
+  const upsertAccount = useAtlasStore((s) => s.upsertAccount);
+  const removeAccount = useAtlasStore((s) => s.removeAccount);
   const upsertHolding = useAtlasStore((s) => s.upsertHolding);
   const removeHolding = useAtlasStore((s) => s.removeHolding);
   const { holdings, reportingCurrency } = useNormalizedHoldings();
   const [active, setActive] = React.useState<Holding | null>(null);
+  const [addAccountOpen, setAddAccountOpen] = React.useState(false);
+  const [addHoldingOpen, setAddHoldingOpen] = React.useState(false);
+  const [presetAccountId, setPresetAccountId] = React.useState<string | undefined>();
+
+  function openHoldingForAccount(accountId: string) {
+    setPresetAccountId(accountId);
+    setAddHoldingOpen(true);
+  }
 
   return (
     <>
       <PageHeader
         eyebrow="Workspace"
         title="Accounts & Assets"
-        description="The full normalized view of every account and holding. Click any row to drill into source, valuation, and advisor controls."
+        description="Add accounts and holdings, drill into source and valuation, and prepare positions for the proposal."
+        actions={
+          <>
+            <Button
+              variant="secondary"
+              iconLeft={<Wallet className="h-4 w-4" />}
+              onClick={() => setAddAccountOpen(true)}
+            >
+              Add account
+            </Button>
+            <Button
+              iconLeft={<Plus className="h-4 w-4" />}
+              onClick={() => {
+                setPresetAccountId(undefined);
+                setAddHoldingOpen(true);
+              }}
+              disabled={accounts.length === 0}
+              title={accounts.length === 0 ? "Add an account first" : undefined}
+            >
+              Add holding
+            </Button>
+          </>
+        }
       />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-        {accounts.map((a) => {
-          const acctValue = holdings
-            .filter((h) => h.accountId === a.id)
-            .reduce((acc, h) => acc + (h.reportingMarketValue ?? h.nativeMarketValue ?? 0), 0);
-          return (
-            <Card key={a.id}>
-              <CardBody>
-                <div className="text-2xs uppercase tracking-widest text-ink-500">{ACCOUNT_TYPE_LABELS[a.type]}</div>
-                <div className="text-[13px] font-medium text-ink-900 mt-0.5 truncate">{a.name}</div>
-                <div className="text-2xs text-ink-500 mt-0.5 truncate">{a.institution ?? "—"}</div>
-                <div className="font-serif text-lg tabular text-ink-900 mt-1.5">{formatCurrency(acctValue, reportingCurrency, { compact: true })}</div>
-                <div className="text-2xs text-ink-500">{a.baseCurrency} · {a.country ?? "—"}</div>
-              </CardBody>
-            </Card>
-          );
-        })}
-      </div>
+      {accounts.length === 0 ? (
+        <EmptyState
+          title="No accounts yet"
+          description="Add a brokerage, IRA, trust, crypto wallet, real-estate schedule, or any other account to begin building this engagement."
+          icon={<Wallet className="h-8 w-8" />}
+          action={
+            <div className="flex flex-wrap gap-2 justify-center">
+              <Button onClick={() => setAddAccountOpen(true)} iconLeft={<Plus className="h-4 w-4" />}>
+                Add your first account
+              </Button>
+              <Link href="/import-center">
+                <Button variant="secondary" iconLeft={<FilePlus2 className="h-4 w-4" />}>
+                  Import from CSV / statement
+                </Button>
+              </Link>
+            </div>
+          }
+        />
+      ) : (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+            {accounts.map((a) => {
+              const acctValue = holdings
+                .filter((h) => h.accountId === a.id)
+                .reduce((acc, h) => acc + (h.reportingMarketValue ?? h.nativeMarketValue ?? 0), 0);
+              return (
+                <Card key={a.id} className="group">
+                  <CardBody>
+                    <div className="text-2xs uppercase tracking-widest text-ink-500">{ACCOUNT_TYPE_LABELS[a.type]}</div>
+                    <div className="text-[13px] font-medium text-ink-900 mt-0.5 truncate">{a.name}</div>
+                    <div className="text-2xs text-ink-500 mt-0.5 truncate">{a.institution ?? "—"}</div>
+                    <div className="font-serif text-lg tabular text-ink-900 mt-1.5">{formatCurrency(acctValue, reportingCurrency, { compact: true })}</div>
+                    <div className="text-2xs text-ink-500 mb-2">{a.baseCurrency} · {a.country ?? "—"}</div>
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => openHoldingForAccount(a.id)}
+                      >
+                        + Holding
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-negative-500 hover:bg-negative-50"
+                        onClick={() => {
+                          if (confirm(`Remove account "${a.name}" and all its holdings?`)) removeAccount(a.id);
+                        }}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  </CardBody>
+                </Card>
+              );
+            })}
+          </div>
 
-      <SectionDivider>All Holdings</SectionDivider>
+          <SectionDivider>All Holdings</SectionDivider>
 
-      <HoldingsTable
-        holdings={holdings}
-        accounts={accounts}
-        reportingCurrency={reportingCurrency}
-        onRowClick={(h) => setActive(h)}
-      />
+          {holdings.length === 0 ? (
+            <EmptyState
+              title="No holdings in this engagement yet"
+              description="Add holdings manually or import them from CSV, Excel, PDF, or a screenshot."
+              action={
+                <div className="flex flex-wrap gap-2 justify-center">
+                  <Button onClick={() => setAddHoldingOpen(true)} iconLeft={<Plus className="h-4 w-4" />}>
+                    Add a holding
+                  </Button>
+                  <Link href="/import-center">
+                    <Button variant="secondary">Open Import Center</Button>
+                  </Link>
+                </div>
+              }
+            />
+          ) : (
+            <HoldingsTable
+              holdings={holdings}
+              accounts={accounts}
+              reportingCurrency={reportingCurrency}
+              onRowClick={(h) => setActive(h)}
+            />
+          )}
+        </>
+      )}
 
       <Drawer open={!!active} onClose={() => setActive(null)} title="Holding Detail" width="max-w-2xl">
         {active && (
@@ -85,6 +180,34 @@ function Inner() {
             }}
           />
         )}
+      </Drawer>
+
+      <Drawer open={addAccountOpen} onClose={() => setAddAccountOpen(false)} title="Add account" width="max-w-lg">
+        <AddAccountForm
+          onCancel={() => setAddAccountOpen(false)}
+          onSave={(account) => {
+            upsertAccount(account);
+            setAddAccountOpen(false);
+            setPresetAccountId(account.id);
+          }}
+        />
+      </Drawer>
+
+      <Drawer
+        open={addHoldingOpen}
+        onClose={() => setAddHoldingOpen(false)}
+        title="Add holding"
+        width="max-w-xl"
+      >
+        <AddHoldingForm
+          accounts={accounts}
+          presetAccountId={presetAccountId}
+          onCancel={() => setAddHoldingOpen(false)}
+          onSave={(holding) => {
+            upsertHolding(holding);
+            setAddHoldingOpen(false);
+          }}
+        />
       </Drawer>
     </>
   );
@@ -199,6 +322,314 @@ function Stat({ label, value }: { label: string; value: string }) {
     <div>
       <div className="text-2xs uppercase tracking-widest text-ink-500">{label}</div>
       <div className="text-ink-900 tabular">{value}</div>
+    </div>
+  );
+}
+
+function AddAccountForm({
+  onSave,
+  onCancel,
+}: {
+  onSave: (a: Account) => void;
+  onCancel: () => void;
+}) {
+  const client = useAtlasStore((s) => s.client);
+  const [name, setName] = React.useState("");
+  const [type, setType] = React.useState<AccountType>("brokerage");
+  const [institution, setInstitution] = React.useState("");
+  const [accountNumber, setAccountNumber] = React.useState("");
+  const [currency, setCurrency] = React.useState(client.baseCurrency || "USD");
+  const [country, setCountry] = React.useState(client.reportingCountry || "US");
+
+  const canSave = name.trim().length > 0;
+
+  function save() {
+    if (!canSave) return;
+    const now = todayIso();
+    const masked = accountNumber ? "•••• " + accountNumber.slice(-4) : undefined;
+    onSave({
+      id: safeId("acc"),
+      name: name.trim(),
+      type,
+      institution: institution.trim() || undefined,
+      accountNumberMasked: masked,
+      baseCurrency: currency,
+      country,
+      asOf: now.slice(0, 10),
+      isLiabilityAccount: type === "liability_account",
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-ink-500">Accounts hold individual assets. Pick the type that matches the custodian or context (e.g. brokerage, IRA, trust, crypto wallet, real-estate schedule, liability).</p>
+      <Label>Account name *</Label>
+      <Input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="e.g. Smith Family — Joint Brokerage"
+        autoFocus
+      />
+      <Label>Account type</Label>
+      <Select value={type} onChange={(e) => setType(e.target.value as AccountType)}>
+        {ACCOUNT_TYPE_GROUPS.flatMap((g) => [
+          <option key={`grp-${g.label}`} disabled>
+            ── {g.label} ──
+          </option>,
+          ...g.types.map((t) => (
+            <option key={t} value={t}>
+              {ACCOUNT_TYPE_LABELS[t]}
+            </option>
+          )),
+        ])}
+      </Select>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label>Institution / custodian</Label>
+          <Input
+            value={institution}
+            onChange={(e) => setInstitution(e.target.value)}
+            placeholder="Fidelity, Schwab, Pictet..."
+          />
+        </div>
+        <div>
+          <Label>Account # (last 4)</Label>
+          <Input
+            value={accountNumber}
+            onChange={(e) => setAccountNumber(e.target.value)}
+            placeholder="1234"
+            maxLength={4}
+          />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label>Base currency</Label>
+          <Select value={currency} onChange={(e) => setCurrency(e.target.value)}>
+            {CURRENCIES.map((c) => (
+              <option key={c.code} value={c.code}>
+                {c.code} — {c.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div>
+          <Label>Country</Label>
+          <Select value={country} onChange={(e) => setCountry(e.target.value)}>
+            {COUNTRIES.map((c) => (
+              <option key={c.code} value={c.code}>
+                {c.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+      </div>
+      <div className="flex gap-2 pt-3 border-t border-ink-100 mt-2">
+        <Button onClick={save} disabled={!canSave}>
+          Add account
+        </Button>
+        <Button variant="ghost" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function AddHoldingForm({
+  accounts,
+  presetAccountId,
+  onSave,
+  onCancel,
+}: {
+  accounts: Account[];
+  presetAccountId?: string;
+  onSave: (h: Holding) => void;
+  onCancel: () => void;
+}) {
+  const client = useAtlasStore((s) => s.client);
+  const [accountId, setAccountId] = React.useState<string>(presetAccountId ?? accounts[0]?.id ?? "");
+  React.useEffect(() => {
+    if (presetAccountId) setAccountId(presetAccountId);
+  }, [presetAccountId]);
+  const account = accounts.find((a) => a.id === accountId);
+
+  const [assetName, setAssetName] = React.useState("");
+  const [symbol, setSymbol] = React.useState("");
+  const [assetClass, setAssetClass] = React.useState<AssetClass>("equity");
+  const [currency, setCurrency] = React.useState(account?.baseCurrency ?? client.baseCurrency ?? "USD");
+  const [country, setCountry] = React.useState(account?.country ?? client.reportingCountry ?? "US");
+  const [quantity, setQuantity] = React.useState("");
+  const [price, setPrice] = React.useState("");
+  const [marketValue, setMarketValue] = React.useState("");
+  const [costBasis, setCostBasis] = React.useState("");
+  const [valuationDate, setValuationDate] = React.useState(new Date().toISOString().slice(0, 10));
+  const [notes, setNotes] = React.useState("");
+
+  // When account changes, default currency/country to that account's defaults if user hasn't typed yet.
+  React.useEffect(() => {
+    if (account) {
+      setCurrency(account.baseCurrency);
+      if (account.country) setCountry(account.country);
+    }
+  }, [accountId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const canSave = !!accountId && assetName.trim().length > 0;
+  const computedValue =
+    marketValue !== ""
+      ? Number(marketValue)
+      : quantity !== "" && price !== ""
+      ? Number(quantity) * Number(price)
+      : 0;
+
+  function save() {
+    if (!canSave) return;
+    const now = todayIso();
+    const isLiability = assetClass === "liability";
+    const sign = isLiability && computedValue > 0 ? -1 : 1;
+    const h: Holding = {
+      id: safeId("h"),
+      accountId,
+      assetName: assetName.trim(),
+      identifier: symbol.trim() ? { type: "ticker", value: symbol.trim().toUpperCase() } : undefined,
+      assetClass,
+      country,
+      currency,
+      quantity: quantity ? Number(quantity) : undefined,
+      price: price ? Number(price) : undefined,
+      nativeMarketValue: sign * Math.abs(computedValue || 0),
+      costBasis: costBasis ? Number(costBasis) : undefined,
+      valuationDate,
+      valuationSource: { kind: "advisor_entered", asOf: valuationDate, confidence: "high" },
+      quoteType: "advisor_entered",
+      priceFreshness: "manual",
+      advisorVerification: "advisor_reviewed",
+      advisorNotes: notes.trim() || undefined,
+      isLiability,
+      dataQuality: [],
+      createdAt: now,
+      updatedAt: now,
+    };
+    onSave(h);
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-ink-500">Add any asset — public or private, in any currency. Symbols are optional; manual valuations and liabilities are first-class.</p>
+
+      <Label>Account *</Label>
+      <Select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+        {accounts.map((a) => (
+          <option key={a.id} value={a.id}>
+            {a.name} ({a.baseCurrency})
+          </option>
+        ))}
+      </Select>
+
+      <Label>Asset name *</Label>
+      <Input
+        value={assetName}
+        onChange={(e) => setAssetName(e.target.value)}
+        placeholder="Apple Inc., Cambridge Residence, Cambridge Growth Partners IV..."
+        autoFocus
+      />
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label>Symbol (optional)</Label>
+          <Input value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder="AAPL, BTC..." />
+        </div>
+        <div>
+          <Label>Asset class</Label>
+          <Select value={assetClass} onChange={(e) => setAssetClass(e.target.value as AssetClass)}>
+            {Object.entries(ASSET_CLASS_LABELS).map(([k, v]) => (
+              <option key={k} value={k}>
+                {v}
+              </option>
+            ))}
+          </Select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label>Currency</Label>
+          <Select value={currency} onChange={(e) => setCurrency(e.target.value)}>
+            {CURRENCIES.map((c) => (
+              <option key={c.code} value={c.code}>
+                {c.code}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div>
+          <Label>Country</Label>
+          <Select value={country} onChange={(e) => setCountry(e.target.value)}>
+            {COUNTRIES.map((c) => (
+              <option key={c.code} value={c.code}>
+                {c.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        <div>
+          <Label>Quantity</Label>
+          <Input value={quantity} onChange={(e) => setQuantity(e.target.value)} inputMode="decimal" />
+        </div>
+        <div>
+          <Label>Price</Label>
+          <Input value={price} onChange={(e) => setPrice(e.target.value)} inputMode="decimal" />
+        </div>
+        <div>
+          <Label>Market value</Label>
+          <Input
+            value={marketValue}
+            onChange={(e) => setMarketValue(e.target.value)}
+            inputMode="decimal"
+            placeholder={quantity && price ? String(Number(quantity) * Number(price)) : ""}
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label>Cost basis (optional)</Label>
+          <Input value={costBasis} onChange={(e) => setCostBasis(e.target.value)} inputMode="decimal" />
+        </div>
+        <div>
+          <Label>Valuation date</Label>
+          <Input type="date" value={valuationDate} onChange={(e) => setValuationDate(e.target.value)} />
+        </div>
+      </div>
+
+      <Label>Advisor notes</Label>
+      <Textarea
+        rows={2}
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+        placeholder="Sponsor reporting cadence, restrictions, valuation method..."
+      />
+
+      <div className="text-xs text-ink-500 pt-1">
+        Will save as <span className="text-ink-900 tabular">{formatCurrency(computedValue, currency)}</span> in {account?.name ?? "—"}.
+        {assetClass === "liability" && computedValue !== 0 && (
+          <span className="text-warning-600 ml-1">Stored as a negative balance.</span>
+        )}
+      </div>
+
+      <div className="flex gap-2 pt-3 border-t border-ink-100 mt-2">
+        <Button onClick={save} disabled={!canSave}>
+          Add holding
+        </Button>
+        <Button variant="ghost" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
     </div>
   );
 }
