@@ -23,6 +23,21 @@ function ClientProfileInner() {
   const advisor = useAtlasStore((s) => s.advisor);
   const setClient = useAtlasStore((s) => s.setClient);
   const setAdvisor = useAtlasStore((s) => s.setAdvisor);
+  const clearAll = useAtlasStore((s) => s.clearAll);
+  const resetSeed = useAtlasStore((s) => s.resetSeed);
+
+  function handleClear() {
+    if (
+      confirm(
+        "Start a new engagement from scratch?\n\n" +
+          "This will permanently clear the client profile, advisor profile, " +
+          "all accounts, holdings, recommendations, source documents, and PDF history. " +
+          "This action cannot be undone."
+      )
+    ) {
+      clearAll();
+    }
+  }
 
   return (
     <>
@@ -30,6 +45,16 @@ function ClientProfileInner() {
         eyebrow="Engagement"
         title="Client & Advisor Profile"
         description="Configure who the proposal is for, what jurisdiction it serves, and the advisor of record."
+        actions={
+          <>
+            <Button variant="ghost" size="sm" onClick={() => { if (confirm("Restore the seeded Blackwell Family Office household?")) resetSeed(); }}>
+              Restore sample data
+            </Button>
+            <Button variant="danger" size="sm" onClick={handleClear}>
+              Start from scratch
+            </Button>
+          </>
+        }
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

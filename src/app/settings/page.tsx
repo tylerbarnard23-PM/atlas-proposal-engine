@@ -18,6 +18,7 @@ export default function SettingsPage() {
 
 function Inner() {
   const reset = useAtlasStore((s) => s.resetSeed);
+  const clearAll = useAtlasStore((s) => s.clearAll);
   const [providers, setProviders] = React.useState<{ id: string; name: string; requiresApiKey: boolean; hasApiKey: boolean }[]>([]);
 
   React.useEffect(() => {
@@ -39,11 +40,25 @@ function Inner() {
       <Card className="mb-5">
         <CardBody className="space-y-3">
           <p className="text-sm text-ink-700">
-            All advisor-entered data is persisted in the browser via <code className="text-2xs bg-slatey-100 rounded px-1 py-0.5">localStorage</code>. Reset reverts the workspace to the seeded Blackwell household used for evaluation.
+            All advisor-entered data is persisted in the browser via <code className="text-2xs bg-slatey-100 rounded px-1 py-0.5">localStorage</code>. Use <em>Restore sample data</em> to repopulate the seeded Blackwell household, or <em>Start from scratch</em> to wipe the workspace and begin a real engagement.
           </p>
-          <div>
-            <Button variant="secondary" onClick={() => { if (confirm("Reset the workspace to seed data? This will clear all in-progress edits.")) reset(); }}>
-              Reset workspace to seed
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" onClick={() => { if (confirm("Reset the workspace to seeded sample data? Any in-progress edits will be replaced.")) reset(); }}>
+              Restore sample data
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => {
+                if (
+                  confirm(
+                    "Start a new engagement from scratch?\n\nThis permanently clears the client profile, advisor profile, all accounts, holdings, recommendations, source documents, and PDF history. This action cannot be undone."
+                  )
+                ) {
+                  clearAll();
+                }
+              }}
+            >
+              Start from scratch
             </Button>
           </div>
         </CardBody>

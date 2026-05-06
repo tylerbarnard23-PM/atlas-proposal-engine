@@ -63,6 +63,7 @@ export interface AtlasActions {
   setProposalNotes: (notes: string) => void;
   recordPdfJob: (job: PdfGenerationJob) => void;
   resetSeed: () => void;
+  clearAll: () => void;
   setHasHydrated: (b: boolean) => void;
 }
 
@@ -101,6 +102,57 @@ const seedState = (): AtlasState => ({
   pdfHistory: [],
   hasHydrated: false,
 });
+
+const blankState = (): AtlasState => {
+  const now = new Date().toISOString();
+  const clientId = `cli_${Math.random().toString(36).slice(2, 10)}`;
+  const advisorId = `adv_${Math.random().toString(36).slice(2, 10)}`;
+  return {
+    client: {
+      id: clientId,
+      fullName: "",
+      countryOfResidence: "US",
+      taxResidency: "US",
+      reportingCountry: "US",
+      baseCurrency: "USD",
+      proposalOutputCurrency: "USD",
+      locale: "en-US",
+      riskTolerance: "moderate",
+      investmentObjective: "",
+      timeHorizonYears: 10,
+      liquidityNeeds: "moderate",
+      incomeNeeds: "modest",
+      taxSensitivity: "moderate",
+    },
+    advisor: { id: advisorId, name: "", email: "", firmName: "" },
+    accounts: [],
+    holdings: [],
+    fxRates: SEED_FX_RATES, // reference rates remain useful on a blank slate
+    recommendations: [],
+    insights: [],
+    sourceDocuments: [],
+    marketDataByIdentifier: {},
+    proposalSections: DEFAULT_PROPOSAL_SECTIONS,
+    proposal: {
+      id: `prop_${Math.random().toString(36).slice(2, 10)}`,
+      clientId,
+      advisorId,
+      title: "Wealth Proposal",
+      outputCurrency: "USD",
+      outputCountry: "US",
+      createdAt: now,
+      updatedAt: now,
+      approvalStatus: "draft",
+      sections: DEFAULT_PROPOSAL_SECTIONS,
+      recommendationIds: [],
+      assumptionIds: [],
+      disclosureIds: DISCLOSURE_LIBRARY.filter((d) => d.required).map((d) => d.id),
+    },
+    disclosures: DISCLOSURE_LIBRARY,
+    pdfHistory: [],
+    hasHydrated: true,
+  };
+};
 
 export const useAtlasStore = create<AtlasState & AtlasActions>()(
   persist(
@@ -165,6 +217,7 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
       setProposalNotes: (notes) => set((s) => ({ proposal: { ...s.proposal, notes } })),
       recordPdfJob: (job) => set((s) => ({ pdfHistory: [job, ...s.pdfHistory].slice(0, 25) })),
       resetSeed: () => set({ ...seedState(), hasHydrated: true }),
+      clearAll: () => set(blankState()),
       setHasHydrated: (b) => set({ hasHydrated: b }),
     }),
     {
