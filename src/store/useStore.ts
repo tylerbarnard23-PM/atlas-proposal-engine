@@ -6,6 +6,7 @@ import type {
   Account,
   AdvisorProfile,
   ClientProfile,
+  DismissedInsight,
   Disclosure,
   FxRate,
   Holding,
@@ -37,6 +38,7 @@ export interface AtlasState {
   fxRates: FxRate[];
   recommendations: Recommendation[];
   insights: Insight[];
+  dismissedInsights: DismissedInsight[];
   sourceDocuments: SourceDocument[];
   marketDataByIdentifier: Record<string, MarketDataResult>;
   proposalSections: ProposalSection[];
@@ -61,6 +63,12 @@ export interface AtlasActions {
   /** Puts a deleted recommendation back at its old position (Undo). */
   restoreRecommendation: (rec: Recommendation, index: number) => void;
   setInsights: (insights: Insight[]) => void;
+  dismissInsight: (d: DismissedInsight) => void;
+  restoreInsight: (key: string) => void;
+  /** Records the advisor's decision not to propose it (status "excluded"). */
+  rejectRecommendation: (id: string, reason?: string) => void;
+  /** Brings a rejected recommendation back as a draft. */
+  reopenRecommendation: (id: string) => void;
   addSourceDocument: (doc: SourceDocument) => void;
   updateSourceDocument: (id: string, patch: Partial<SourceDocument>) => void;
   setMarketData: (identifierKey: string, result: MarketDataResult) => void;
@@ -112,6 +120,7 @@ const seedState = (): AtlasState => ({
   fxRates: SEED_FX_RATES,
   recommendations: SEED_RECOMMENDATIONS,
   insights: [],
+  dismissedInsights: [],
   sourceDocuments: [],
   marketDataByIdentifier: Object.fromEntries(SEED_MARKET_QUOTES.map((q) => [`${q.identifier.type}:${q.identifier.value}`, q])),
   proposalSections: DEFAULT_PROPOSAL_SECTIONS,
@@ -148,6 +157,7 @@ const blankState = (): AtlasState => {
     fxRates: SEED_FX_RATES, // reference rates remain useful on a blank slate
     recommendations: [],
     insights: [],
+    dismissedInsights: [],
     sourceDocuments: [],
     marketDataByIdentifier: {},
     proposalSections: DEFAULT_PROPOSAL_SECTIONS,
@@ -257,6 +267,33 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
           return { recommendations: next };
         }),
       setInsights: (insights) => set({ insights }),
+      dismissInsight: (d) =>
+        set((s) => ({ dismissedInsights: [d, ...s.dismissedInsights.filter((x) => x.key !== d.key)] })),
+      restoreInsight: (key) => set((s) => ({ dismissedInsights: s.dismissedInsights.filter((x) => x.key !== key) })),
+      rejectRecommendation: (id, reason) =>
+        set((s) => ({
+          recommendations: s.recommendations.map((r) =>
+            r.id === id
+              ? {
+                  ...r,
+                  status: "excluded",
+                  approvedByAdvisor: false,
+                  includeInPdf: false,
+                  rejectionReason: reason?.trim() || undefined,
+                  rejectedAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                }
+              : r
+          ),
+        })),
+      reopenRecommendation: (id) =>
+        set((s) => ({
+          recommendations: s.recommendations.map((r) =>
+            r.id === id
+              ? { ...r, status: "draft", rejectionReason: undefined, rejectedAt: undefined, updatedAt: new Date().toISOString() }
+              : r
+          ),
+        })),
       addSourceDocument: (doc) => set((s) => ({ sourceDocuments: [doc, ...s.sourceDocuments] })),
       updateSourceDocument: (id, patch) =>
         set((s) => ({
@@ -297,11 +334,12 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
           };
         }),
       approveAllRecommendations: () => {
-        const pending = get().recommendations.filter((r) => !r.approvedByAdvisor);
+        // Rejected recommendations are a decision already made: not "pending".
+        const pending = get().recommendations.filter((r) => !r.approvedByAdvisor && r.status !== "excluded");
         const now = new Date().toISOString();
         set((s) => ({
           recommendations: s.recommendations.map((r) =>
-            r.approvedByAdvisor
+            r.approvedByAdvisor || r.status === "excluded"
               ? r
               : { ...r, approvedByAdvisor: true, status: "approved", includeInPdf: true, updatedAt: now }
           ),

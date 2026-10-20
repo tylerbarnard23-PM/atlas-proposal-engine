@@ -430,8 +430,19 @@ export interface Recommendation {
   approvedByAdvisor: boolean;
   /** Set when converted from an insight, so the same insight isn't added twice. */
   sourceInsightKey?: string;
+  /** Why the advisor rejected it (status "excluded"). */
+  rejectionReason?: string;
+  rejectedAt?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+/** An insight the advisor reviewed and set aside; keyed by insightKey(). */
+export interface DismissedInsight {
+  key: string;
+  title: string;
+  reason?: string;
+  dismissedAt: string;
 }
 
 export interface ComplianceCheck {

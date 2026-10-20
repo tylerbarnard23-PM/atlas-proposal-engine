@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { CheckCheck, CheckCircle2, Lightbulb, Plus, Trash2 } from "lucide-react";
+import { Ban, CheckCheck, CheckCircle2, Lightbulb, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { useAtlasStore } from "@/store/useStore";
 import { ClientOnly } from "@/components/layout/ClientOnly";
 import { PageHeader } from "@/components/ui/Section";
@@ -12,10 +12,11 @@ import { Button } from "@/components/ui/Button";
 import { Input, Label, Select, Textarea } from "@/components/ui/Input";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Drawer } from "@/components/ui/Drawer";
+import { ReasonPicker } from "@/components/ui/ReasonPicker";
 import type { Holding, Recommendation, RecommendationStatus, RecommendationType } from "@/domain/types";
 import { applyRecToValue, proposedCashShortfalls } from "@/engines/proposalEngine";
 import { useNormalizedHoldings } from "@/hooks/useNormalizedHoldings";
-import { formatCurrency, safeId, todayIso } from "@/utils/formatting";
+import { formatCurrency, formatDate, safeId, todayIso } from "@/utils/formatting";
 
 const TYPES: RecommendationType[] = [
   "buy", "sell", "hold", "reduce", "increase", "rebalance", "transfer",
@@ -27,6 +28,8 @@ const TYPES: RecommendationType[] = [
   "review_source_data", "refresh_market_data", "request_updated_statement",
   "custom",
 ];
+
+const REJECT_REASONS = ["Client declined", "Not suitable", "Tax impact too high", "Timing"];
 
 const STATUSES: RecommendationStatus[] = ["draft", "needs_review", "approved", "excluded", "implemented"];
 
@@ -50,11 +53,17 @@ function Inner() {
   );
   const remove = useAtlasStore((s) => s.removeRecommendation);
   const approveAll = useAtlasStore((s) => s.approveAllRecommendations);
-  const pendingCount = recs.filter((r) => !r.approvedByAdvisor).length;
+  const isRejected = (r: Recommendation) => r.status === "excluded";
+  const pendingCount = recs.filter((r) => !r.approvedByAdvisor && !isRejected(r)).length;
+  const rejectRec = useAtlasStore((s) => s.rejectRecommendation);
+  const reopenRec = useAtlasStore((s) => s.reopenRecommendation);
+  const [rejecting, setRejecting] = React.useState<string | null>(null);
+  // Rejected ones sink to the bottom; otherwise keep the advisor's order.
+  const ordered = React.useMemo(() => [...recs.filter((r) => !isRejected(r)), ...recs.filter(isRejected)], [recs]);
   const [approvedNotice, setApprovedNotice] = React.useState<number | null>(null);
 
   function onApproveAll() {
-    const fromCopilot = recs.filter((r) => !r.approvedByAdvisor && r.complianceNote?.includes("Proposal Copilot")).length;
+    const fromCopilot = recs.filter((r) => !r.approvedByAdvisor && !isRejected(r) && r.complianceNote?.includes("Proposal Copilot")).length;
     const ok = confirm(
       `Approve ${pendingCount} recommendation${pendingCount === 1 ? "" : "s"} and include ${pendingCount === 1 ? "it" : "them"} in the PDF?` +
         (fromCopilot ? `\n\n${fromCopilot} of these were drafted by the Proposal Copilot.` : "") +
@@ -110,7 +119,11 @@ function Inner() {
               disabled={pendingCount === 0}
               iconLeft={<CheckCheck className="h-4 w-4" />}
             >
-              {pendingCount === 0 ? "All approved" : `Approve all (${pendingCount})`}
+              {pendingCount > 0
+                ? `Approve all (${pendingCount})`
+                : recs.some((r) => r.approvedByAdvisor)
+                ? "All approved"
+                : "Nothing to approve"}
             </Button>
             <Button onClick={newRec} iconLeft={<Plus className="h-4 w-4" />}>
               New recommendation
@@ -176,24 +189,36 @@ function Inner() {
         />
       ) : (
         <div className="space-y-3">
-          {recs.map((r) => {
+          {ordered.map((r) => {
+            const rejected = isRejected(r);
             const linked = r.relatedHoldingId ? holdingsById[r.relatedHoldingId] : undefined;
             const effect = describeRecEffect(r, linked);
             return (
-              <Card key={r.id}>
+              <Card key={r.id} className={rejected ? "opacity-80 bg-slatey-50" : undefined}>
                 <CardBody>
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <Badge tone="navy">{r.type.replace(/_/g, " ")}</Badge>
-                        <Badge tone={r.approvedByAdvisor ? "positive" : "warning"}>
-                          {r.approvedByAdvisor ? "Approved" : "Not approved"}
-                        </Badge>
+                        {rejected ? (
+                          <Badge tone="negative">Rejected</Badge>
+                        ) : (
+                          <Badge tone={r.approvedByAdvisor ? "positive" : "warning"}>
+                            {r.approvedByAdvisor ? "Approved" : "Not approved"}
+                          </Badge>
+                        )}
                         <Badge tone="neutral">{r.priority} priority</Badge>
                         {r.includeInPdf && <Badge tone="gold">In PDF prose</Badge>}
                       </div>
-                      <h4 className="font-serif text-lg text-ink-900 mt-1.5">{r.title}</h4>
+                      <h4 className={`font-serif text-lg mt-1.5 ${rejected ? "text-ink-500 line-through decoration-ink-300" : "text-ink-900"}`}>{r.title}</h4>
+                      {rejected && (
+                        <p className="mt-1 text-[13px] text-negative-600">
+                          Rejected{r.rejectedAt ? ` ${formatDate(r.rejectedAt)}` : ""}
+                          {r.rejectionReason ? `: ${r.rejectionReason}` : ""}. Not applied to the Before / After and left out of the PDF.
+                        </p>
+                      )}
                       <p className="text-sm text-ink-600 mt-1 leading-relaxed">{r.rationale}</p>
+                      {!rejected && (
                       <div
                         className={`mt-2 text-[12px] tabular px-2.5 py-1.5 rounded-md inline-block ${
                           effect.tone === "positive"
@@ -208,23 +233,42 @@ function Inner() {
                         {r.approvedByAdvisor ? "↻ " : "○ "}
                         {effect.label}
                       </div>
+                      )}
                     </div>
                     <div className="flex flex-col gap-2 shrink-0">
-                      <Button size="sm" variant="secondary" onClick={() => setEditing(r)}>Edit</Button>
-                      <Button
-                        size="sm"
-                        variant={r.approvedByAdvisor ? "secondary" : "primary"}
-                        onClick={() =>
-                          upsert({
-                            ...r,
-                            approvedByAdvisor: !r.approvedByAdvisor,
-                            status: !r.approvedByAdvisor ? "approved" : r.status,
-                            includeInPdf: !r.approvedByAdvisor ? true : r.includeInPdf,
-                          })
-                        }
-                      >
-                        {r.approvedByAdvisor ? "Unapprove" : "Approve"}
-                      </Button>
+                      {rejected ? (
+                        <Button size="sm" variant="secondary" iconLeft={<RotateCcw className="h-3.5 w-3.5" />} onClick={() => reopenRec(r.id)}>
+                          Reopen
+                        </Button>
+                      ) : (
+                        <>
+                          <Button size="sm" variant="secondary" onClick={() => setEditing(r)}>Edit</Button>
+                          <Button
+                            size="sm"
+                            variant={r.approvedByAdvisor ? "secondary" : "primary"}
+                            onClick={() =>
+                              upsert({
+                                ...r,
+                                approvedByAdvisor: !r.approvedByAdvisor,
+                                status: !r.approvedByAdvisor ? "approved" : r.status,
+                                includeInPdf: !r.approvedByAdvisor ? true : r.includeInPdf,
+                              })
+                            }
+                          >
+                            {r.approvedByAdvisor ? "Unapprove" : "Approve"}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-negative-600 hover:bg-negative-50"
+                            aria-label={`Reject ${r.title}`}
+                            iconLeft={<Ban className="h-3.5 w-3.5" />}
+                            onClick={() => setRejecting(rejecting === r.id ? null : r.id)}
+                          >
+                            Reject
+                          </Button>
+                        </>
+                      )}
                       <Button
                         size="sm"
                         variant="ghost"
@@ -236,6 +280,20 @@ function Inner() {
                       </Button>
                     </div>
                   </div>
+                  {rejecting === r.id && !rejected && (
+                    <ReasonPicker
+                      className="mt-3"
+                      tone="negative"
+                      prompt="Why reject this recommendation? (optional, kept for the record)"
+                      reasons={REJECT_REASONS}
+                      confirmLabel="Reject recommendation"
+                      onConfirm={(reason) => {
+                        rejectRec(r.id, reason);
+                        setRejecting(null);
+                      }}
+                      onCancel={() => setRejecting(null)}
+                    />
+                  )}
                 </CardBody>
               </Card>
             );
