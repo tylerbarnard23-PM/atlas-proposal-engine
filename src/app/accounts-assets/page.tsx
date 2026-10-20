@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Plus, FilePlus2, Wallet, ShieldAlert, CheckCircle2, ArrowRight } from "lucide-react";
+import { Plus, FilePlus2, Wallet, ShieldAlert, CheckCircle2, ArrowRight, CheckCheck } from "lucide-react";
 import { useAtlasStore } from "@/store/useStore";
 import { ClientOnly } from "@/components/layout/ClientOnly";
 import { useNormalizedHoldings } from "@/hooks/useNormalizedHoldings";
@@ -50,6 +50,30 @@ function Inner() {
   const [addHoldingOpen, setAddHoldingOpen] = React.useState(false);
   const [presetAccountId, setPresetAccountId] = React.useState<string | undefined>();
   const pending = holdingsNeedingReview(holdings);
+  const setVerification = useAtlasStore((s) => s.setHoldingsVerification);
+  const accountName = React.useMemo(() => Object.fromEntries(accounts.map((a) => [a.id, a.name])), [accounts]);
+  // Confirm all covers only holdings whose price isn't stale or a placeholder;
+  // those need opening one by one.
+  const bulkConfirmable = pending.filter((p) => p.reasons.length === 1);
+  const [bulkConfirmed, setBulkConfirmed] = React.useState<string[] | null>(null);
+  function confirmAll() {
+    const total = bulkConfirmable.reduce((s, p) => s + (p.holding.reportingMarketValue ?? p.holding.nativeMarketValue), 0);
+    const held = pending.length - bulkConfirmable.length;
+    const ok = confirm(
+      `Confirm the values of ${bulkConfirmable.length} holding${bulkConfirmable.length === 1 ? "" : "s"} ` +
+        `(${formatCurrency(total, reportingCurrency, { compact: true })} in total) as shown in the list?
+
+` +
+        "Only do this if you've checked them against their source documents." +
+        (held ? `
+
+${held} holding${held === 1 ? " has" : "s have"} an out-of-date or placeholder price and must be checked one by one.` : "")
+    );
+    if (!ok) return;
+    const ids = bulkConfirmable.map((p) => p.holding.id);
+    setVerification(ids, "advisor_approved");
+    setBulkConfirmed(ids);
+  }
   // Readiness "Fix in…" links land here with ?review=1; highlight the queue
   // and bring it into view so the next step is obvious.
   const reviewRef = React.useRef<HTMLDivElement>(null);
@@ -154,6 +178,26 @@ function Inner() {
             })}
           </div>
 
+          {bulkConfirmed && (
+            <div role="status" className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-positive-50 ring-1 ring-inset ring-positive-500/40 px-4 py-2.5 text-[13px]">
+              <span className="inline-flex items-center gap-1.5 font-semibold text-positive-600">
+                <CheckCircle2 className="h-4 w-4" />
+                Confirmed {bulkConfirmed.length} holding value{bulkConfirmed.length === 1 ? "" : "s"}.
+              </span>
+              <button
+                className="font-medium text-navy-700 hover:underline"
+                onClick={() => {
+                  setVerification(bulkConfirmed, "unverified");
+                  setBulkConfirmed(null);
+                }}
+              >
+                Undo
+              </button>
+              <Link href="/pdf-preview" className="font-medium text-navy-700 hover:underline">Check readiness in PDF Preview →</Link>
+              <button className="ml-auto text-ink-500 hover:text-ink-800" onClick={() => setBulkConfirmed(null)}>Dismiss</button>
+            </div>
+          )}
+
           {pending.length > 0 && (
             <div ref={reviewRef} className="mb-4 scroll-mt-20">
               <Card className={cn(focusReview && "ring-2 ring-warning-500/60")}>
@@ -163,26 +207,51 @@ function Inner() {
                 </CardHeader>
                 <CardBody className="space-y-2">
                   <p className="text-[13px] text-ink-600">
-                    Check that each holding&apos;s value is correct before it goes into a client document. Open each one, check
-                    its value and source, then click <span className="font-medium text-ink-800">Confirm value</span> (or save a
-                    corrected value).
+                    Check that each holding&apos;s value is correct before it goes into a client document. Compare the value
+                    and source shown with the statement, then click <span className="font-medium text-ink-800">Confirm</span>. To
+                    correct a value or see more detail, click <span className="font-medium text-ink-800">Check value</span>.
                   </p>
                   <p className="text-[12px] text-ink-500">
                     This is a data check, not a recommendation review. Recommendations are approved separately on{" "}
                     <Link href="/recommendations" className="font-medium text-navy-700 hover:underline">Recommendations →</Link>
                   </p>
+                  {bulkConfirmable.length > 1 && (
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-slatey-50 px-3 py-2">
+                      <span className="text-[12px] text-ink-600">
+                        Checked them all against the source? Confirm the {bulkConfirmable.length} values shown below in one step.
+                      </span>
+                      <Button size="sm" variant="secondary" iconLeft={<CheckCheck className="h-4 w-4" />} onClick={confirmAll}>
+                        Confirm all ({bulkConfirmable.length})
+                      </Button>
+                    </div>
+                  )}
                   <ul className="divide-y divide-ink-100">
                     {pending.map(({ holding, reasons }) => (
                       <li key={holding.id} className="flex items-center justify-between gap-3 py-2">
                         <div className="min-w-0">
                           <div className="text-[13px] font-medium text-ink-900 truncate">{holding.assetName}</div>
+                          <div className="text-[12px] text-ink-500 truncate">
+                            <span className="tabular font-medium text-ink-800">
+                              {formatCurrency(holding.nativeMarketValue, holding.currency)}
+                            </span>
+                            {accountName[holding.accountId] && accountName[holding.accountId] !== holding.assetName && (
+                              <> · {accountName[holding.accountId]}</>
+                            )}
+                            {" · "}
+                            {holding.valuationSource.note ?? holding.valuationSource.kind} · as of {formatDate(holding.valuationDate)}
+                          </div>
                           <div className="flex flex-wrap gap-1 mt-0.5">
                             {reasons.map((r) => (
                               <Badge key={r} tone="warning">{REASON_LABEL[r]}</Badge>
                             ))}
                           </div>
                         </div>
-                        <Button size="sm" onClick={() => setActive(holding)}>Check value</Button>
+                        <div className="flex shrink-0 gap-2">
+                          <Button size="sm" variant="secondary" onClick={() => setActive(holding)}>Check value</Button>
+                          {reasons.length === 1 && (
+                            <Button size="sm" onClick={() => setVerification([holding.id], "advisor_approved")}>Confirm</Button>
+                          )}
+                        </div>
                       </li>
                     ))}
                   </ul>

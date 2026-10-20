@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { CheckCheck, CheckCircle2, Lightbulb, Plus } from "lucide-react";
+import { CheckCheck, CheckCircle2, Lightbulb, Plus, Trash2 } from "lucide-react";
 import { useAtlasStore } from "@/store/useStore";
 import { ClientOnly } from "@/components/layout/ClientOnly";
 import { PageHeader } from "@/components/ui/Section";
@@ -63,6 +63,13 @@ function Inner() {
     if (ok) setApprovedNotice(approveAll());
   }
   const [editing, setEditing] = React.useState<Recommendation | null>(null);
+  // Delete straight from the list, with Undo instead of a confirm dialog.
+  const [deleted, setDeleted] = React.useState<{ rec: Recommendation; index: number } | null>(null);
+  const restore = useAtlasStore((s) => s.restoreRecommendation);
+  function deleteRec(r: Recommendation) {
+    setDeleted({ rec: r, index: recs.findIndex((x) => x.id === r.id) });
+    remove(r.id);
+  }
   const holdingsById = React.useMemo(
     () => Object.fromEntries(holdings.map((h) => [h.id, h])),
     [holdings]
@@ -119,6 +126,22 @@ function Inner() {
             Approved {approvedNotice} recommendation{approvedNotice === 1 ? "" : "s"} and included {approvedNotice === 1 ? "it" : "them"} in the PDF.
           </span>
           <Link href="/pdf-preview" className="font-medium text-navy-700 hover:underline">Check readiness in PDF Preview →</Link>
+        </div>
+      )}
+
+      {deleted && (
+        <div role="status" className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-slatey-50 ring-1 ring-inset ring-ink-200 px-4 py-2.5 text-[13px] text-ink-800">
+          <span>Deleted &ldquo;{deleted.rec.title || "Untitled recommendation"}&rdquo;.</span>
+          <button
+            className="font-medium text-navy-700 hover:underline"
+            onClick={() => {
+              restore(deleted.rec, deleted.index);
+              setDeleted(null);
+            }}
+          >
+            Undo
+          </button>
+          <button className="ml-auto text-ink-500 hover:text-ink-800" onClick={() => setDeleted(null)}>Dismiss</button>
         </div>
       )}
 
@@ -202,6 +225,15 @@ function Inner() {
                       >
                         {r.approvedByAdvisor ? "Unapprove" : "Approve"}
                       </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        aria-label={`Delete ${r.title}`}
+                        iconLeft={<Trash2 className="h-3.5 w-3.5" />}
+                        onClick={() => deleteRec(r)}
+                      >
+                        Delete
+                      </Button>
                     </div>
                   </div>
                 </CardBody>
@@ -221,7 +253,8 @@ function Inner() {
               setEditing(null);
             }}
             onRemove={() => {
-              remove(editing.id);
+              const existing = recs.find((x) => x.id === editing.id);
+              if (existing) deleteRec(existing);
               setEditing(null);
             }}
           />

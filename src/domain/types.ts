@@ -428,6 +428,8 @@ export interface Recommendation {
   status: RecommendationStatus;
   includeInPdf: boolean;
   approvedByAdvisor: boolean;
+  /** Set when converted from an insight, so the same insight isn't added twice. */
+  sourceInsightKey?: string;
   createdAt: string;
   updatedAt: string;
 }

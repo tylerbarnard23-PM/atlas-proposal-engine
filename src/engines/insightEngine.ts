@@ -22,8 +22,12 @@ export function generateInsights({ holdings, reportingCurrency }: InsightInputs)
   if (total <= 0 || investible.length === 0) return out;
   const now = todayIso();
 
-  // Concentration (single issuer)
+  // Concentration. Only positions with a single issuer or a single asset
+  // behind them: not cash, not diversified funds, not a balance-only account
+  // whose contents are unknown, not the client's own home.
   for (const h of investible) {
+    const kind = concentrationKind(h);
+    if (!kind) continue;
     const v = h.reportingMarketValue || 0;
     const pct = (v / total) * 100;
     if (pct >= CONCENTRATION_PCT) {
@@ -32,7 +36,10 @@ export function generateInsights({ holdings, reportingCurrency }: InsightInputs)
         category: "concentration",
         severity: pct >= 12 ? "critical" : "warning",
         title: `${h.assetName} represents ${pct.toFixed(1)}% of investible assets`,
-        detail: `Single-issuer concentration above ${CONCENTRATION_PCT}% of investible assets. Consider trimming to manage idiosyncratic risk.`,
+        detail:
+          kind === "issuer"
+            ? `Single-issuer concentration above ${CONCENTRATION_PCT}% of investible assets. Consider trimming to manage idiosyncratic risk.`
+            : `A single asset above ${CONCENTRATION_PCT}% of investible assets. Review how it fits the client's liquidity needs and risk tolerance.`,
         relatedHoldingIds: [h.id],
         context: [
           { label: "Position", value: h.assetName },
@@ -176,4 +183,28 @@ export function summarizeAllocation(
   return Array.from(totals.entries())
     .map(([label, value]) => ({ label, value, pct: total > 0 ? (value / total) * 100 : 0 }))
     .sort((a, b) => b.value - a.value);
+}
+
+// Insight ids are regenerated on every run; this key identifies "the same
+// observation" across runs (category + the holdings or accounts it is about),
+// ignoring the percentages in the title, which move with prices.
+export function insightKey(i: Pick<Insight, "category" | "title" | "relatedHoldingIds" | "relatedAccountIds">): string {
+  const subject = i.relatedHoldingIds?.join(",") || i.relatedAccountIds?.join(",") || i.title.replace(/[\d.,]+%?/g, "#");
+  return `${i.category}:${subject}`;
+}
+
+const FUND_NAME = /\b(ETF|FUND|INDEX|TRUST SHARES|PORTFOLIO)\b/i;
+const OWN_HOME = /primary|residence|\bhome\b|vacation/i;
+
+// "issuer": a stock, bond or award tied to one company. "asset": one
+// property, business or collectible. undefined: not a concentration
+// question (cash, funds, unclassified balances, the family home).
+export function concentrationKind(h: Pick<Holding, "assetClass" | "assetType" | "subAssetClass" | "assetName">): "issuer" | "asset" | undefined {
+  if (["cash", "custom", "liability", "insurance"].includes(h.assetClass) || h.subAssetClass === "unclassified") return undefined;
+  if (h.assetType === "etf" || h.assetType === "mutual_fund" || h.subAssetClass === "reit" || FUND_NAME.test(h.assetName)) return undefined;
+  if (["real_estate", "business", "collectible", "private_equity", "private_credit", "hedge_fund", "venture"].includes(h.assetClass)) {
+    if (h.assetClass === "real_estate" && OWN_HOME.test(h.assetName)) return undefined;
+    return "asset";
+  }
+  return "issuer";
 }

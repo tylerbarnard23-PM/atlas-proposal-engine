@@ -66,16 +66,16 @@ function renderBeforeAfter(recommendations: Recommendation[], hs: NormalizedHold
   expect(start).toBeGreaterThan(-1);
   const text = html.slice(start).replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ");
   const labels = Object.values(ASSET_CLASS_LABELS).map((l) => l.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-  // Each side lists "Label 12.3% $4.5M" rows after its "Current"/"Proposed" total.
+  // Each side lists "Label 12.3% $4.5M" rows after its "Before Current portfolio"/"After Proposed portfolio" total.
   const rowRe = new RegExp(`(${labels.join("|")}) (-?[\\d.]+)% (\\$?-?[\\d.,]+[KMB]?)`, "g");
   const side = (marker: string, until: string): Side => {
     const seg = text.slice(text.indexOf(marker), text.indexOf(until, text.indexOf(marker) + marker.length));
-    const total = money(seg.split(" ")[1]);
+    const total = money(seg.slice(marker.length).trim().split(" ")[0]);
     const rows = new Map<string, { pct: number; value: number }>();
     for (const m of seg.matchAll(rowRe)) rows.set(m[1], { pct: Number(m[2]), value: money(m[3]) });
     return { total, rows };
   };
-  return { current: side("Current $", "Proposed $"), proposed: side("Proposed $", "approved recommendation"), text };
+  return { current: side("Current portfolio", "Proposed portfolio"), proposed: side("Proposed portfolio", "approved recommendation"), text };
 }
 
 const near = (a: number, b: number, tol: number) => expect(Math.abs(a - b)).toBeLessThanOrEqual(tol);
