@@ -19,9 +19,10 @@ import { SAMPLE_BROKERAGE_CSV } from "@/ingestion/sampleSources/sampleBrokerageS
 import { SAMPLE_MESSY_TEXT } from "@/ingestion/sampleSources/sampleMessyStatement";
 import { SAMPLE_CRYPTO_WALLET } from "@/ingestion/sampleSources/sampleCryptoWalletScreenshot";
 import { SAMPLE_RETIREMENT_CSV } from "@/ingestion/sampleSources/sampleRetirementStatement";
-import { safeId, todayIso } from "@/utils/formatting";
+import { formatCurrency, safeId, todayIso } from "@/utils/formatting";
 import { PdfImport } from "@/components/import/PdfImport";
 import { extractionToWorkspace } from "@/ingestion/documents/toWorkspace";
+import { useImportTarget } from "@/components/import/importTarget";
 import type {
   Account,
   AccountType,
@@ -46,6 +47,11 @@ type Mode = "manual" | "csv" | "excel" | "pdf" | "image" | "paste" | "ofx";
 
 function ImportCenterInner() {
   const [mode, setMode] = React.useState<Mode>("paste");
+  const target = useImportTarget();
+  // Arriving to add positions to one account: start on the CSV tab.
+  React.useEffect(() => {
+    if (target.account) setMode("csv");
+  }, [target.account]);
 
   return (
     <>
@@ -63,6 +69,22 @@ function ImportCenterInner() {
       />
 
       <IngestErrorBanner />
+
+      {target.account && (
+        <div role="status" className="mb-4 rounded-md bg-navy-50 ring-1 ring-inset ring-navy-200 px-4 py-3 text-[13px] text-ink-800">
+          <div className="font-semibold text-navy-800">Adding positions to {target.account.name}</div>
+          <p className="mt-0.5 text-ink-700">
+            Upload this account&apos;s statement as CSV, Excel or PDF, or paste its holdings table.
+            {target.replace && (
+              <>
+                {" "}When you save, its single balance of{" "}
+                <span className="font-medium tabular">{formatCurrency(target.replace.nativeMarketValue, target.replace.currency)}</span> is replaced by the
+                positions.
+              </>
+            )}
+          </p>
+        </div>
+      )}
 
       <Tabs
         active={mode}
@@ -555,7 +577,12 @@ function ExtractionPreview({ result, fileName, sizeBytes }: { result: Extraction
   // Default to new accounts: silently merging a file into whichever account
   // happens to be listed first put one client's positions in another's account.
   const [targetAccountId, setTargetAccountId] = React.useState("");
-  const [saved, setSaved] = React.useState<{ holdings: number; accounts: number; target?: string } | null>(null);
+  const target = useImportTarget();
+  const removeHolding = useAtlasStore((s) => s.removeHolding);
+  React.useEffect(() => {
+    if (target.account) setTargetAccountId(target.account.id);
+  }, [target.account]);
+  const [saved, setSaved] = React.useState<{ holdings: number; accounts: number; target?: string; replaced?: string } | null>(null);
   React.useEffect(() => setSaved(null), [result]);
 
   const totalHoldings = result.accounts.reduce((acc, a) => acc + a.holdings.length, 0);
@@ -583,7 +610,11 @@ function ExtractionPreview({ result, fileName, sizeBytes }: { result: Extraction
     });
     if (sourceType === "image_screenshot") imported.holdings.forEach((h) => (h.quoteType = "ocr_extracted"));
     addImported(imported);
+    // Positions for a balance-only account replace that single balance.
+    const replaced = target.replace && targetAccountId === target.account?.id && imported.holdings.length > 0 ? target.replace : undefined;
+    if (replaced) removeHolding(replaced.id);
     setSaved({
+      replaced: replaced?.assetName,
       holdings: imported.holdings.length,
       accounts: imported.accounts.length,
       target: accounts.find((a) => a.id === targetAccountId)?.name,
@@ -624,7 +655,8 @@ function ExtractionPreview({ result, fileName, sizeBytes }: { result: Extraction
         <div role="status" className="px-4 py-2.5 bg-positive-50 border-b border-positive-500/30 flex flex-wrap items-center justify-between gap-2 text-[13px] text-ink-800">
           <span>
             Saved {saved.holdings} holding{saved.holdings === 1 ? "" : "s"}{" "}
-            {saved.target ? `to ${saved.target}` : `in ${saved.accounts} new account${saved.accounts === 1 ? "" : "s"}`}. Values arrive as
+            {saved.target ? `to ${saved.target}` : `in ${saved.accounts} new account${saved.accounts === 1 ? "" : "s"}`}
+            {saved.replaced ? ", replacing its single balance" : ""}. Values arrive as
             &ldquo;not confirmed&rdquo; until you check them.
           </span>
           <Button size="sm" onClick={() => router.push("/accounts-assets?review=1")}>Review values</Button>

@@ -14,6 +14,7 @@ import { formatCurrency } from "@/utils/formatting";
 import { PdfReadError, readPdfInBrowser } from "@/ingestion/pdf/readPdfBrowser";
 import { parseStatementPdf } from "@/ingestion/documents/parseStatementPdf";
 import { extractionToWorkspace } from "@/ingestion/documents/toWorkspace";
+import { useImportTarget } from "./importTarget";
 
 type State =
   | { step: "idle" }
@@ -35,6 +36,8 @@ export function PdfImport() {
   const client = useAtlasStore((s) => s.client);
   const loadImported = useAtlasStore((s) => s.loadImportedEngagement);
   const addImported = useAtlasStore((s) => s.addImportedToEngagement);
+  const removeHolding = useAtlasStore((s) => s.removeHolding);
+  const target = useImportTarget();
   const [state, setState] = React.useState<State>({ step: "idle" });
   const fileRef = React.useRef<HTMLInputElement>(null);
 
@@ -52,7 +55,7 @@ export function PdfImport() {
     }
   }
 
-  function load(mode: "new" | "add") {
+  function load(mode: "new" | "add" | "target") {
     if (state.step !== "done") return;
     const { result, file } = state;
     const imported = extractionToWorkspace(result, {
@@ -60,7 +63,15 @@ export function PdfImport() {
       sizeBytes: file.size,
       reportingCurrency: client.proposalOutputCurrency || "USD",
       country: client.reportingCountry,
+      targetAccountId: mode === "target" ? target.account?.id : undefined,
     });
+    if (mode === "target") {
+      // A statement's positions replace the account's single imported balance.
+      addImported(imported);
+      if (target.replace && imported.holdings.length > 0) removeHolding(target.replace.id);
+      router.push("/accounts-assets?review=1");
+      return;
+    }
     if (mode === "new") {
       const current = client.householdName || client.fullName;
       const ok = confirm(
@@ -108,7 +119,9 @@ export function PdfImport() {
           </div>
         )}
 
-        {state.step === "done" && <ImportResult result={state.result} fileName={state.file.name} onLoad={load} />}
+        {state.step === "done" && (
+          <ImportResult result={state.result} fileName={state.file.name} onLoad={load} targetName={target.account?.name} />
+        )}
       </CardBody>
     </Card>
   );
@@ -118,10 +131,12 @@ function ImportResult({
   result,
   fileName,
   onLoad,
+  targetName,
 }: {
   result: ExtractionResult;
   fileName: string;
-  onLoad: (mode: "new" | "add") => void;
+  onLoad: (mode: "new" | "add" | "target") => void;
+  targetName?: string;
 }) {
   const rows = result.accounts.flatMap((a) => a.holdings.map((h) => ({ a, h })));
   const isPlan = result.documentKind === "financial_plan_lifeview";
@@ -193,7 +208,8 @@ function ImportResult({
       </div>
 
       <div className="flex flex-wrap items-center gap-2 pt-1">
-        <Button onClick={() => onLoad(isPlan ? "new" : "add")}>
+        {targetName && !isPlan && <Button onClick={() => onLoad("target")}>Add to {targetName}</Button>}
+        <Button variant={targetName && !isPlan ? "secondary" : "primary"} onClick={() => onLoad(isPlan ? "new" : "add")}>
           {isPlan ? "Load as new client" : "Add to current client"}
         </Button>
         <Button variant="secondary" onClick={() => onLoad(isPlan ? "add" : "new")}>

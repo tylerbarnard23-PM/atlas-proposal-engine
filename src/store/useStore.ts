@@ -60,6 +60,8 @@ export interface AtlasActions {
   removeRecommendation: (id: string) => void;
   /** Sets the value-check state of several holdings at once (Confirm all, and its Undo). */
   setHoldingsVerification: (ids: string[], verification: Holding["advisorVerification"]) => void;
+  /** Merges fields into one holding (used by the in-place "Data to complete" fixes). */
+  patchHolding: (id: string, patch: Partial<Holding>) => void;
   /** Puts a deleted recommendation back at its old position (Undo). */
   restoreRecommendation: (rec: Recommendation, index: number) => void;
   setInsights: (insights: Insight[]) => void;
@@ -251,6 +253,10 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
         })),
       removeRecommendation: (id) =>
         set((s) => ({ recommendations: s.recommendations.filter((r) => r.id !== id) })),
+      patchHolding: (id, patch) =>
+        set((s) => ({
+          holdings: s.holdings.map((h) => (h.id === id ? { ...h, ...patch, updatedAt: todayIso() } : h)),
+        })),
       setHoldingsVerification: (ids, verification) =>
         set((s) => {
           const target = new Set(ids);

@@ -2,6 +2,22 @@ import type { Insight, Holding } from "@/domain/types";
 import type { NormalizedHolding } from "./normalizationEngine";
 import { groupBy, sumBy } from "@/utils/numbers";
 import { safeId, todayIso } from "@/utils/formatting";
+import { CODES_COVERED_BY_TASKS, dataTasks, isBalanceOnly, MARKET_STALE_DAYS } from "./dataTasks";
+import type { DataTaskKind } from "@/domain/types";
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+const TASK_TITLE: Record<DataTaskKind, (n: number) => string> = {
+  balance_only: (n) => `${plural(n, "account has", "accounts have")} a total but no holdings inside`,
+  missing_identifier: (n) => `${plural(n, "security has", "securities have")} no ticker or CUSIP`,
+  stale_value: (n) => `${plural(n, "value is", "values are")} out of date`,
+};
+const TASK_WHY: Record<DataTaskKind, string> = {
+  balance_only:
+    "They show as \"Other / unclassified\" in the allocation charts, so the Before / After can't reflect what's inside them. Upload the account's positions, or keep it as one balance.",
+  missing_identifier:
+    "Without a ticker or CUSIP the price can't be refreshed from market data. Add one, or dismiss if the holding has none.",
+  stale_value: `Market-priced values older than ${MARKET_STALE_DAYS} days, and property, business, insurance or private assets older than 12 months, may no longer be accurate. Update the value, refresh the price, or keep the date: the proposal shows each value's as-of date.`,
+};
 
 export interface InsightInputs {
   holdings: NormalizedHolding[];
@@ -149,12 +165,29 @@ export function generateInsights({ holdings, reportingCurrency }: InsightInputs)
     });
   }
 
-  // Data quality flags. The same issue on many holdings (every balance-only
-  // line of an imported plan) is one insight listing them, not one each.
+  // Data to complete: gaps the advisor can fix in place (see dataTasks).
+  for (const t of dataTasks(investible)) {
+    const n = t.openIds.length;
+    out.push({
+      id: safeId("insight"),
+      category: "data_quality",
+      severity: "warning",
+      title: TASK_TITLE[t.kind](n),
+      detail: TASK_WHY[t.kind],
+      relatedHoldingIds: t.openIds,
+      task: { kind: t.kind, openIds: t.openIds, doneIds: t.doneIds },
+      generatedAt: now,
+    });
+  }
+
+  // Other data-quality notes. The same issue on many holdings is one insight
+  // listing them, not one each.
   const byIssue = new Map<string, { message: string; severity: Insight["severity"]; holdings: NormalizedHolding[] }>();
   for (const h of investible) {
     for (const issue of h.dataQuality) {
       if (issue.severity === "info") continue;
+      if (CODES_COVERED_BY_TASKS.has(issue.code) || /only this account's balance/.test(issue.message)) continue;
+      if (issue.code === "MISSING_ASSET_CLASS" && isBalanceOnly(h)) continue;
       const k = `${issue.code}|${issue.message}`;
       const entry = byIssue.get(k) ?? { message: issue.message, severity: issue.severity, holdings: [] };
       entry.holdings.push(h);
@@ -169,7 +202,9 @@ export function generateInsights({ holdings, reportingCurrency }: InsightInputs)
       category: "data_quality",
       severity,
       title: hs.length === 1 ? `${names[0]}: ${message}` : `${hs.length} holdings: ${message}`,
-      detail: hs.length === 1 ? "Review it in Accounts & Assets." : `Applies to ${shown}.`,
+      detail:
+        (hs.length === 1 ? "" : `Applies to ${shown}. `) +
+        "In the value check on Accounts & Assets, click Details on each to correct it, or Confirm it if it's right.",
       relatedHoldingIds: hs.map((h) => h.id),
       generatedAt: now,
     });
@@ -197,7 +232,9 @@ export function summarizeAllocation(
 // Insight ids are regenerated on every run; this key identifies "the same
 // observation" across runs (category + the holdings or accounts it is about),
 // ignoring the percentages in the title, which move with prices.
-export function insightKey(i: Pick<Insight, "category" | "title" | "relatedHoldingIds" | "relatedAccountIds">): string {
+export function insightKey(i: Pick<Insight, "category" | "title" | "relatedHoldingIds" | "relatedAccountIds" | "task">): string {
+  // A task's holdings change as they're resolved; the task itself doesn't.
+  if (i.task) return `data_task:${i.task.kind}`;
   const subject = i.relatedHoldingIds?.join(",") || i.relatedAccountIds?.join(",") || i.title.replace(/[\d.,]+%?/g, "#");
   return `${i.category}:${subject}`;
 }

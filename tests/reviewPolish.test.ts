@@ -74,20 +74,60 @@ describe("rejecting recommendations and dismissing insights", () => {
   });
 });
 
-describe("data-quality insights", () => {
-  it("the same issue on many holdings is one insight listing them", async () => {
+describe("data to complete", () => {
+  const daysAgo = (d: number) => new Date(Date.now() - d * 86_400_000).toISOString().slice(0, 10);
+  const balanceMsg = "The plan gives only this account's balance, not the holdings inside it.";
+  const h = (over: Record<string, unknown>) =>
+    ({
+      id: "h", accountId: "a", assetName: "X", assetClass: "equity", currency: "USD", nativeMarketValue: 100, reportingMarketValue: 100,
+      valuationDate: daysAgo(1), valuationSource: { kind: "statement" }, dataQuality: [], identifier: { type: "ticker", value: "X" },
+      ...over,
+    }) as never;
+
+  it("balance-only accounts are one task listing them; 'keep as one balance' marks them done", async () => {
+    const { dataTasks } = await import("@/engines/dataTasks");
+    const dq = [{ code: "CUSTOM_REQUIRES_REVIEW", severity: "warning", message: balanceMsg }];
+    const tasks = dataTasks([
+      h({ id: "a1", assetClass: "custom", identifier: undefined, dataQuality: dq }),
+      h({ id: "a2", assetClass: "custom", identifier: undefined, dataQuality: dq, dataAcks: { keepAsBalance: true } }),
+    ]);
+    expect(tasks).toEqual([{ kind: "balance_only", openIds: ["a1"], doneIds: ["a2"] }]);
+  });
+
+  it("asks for a ticker only for listed securities", async () => {
+    const { needsIdentifier } = await import("@/engines/dataTasks");
+    expect(needsIdentifier(h({ identifier: undefined }))).toBe(true);
+    for (const assetClass of ["insurance", "real_estate", "business", "cash", "collectible", "custom"]) {
+      expect(needsIdentifier(h({ assetClass, identifier: undefined }))).toBe(false);
+    }
+  });
+
+  it("stale after 35 days if market-priced, 12 months if privately valued; 'use this date' holds until the date changes", async () => {
+    const { isStaleValue, dataTasks } = await import("@/engines/dataTasks");
+    expect(isStaleValue(h({ valuationDate: daysAgo(40) }))).toBe(true);
+    expect(isStaleValue(h({ assetClass: "real_estate", valuationDate: daysAgo(200) }))).toBe(false);
+    expect(isStaleValue(h({ assetClass: "insurance", valuationDate: daysAgo(400) }))).toBe(true);
+    const date = daysAgo(40);
+    expect(dataTasks([h({ valuationDate: date, dataAcks: { acceptedValuationDate: date } })])).toEqual([]);
+    expect(dataTasks([h({ valuationDate: date, dataAcks: { acceptedValuationDate: daysAgo(90) } })])[0].openIds).toEqual(["h"]);
+  });
+
+  it("task insights keep one key as holdings are resolved, so a dismissal sticks", async () => {
+    const { generateInsights, insightKey } = await import("@/engines/insightEngine");
+    const stale = (id: string) => h({ id, valuationDate: daysAgo(60) });
+    const a = generateInsights({ holdings: [stale("x"), stale("y")], reportingCurrency: "USD" }).find((i) => i.task)!;
+    const b = generateInsights({ holdings: [stale("x")], reportingCurrency: "USD" }).find((i) => i.task)!;
+    expect(a.title).toBe("2 values are out of date");
+    expect(insightKey(a)).toBe(insightKey(b));
+  });
+
+  it("other data-quality issues on many holdings are one insight listing them", async () => {
     const { generateInsights } = await import("@/engines/insightEngine");
-    const msg = "The plan gives only this account's balance, not the holdings inside it.";
-    const h = (id: string, name: string) =>
-      ({
-        id, assetName: name, assetClass: "custom", currency: "USD", reportingMarketValue: 100, nativeMarketValue: 100,
-        valuationSource: { kind: "statement" }, dataQuality: [{ code: "CUSTOM_REQUIRES_REVIEW", severity: "warning", message: msg }],
-      }) as never;
-    const out = generateInsights({ holdings: [h("a", "Intel 401(k)"), h("b", "Roth IRA"), h("c", "403(b)")], reportingCurrency: "USD" });
-    const dq = out.filter((i) => i.category === "data_quality");
-    expect(dq).toHaveLength(1);
-    expect(dq[0].title).toBe(`3 holdings: ${msg}`);
-    expect(dq[0].detail).toMatch(/Intel 401\(k\), Roth IRA, 403\(b\)/);
-    expect(dq[0].relatedHoldingIds).toEqual(["a", "b", "c"]);
+    const dq = [{ code: "QUANTITY_VALUE_MISMATCH", severity: "warning", message: "Quantity × price differs from market value." }];
+    const out = generateInsights({ holdings: [h({ id: "a", assetName: "AAA", dataQuality: dq }), h({ id: "b", assetName: "BBB", dataQuality: dq })], reportingCurrency: "USD" });
+    const dqi = out.filter((i) => i.category === "data_quality" && !i.task);
+    expect(dqi).toHaveLength(1);
+    expect(dqi[0].title).toBe("2 holdings: Quantity × price differs from market value.");
+    expect(dqi[0].detail).toMatch(/AAA, BBB/);
   });
 });
