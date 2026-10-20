@@ -4,7 +4,7 @@ import { applyRecToValue, applyRecommendationsToProposed, netWorth } from "@/eng
 import { convert } from "@/engines/currencyEngine";
 import { normalizeHoldings } from "@/engines/normalizationEngine";
 import { generateInsights } from "@/engines/insightEngine";
-import { evaluateReadiness, readinessOk } from "@/engines/complianceEngine";
+import { evaluateReadiness, evaluateWorkspaceReadiness, holdingsNeedingReview, readinessOk } from "@/engines/complianceEngine";
 import { SEED_HOLDINGS } from "@/data/seedHoldings";
 import { SEED_FX_RATES } from "@/data/seedFxRates";
 import { SEED_ACCOUNTS } from "@/data/seedAccounts";
@@ -146,3 +146,62 @@ describe("compliance readiness", () => {
     expect(checks.find((c) => c.code === "unverified_holdings")?.detail).toBe("3 holding(s) await advisor review");
   });
 });
+
+describe("workspace readiness", () => {
+  const ws = () => ({
+    client: SEED_CLIENT,
+    advisor: SEED_ADVISOR,
+    accounts: SEED_ACCOUNTS,
+    holdings: SEED_HOLDINGS,
+    recommendations: [rec({})],
+    disclosures: DISCLOSURE_LIBRARY,
+  });
+
+  it("lists every unreviewed holding with why it blocks the PDF", () => {
+    const pending = holdingsNeedingReview(SEED_HOLDINGS);
+    expect(pending.length).toBe(SEED_HOLDINGS.filter((h) => h.advisorVerification === "unverified").length);
+    const stale = pending.find((p) => p.holding.priceFreshness === "stale");
+    expect(stale?.reasons).toEqual(expect.arrayContaining(["unverified", "stale"]));
+  });
+
+  it("clears stale and unverified checks once the advisor reviews those holdings", () => {
+    const before = evaluateWorkspaceReadiness(ws());
+    expect(before.find((c) => c.code === "unverified_holdings")?.passed).toBe(false);
+    expect(before.find((c) => c.code === "stale_valuations")?.passed).toBe(false);
+
+    const reviewed = SEED_HOLDINGS.map((h) =>
+      h.advisorVerification === "unverified" ? { ...h, advisorVerification: "advisor_approved" as const } : h
+    );
+    const after = evaluateWorkspaceReadiness({ ...ws(), holdings: reviewed });
+    expect(readinessOk(after)).toBe(true);
+  });
+});
+
+describe("PDF API readiness gate", () => {
+  it("refuses a final PDF while readiness checks fail, without launching a browser", async () => {
+    const { POST } = await import("@/app/api/proposals/[id]/generate-pdf/route");
+    const state = { ...ws_forApi(), recommendations: [] };
+    const res = await POST(
+      new Request("http://localhost/api/proposals/p1/generate-pdf?variant=final", {
+        method: "POST",
+        body: JSON.stringify({ state }),
+      }),
+      { params: Promise.resolve({ id: "p1" }) }
+    );
+    expect(res.status).toBe(422);
+    const body = await res.json();
+    expect(body.failing).toContain("At least one approved recommendation included in PDF");
+  });
+});
+
+function ws_forApi() {
+  return {
+    client: SEED_CLIENT,
+    advisor: SEED_ADVISOR,
+    accounts: SEED_ACCOUNTS,
+    holdings: SEED_HOLDINGS,
+    disclosures: DISCLOSURE_LIBRARY,
+    sections: [],
+    proposal: { id: "p1" },
+  };
+}

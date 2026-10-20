@@ -1,6 +1,6 @@
 # Atlas Proposal Engine
 
-**An open-source reference implementation of AI-assisted wealth-proposal tooling.** Atlas takes an advisor from a pile of messy client statements to a branded, compliance-checked PDF proposal, with a Claude-powered Copilot that drafts recommendations and leaves every decision to the advisor.
+**An open-source reference implementation of AI-assisted wealth-proposal tooling.** Atlas takes an advisor from a pile of messy client statements to a branded sample PDF proposal gated by a readiness checklist, with a Claude-powered Copilot that drafts recommendations and leaves every decision to the advisor.
 
 [![CI](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/actions/workflows/ci.yml)
 
@@ -8,7 +8,9 @@
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Ftylerbarnard23-PM%2Fatlas-proposal-engine)
 
-> **Reference implementation, not production software.** Atlas has not been reviewed for compliance with SEC, FINRA or any other regulator's advertising, suitability or recordkeeping rules. Nothing it produces is investment, tax or legal advice. Don't use it with real client data.
+> **Disclaimer.** Atlas is a demonstration project. It is not a registered investment adviser or broker-dealer and is not affiliated with, reviewed, or endorsed by the SEC, FINRA, or any regulator. Sample clients and advisors are fictional. Nothing here is investment, tax, or legal advice. Do not upload real client data.
+>
+> Atlas is a reference implementation, not production software, and has not been reviewed for compliance with SEC, FINRA or any other regulator's advertising, suitability or recordkeeping rules.
 
 ![Atlas dashboard](docs/screenshots/dashboard.jpg)
 
@@ -28,7 +30,7 @@ Atlas is built for advisors at RIAs and wealth platforms, and for the people bui
 | **Analyze** | A rules engine flags concentration, currency and country exposure, illiquidity, cash drag, high fees, manual valuations and data-quality problems. | Insights |
 | **Recommend** | The advisor writes or converts recommendations; approved ones reshape the Before/After allocation, with sale proceeds flowing to cash in the same account. | Recommendations |
 | **Ask the Copilot** | Claude investigates the portfolio through the engines and drafts recommendations for review. See below. | Proposal Copilot |
-| **Check & publish** | A readiness checklist (unverified holdings, stale prices, approvals, required disclosures) gates a branded PDF rendered with headless Chromium. | Proposal Builder, PDF Preview |
+| **Check & publish** | A readiness checklist (unverified holdings, stale prices, approvals, required disclosures) gates the final PDF, in the UI and on the server. Each open item links to the page where it's fixed. PDFs are rendered with headless Chromium and marked as samples. | Proposal Builder, PDF Preview |
 
 ## Proposal Copilot: the AI layer
 
@@ -133,6 +135,12 @@ To try the Copilot with Claude locally, copy `.env.example` to `.env.local` and 
 |---|---|
 | `ANTHROPIC_API_KEY` + `COPILOT_MODE=live` | Both required for the live Copilot. Otherwise, demo mode. |
 | `FINNHUB_API_KEY`, `TWELVE_DATA_API_KEY`, `ALPHA_VANTAGE_API_KEY`, `FRED_API_KEY` | Live market data. Without them, free providers and mock fallbacks. |
+
+## Sample output and forks
+
+Every PDF Atlas generates is marked as a sample: a SAMPLE watermark on final PDFs (DRAFT on drafts), a notice at the foot of every page, and a `SAMPLE_` filename prefix. The same disclaimer appears in the app footer. These markings are intentional and stay in this repository.
+
+You're welcome to fork Atlas under the MIT license. If you adapt it for real client work, removing the sample markings is your decision, and so is everything that comes with it: compliance review, books-and-records retention, supervision, data security and vendor due diligence are the responsibility of whoever deploys it.
 
 ## Limitations and roadmap
 

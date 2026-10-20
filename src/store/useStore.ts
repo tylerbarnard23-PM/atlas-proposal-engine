@@ -215,7 +215,14 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
           },
         })),
       setProposalNotes: (notes) => set((s) => ({ proposal: { ...s.proposal, notes } })),
-      recordPdfJob: (job) => set((s) => ({ pdfHistory: [job, ...s.pdfHistory].slice(0, 25) })),
+      // Upsert by id: a job is recorded as "running" and later updated to its
+      // final status, which must replace the running entry, not add another.
+      recordPdfJob: (job) =>
+        set((s) => ({
+          pdfHistory: s.pdfHistory.some((j) => j.id === job.id)
+            ? s.pdfHistory.map((j) => (j.id === job.id ? job : j))
+            : [job, ...s.pdfHistory].slice(0, 25),
+        })),
       resetSeed: () => set({ ...seedState(), hasHydrated: true }),
       clearAll: () => set(blankState()),
       setHasHydrated: (b) => set({ hasHydrated: b }),
@@ -225,7 +232,20 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);
       },
-      version: 1,
+      version: 2,
+      // v2: the seeded fictional advisor no longer carries real credential
+      // marks (CFA, CFP®); strip them from workspaces saved before the change,
+      // and drop "running" PDF jobs orphaned by the old append-only history.
+      migrate: (persisted, version) => {
+        const state = persisted as AtlasState;
+        if (version < 2 && state?.advisor?.name === "Margaret S. Whitfield, CFA, CFP®") {
+          state.advisor = { ...state.advisor, name: SEED_ADVISOR.name };
+        }
+        if (version < 2 && Array.isArray(state?.pdfHistory)) {
+          state.pdfHistory = state.pdfHistory.filter((j) => j.status !== "running");
+        }
+        return state;
+      },
     }
   )
 );

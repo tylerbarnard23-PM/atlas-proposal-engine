@@ -45,7 +45,7 @@ export const PDF_BASE_CSS = `
   }
   .pdf-page {
     width: 8.5in; min-height: 11in;
-    padding: 0.6in 0.55in 0.7in 0.55in;
+    padding: 0.6in 0.55in 0.95in 0.55in; /* bottom leaves room for the sample notice + footer */
     page-break-after: always;
     break-after: page;
     position: relative;
@@ -66,6 +66,10 @@ export const PDF_BASE_CSS = `
     position: absolute; left: 0.55in; right: 0.55in; bottom: 0.35in;
     display:flex; justify-content: space-between; font-size: 7.5pt; color: var(--ink-500);
     border-top: 1px solid var(--ink-100); padding-top: 6pt;
+  }
+  .pdf-sample-notice {
+    position: absolute; left: 0.55in; right: 0.55in; bottom: 0.64in;
+    font-size: 6.5pt; line-height: 1.35; color: var(--ink-500); text-align: center;
   }
   .pdf-grid-2 { display:grid; grid-template-columns: 1fr 1fr; gap: 16pt; }
   .pdf-grid-3 { display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 12pt; }
@@ -100,7 +104,9 @@ export const PDF_BASE_CSS = `
   .pdf-rec p { margin: 4pt 0; }
   .pdf-rec .meta { font-size: 8pt; color: var(--ink-500); }
   .pdf-watermark {
-    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-28deg);
+    /* absolute, not fixed: each page renders its own watermark, and fixed
+       elements repeat on every printed page, so N pages stacked N copies. */
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-28deg);
     font-family: Georgia, serif; font-size: 110pt; color: rgba(212,180,90,0.10); font-weight: 700; letter-spacing: 0.1em;
     z-index: 0; pointer-events: none; user-select: none;
   }

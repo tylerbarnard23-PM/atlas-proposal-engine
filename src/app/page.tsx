@@ -15,7 +15,8 @@ import { formatCurrency, formatPercent } from "@/utils/formatting";
 import { ASSET_CLASS_LABELS } from "@/domain/assetTaxonomy";
 import { netWorth } from "@/engines/proposalEngine";
 import { dataQualityScore } from "@/engines/dataQualityEngine";
-import { evaluateReadiness } from "@/engines/complianceEngine";
+import { evaluateWorkspaceReadiness } from "@/engines/complianceEngine";
+import { ReadinessChecklist } from "@/components/proposal/ReadinessChecklist";
 import { summarizeAllocation } from "@/engines/insightEngine";
 import Link from "next/link";
 import { ArrowRight, ShieldCheck, FileSignature } from "lucide-react";
@@ -53,19 +54,7 @@ function DashboardInner() {
   const countries = new Set(holdings.map((h) => h.country).filter(Boolean)).size;
   const classes = new Set(holdings.map((h) => h.assetClass)).size;
 
-  const readiness = evaluateReadiness({
-    client,
-    advisor,
-    accounts,
-    holdings,
-    recommendations,
-    disclosures,
-    unverifiedHoldingsCount: unverifiedCount,
-    staleValuationsCount: stale,
-    marketDataIssuesCount: mockCount,
-    insightsReviewedCount: 0,
-    totalInsightsCount: insights.length,
-  });
+  const readiness = evaluateWorkspaceReadiness({ client, advisor, accounts, holdings, recommendations, disclosures });
   const readyCount = readiness.filter((r) => r.passed).length;
 
   return (
@@ -177,17 +166,11 @@ function DashboardInner() {
             </div>
           </CardHeader>
           <CardBody>
-            <ul className="space-y-1.5">
-              {readiness.slice(0, 6).map((r) => (
-                <li key={r.code} className="flex items-start gap-2 text-[13px]">
-                  <span className={r.passed ? "text-positive-500" : "text-warning-500"}>
-                    {r.passed ? "●" : "○"}
-                  </span>
-                  <span className="text-ink-800 flex-1">{r.label}</span>
-                  {r.detail && <span className="text-ink-500 text-2xs">{r.detail}</span>}
-                </li>
-              ))}
-            </ul>
+            {/* Outstanding items first, so what blocks the PDF is visible without scrolling. */}
+            <ReadinessChecklist
+              compact
+              checks={[...readiness.filter((r) => !r.passed), ...readiness.filter((r) => r.passed)].slice(0, 6)}
+            />
             <div className="mt-3 flex gap-2">
               <Link href="/proposal-builder">
                 <Button size="sm" variant="secondary" iconLeft={<FileSignature className="h-3.5 w-3.5" />}>Open builder</Button>

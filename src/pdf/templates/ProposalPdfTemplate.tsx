@@ -16,6 +16,7 @@ import { formatCurrency, formatDate, formatPercent } from "@/utils/formatting";
 import { sumBy, groupBy } from "@/utils/numbers";
 import { applyRecommendationsToProposed, netWorth } from "@/engines/proposalEngine";
 import { dataQualityScore } from "@/engines/dataQualityEngine";
+import { PDF_SAMPLE_NOTICE } from "@/domain/legal";
 
 // Print-safe palette used by both the pie chart and the allocation list. Order
 // is significant — pie slices and bar rows pick by index so colors match.
@@ -229,9 +230,10 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
       </div>
       <div>
         <div className="pdf-disclaimer">
-          This proposal is prepared by {advisor.firmName} for the named client and household. It is advisor-led, advisor-reviewed, and advisor-approved. It does not constitute tax, legal, or accounting advice. All values, sources, and assumptions are disclosed in the body of this document.
+          <strong>{PDF_SAMPLE_NOTICE}</strong> The names, firm, holdings and figures in this document are fictional and were produced to demonstrate software. Values, sources, and assumptions are disclosed in the body of this document.
         </div>
         <div className="pdf-cover-meta" style={{ marginTop: "0.35in" }}>
+          <span className="pdf-pill warn" style={{ background: "rgba(255,255,255,0.12)", color: "#F1E7C7", borderColor: "rgba(255,255,255,0.25)", marginRight: 8 }}>SAMPLE — demonstration only</span>
           {isDraft && (
             <span className="pdf-pill warn" style={{ background: "rgba(255,255,255,0.12)", color: "#F1E7C7", borderColor: "rgba(255,255,255,0.25)" }}>DRAFT — for advisor review</span>
           )}
@@ -245,7 +247,9 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
     const num = pageIdx - 1;
     return (
       <div className="pdf-page" key={`p${pageIdx}`}>
-        {isDraft && <div className="pdf-watermark">DRAFT</div>}
+        {/* Every page carries a watermark: DRAFT for working copies, SAMPLE for
+            "final" output, since this demo never produces a real deliverable. */}
+        <div className="pdf-watermark">{isDraft ? "DRAFT" : "SAMPLE"}</div>
         <div className="pdf-headerline">
           <div className="left">
             {eyebrow && <span className="pdf-eyebrow" style={{ marginRight: 12 }}>{eyebrow}</span>}
@@ -254,6 +258,7 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
           <div className="right">{client.householdName ?? client.fullName}</div>
         </div>
         <div style={{ position: "relative", zIndex: 1 }}>{children}</div>
+        <div className="pdf-sample-notice">{PDF_SAMPLE_NOTICE}</div>
         <div className="pdf-footer">
           <span>{advisor.firmName} · Prepared {today}</span>
           <span>{pageNumber(num)}</span>

@@ -4,7 +4,7 @@ import type { Recommendation, RecommendationType } from "@/domain/types";
 import { normalizeHoldings, type NormalizedHolding } from "@/engines/normalizationEngine";
 import { generateInsights, summarizeAllocation } from "@/engines/insightEngine";
 import { applyRecToValue, netWorth } from "@/engines/proposalEngine";
-import { evaluateReadiness, readinessOk } from "@/engines/complianceEngine";
+import { evaluateWorkspaceReadiness, readinessOk } from "@/engines/complianceEngine";
 import { safeId, todayIso } from "@/utils/formatting";
 import type { CopilotSnapshot } from "./snapshot";
 
@@ -199,19 +199,14 @@ function simulate(ctx: CopilotContext, input: z.infer<typeof SimulateInput>) {
 
 function checkReadiness(ctx: CopilotContext) {
   const s = ctx.snapshot;
-  // Same inputs the PDF Preview page uses, so the Copilot and the UI agree.
-  const checks = evaluateReadiness({
+  // Same shared evaluation the dashboard, PDF Preview and PDF API use.
+  const checks = evaluateWorkspaceReadiness({
     client: s.client,
     advisor: s.advisor,
     accounts: s.accounts,
     holdings: ctx.holdings,
     recommendations: s.recommendations,
-    disclosures: s.disclosures.filter((d) => d.required),
-    unverifiedHoldingsCount: ctx.holdings.filter((h) => h.advisorVerification === "unverified").length,
-    staleValuationsCount: ctx.holdings.filter((h) => h.priceFreshness === "stale").length,
-    marketDataIssuesCount: ctx.holdings.filter((h) => h.valuationSource.kind === "mock").length,
-    insightsReviewedCount: 0,
-    totalInsightsCount: 0,
+    disclosures: s.disclosures,
   });
   return {
     ready: readinessOk(checks),

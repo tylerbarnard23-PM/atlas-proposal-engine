@@ -8,7 +8,9 @@ import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { useNormalizedHoldings } from "@/hooks/useNormalizedHoldings";
-import { evaluateReadiness, readinessOk } from "@/engines/complianceEngine";
+import { evaluateWorkspaceReadiness, readinessOk } from "@/engines/complianceEngine";
+import { ReadinessChecklist } from "@/components/proposal/ReadinessChecklist";
+import { Lock } from "lucide-react";
 import { formatDateTime } from "@/utils/formatting";
 import { safeId, todayIso } from "@/utils/formatting";
 import type { PdfGenerationJob } from "@/domain/types";
@@ -32,23 +34,9 @@ function Inner() {
   const recordPdfJob = useAtlasStore((s) => s.recordPdfJob);
   const { holdings } = useNormalizedHoldings();
 
-  const stale = holdings.filter((h) => h.priceFreshness === "stale").length;
-  const mock = holdings.filter((h) => h.valuationSource.kind === "mock").length;
-  const unverified = holdings.filter((h) => h.advisorVerification === "unverified").length;
-  const checks = evaluateReadiness({
-    client,
-    advisor,
-    accounts,
-    holdings,
-    recommendations: recs,
-    disclosures: disclosures.filter((d) => d.required),
-    unverifiedHoldingsCount: unverified,
-    staleValuationsCount: stale,
-    marketDataIssuesCount: mock,
-    insightsReviewedCount: 0,
-    totalInsightsCount: 0,
-  });
+  const checks = evaluateWorkspaceReadiness({ client, advisor, accounts, holdings, recommendations: recs, disclosures });
   const ready = readinessOk(checks);
+  const failing = checks.filter((c) => !c.passed);
 
   const [busy, setBusy] = React.useState<null | "draft" | "final">(null);
 
@@ -80,8 +68,12 @@ function Inner() {
         }),
       });
       if (!res.ok) {
-        const err = await res.text();
-        throw new Error(err || `HTTP ${res.status}`);
+        const text = await res.text();
+        let message = text;
+        try {
+          message = JSON.parse(text).error ?? text;
+        } catch {}
+        throw new Error(message || `HTTP ${res.status}`);
       }
       const blob = await res.blob();
       const fileName = res.headers.get("X-Filename") ?? `proposal_${variant}.pdf`;
@@ -145,14 +137,7 @@ function Inner() {
               </div>
             </CardHeader>
             <CardBody>
-              <ul className="space-y-1.5">
-                {checks.map((c) => (
-                  <li key={c.code} className="flex items-start gap-2 text-[13px]">
-                    <span className={c.passed ? "text-positive-500" : "text-warning-500"}>{c.passed ? "●" : "○"}</span>
-                    <span className="text-ink-800 flex-1">{c.label}</span>
-                  </li>
-                ))}
-              </ul>
+              <ReadinessChecklist checks={checks} />
             </CardBody>
           </Card>
 
@@ -165,10 +150,19 @@ function Inner() {
               <Button onClick={() => generate("final")} loading={busy === "final"} disabled={!ready}>
                 Generate final PDF
               </Button>
-              {!ready && (
-                <p className="text-2xs text-ink-500">
-                  Final PDF is gated by the readiness checklist. Draft PDFs include unresolved warnings and a DRAFT watermark.
-                </p>
+              {ready ? (
+                <p className="text-2xs text-ink-500">All readiness checks pass. The final PDF is unlocked.</p>
+              ) : (
+                <div className="rounded-md bg-warning-50 ring-1 ring-inset ring-warning-500/30 px-3 py-2.5 text-[12px] text-ink-800">
+                  <div className="flex items-center gap-1.5 font-semibold text-warning-600">
+                    <Lock className="h-3.5 w-3.5" />
+                    Final PDF locked: {failing.length} item{failing.length === 1 ? "" : "s"} to resolve
+                  </div>
+                  <p className="mt-1 text-ink-600">
+                    Each item is done on another page. Use the <span className="font-medium">Fix in…</span> links in the
+                    Readiness checklist above. You can generate a draft PDF (watermarked) at any time.
+                  </p>
+                </div>
               )}
             </CardBody>
           </Card>

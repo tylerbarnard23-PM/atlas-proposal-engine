@@ -2,12 +2,12 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Plus, FilePlus2, Wallet } from "lucide-react";
+import { Plus, FilePlus2, Wallet, ShieldAlert } from "lucide-react";
 import { useAtlasStore } from "@/store/useStore";
 import { ClientOnly } from "@/components/layout/ClientOnly";
 import { useNormalizedHoldings } from "@/hooks/useNormalizedHoldings";
 import { PageHeader, SectionDivider } from "@/components/ui/Section";
-import { Card, CardBody } from "@/components/ui/Card";
+import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Drawer } from "@/components/ui/Drawer";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -21,6 +21,14 @@ import { CURRENCIES } from "@/domain/currencyConfigs";
 import type { Account, AccountType, AssetClass, Holding } from "@/domain/types";
 import { formatCurrency, formatDate, safeId, todayIso } from "@/utils/formatting";
 import { QuoteTypeBadge, ValuationSourceLine } from "@/components/ui/SourceTag";
+import { holdingsNeedingReview, type ReviewReason } from "@/engines/complianceEngine";
+import { cn } from "@/utils/cn";
+
+const REASON_LABEL: Record<ReviewReason, string> = {
+  unverified: "Not reviewed",
+  stale: "Stale price",
+  mock: "Mock price",
+};
 
 export default function AccountsAssetsPage() {
   return (
@@ -41,6 +49,17 @@ function Inner() {
   const [addAccountOpen, setAddAccountOpen] = React.useState(false);
   const [addHoldingOpen, setAddHoldingOpen] = React.useState(false);
   const [presetAccountId, setPresetAccountId] = React.useState<string | undefined>();
+  const pending = holdingsNeedingReview(holdings);
+  // Readiness "Fix in…" links land here with ?review=1; highlight the queue
+  // and bring it into view so the next step is obvious.
+  const reviewRef = React.useRef<HTMLDivElement>(null);
+  const [focusReview, setFocusReview] = React.useState(false);
+  React.useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("review") === "1") {
+      setFocusReview(true);
+      reviewRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, []);
 
   function openHoldingForAccount(accountId: string) {
     setPresetAccountId(accountId);
@@ -135,6 +154,38 @@ function Inner() {
             })}
           </div>
 
+          {pending.length > 0 && (
+            <div ref={reviewRef} className="mb-4 scroll-mt-20">
+              <Card className={cn(focusReview && "ring-2 ring-warning-500/60")}>
+                <CardHeader className="flex items-center gap-2">
+                  <ShieldAlert className="h-4 w-4 text-warning-500" />
+                  <CardTitle>Needs your review · {pending.length} holding{pending.length === 1 ? "" : "s"}</CardTitle>
+                </CardHeader>
+                <CardBody className="space-y-2">
+                  <p className="text-[13px] text-ink-600">
+                    These holdings block the final PDF. Open each one, check its value and source, then click{" "}
+                    <span className="font-medium text-ink-800">Mark advisor approved</span> (or save an override).
+                  </p>
+                  <ul className="divide-y divide-ink-100">
+                    {pending.map(({ holding, reasons }) => (
+                      <li key={holding.id} className="flex items-center justify-between gap-3 py-2">
+                        <div className="min-w-0">
+                          <div className="text-[13px] font-medium text-ink-900 truncate">{holding.assetName}</div>
+                          <div className="flex flex-wrap gap-1 mt-0.5">
+                            {reasons.map((r) => (
+                              <Badge key={r} tone="warning">{REASON_LABEL[r]}</Badge>
+                            ))}
+                          </div>
+                        </div>
+                        <Button size="sm" onClick={() => setActive(holding)}>Review</Button>
+                      </li>
+                    ))}
+                  </ul>
+                </CardBody>
+              </Card>
+            </div>
+          )}
+
           <SectionDivider>All Holdings</SectionDivider>
 
           {holdings.length === 0 ? (
@@ -224,8 +275,20 @@ function HoldingDetail({
 }) {
   const [override, setOverride] = React.useState(holding.nativeMarketValue);
   const [notes, setNotes] = React.useState(holding.advisorNotes ?? "");
+  const review = holdingsNeedingReview([holding])[0];
   return (
     <div className="space-y-5">
+      {review && (
+        <div className="rounded-md bg-warning-50 ring-1 ring-inset ring-warning-500/30 px-3 py-2.5 text-[13px] text-ink-800">
+          <div className="font-semibold text-warning-600">
+            Blocks the final PDF: {review.reasons.map((r) => REASON_LABEL[r].toLowerCase()).join(", ")}
+          </div>
+          <p className="mt-0.5 text-ink-600">
+            Check the value and valuation source below, then click <span className="font-medium">Mark advisor approved</span>,
+            or enter a corrected value and click <span className="font-medium">Save advisor override</span>.
+          </p>
+        </div>
+      )}
       <div>
         <div className="text-2xs uppercase tracking-widest text-ink-500">{ASSET_CLASS_LABELS[holding.assetClass]}</div>
         <h3 className="font-serif text-2xl text-ink-900 leading-tight">{holding.assetName}</h3>
