@@ -25,7 +25,7 @@
     "next": "^15.1.12",
     "papaparse": "^5.4.1",
     "pdf-parse": "^1.1.1",
-    "puppeteer-core": "^23.11.1",
+    "puppeteer-core": "^25.15.0",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "recharts": "^2.15.0",

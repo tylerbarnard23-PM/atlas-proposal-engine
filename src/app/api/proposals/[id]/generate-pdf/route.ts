@@ -97,7 +97,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   try {
     const page = await browser.newPage();
     await page.emulateMediaType("print");
-    await page.setContent(html, { waitUntil: "networkidle0", timeout: 60_000 });
+    // The template is self-contained (inline CSS, no scripts or remote assets),
+    // so "load" is complete. puppeteer-core 25 dropped networkidle for setContent.
+    await page.setContent(html, { waitUntil: "load", timeout: 60_000 });
     const pdf = await page.pdf({
       format: "Letter",
       printBackground: true,
