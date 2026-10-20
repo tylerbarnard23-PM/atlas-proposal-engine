@@ -49,7 +49,7 @@ function Inner() {
                   <Badge tone="navy">{list.length}</Badge>
                 </div>
               </CardHeader>
-              <CardBody className="!p-0">
+              <CardBody className="p-0!">
                 <ul>
                   {list.map((i) => (
                     <li key={i.id} className="px-5 py-3 border-t border-ink-100 first:border-t-0">

@@ -153,7 +153,7 @@ export function HoldingsTable({ holdings, accounts, reportingCurrency, onRowClic
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           placeholder="Filter holdings…"
-          className="h-8 w-64 max-w-full rounded-md border border-ink-200 bg-white px-3 text-[13px] focus:outline-none focus:border-navy-400 focus:ring-2 focus:ring-navy-200/60"
+          className="h-8 w-64 max-w-full rounded-md border border-ink-200 bg-white px-3 text-[13px] focus:outline-hidden focus:border-navy-400 focus:ring-2 focus:ring-navy-200/60"
         />
         <div className="text-2xs uppercase tracking-widest text-ink-500">{holdings.length} rows</div>
       </div>

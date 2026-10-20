@@ -89,7 +89,9 @@ const body = {
   state: { client, advisor, accounts, holdings, recommendations, sections, disclosures, proposal },
 };
 
-const url = `http://127.0.0.1:${port}/api/proposals/${proposalId}/generate-pdf?variant=draft`;
+// BASE_URL targets a deployed instance (e.g. a Vercel preview); default is local.
+const baseUrl = (process.env.BASE_URL ?? `http://127.0.0.1:${port}`).replace(/\/$/, "");
+const url = `${baseUrl}/api/proposals/${proposalId}/generate-pdf?variant=draft`;
 console.log(`POST ${url}`);
 const t0 = Date.now();
 const res = await fetch(url, {

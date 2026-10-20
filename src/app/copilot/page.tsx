@@ -202,7 +202,7 @@ function Inner() {
                     <span className={t.ok ? "text-positive-600" : "text-negative-600"}>{t.ok ? "✓" : "✕"}</span>
                     <div className="min-w-0">
                       <div className="text-ink-800">{TOOL_LABELS[t.name] ?? t.name}</div>
-                      <div className="text-2xs text-ink-500 break-words">{t.summary}</div>
+                      <div className="text-2xs text-ink-500 wrap-break-word">{t.summary}</div>
                     </div>
                   </li>
                 ))}
