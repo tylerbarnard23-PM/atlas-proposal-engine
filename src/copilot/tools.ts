@@ -1,4 +1,4 @@
-﻿import type Anthropic from "@anthropic-ai/sdk";
+import type Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import type { Recommendation, RecommendationType } from "@/domain/types";
 import { normalizeHoldings, type NormalizedHolding } from "@/engines/normalizationEngine";
