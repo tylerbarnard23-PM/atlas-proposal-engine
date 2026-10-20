@@ -649,7 +649,11 @@ export interface AdvisorProfile {
   name: string;
   email: string;
   firmName: string;
-  firmLogoUrl?: string;
+  // Logo as a validated PNG/JPEG/WebP data URL (see domain/branding.ts). Never a
+  // remote URL: the PDF renderer would fetch it server-side.
+  logoDataUrl?: string;
+  // Six-digit hex accent for section labels and highlights in the proposal.
+  accentColor?: string;
   phone?: string;
   licenseNumbers?: string[];
   jurisdictions?: CountryCode[];

@@ -17,6 +17,7 @@ import {
   ScrollText,
   Settings,
   Bot,
+  Building2,
 } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { useAtlasStore } from "@/store/useStore";
@@ -31,6 +32,8 @@ interface NavItem {
 }
 
 const NAV: NavItem[] = [
+  // Set up once, before any client work, so it leads the menu.
+  { label: "Firm & Branding", href: "/firm-branding", icon: <Building2 className="h-4 w-4" />, group: "Your Firm" },
   { label: "Dashboard", href: "/", icon: <LayoutDashboard className="h-4 w-4" />, group: "Overview" },
   { label: "Client Profile", href: "/client-profile", icon: <UserSquare className="h-4 w-4" />, group: "Overview" },
   { label: "Import Center", href: "/import-center", icon: <Inbox className="h-4 w-4" />, group: "Data" },

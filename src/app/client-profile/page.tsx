@@ -20,22 +20,19 @@ export default function ClientProfilePage() {
 
 function ClientProfileInner() {
   const client = useAtlasStore((s) => s.client);
-  const advisor = useAtlasStore((s) => s.advisor);
   const setClient = useAtlasStore((s) => s.setClient);
-  const setAdvisor = useAtlasStore((s) => s.setAdvisor);
-  const clearAll = useAtlasStore((s) => s.clearAll);
+  const startNewClient = useAtlasStore((s) => s.startNewClient);
   const resetSeed = useAtlasStore((s) => s.resetSeed);
 
-  function handleClear() {
+  function handleNewClient() {
     if (
       confirm(
-        "Start a new engagement from scratch?\n\n" +
-          "This will permanently clear the client profile, advisor profile, " +
-          "all accounts, holdings, recommendations, source documents, and PDF history. " +
-          "This action cannot be undone."
+        "Start a new client?\n\n" +
+          "This clears the client profile, accounts, holdings, recommendations, source documents and PDF history. " +
+          "Your firm & branding are kept. This can't be undone."
       )
     ) {
-      clearAll();
+      startNewClient();
     }
   }
 
@@ -43,21 +40,21 @@ function ClientProfileInner() {
     <>
       <PageHeader
         eyebrow="Engagement"
-        title="Client & Advisor Profile"
-        description="Configure who the proposal is for, what jurisdiction it serves, and the advisor of record."
+        title="Client Profile"
+        description="Who this proposal is for: the client's details, jurisdiction, goals and constraints."
         actions={
           <>
             <Button variant="ghost" size="sm" onClick={() => { if (confirm("Restore the seeded Blackwell Family Office household?")) resetSeed(); }}>
               Restore sample data
             </Button>
-            <Button variant="danger" size="sm" onClick={handleClear}>
-              Start from scratch
+            <Button variant="danger" size="sm" onClick={handleNewClient}>
+              Start a new client
             </Button>
           </>
         }
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="max-w-4xl">
         <Card>
           <CardHeader>
             <CardTitle>Client</CardTitle>
@@ -183,33 +180,6 @@ function ClientProfileInner() {
                 onChange={(e) => setClient({ advisorDiscoveryNotes: e.target.value })}
               />
             </Field>
-          </CardBody>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Advisor of Record</CardTitle>
-          </CardHeader>
-          <CardBody className="space-y-4">
-            <Field label="Advisor name">
-              <Input value={advisor.name} onChange={(e) => setAdvisor({ name: e.target.value })} />
-            </Field>
-            <Field label="Email">
-              <Input value={advisor.email} onChange={(e) => setAdvisor({ email: e.target.value })} />
-            </Field>
-            <Field label="Firm name">
-              <Input value={advisor.firmName} onChange={(e) => setAdvisor({ firmName: e.target.value })} />
-            </Field>
-            <Field label="Phone">
-              <Input value={advisor.phone ?? ""} onChange={(e) => setAdvisor({ phone: e.target.value })} />
-            </Field>
-            <Field label="Logo URL (optional)">
-              <Input value={advisor.firmLogoUrl ?? ""} onChange={(e) => setAdvisor({ firmLogoUrl: e.target.value })} />
-            </Field>
-            <p className="text-2xs text-ink-500 leading-relaxed pt-2">
-              The advisor remains responsible for the suitability and implementation of every recommendation in this proposal. The platform does not autonomously provide
-              financial, tax, legal, or investment advice.
-            </p>
           </CardBody>
         </Card>
       </div>

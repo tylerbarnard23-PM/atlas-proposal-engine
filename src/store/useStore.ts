@@ -25,6 +25,7 @@ import { SEED_RECOMMENDATIONS } from "@/data/seedRecommendations";
 import { SEED_MARKET_QUOTES } from "@/data/seedMarketData";
 import { DISCLOSURE_LIBRARY } from "@/domain/disclosureLibrary";
 import { DEFAULT_PROPOSAL_SECTIONS } from "@/engines/proposalEngine";
+import { LEGACY_SAMPLE_FIRM_NAME } from "@/domain/branding";
 
 export interface AtlasState {
   client: ClientProfile;
@@ -67,6 +68,9 @@ export interface AtlasActions {
   approveAllRecommendations: () => number;
   recordPdfJob: (job: PdfGenerationJob) => void;
   resetSeed: () => void;
+  // Clears the client, accounts, holdings and recommendations but keeps the
+  // firm & branding, which are set once and reused for every client.
+  startNewClient: () => void;
   clearAll: () => void;
   setHasHydrated: (b: boolean) => void;
 }
@@ -157,6 +161,42 @@ const blankState = (): AtlasState => {
     hasHydrated: true,
   };
 };
+
+// Upgrades a workspace saved by an earlier version of the app. Exported so
+// each step can be unit-tested.
+export function migrateAtlasState(persisted: unknown, version: number): AtlasState {
+  const state = persisted as AtlasState;
+  if (version < 2 && state?.advisor?.name === "Margaret S. Whitfield, CFA, CFP®") {
+    state.advisor = { ...state.advisor, name: SEED_ADVISOR.name };
+  }
+  if (version < 2 && Array.isArray(state?.pdfHistory)) {
+    state.pdfHistory = state.pdfHistory.filter((j) => j.status !== "running");
+  }
+  // v3: new disclosures (fees, conflicts, not-an-offer, client-provided
+  // information, held-away assets) and a strengthened data-source text.
+  // The library has no in-app editor, so refresh it from the source and
+  // add any newly required disclosure to the proposal.
+  if (version < 3 && state) {
+    state.disclosures = DISCLOSURE_LIBRARY;
+    if (state.proposal) {
+      const ids = new Set(state.proposal.disclosureIds ?? []);
+      for (const d of DISCLOSURE_LIBRARY) if (d.required) ids.add(d.id);
+      state.proposal = { ...state.proposal, disclosureIds: [...ids] };
+    }
+  }
+  // v4: white-label branding. The sample firm is renamed so it no longer
+  // shares the product's name, and the old remote-logo URL field is dropped
+  // (the PDF server would have fetched it); logos are now uploaded images.
+  if (version < 4 && state?.advisor) {
+    const { firmLogoUrl: _dropped, ...advisor } = state.advisor as AdvisorProfile & { firmLogoUrl?: string };
+    void _dropped;
+    state.advisor =
+      advisor.firmName === LEGACY_SAMPLE_FIRM_NAME
+        ? { ...advisor, firmName: SEED_ADVISOR.firmName, email: SEED_ADVISOR.email }
+        : advisor;
+  }
+  return state;
+}
 
 export const useAtlasStore = create<AtlasState & AtlasActions>()(
   persist(
@@ -252,6 +292,11 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
             : [job, ...s.pdfHistory].slice(0, 25),
         })),
       resetSeed: () => set({ ...seedState(), hasHydrated: true }),
+      startNewClient: () =>
+        set((s) => {
+          const fresh = blankState();
+          return { ...fresh, advisor: s.advisor, proposal: { ...fresh.proposal, advisorId: s.advisor.id } };
+        }),
       clearAll: () => set(blankState()),
       setHasHydrated: (b) => set({ hasHydrated: b }),
     }),
@@ -260,32 +305,11 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);
       },
-      version: 3,
+      version: 4,
       // v2: the seeded fictional advisor no longer carries real credential
       // marks (CFA, CFP®); strip them from workspaces saved before the change,
       // and drop "running" PDF jobs orphaned by the old append-only history.
-      migrate: (persisted, version) => {
-        const state = persisted as AtlasState;
-        if (version < 2 && state?.advisor?.name === "Margaret S. Whitfield, CFA, CFP®") {
-          state.advisor = { ...state.advisor, name: SEED_ADVISOR.name };
-        }
-        if (version < 2 && Array.isArray(state?.pdfHistory)) {
-          state.pdfHistory = state.pdfHistory.filter((j) => j.status !== "running");
-        }
-        // v3: new disclosures (fees, conflicts, not-an-offer, client-provided
-        // information, held-away assets) and a strengthened data-source text.
-        // The library has no in-app editor, so refresh it from the source and
-        // add any newly required disclosure to the proposal.
-        if (version < 3 && state) {
-          state.disclosures = DISCLOSURE_LIBRARY;
-          if (state.proposal) {
-            const ids = new Set(state.proposal.disclosureIds ?? []);
-            for (const d of DISCLOSURE_LIBRARY) if (d.required) ids.add(d.id);
-            state.proposal = { ...state.proposal, disclosureIds: [...ids] };
-          }
-        }
-        return state;
-      },
+      migrate: (persisted, version) => migrateAtlasState(persisted, version),
     }
   )
 );

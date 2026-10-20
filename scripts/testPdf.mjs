@@ -39,8 +39,8 @@ const client = {
 const advisor = {
   id: "adv_atlas",
   name: "Margaret S. Whitfield, CFA, CFP®",
-  email: "mwhitfield@atlas-advisors.example",
-  firmName: "Atlas Private Wealth Advisors",
+  email: "mwhitfield@harborandpine.example",
+  firmName: "Harbor & Pine Wealth Partners",
 };
 
 const accounts = [
