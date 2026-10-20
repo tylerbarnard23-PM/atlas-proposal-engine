@@ -1,0 +1,397 @@
+import type Anthropic from "@anthropic-ai/sdk";
+import { z } from "zod";
+import type { Recommendation, RecommendationType } from "@/domain/types";
+import { normalizeHoldings, type NormalizedHolding } from "@/engines/normalizationEngine";
+import { generateInsights, summarizeAllocation } from "@/engines/insightEngine";
+import { applyRecToValue, netWorth } from "@/engines/proposalEngine";
+import { evaluateReadiness, readinessOk } from "@/engines/complianceEngine";
+import { safeId, todayIso } from "@/utils/formatting";
+import type { CopilotSnapshot } from "./snapshot";
+
+// Every tool here is a thin, read-only wrapper over the deterministic engines.
+// The model never computes a number itself; it asks the engines. The single
+// write path, draft_recommendation, can only produce unapproved drafts.
+
+export const MAX_DRAFTS_PER_RUN = 5;
+
+const REC_TYPES = [
+  "buy", "sell", "hold", "reduce", "increase", "rebalance", "transfer",
+  "consolidate_accounts", "tax_loss_harvest", "improve_asset_location",
+  "currency_hedge", "replace_high_fee_fund", "increase_diversification",
+  "reduce_concentration", "raise_cash", "add_income_strategy",
+  "add_downside_protection", "add_insurance_coverage", "adjust_risk_level",
+  "refinance_liability", "pay_down_debt", "review_private_valuation",
+  "review_source_data", "refresh_market_data", "request_updated_statement",
+  "custom",
+] as const satisfies readonly RecommendationType[];
+
+export class CopilotContext {
+  readonly holdings: NormalizedHolding[];
+  readonly reportingCurrency: string;
+  readonly drafts: Recommendation[] = [];
+
+  constructor(readonly snapshot: CopilotSnapshot) {
+    this.reportingCurrency = snapshot.client.proposalOutputCurrency || "USD";
+    this.holdings = normalizeHoldings(snapshot.holdings, snapshot.fxRates, this.reportingCurrency);
+  }
+
+  get investibleTotal(): number {
+    return this.holdings.filter((h) => !h.isLiability).reduce((s, h) => s + (h.reportingMarketValue || 0), 0);
+  }
+
+  holding(id: string): NormalizedHolding | undefined {
+    return this.holdings.find((h) => h.id === id);
+  }
+
+  accountName(id: string): string {
+    return this.snapshot.accounts.find((a) => a.id === id)?.name ?? "Unknown account";
+  }
+}
+
+const round = (n: number) => Math.round(n);
+const pct = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 1000) / 10 : 0);
+
+// ---------------------------------------------------------------------------
+// Tool implementations
+// ---------------------------------------------------------------------------
+
+function getPortfolioOverview(ctx: CopilotContext) {
+  const { client } = ctx.snapshot;
+  const nw = netWorth(ctx.holdings);
+  const total = ctx.investibleTotal;
+  const top = [...ctx.holdings]
+    .filter((h) => !h.isLiability)
+    .sort((a, b) => (b.reportingMarketValue || 0) - (a.reportingMarketValue || 0))
+    .slice(0, 10)
+    .map((h) => ({
+      holding_id: h.id,
+      name: h.assetName,
+      account: ctx.accountName(h.accountId),
+      asset_class: h.assetClass,
+      currency: h.currency,
+      value: round(h.reportingMarketValue),
+      pct_of_investible: pct(h.reportingMarketValue, total),
+    }));
+  return {
+    reporting_currency: ctx.reportingCurrency,
+    client: {
+      name: client.fullName || "(not set)",
+      risk_tolerance: client.riskTolerance,
+      objective: client.investmentObjective,
+      time_horizon_years: client.timeHorizonYears,
+      liquidity_needs: client.liquidityNeeds,
+      income_needs: client.incomeNeeds,
+      tax_sensitivity: client.taxSensitivity,
+      country_of_residence: client.countryOfResidence,
+      restricted_securities: client.restrictedSecurities ?? [],
+    },
+    net_worth: { gross_assets: round(nw.gross), liabilities: round(nw.liabilities), net: round(nw.net) },
+    counts: { accounts: ctx.snapshot.accounts.length, holdings: ctx.holdings.length },
+    allocation_by_asset_class: summarizeAllocation(ctx.holdings, (h) => h.assetClass).map((r) => ({
+      label: r.label,
+      value: round(r.value),
+      pct: Math.round(r.pct * 10) / 10,
+    })),
+    allocation_by_currency: summarizeAllocation(ctx.holdings, (h) => h.currency).map((r) => ({
+      label: r.label,
+      value: round(r.value),
+      pct: Math.round(r.pct * 10) / 10,
+    })),
+    top_holdings: top,
+    existing_recommendations: ctx.snapshot.recommendations.map((r) => ({
+      title: r.title,
+      type: r.type,
+      holding_id: r.relatedHoldingId ?? null,
+      approved: r.approvedByAdvisor,
+    })),
+  };
+}
+
+const ListInsightsInput = z.object({
+  category: z.string().optional(),
+  min_severity: z.enum(["info", "warning", "critical"]).optional(),
+});
+
+function listInsights(ctx: CopilotContext, input: z.infer<typeof ListInsightsInput>) {
+  const rank = { info: 0, warning: 1, critical: 2 } as const;
+  const min = rank[input.min_severity ?? "info"];
+  const insights = generateInsights({ holdings: ctx.holdings, reportingCurrency: ctx.reportingCurrency })
+    .filter((i) => (input.category ? i.category === input.category : true))
+    .filter((i) => rank[i.severity] >= min);
+  return {
+    count: insights.length,
+    insights: insights.map((i) => ({
+      category: i.category,
+      severity: i.severity,
+      title: i.title,
+      detail: i.detail,
+      related_holding_ids: i.relatedHoldingIds ?? [],
+    })),
+  };
+}
+
+const GetHoldingInput = z.object({ holding_id: z.string() });
+
+function getHolding(ctx: CopilotContext, input: z.infer<typeof GetHoldingInput>) {
+  const h = ctx.holding(input.holding_id);
+  if (!h) throw new ToolInputError(`No holding with id ${input.holding_id}`);
+  return {
+    holding_id: h.id,
+    name: h.assetName,
+    identifier: h.identifier ? `${h.identifier.type}:${h.identifier.value}` : null,
+    account: ctx.accountName(h.accountId),
+    asset_class: h.assetClass,
+    sub_asset_class: h.subAssetClass ?? null,
+    country: h.country ?? null,
+    currency: h.currency,
+    native_value: round(h.nativeMarketValue),
+    reporting_value: round(h.reportingMarketValue),
+    pct_of_investible: h.isLiability ? null : pct(h.reportingMarketValue, ctx.investibleTotal),
+    cost_basis: h.costBasis ?? null,
+    expense_ratio_pct: h.expenseRatioPct ?? null,
+    liquidity: h.liquidity ?? null,
+    is_liability: !!h.isLiability,
+    valuation: { source: h.valuationSource.kind, date: h.valuationDate ?? null, freshness: h.priceFreshness ?? null },
+    advisor_verification: h.advisorVerification,
+    data_quality_issues: h.dataQuality.map((d) => ({ code: d.code, severity: d.severity, message: d.message })),
+  };
+}
+
+const RecShape = {
+  holding_id: z.string().optional(),
+  type: z.enum(REC_TYPES),
+  action_amount: z.number().finite().optional(),
+  action_amount_unit: z.enum(["amount", "percent"]).optional(),
+  proposed_value: z.number().finite().optional(),
+};
+const SimulateInput = z.object({ ...RecShape, holding_id: z.string() });
+
+function simulate(ctx: CopilotContext, input: z.infer<typeof SimulateInput>) {
+  const h = ctx.holding(input.holding_id);
+  if (!h) throw new ToolInputError(`No holding with id ${input.holding_id}`);
+  const rec = {
+    type: input.type,
+    actionAmount: input.action_amount,
+    actionAmountUnit: input.action_amount_unit,
+    proposedValue: input.proposed_value,
+  } as Recommendation;
+  const before = h.reportingMarketValue;
+  const after = applyRecToValue(before, rec, !!h.isLiability);
+  const delta = after - before;
+  const total = ctx.investibleTotal;
+  // Sales credit cash in the same account and purchases debit it, so the
+  // investible total is unchanged; only the position's weight moves.
+  return {
+    holding: h.assetName,
+    currency: ctx.reportingCurrency,
+    before: round(before),
+    after: round(after),
+    delta: round(delta),
+    pct_of_investible_before: h.isLiability ? null : pct(before, total),
+    pct_of_investible_after: h.isLiability ? null : pct(after, total),
+    cash_effect_in_account: h.assetClass === "cash" ? 0 : round(-delta),
+    note:
+      Math.abs(delta) < 1 && input.proposed_value == null
+        ? "No allocation change: this type is allocation-neutral or needs an action_amount / proposed_value."
+        : undefined,
+  };
+}
+
+function checkReadiness(ctx: CopilotContext) {
+  const s = ctx.snapshot;
+  // Same inputs the PDF Preview page uses, so the Copilot and the UI agree.
+  const checks = evaluateReadiness({
+    client: s.client,
+    advisor: s.advisor,
+    accounts: s.accounts,
+    holdings: ctx.holdings,
+    recommendations: s.recommendations,
+    disclosures: s.disclosures.filter((d) => d.required),
+    unverifiedHoldingsCount: ctx.holdings.filter((h) => h.advisorVerification === "unverified").length,
+    staleValuationsCount: ctx.holdings.filter((h) => h.priceFreshness === "stale").length,
+    marketDataIssuesCount: ctx.holdings.filter((h) => h.valuationSource.kind === "mock").length,
+    insightsReviewedCount: 0,
+    totalInsightsCount: 0,
+  });
+  return {
+    ready: readinessOk(checks),
+    checks: checks.map((c) => ({ check: c.label, passed: c.passed, detail: c.detail ?? null })),
+  };
+}
+
+const DraftInput = z.object({
+  ...RecShape,
+  title: z.string().min(3).max(160),
+  priority: z.enum(["low", "medium", "high"]),
+  rationale: z.string().min(10).max(2000),
+  client_benefit: z.string().max(1000).optional(),
+  risk_tradeoff: z.string().max(1000).optional(),
+  tax_note: z.string().max(1000).optional(),
+  implementation_step: z.string().max(1000).optional(),
+});
+
+function draftRecommendation(ctx: CopilotContext, input: z.infer<typeof DraftInput>) {
+  if (ctx.drafts.length >= MAX_DRAFTS_PER_RUN) {
+    throw new ToolInputError(`Draft limit reached (${MAX_DRAFTS_PER_RUN} per request).`);
+  }
+  if (input.holding_id && !ctx.holding(input.holding_id)) {
+    throw new ToolInputError(`No holding with id ${input.holding_id}`);
+  }
+  const now = todayIso();
+  const rec: Recommendation = {
+    id: safeId("rec"),
+    title: input.title,
+    type: input.type,
+    relatedHoldingId: input.holding_id,
+    relatedAccountId: input.holding_id ? ctx.holding(input.holding_id)?.accountId : undefined,
+    actionAmount: input.action_amount,
+    actionAmountUnit: input.action_amount_unit,
+    proposedValue: input.proposed_value,
+    currency: ctx.reportingCurrency,
+    rationale: input.rationale,
+    clientBenefit: input.client_benefit,
+    riskTradeoff: input.risk_tradeoff,
+    taxNote: input.tax_note,
+    implementationStep: input.implementation_step,
+    complianceNote: "Drafted by Proposal Copilot. Requires advisor review and approval before client use.",
+    priority: input.priority,
+    // Hard-coded, not model-controlled: AI drafts are never approved and never
+    // reach the client PDF until the advisor flips these in the UI.
+    status: "needs_review",
+    approvedByAdvisor: false,
+    includeInPdf: false,
+    createdAt: now,
+    updatedAt: now,
+  };
+  ctx.drafts.push(rec);
+  return {
+    draft_id: rec.id,
+    status: "needs_review (advisor approval required)",
+    effect: input.holding_id ? simulate(ctx, { ...input, holding_id: input.holding_id }) : "Advisory only: no allocation impact.",
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Registry
+// ---------------------------------------------------------------------------
+
+export class ToolInputError extends Error {}
+
+type ToolSpec = {
+  definition: Anthropic.Beta.BetaTool;
+  run: (ctx: CopilotContext, input: unknown) => unknown;
+};
+
+const recProperties = {
+  holding_id: { type: "string", description: "holding_id from get_portfolio_overview, list_insights or get_holding." },
+  type: { type: "string", enum: [...REC_TYPES] },
+  action_amount: {
+    type: "number",
+    description: "Optional size of the action. Dollars in the reporting currency, or a percent of the position when action_amount_unit is 'percent'.",
+  },
+  action_amount_unit: { type: "string", enum: ["amount", "percent"] },
+  proposed_value: { type: "number", description: "Optional explicit target value for the position; overrides action_amount." },
+} as const;
+
+const TOOLS: Record<string, ToolSpec> = {
+  get_portfolio_overview: {
+    definition: {
+      name: "get_portfolio_overview",
+      description:
+        "Client profile, net worth, allocation by asset class and currency, the ten largest positions and the recommendations already on file, all valued by the Atlas valuation and FX engines in the proposal's reporting currency. Call this first.",
+      input_schema: { type: "object", properties: {} },
+    },
+    run: (ctx) => getPortfolioOverview(ctx),
+  },
+  list_insights: {
+    definition: {
+      name: "list_insights",
+      description:
+        "Rules-based findings from the Atlas insight engine: concentration, currency and country exposure, liquidity, cash drag, high fees, manual valuations and data-quality problems.",
+      input_schema: {
+        type: "object",
+        properties: {
+          category: {
+            type: "string",
+            enum: ["concentration", "currency", "country", "liquidity", "fees", "valuation", "data_quality"],
+          },
+          min_severity: { type: "string", enum: ["info", "warning", "critical"] },
+        },
+      },
+    },
+    run: (ctx, input) => listInsights(ctx, ListInsightsInput.parse(input)),
+  },
+  get_holding: {
+    definition: {
+      name: "get_holding",
+      description: "Full detail for one holding, including valuation source, verification status and data-quality issues.",
+      input_schema: { type: "object", properties: { holding_id: recProperties.holding_id }, required: ["holding_id"] },
+    },
+    run: (ctx, input) => getHolding(ctx, GetHoldingInput.parse(input)),
+  },
+  simulate_recommendation: {
+    definition: {
+      name: "simulate_recommendation",
+      description:
+        "Run a hypothetical recommendation through the same engine that builds the proposal's Before / After view and return the position's value and weight before and after. Changes nothing.",
+      input_schema: { type: "object", properties: recProperties, required: ["holding_id", "type"] },
+    },
+    run: (ctx, input) => simulate(ctx, SimulateInput.parse(input)),
+  },
+  check_proposal_readiness: {
+    definition: {
+      name: "check_proposal_readiness",
+      description: "Run the Atlas compliance readiness checklist that gates PDF generation and report which checks fail.",
+      input_schema: { type: "object", properties: {} },
+    },
+    run: (ctx) => checkReadiness(ctx),
+  },
+  draft_recommendation: {
+    definition: {
+      name: "draft_recommendation",
+      description: `Save a recommendation draft for the advisor to review. Drafts are always unapproved and excluded from the client PDF until the advisor approves them. At most ${MAX_DRAFTS_PER_RUN} per request. Simulate first so the rationale cites engine numbers.`,
+      input_schema: {
+        type: "object",
+        properties: {
+          ...recProperties,
+          holding_id: { ...recProperties.holding_id, description: "Omit for advisory-only recommendations." },
+          title: { type: "string" },
+          priority: { type: "string", enum: ["low", "medium", "high"] },
+          rationale: { type: "string", description: "Why, citing figures returned by the tools." },
+          client_benefit: { type: "string" },
+          risk_tradeoff: { type: "string" },
+          tax_note: { type: "string" },
+          implementation_step: { type: "string" },
+        },
+        required: ["type", "title", "priority", "rationale"],
+      },
+    },
+    run: (ctx, input) => draftRecommendation(ctx, DraftInput.parse(input)),
+  },
+};
+
+export const COPILOT_TOOLS: Anthropic.Beta.BetaTool[] = Object.values(TOOLS).map((t) => t.definition);
+
+export interface ToolCallRecord {
+  name: string;
+  input: unknown;
+  ok: boolean;
+  summary: string;
+}
+
+// Runs one tool call and returns the JSON string handed back to the model.
+// Errors become is_error tool results instead of exceptions so the model can
+// correct itself (wrong id, bad enum) without aborting the run.
+export function executeTool(ctx: CopilotContext, name: string, input: unknown): { content: string; isError: boolean } {
+  const spec = TOOLS[name];
+  if (!spec) return { content: `Unknown tool: ${name}`, isError: true };
+  try {
+    return { content: JSON.stringify(spec.run(ctx, input ?? {})), isError: false };
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return { content: `Invalid input: ${err.issues.map((i) => `${i.path.join(".")} ${i.message}`).join("; ")}`, isError: true };
+    }
+    if (err instanceof ToolInputError) return { content: err.message, isError: true };
+    throw err;
+  }
+}
