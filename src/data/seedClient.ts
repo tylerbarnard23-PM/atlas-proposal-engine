@@ -2,7 +2,9 @@ import type { ClientProfile, AdvisorProfile, Household } from "@/domain/types";
 
 export const SEED_ADVISOR: AdvisorProfile = {
   id: "adv_atlas_01",
-  name: "Margaret S. Whitfield, CFA, CFP®",
+  // Fictional advisor. No professional designations: CFA and CFP® are real
+  // credential marks and must not be attached to an invented person.
+  name: "Margaret S. Whitfield",
   email: "mwhitfield@atlas-advisors.example",
   firmName: "Atlas Private Wealth Advisors",
   phone: "+1 415 555 0117",

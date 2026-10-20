@@ -7,6 +7,7 @@ import type {
   Disclosure,
   ComplianceCheck,
 } from "@/domain/types";
+import { proposedCashShortfalls, type CashShortfall } from "./proposalEngine";
 
 export interface ReadinessInputs {
   client: ClientProfile;
@@ -20,6 +21,8 @@ export interface ReadinessInputs {
   marketDataIssuesCount: number;
   insightsReviewedCount: number;
   totalInsightsCount: number;
+  // Accounts whose proposed cash goes negative (purchases exceed cash).
+  cashShortfalls?: CashShortfall[];
 }
 
 export function evaluateReadiness(inp: ReadinessInputs): ComplianceCheck[] {
@@ -72,6 +75,16 @@ export function evaluateReadiness(inp: ReadinessInputs): ComplianceCheck[] {
     label: "At least one approved recommendation included in PDF",
     passed: inp.recommendations.some((r) => r.approvedByAdvisor && r.includeInPdf),
   });
+  const shortfalls = inp.cashShortfalls ?? [];
+  checks.push({
+    code: "trades_funded",
+    label: "Proposed trades are funded",
+    passed: shortfalls.length === 0,
+    detail:
+      shortfalls.length > 0
+        ? shortfalls.map((s) => `${s.accountName} short ${Math.round(s.shortfall).toLocaleString()}`).join("; ")
+        : undefined,
+  });
   checks.push({
     code: "disclosures_included",
     label: "Required disclosures included",
@@ -82,4 +95,59 @@ export function evaluateReadiness(inp: ReadinessInputs): ComplianceCheck[] {
 
 export function readinessOk(checks: ComplianceCheck[]): boolean {
   return checks.every((c) => c.passed);
+}
+
+// --- Workspace-level readiness --------------------------------------------
+// One place that derives the counts above from the workspace, so the
+// dashboard, Proposal Builder, PDF Preview, the Copilot and the PDF API all
+// agree on what blocks a final PDF.
+
+export type ReviewReason = "unverified" | "stale" | "mock";
+
+export interface HoldingNeedingReview {
+  holding: Holding;
+  reasons: ReviewReason[];
+}
+
+// A holding the advisor has looked at (reviewed, approved, locked or
+// rejected) no longer blocks the PDF for staleness or mock pricing: the
+// checklist asks for those to be *reviewed*, not eliminated.
+function isReviewed(h: Holding): boolean {
+  return h.advisorVerification !== "unverified";
+}
+
+export function holdingsNeedingReview(holdings: Holding[]): HoldingNeedingReview[] {
+  const out: HoldingNeedingReview[] = [];
+  for (const h of holdings) {
+    if (isReviewed(h)) continue;
+    const reasons: ReviewReason[] = ["unverified"];
+    if (h.priceFreshness === "stale") reasons.push("stale");
+    if (h.valuationSource.kind === "mock") reasons.push("mock");
+    out.push({ holding: h, reasons });
+  }
+  return out;
+}
+
+export interface WorkspaceReadinessInputs {
+  client: ClientProfile;
+  advisor: AdvisorProfile;
+  accounts: Account[];
+  holdings: Holding[];
+  recommendations: Recommendation[];
+  disclosures: Disclosure[];
+}
+
+export function evaluateWorkspaceReadiness(ws: WorkspaceReadinessInputs): ComplianceCheck[] {
+  const pending = holdingsNeedingReview(ws.holdings);
+  const approved = ws.recommendations.filter((r) => r.approvedByAdvisor);
+  return evaluateReadiness({
+    cashShortfalls: proposedCashShortfalls(ws.holdings, approved, ws.accounts),
+    ...ws,
+    disclosures: ws.disclosures.filter((d) => d.required),
+    unverifiedHoldingsCount: pending.length,
+    staleValuationsCount: pending.filter((p) => p.reasons.includes("stale")).length,
+    marketDataIssuesCount: pending.filter((p) => p.reasons.includes("mock")).length,
+    insightsReviewedCount: 0,
+    totalInsightsCount: 0,
+  });
 }

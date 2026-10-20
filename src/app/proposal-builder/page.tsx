@@ -10,7 +10,9 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input, Label, Textarea } from "@/components/ui/Input";
 import { useNormalizedHoldings } from "@/hooks/useNormalizedHoldings";
-import { evaluateReadiness } from "@/engines/complianceEngine";
+import { evaluateWorkspaceReadiness } from "@/engines/complianceEngine";
+import { ReadinessChecklist } from "@/components/proposal/ReadinessChecklist";
+import { ReadinessBanner } from "@/components/proposal/ReadinessBanner";
 import { ChevronRight } from "lucide-react";
 
 export default function ProposalBuilderPage() {
@@ -33,22 +35,7 @@ function Inner() {
   const disclosures = useAtlasStore((s) => s.disclosures);
   const { holdings } = useNormalizedHoldings();
 
-  const stale = holdings.filter((h) => h.priceFreshness === "stale").length;
-  const mock = holdings.filter((h) => h.valuationSource.kind === "mock").length;
-  const unverified = holdings.filter((h) => h.advisorVerification === "unverified").length;
-  const readiness = evaluateReadiness({
-    client,
-    advisor,
-    accounts,
-    holdings,
-    recommendations: recs,
-    disclosures: disclosures.filter((d) => d.required),
-    unverifiedHoldingsCount: unverified,
-    staleValuationsCount: stale,
-    marketDataIssuesCount: mock,
-    insightsReviewedCount: 0,
-    totalInsightsCount: 0,
-  });
+  const readiness = evaluateWorkspaceReadiness({ client, advisor, accounts, holdings, recommendations: recs, disclosures });
 
   return (
     <>
@@ -64,6 +51,8 @@ function Inner() {
           </>
         }
       />
+
+      <ReadinessBanner checks={readiness} className="mb-5" />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <div className="lg:col-span-2 space-y-5">
@@ -127,19 +116,7 @@ function Inner() {
           <Card>
             <CardHeader><CardTitle>Readiness Checklist</CardTitle></CardHeader>
             <CardBody>
-              <ul className="space-y-2">
-                {readiness.map((r) => (
-                  <li key={r.code} className="flex items-start gap-2 text-[13px]">
-                    <span className={r.passed ? "text-positive-500" : "text-warning-500"}>
-                      {r.passed ? "●" : "○"}
-                    </span>
-                    <div className="flex-1">
-                      <div className="text-ink-800">{r.label}</div>
-                      {r.detail && <div className="text-2xs text-ink-500">{r.detail}</div>}
-                    </div>
-                  </li>
-                ))}
-              </ul>
+              <ReadinessChecklist checks={readiness} />
             </CardBody>
           </Card>
 

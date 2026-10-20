@@ -14,6 +14,7 @@ import type {
   ProposalSection,
   Recommendation,
 } from "@/domain/types";
+import { evaluateWorkspaceReadiness, readinessOk } from "@/engines/complianceEngine";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -38,6 +39,27 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   if (!body?.state?.client?.fullName) {
     return NextResponse.json({ error: "Invalid proposal state in request body." }, { status: 400 });
+  }
+
+  // The UI disables the final button until readiness passes; enforce the same
+  // gate here so a direct API call can't skip it.
+  if (variant === "final") {
+    const { client, advisor, accounts, holdings, recommendations, disclosures } = body.state;
+    const checks = evaluateWorkspaceReadiness({
+      client,
+      advisor,
+      accounts: accounts ?? [],
+      holdings: holdings ?? [],
+      recommendations: recommendations ?? [],
+      disclosures: disclosures ?? [],
+    });
+    if (!readinessOk(checks)) {
+      const failing = checks.filter((c) => !c.passed).map((c) => c.label);
+      return NextResponse.json(
+        { error: `Final PDF blocked by readiness checks: ${failing.join("; ")}.`, failing },
+        { status: 422 }
+      );
+    }
   }
 
   const props = { ...body.state, variant };
@@ -111,7 +133,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       .replace(/[^A-Za-z0-9]+/g, "_")
       .replace(/^_+|_+$/g, "");
     const dateStamp = new Date().toISOString().slice(0, 10);
-    const filename = `${safeName}_${variant === "draft" ? "Draft_" : ""}Wealth_Proposal_${dateStamp}.pdf`;
+    const filename = `SAMPLE_${safeName}_${variant === "draft" ? "Draft_" : ""}Wealth_Proposal_${dateStamp}.pdf`;
     return new Response(pdf as unknown as BodyInit, {
       status: 200,
       headers: {

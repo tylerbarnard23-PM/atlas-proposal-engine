@@ -61,6 +61,10 @@ export interface AtlasActions {
   setFxRates: (rates: FxRate[]) => void;
   toggleSection: (key: string) => void;
   setProposalNotes: (notes: string) => void;
+  // Optional disclosures only; required ones always stay in the proposal.
+  toggleDisclosure: (id: string) => void;
+  // Approves every recommendation not yet approved and includes it in the PDF.
+  approveAllRecommendations: () => number;
   recordPdfJob: (job: PdfGenerationJob) => void;
   resetSeed: () => void;
   clearAll: () => void;
@@ -215,7 +219,38 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
           },
         })),
       setProposalNotes: (notes) => set((s) => ({ proposal: { ...s.proposal, notes } })),
-      recordPdfJob: (job) => set((s) => ({ pdfHistory: [job, ...s.pdfHistory].slice(0, 25) })),
+      toggleDisclosure: (id) =>
+        set((s) => {
+          const d = s.disclosures.find((x) => x.id === id);
+          if (!d || d.required) return {};
+          const ids = s.proposal.disclosureIds;
+          return {
+            proposal: {
+              ...s.proposal,
+              disclosureIds: ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id],
+            },
+          };
+        }),
+      approveAllRecommendations: () => {
+        const pending = get().recommendations.filter((r) => !r.approvedByAdvisor);
+        const now = new Date().toISOString();
+        set((s) => ({
+          recommendations: s.recommendations.map((r) =>
+            r.approvedByAdvisor
+              ? r
+              : { ...r, approvedByAdvisor: true, status: "approved", includeInPdf: true, updatedAt: now }
+          ),
+        }));
+        return pending.length;
+      },
+      // Upsert by id: a job is recorded as "running" and later updated to its
+      // final status, which must replace the running entry, not add another.
+      recordPdfJob: (job) =>
+        set((s) => ({
+          pdfHistory: s.pdfHistory.some((j) => j.id === job.id)
+            ? s.pdfHistory.map((j) => (j.id === job.id ? job : j))
+            : [job, ...s.pdfHistory].slice(0, 25),
+        })),
       resetSeed: () => set({ ...seedState(), hasHydrated: true }),
       clearAll: () => set(blankState()),
       setHasHydrated: (b) => set({ hasHydrated: b }),
@@ -225,7 +260,32 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);
       },
-      version: 1,
+      version: 3,
+      // v2: the seeded fictional advisor no longer carries real credential
+      // marks (CFA, CFP®); strip them from workspaces saved before the change,
+      // and drop "running" PDF jobs orphaned by the old append-only history.
+      migrate: (persisted, version) => {
+        const state = persisted as AtlasState;
+        if (version < 2 && state?.advisor?.name === "Margaret S. Whitfield, CFA, CFP®") {
+          state.advisor = { ...state.advisor, name: SEED_ADVISOR.name };
+        }
+        if (version < 2 && Array.isArray(state?.pdfHistory)) {
+          state.pdfHistory = state.pdfHistory.filter((j) => j.status !== "running");
+        }
+        // v3: new disclosures (fees, conflicts, not-an-offer, client-provided
+        // information, held-away assets) and a strengthened data-source text.
+        // The library has no in-app editor, so refresh it from the source and
+        // add any newly required disclosure to the proposal.
+        if (version < 3 && state) {
+          state.disclosures = DISCLOSURE_LIBRARY;
+          if (state.proposal) {
+            const ids = new Set(state.proposal.disclosureIds ?? []);
+            for (const d of DISCLOSURE_LIBRARY) if (d.required) ids.add(d.id);
+            state.proposal = { ...state.proposal, disclosureIds: [...ids] };
+          }
+        }
+        return state;
+      },
     }
   )
 );

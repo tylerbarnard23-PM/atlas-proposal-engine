@@ -17,6 +17,8 @@ export default function AssumptionsDisclosuresPage() {
 
 function Inner() {
   const disclosures = useAtlasStore((s) => s.disclosures);
+  const included = useAtlasStore((s) => s.proposal.disclosureIds);
+  const toggleDisclosure = useAtlasStore((s) => s.toggleDisclosure);
   const fxRates = useAtlasStore((s) => s.fxRates);
   const client = useAtlasStore((s) => s.client);
 
@@ -73,6 +75,13 @@ function Inner() {
 
       <SectionDivider>Disclosures</SectionDivider>
 
+      <p className="text-[13px] text-ink-600 mb-3">
+        Required disclosures always appear in the proposal. Turn optional ones on when they apply to this client.{" "}
+        <span className="text-ink-500">
+          <code className="text-2xs bg-slatey-100 rounded px-1 py-0.5">[Firm]</code> is a placeholder for the adviser&apos;s own name and Form ADV / Form CRS.
+        </span>
+      </p>
+
       <div className="space-y-3">
         {disclosures.map((d) => (
           <Card key={d.id}>
@@ -82,9 +91,20 @@ function Inner() {
                   <div className="text-[13px] font-medium text-ink-900">{d.title}</div>
                   <p className="text-[13px] text-ink-700 mt-1.5 leading-relaxed">{d.body}</p>
                 </div>
-                <div className="flex flex-col gap-2 items-end">
-                  {d.required && <Badge tone="gold">Required</Badge>}
-                  <Badge tone="neutral">{d.category}</Badge>
+                <div className="flex flex-col gap-2 items-end shrink-0">
+                  {d.required ? (
+                    <Badge tone="gold">Required · always in PDF</Badge>
+                  ) : (
+                    <label className="inline-flex items-center gap-1.5 text-[12px] text-ink-700 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={included.includes(d.id)}
+                        onChange={() => toggleDisclosure(d.id)}
+                      />
+                      Include in PDF
+                    </label>
+                  )}
+                  <Badge tone="neutral">{d.category.replace(/_/g, " ")}</Badge>
                 </div>
               </div>
             </CardBody>
