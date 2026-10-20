@@ -25,9 +25,9 @@ import { holdingsNeedingReview, type ReviewReason } from "@/engines/complianceEn
 import { cn } from "@/utils/cn";
 
 const REASON_LABEL: Record<ReviewReason, string> = {
-  unverified: "Not reviewed",
-  stale: "Stale price",
-  mock: "Mock price",
+  unverified: "Value not confirmed",
+  stale: "Price out of date",
+  mock: "Placeholder price",
 };
 
 export default function AccountsAssetsPage() {
@@ -159,12 +159,17 @@ function Inner() {
               <Card className={cn(focusReview && "ring-2 ring-warning-500/60")}>
                 <CardHeader className="flex items-center gap-2">
                   <ShieldAlert className="h-4 w-4 text-warning-500" />
-                  <CardTitle>Needs your review · {pending.length} holding{pending.length === 1 ? "" : "s"}</CardTitle>
+                  <CardTitle>Confirm holding values · {pending.length} holding{pending.length === 1 ? "" : "s"}</CardTitle>
                 </CardHeader>
                 <CardBody className="space-y-2">
                   <p className="text-[13px] text-ink-600">
-                    These holdings block the final PDF. Open each one, check its value and source, then click{" "}
-                    <span className="font-medium text-ink-800">Mark advisor approved</span> (or save an override).
+                    Check that each holding&apos;s value is correct before it goes into a client document. Open each one, check
+                    its value and source, then click <span className="font-medium text-ink-800">Confirm value</span> (or save a
+                    corrected value).
+                  </p>
+                  <p className="text-[12px] text-ink-500">
+                    This is a data check, not a recommendation review. Recommendations are approved separately on{" "}
+                    <Link href="/recommendations" className="font-medium text-navy-700 hover:underline">Recommendations →</Link>
                   </p>
                   <ul className="divide-y divide-ink-100">
                     {pending.map(({ holding, reasons }) => (
@@ -177,7 +182,7 @@ function Inner() {
                             ))}
                           </div>
                         </div>
-                        <Button size="sm" onClick={() => setActive(holding)}>Review</Button>
+                        <Button size="sm" onClick={() => setActive(holding)}>Check value</Button>
                       </li>
                     ))}
                   </ul>
@@ -274,9 +279,9 @@ const VERIFICATION: Record<
   Holding["advisorVerification"],
   { label: string; tone: "warning" | "positive" | "navy" | "negative" | "neutral" }
 > = {
-  unverified: { label: "Not reviewed", tone: "warning" },
-  advisor_reviewed: { label: "Advisor reviewed", tone: "neutral" },
-  advisor_approved: { label: "Advisor approved", tone: "positive" },
+  unverified: { label: "Value not confirmed", tone: "warning" },
+  advisor_reviewed: { label: "Value reviewed", tone: "neutral" },
+  advisor_approved: { label: "Value confirmed", tone: "positive" },
   locked_for_proposal: { label: "Locked for proposal", tone: "navy" },
   rejected: { label: "Rejected", tone: "negative" },
 };
@@ -316,14 +321,14 @@ function HoldingDetail({
           <div className="mt-1.5 flex flex-wrap items-center gap-2 text-ink-700">
             {pendingCount > 0 ? (
               <>
-                <span>{pendingCount} more holding{pendingCount === 1 ? "" : "s"} to review.</span>
+                <span>{pendingCount} more holding value{pendingCount === 1 ? "" : "s"} to confirm.</span>
                 <Button size="sm" onClick={onNext} iconRight={<ArrowRight className="h-3.5 w-3.5" />}>
-                  Review next
+                  Next holding
                 </Button>
               </>
             ) : (
               <>
-                <span>No holdings left to review.</span>
+                <span>All holding values confirmed.</span>
                 <Link href="/pdf-preview" className="inline-flex items-center gap-1 font-medium text-navy-700 hover:underline">
                   Back to PDF Preview <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
@@ -338,8 +343,8 @@ function HoldingDetail({
             Blocks the final PDF: {review.reasons.map((r) => REASON_LABEL[r].toLowerCase()).join(", ")}
           </div>
           <p className="mt-0.5 text-ink-600">
-            Check the value and valuation source below, then click <span className="font-medium">Mark advisor approved</span>,
-            or enter a corrected value and click <span className="font-medium">Save advisor override</span>.
+            Check the value and valuation source below, then click <span className="font-medium">Confirm value</span>, or
+            enter a corrected value and click <span className="font-medium">Save advisor override</span>.
           </p>
         </div>
       )}
@@ -363,7 +368,7 @@ function HoldingDetail({
         <Stat label="Cost basis" value={holding.costBasis != null ? formatCurrency(holding.costBasis, holding.currency) : "—"} />
         <Stat label="Liquidity" value={holding.liquidity ?? "—"} />
         <Stat label="Valuation date" value={formatDate(holding.valuationDate)} />
-        <Stat label="Verification" value={holding.advisorVerification.replace("_", " ")} />
+        <Stat label="Value status" value={status.label} />
       </div>
 
       <div className="border-t border-ink-100 pt-4">
@@ -385,10 +390,10 @@ function HoldingDetail({
             className={cn(isApproved && "bg-positive-50 border-positive-500/50 text-positive-600 disabled:opacity-100 disabled:cursor-default")}
             iconLeft={isApproved ? <CheckCircle2 className="h-4 w-4" /> : undefined}
             onClick={() =>
-              act("Marked advisor approved.", { advisorVerification: "advisor_approved", advisorNotes: notes || holding.advisorNotes })
+              act("Value confirmed.", { advisorVerification: "advisor_approved", advisorNotes: notes || holding.advisorNotes })
             }
           >
-            {isApproved ? "Advisor approved" : "Mark advisor approved"}
+            {isApproved ? "Value confirmed" : "Confirm value"}
           </Button>
           <Button
             variant="secondary"
@@ -427,7 +432,7 @@ function HoldingDetail({
           <Button variant="ghost" onClick={onRemove}>Remove holding</Button>
         </div>
         <dl className="text-2xs text-ink-500 leading-relaxed space-y-0.5">
-          <div><dt className="inline font-medium text-ink-700">Mark advisor approved:</dt> <dd className="inline">confirms the current value is right for the proposal.</dd></div>
+          <div><dt className="inline font-medium text-ink-700">Confirm value:</dt> <dd className="inline">you&apos;ve checked the current value and it&apos;s right for the proposal.</dd></div>
           <div><dt className="inline font-medium text-ink-700">Save advisor override:</dt> <dd className="inline">replaces the value with the one entered above.</dd></div>
           <div><dt className="inline font-medium text-ink-700">Lock for proposal:</dt> <dd className="inline">freezes today&apos;s value so later price refreshes don&apos;t change the proposal.</dd></div>
         </dl>

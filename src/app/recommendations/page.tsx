@@ -89,7 +89,7 @@ function Inner() {
       <PageHeader
         eyebrow="Advisor Recommendations"
         title="Recommendation Builder"
-        description="Approving a recommendation reshapes the Before / After allocation immediately. The Include-in-PDF toggle controls only whether its prose appears in the final document."
+        description="Approving a recommendation reshapes the Before / After allocation immediately. The Include-in-PDF toggle controls only whether its prose appears in the final document. Holding values are confirmed separately, in Accounts & Assets."
         actions={
           <>
             <Link href="/insights">

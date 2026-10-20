@@ -54,21 +54,21 @@ export function evaluateReadiness(inp: ReadinessInputs): ComplianceCheck[] {
   });
   checks.push({
     code: "unverified_holdings",
-    label: "No unverified holdings",
+    label: "All holding values confirmed",
     passed: inp.unverifiedHoldingsCount === 0,
-    detail: inp.unverifiedHoldingsCount > 0 ? `${inp.unverifiedHoldingsCount} holding(s) await advisor review` : undefined,
+    detail: inp.unverifiedHoldingsCount > 0 ? `${inp.unverifiedHoldingsCount} holding value(s) not yet confirmed` : undefined,
   });
   checks.push({
     code: "stale_valuations",
-    label: "Stale valuations reviewed",
+    label: "Out-of-date prices checked",
     passed: inp.staleValuationsCount === 0,
-    detail: inp.staleValuationsCount > 0 ? `${inp.staleValuationsCount} stale valuation(s)` : undefined,
+    detail: inp.staleValuationsCount > 0 ? `${inp.staleValuationsCount} out-of-date price(s)` : undefined,
   });
   checks.push({
     code: "market_data",
-    label: "Market data issues reviewed",
+    label: "Placeholder prices checked",
     passed: inp.marketDataIssuesCount === 0,
-    detail: inp.marketDataIssuesCount > 0 ? `${inp.marketDataIssuesCount} market data warning(s)` : undefined,
+    detail: inp.marketDataIssuesCount > 0 ? `${inp.marketDataIssuesCount} placeholder price(s)` : undefined,
   });
   checks.push({
     code: "approved_recs",

@@ -143,7 +143,7 @@ describe("compliance readiness", () => {
   });
   it("reports unverified holdings with a count", () => {
     const checks = evaluateReadiness({ ...base, recommendations: [rec({})], unverifiedHoldingsCount: 3 });
-    expect(checks.find((c) => c.code === "unverified_holdings")?.detail).toBe("3 holding(s) await advisor review");
+    expect(checks.find((c) => c.code === "unverified_holdings")?.detail).toBe("3 holding value(s) not yet confirmed");
   });
 });
 
