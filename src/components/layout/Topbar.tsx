@@ -3,12 +3,14 @@
 import * as React from "react";
 import { useAtlasStore } from "@/store/useStore";
 import { Badge } from "@/components/ui/Badge";
+import { ReadinessPill } from "./ReadinessPill";
 
 export function Topbar() {
   const client = useAtlasStore((s) => s.client);
   const advisor = useAtlasStore((s) => s.advisor);
   const accounts = useAtlasStore((s) => s.accounts);
   const holdings = useAtlasStore((s) => s.holdings);
+  const hydrated = useAtlasStore((s) => s.hasHydrated);
 
   return (
     <header className="sticky top-0 z-40 h-14 bg-paper/95 backdrop-blur-sm border-b border-ink-100 flex items-center px-6 gap-4">
@@ -18,6 +20,8 @@ export function Topbar() {
         <Badge tone="navy" className="hidden md:inline-flex">{client.reportingCountry} · {client.proposalOutputCurrency}</Badge>
       </div>
       <div className="ml-auto flex items-center gap-4 text-xs text-ink-500">
+        {/* Rendered after the saved workspace loads, so it never flashes the seed state. */}
+        {hydrated && <ReadinessPill />}
         <div className="hidden lg:flex gap-4">
           <span><span className="text-ink-700 font-medium tabular">{accounts.length}</span> accounts</span>
           <span><span className="text-ink-700 font-medium tabular">{holdings.length}</span> holdings</span>

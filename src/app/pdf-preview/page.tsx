@@ -10,6 +10,8 @@ import { Badge } from "@/components/ui/Badge";
 import { useNormalizedHoldings } from "@/hooks/useNormalizedHoldings";
 import { evaluateWorkspaceReadiness, readinessOk } from "@/engines/complianceEngine";
 import { ReadinessChecklist } from "@/components/proposal/ReadinessChecklist";
+import { ReadinessBanner } from "@/components/proposal/ReadinessBanner";
+import { cn } from "@/utils/cn";
 import { Lock } from "lucide-react";
 import { formatDateTime } from "@/utils/formatting";
 import { safeId, todayIso } from "@/utils/formatting";
@@ -102,6 +104,20 @@ function Inner() {
         description="Generate a draft (advisor working copy, watermarked) or a final client-ready PDF. The document is rendered server-side from a dedicated proposal template."
       />
 
+      <ReadinessBanner
+        checks={checks}
+        className="mb-5"
+        readyAction={
+          <Button
+            onClick={() => generate("final")}
+            loading={busy === "final"}
+            className="bg-positive-600 hover:bg-positive-500 active:bg-positive-600"
+          >
+            Generate final PDF
+          </Button>
+        }
+      />
+
       <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-5">
         <Card>
           <CardHeader>
@@ -141,13 +157,18 @@ function Inner() {
             </CardBody>
           </Card>
 
-          <Card>
+          <Card className={cn(ready && "ring-2 ring-positive-500/50")}>
             <CardHeader><CardTitle>Generate</CardTitle></CardHeader>
             <CardBody className="space-y-2.5">
               <Button onClick={() => generate("draft")} loading={busy === "draft"} variant="secondary">
                 Generate draft PDF
               </Button>
-              <Button onClick={() => generate("final")} loading={busy === "final"} disabled={!ready}>
+              <Button
+                onClick={() => generate("final")}
+                loading={busy === "final"}
+                disabled={!ready}
+                className={cn(ready && "bg-positive-600 hover:bg-positive-500 active:bg-positive-600")}
+              >
                 Generate final PDF
               </Button>
               {ready ? (

@@ -19,6 +19,9 @@ import {
   Bot,
 } from "lucide-react";
 import { cn } from "@/utils/cn";
+import { useAtlasStore } from "@/store/useStore";
+import { useWorkspaceReadiness } from "@/hooks/useWorkspaceReadiness";
+import { readinessSteps } from "@/components/proposal/ReadinessBanner";
 
 interface NavItem {
   label: string;
@@ -46,6 +49,10 @@ const NAV: NavItem[] = [
 export function Sidebar() {
   const pathname = usePathname();
   const groups = Array.from(new Set(NAV.map((n) => n.group ?? "")));
+  const hydrated = useAtlasStore((s) => s.hasHydrated);
+  const { failing, ready } = useWorkspaceReadiness();
+  // Open readiness items per page, so the nav itself shows where work remains.
+  const openByPath = new Map(readinessSteps(failing).map((s) => [s.href.split("?")[0], s.items.length] as const));
 
   return (
     <aside className="hidden md:flex w-[260px] shrink-0 flex-col border-r border-ink-100 bg-paper">
@@ -88,7 +95,20 @@ export function Sidebar() {
                       >
                         {item.icon}
                       </span>
-                      {item.label}
+                      <span className="flex-1">{item.label}</span>
+                      {hydrated && (openByPath.get(item.href) ?? 0) > 0 && (
+                        <span
+                          className="min-w-5 h-5 px-1.5 rounded-full bg-warning-500 text-white text-[11px] font-semibold flex items-center justify-center"
+                          title="Items to resolve before the final PDF"
+                        >
+                          {openByPath.get(item.href)}
+                        </span>
+                      )}
+                      {hydrated && ready && item.href === "/pdf-preview" && (
+                        <span className="rounded-full bg-positive-500 text-white text-[10px] font-semibold px-2 h-5 flex items-center">
+                          Ready
+                        </span>
+                      )}
                     </Link>
                   </li>
                 );

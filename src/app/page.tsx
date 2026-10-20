@@ -17,6 +17,7 @@ import { netWorth } from "@/engines/proposalEngine";
 import { dataQualityScore } from "@/engines/dataQualityEngine";
 import { evaluateWorkspaceReadiness } from "@/engines/complianceEngine";
 import { ReadinessChecklist } from "@/components/proposal/ReadinessChecklist";
+import { ReadinessBanner } from "@/components/proposal/ReadinessBanner";
 import { summarizeAllocation } from "@/engines/insightEngine";
 import Link from "next/link";
 import { ArrowRight, ShieldCheck, FileSignature } from "lucide-react";
@@ -74,6 +75,8 @@ function DashboardInner() {
           </>
         }
       />
+
+      <ReadinessBanner checks={readiness} className="mb-6" />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
         <KpiCard
