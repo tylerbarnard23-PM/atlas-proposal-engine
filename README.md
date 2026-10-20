@@ -2,6 +2,8 @@
 
 **An open-source reference implementation of AI-assisted wealth-proposal tooling.** Atlas takes an advisor from a pile of messy client statements to a branded, compliance-checked PDF proposal, with a Claude-powered Copilot that drafts recommendations and leaves every decision to the advisor.
 
+[![CI](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/actions/workflows/ci.yml)
+
 **[Live demo →](https://atlas-proposal-engine.vercel.app/)** · runs on a sample family office, no sign-up, no API key needed
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Ftylerbarnard23-PM%2Fatlas-proposal-engine)
@@ -95,9 +97,11 @@ tests/            unit tests + extraction eval
 ## Tests and evals
 
 ```bash
-npm test        # 31 unit tests + the eval: proposal math, cash flows, readiness, insights, Copilot guardrails
+npm test        # 33 unit tests + the eval: proposal math, cash flows, readiness, insights, Excel parsing, Copilot guardrails
 npm run eval    # statement-extraction accuracy scorecard
 ```
+
+CI runs the type check, tests, eval and production build on every pull request.
 
 The extraction eval runs the parsers over the sample statements against hand-labelled holdings and scores recall, label accuracy, currency accuracy and spurious rows. Its first run found real bugs: amounts written as `CHF 193,864.00` didn't parse, and bond face value was being read as market value. Fixing the parser to use the statement's header row took recall from **61.9% to 100%** and spurious rows from **5 to 0**. Those numbers are now the floor the eval allows.
 
