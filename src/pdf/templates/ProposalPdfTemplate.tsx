@@ -14,7 +14,7 @@ import { ACCOUNT_TYPE_LABELS } from "@/domain/accountTaxonomy";
 import { PDF_BASE_CSS } from "../styles/pdfStyles";
 import { formatCurrency, formatDate, formatPercent } from "@/utils/formatting";
 import { sumBy, groupBy } from "@/utils/numbers";
-import { applyRecommendationsToProposed, netWorth } from "@/engines/proposalEngine";
+import { applyRecommendationsToProposed, netWorth, proposedCashShortfalls } from "@/engines/proposalEngine";
 import { dataQualityScore } from "@/engines/dataQualityEngine";
 import { PDF_SAMPLE_NOTICE } from "@/domain/legal";
 
@@ -185,6 +185,7 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
   // intent is interpreted by applyRecommendationsToProposed (sell zeroes,
   // reduce subtracts, increase/buy adds, with offsetting cash flow).
   const proposedHoldings = applyRecommendationsToProposed(holdings, proposedRecs, accounts);
+  const cashShortfalls = proposedCashShortfalls(holdings, proposedRecs, accounts);
   const allocProposedClass = summarize(proposedHoldings, (h) => ASSET_CLASS_LABELS[h.assetClass] ?? "Other");
 
   // Align legend ordering with the current allocation so colors stay stable
@@ -477,6 +478,7 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
               {formatCurrency(proposedTotal, reportingCurrency, { compact: true })}
             </div>
             <div style={{ display: "flex", gap: 16, alignItems: "center", marginTop: 10 }}>
+              {/* PdfPieChart skips non-positive slices; an unfunded purchase is called out below instead. */}
               <PdfPieChart data={allocProposedClassOrdered} size={148} />
               <div style={{ flex: 1 }}>
                 <PdfPieLegend data={allocProposedClassOrdered} />
@@ -494,6 +496,19 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
             </div>
           </div>
         </div>
+
+        {cashShortfalls.length > 0 && (
+          <div className="pdf-card pdf-avoid-break" style={{ marginTop: 14, borderColor: "#9B2C2C" }}>
+            <div className="pdf-stat-label" style={{ color: "#7A2222" }}>Unfunded proposed purchases</div>
+            <p className="pdf-text" style={{ marginTop: 6 }}>
+              Approved purchases exceed the cash available in{" "}
+              {cashShortfalls
+                .map((c) => `${c.accountName} (short ${formatCurrency(c.shortfall, reportingCurrency, { compact: true })})`)
+                .join(", ")}
+              . The proposed cash shown is negative until a funding source is added.
+            </p>
+          </div>
+        )}
 
         {deltas.length > 0 && (
           <div className="pdf-card pdf-avoid-break" style={{ marginTop: 14 }}>

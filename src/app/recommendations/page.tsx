@@ -13,7 +13,8 @@ import { Input, Label, Select, Textarea } from "@/components/ui/Input";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Drawer } from "@/components/ui/Drawer";
 import type { Holding, Recommendation, RecommendationStatus, RecommendationType } from "@/domain/types";
-import { applyRecToValue } from "@/engines/proposalEngine";
+import { applyRecToValue, proposedCashShortfalls } from "@/engines/proposalEngine";
+import { useNormalizedHoldings } from "@/hooks/useNormalizedHoldings";
 import { formatCurrency, safeId, todayIso } from "@/utils/formatting";
 
 const TYPES: RecommendationType[] = [
@@ -40,7 +41,13 @@ export default function RecommendationsPage() {
 function Inner() {
   const recs = useAtlasStore((s) => s.recommendations);
   const holdings = useAtlasStore((s) => s.holdings);
+  const accounts = useAtlasStore((s) => s.accounts);
   const upsert = useAtlasStore((s) => s.upsertRecommendation);
+  const { holdings: normalized, reportingCurrency } = useNormalizedHoldings();
+  const shortfalls = React.useMemo(
+    () => proposedCashShortfalls(normalized, recs.filter((r) => r.approvedByAdvisor), accounts),
+    [normalized, recs, accounts]
+  );
   const remove = useAtlasStore((s) => s.removeRecommendation);
   const [editing, setEditing] = React.useState<Recommendation | null>(null);
   const holdingsById = React.useMemo(
@@ -83,6 +90,18 @@ function Inner() {
           </>
         }
       />
+
+      {shortfalls.length > 0 && (
+        <div role="alert" className="mb-4 rounded-md bg-negative-50 ring-1 ring-inset ring-negative-500/30 px-4 py-3 text-[13px] text-ink-800">
+          <div className="font-semibold text-negative-600">Approved purchases exceed available cash</div>
+          <p className="mt-0.5">
+            {shortfalls
+              .map((sf) => `${sf.accountName} is short ${formatCurrency(sf.shortfall, reportingCurrency, { compact: true })}`)
+              .join("; ")}
+            . Reduce a purchase or add a sale in the same account. The final PDF stays locked until this is fixed.
+          </p>
+        </div>
+      )}
 
       {recs.length === 0 ? (
         <EmptyState

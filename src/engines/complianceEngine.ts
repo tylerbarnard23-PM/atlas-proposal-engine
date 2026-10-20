@@ -7,6 +7,7 @@ import type {
   Disclosure,
   ComplianceCheck,
 } from "@/domain/types";
+import { proposedCashShortfalls, type CashShortfall } from "./proposalEngine";
 
 export interface ReadinessInputs {
   client: ClientProfile;
@@ -20,6 +21,8 @@ export interface ReadinessInputs {
   marketDataIssuesCount: number;
   insightsReviewedCount: number;
   totalInsightsCount: number;
+  // Accounts whose proposed cash goes negative (purchases exceed cash).
+  cashShortfalls?: CashShortfall[];
 }
 
 export function evaluateReadiness(inp: ReadinessInputs): ComplianceCheck[] {
@@ -71,6 +74,16 @@ export function evaluateReadiness(inp: ReadinessInputs): ComplianceCheck[] {
     code: "approved_recs",
     label: "At least one approved recommendation included in PDF",
     passed: inp.recommendations.some((r) => r.approvedByAdvisor && r.includeInPdf),
+  });
+  const shortfalls = inp.cashShortfalls ?? [];
+  checks.push({
+    code: "trades_funded",
+    label: "Proposed trades are funded",
+    passed: shortfalls.length === 0,
+    detail:
+      shortfalls.length > 0
+        ? shortfalls.map((s) => `${s.accountName} short ${Math.round(s.shortfall).toLocaleString()}`).join("; ")
+        : undefined,
   });
   checks.push({
     code: "disclosures_included",
@@ -126,7 +139,9 @@ export interface WorkspaceReadinessInputs {
 
 export function evaluateWorkspaceReadiness(ws: WorkspaceReadinessInputs): ComplianceCheck[] {
   const pending = holdingsNeedingReview(ws.holdings);
+  const approved = ws.recommendations.filter((r) => r.approvedByAdvisor);
   return evaluateReadiness({
+    cashShortfalls: proposedCashShortfalls(ws.holdings, approved, ws.accounts),
     ...ws,
     disclosures: ws.disclosures.filter((d) => d.required),
     unverifiedHoldingsCount: pending.length,

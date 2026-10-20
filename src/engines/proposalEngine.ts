@@ -200,6 +200,32 @@ export function applyRecommendationsToProposed(
   return result;
 }
 
+export interface CashShortfall {
+  accountId: string;
+  accountName: string;
+  shortfall: number; // positive amount of cash missing, in the reporting currency
+}
+
+// Accounts whose cash would go negative after the approved recommendations,
+// i.e. purchases (or debt paydowns) larger than the cash available in that
+// account. The proposal must not present negative cash as an allocation.
+export function proposedCashShortfalls(
+  current: Holding[],
+  approvedRecommendations: Recommendation[],
+  accounts: Account[] = []
+): CashShortfall[] {
+  const proposed = applyRecommendationsToProposed(current, approvedRecommendations, accounts);
+  const cashByAccount = new Map<string, number>();
+  for (const h of proposed) {
+    if (h.isLiability || h.assetClass !== "cash") continue;
+    cashByAccount.set(h.accountId, (cashByAccount.get(h.accountId) ?? 0) + (h.reportingMarketValue ?? h.nativeMarketValue));
+  }
+  const names = new Map(accounts.map((a) => [a.id, a.name] as const));
+  return [...cashByAccount]
+    .filter(([, cash]) => cash < -0.5)
+    .map(([accountId, cash]) => ({ accountId, accountName: names.get(accountId) ?? accountId, shortfall: -cash }));
+}
+
 export function netWorth(holdings: Holding[]): { gross: number; liabilities: number; net: number } {
   const assets = sumBy(holdings.filter((h) => !h.isLiability), (h) => h.reportingMarketValue ?? h.nativeMarketValue);
   const liabilities = sumBy(holdings.filter((h) => h.isLiability), (h) => h.reportingMarketValue ?? h.nativeMarketValue);
