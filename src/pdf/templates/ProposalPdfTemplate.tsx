@@ -17,6 +17,7 @@ import { sumBy, groupBy } from "@/utils/numbers";
 import { applyRecommendationsToProposed, netWorth, proposedCashShortfalls } from "@/engines/proposalEngine";
 import { dataQualityScore } from "@/engines/dataQualityEngine";
 import { PDF_SAMPLE_NOTICE } from "@/domain/legal";
+import { accentTint, checkLogoDataUrl, isValidAccentColor, resolveFirmPlaceholder } from "@/domain/branding";
 
 // Print-safe palette used by both the pie chart and the allocation list. Order
 // is significant — pie slices and bar rows pick by index so colors match.
@@ -163,6 +164,10 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
   const reportingCurrency = proposal.outputCurrency;
   const today = new Date().toLocaleDateString(client.locale ?? "en-US", { year: "numeric", month: "long", day: "numeric" });
   const isDraft = variant === "draft";
+  // Branding is re-validated here so an invalid value can never reach the
+  // document, whichever caller rendered it.
+  const logo = advisor.logoDataUrl && checkLogoDataUrl(advisor.logoDataUrl).ok ? advisor.logoDataUrl : undefined;
+  const accent = isValidAccentColor(advisor.accentColor) ? advisor.accentColor : undefined;
 
   const enabled = (key: string) => sections.find((s) => s.key === key)?.enabled !== false;
   // Any advisor-approved rec drives the Proposed view's math. The
@@ -210,6 +215,11 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
     <div className="pdf-cover" key="cover">
       <div>
         <div className="pdf-cover-eyebrow">Confidential Wealth Proposal</div>
+        {logo && (
+          <div style={{ display: "inline-flex", background: "white", borderRadius: 6, padding: "6pt 9pt", marginTop: "0.2in" }}>
+            <img src={logo} alt={`${advisor.firmName} logo`} style={{ maxHeight: "0.45in", maxWidth: "2.2in", objectFit: "contain" }} />
+          </div>
+        )}
         <div className="pdf-cover-firm" style={{ marginTop: "0.25in" }}>{advisor.firmName}</div>
       </div>
       <div>
@@ -256,7 +266,10 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
             {eyebrow && <span className="pdf-eyebrow" style={{ marginRight: 12 }}>{eyebrow}</span>}
             {title}
           </div>
-          <div className="right">{client.householdName ?? client.fullName}</div>
+          <div className="right" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {logo && <img src={logo} alt="" style={{ maxHeight: "12pt", maxWidth: "0.9in", objectFit: "contain" }} />}
+            {client.householdName ?? client.fullName}
+          </div>
         </div>
         <div style={{ position: "relative", zIndex: 1 }}>{children}</div>
         <div className="pdf-sample-notice">{PDF_SAMPLE_NOTICE}</div>
@@ -733,7 +746,7 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
         {disclosures.map((d) => (
           <div className="pdf-disclosure" key={d.id}>
             <h4>{d.title}</h4>
-            <div>{d.body}</div>
+            <div>{resolveFirmPlaceholder(d.body, advisor)}</div>
           </div>
         ))}
       </PageWrap>
@@ -860,7 +873,13 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
     );
   }
 
-  return <div className="pdf-document">{pages}</div>;
+  return (
+    <div className="pdf-document">
+      {/* Accent is a validated #RRGGBB, so interpolating it into CSS is safe. */}
+      {accent && <style>{`:root{--gold-500:${accent};--gold-300:${accentTint(accent)}}`}</style>}
+      {pages}
+    </div>
+  );
 }
 
 // Wraps rendered body markup into a complete print-ready HTML document.

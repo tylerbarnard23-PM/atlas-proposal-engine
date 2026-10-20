@@ -1,6 +1,8 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 import { useAtlasStore } from "@/store/useStore";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Input, Label, Select, Textarea } from "@/components/ui/Input";
@@ -22,20 +24,18 @@ function ClientProfileInner() {
   const client = useAtlasStore((s) => s.client);
   const advisor = useAtlasStore((s) => s.advisor);
   const setClient = useAtlasStore((s) => s.setClient);
-  const setAdvisor = useAtlasStore((s) => s.setAdvisor);
-  const clearAll = useAtlasStore((s) => s.clearAll);
+  const startNewClient = useAtlasStore((s) => s.startNewClient);
   const resetSeed = useAtlasStore((s) => s.resetSeed);
 
-  function handleClear() {
+  function handleNewClient() {
     if (
       confirm(
-        "Start a new engagement from scratch?\n\n" +
-          "This will permanently clear the client profile, advisor profile, " +
-          "all accounts, holdings, recommendations, source documents, and PDF history. " +
-          "This action cannot be undone."
+        "Start a new client?\n\n" +
+          "This clears the client profile, accounts, holdings, recommendations, source documents and PDF history. " +
+          "Your firm & branding are kept. This can't be undone."
       )
     ) {
-      clearAll();
+      startNewClient();
     }
   }
 
@@ -43,15 +43,15 @@ function ClientProfileInner() {
     <>
       <PageHeader
         eyebrow="Engagement"
-        title="Client & Advisor Profile"
-        description="Configure who the proposal is for, what jurisdiction it serves, and the advisor of record."
+        title="Client Profile"
+        description="Who this proposal is for: the client's details, jurisdiction, goals and constraints. Your firm's details live in Firm & Branding."
         actions={
           <>
             <Button variant="ghost" size="sm" onClick={() => { if (confirm("Restore the seeded Blackwell Family Office household?")) resetSeed(); }}>
               Restore sample data
             </Button>
-            <Button variant="danger" size="sm" onClick={handleClear}>
-              Start from scratch
+            <Button variant="danger" size="sm" onClick={handleNewClient}>
+              Start a new client
             </Button>
           </>
         }
@@ -186,27 +186,34 @@ function ClientProfileInner() {
           </CardBody>
         </Card>
 
-        <Card>
+        <Card className="self-start">
           <CardHeader>
-            <CardTitle>Advisor of Record</CardTitle>
+            <CardTitle>Your firm</CardTitle>
           </CardHeader>
-          <CardBody className="space-y-4">
-            <Field label="Advisor name">
-              <Input value={advisor.name} onChange={(e) => setAdvisor({ name: e.target.value })} />
-            </Field>
-            <Field label="Email">
-              <Input value={advisor.email} onChange={(e) => setAdvisor({ email: e.target.value })} />
-            </Field>
-            <Field label="Firm name">
-              <Input value={advisor.firmName} onChange={(e) => setAdvisor({ firmName: e.target.value })} />
-            </Field>
-            <Field label="Phone">
-              <Input value={advisor.phone ?? ""} onChange={(e) => setAdvisor({ phone: e.target.value })} />
-            </Field>
-            <Field label="Logo URL (optional)">
-              <Input value={advisor.firmLogoUrl ?? ""} onChange={(e) => setAdvisor({ firmLogoUrl: e.target.value })} />
-            </Field>
-            <p className="text-2xs text-ink-500 leading-relaxed pt-2">
+          <CardBody className="space-y-3">
+            <div className="flex items-center gap-3">
+              {advisor.logoDataUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={advisor.logoDataUrl} alt="" className="h-10 max-w-28 object-contain" />
+              )}
+              <div className="min-w-0">
+                <div className="font-medium text-ink-900 truncate">{advisor.firmName || "No firm set"}</div>
+                <div className="text-[13px] text-ink-600 truncate">
+                  {advisor.name || "No advisor set"}
+                  {advisor.email ? ` · ${advisor.email}` : ""}
+                </div>
+              </div>
+            </div>
+            <p className="text-[13px] text-ink-600 leading-relaxed">
+              Proposals are branded with your firm, not Atlas. Firm details, logo and accent color are set once in{" "}
+              <span className="font-medium text-ink-800">Firm &amp; Branding</span> and reused for every client.
+            </p>
+            <Link href="/firm-branding">
+              <Button variant="secondary" size="sm" iconRight={<ArrowRight className="h-3.5 w-3.5" />}>
+                Edit firm &amp; branding
+              </Button>
+            </Link>
+            <p className="text-2xs text-ink-500 leading-relaxed pt-2 border-t border-ink-100">
               The advisor remains responsible for the suitability and implementation of every recommendation in this proposal. The platform does not autonomously provide
               financial, tax, legal, or investment advice.
             </p>

@@ -10,7 +10,7 @@ import { cn } from "@/utils/cn";
 // answer next to the check instead of making the advisor hunt for it.
 export const READINESS_FIX: Record<string, { href: string; label: string; hint: string }> = {
   client_profile: { href: "/client-profile", label: "Client Profile", hint: "Add the client's name, base currency and country of residence." },
-  advisor_profile: { href: "/client-profile", label: "Client Profile", hint: "Fill in the advisor name and firm name." },
+  advisor_profile: { href: "/firm-branding", label: "Firm & Branding", hint: "Fill in the advisor name and firm name." },
   accounts_present: { href: "/accounts-assets", label: "Accounts & Assets", hint: "Add an account, or import one from a statement." },
   holdings_present: { href: "/import-center", label: "Import Center", hint: "Import holdings from a statement or add them by hand." },
   output_currency: { href: "/client-profile", label: "Client Profile", hint: "Choose the proposal's output currency." },

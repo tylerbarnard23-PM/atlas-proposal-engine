@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useAtlasStore } from "@/store/useStore";
+import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { ReadinessPill } from "./ReadinessPill";
 
@@ -30,6 +31,13 @@ export function Topbar() {
           <span className="text-ink-900 text-[13px] font-medium">{advisor.name}</span>
           <span className="text-2xs">{advisor.firmName}</span>
         </div>
+        {/* The firm's logo when it has one (white-label); initials otherwise. */}
+        {advisor.logoDataUrl ? (
+          <Link href="/firm-branding" title="Firm & Branding" className="h-8 max-w-24 flex items-center">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={advisor.logoDataUrl} alt={`${advisor.firmName} logo`} className="max-h-8 max-w-24 object-contain" />
+          </Link>
+        ) : (
         <div className="h-8 w-8 rounded-full bg-navy-700 text-white text-[12px] font-medium flex items-center justify-center">
           {advisor.name
             .split(" ")
@@ -38,6 +46,7 @@ export function Topbar() {
             .map((s) => s[0])
             .join("")}
         </div>
+        )}
       </div>
     </header>
   );

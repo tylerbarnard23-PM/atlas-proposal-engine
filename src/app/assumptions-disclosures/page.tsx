@@ -6,6 +6,7 @@ import { ClientOnly } from "@/components/layout/ClientOnly";
 import { PageHeader, SectionDivider } from "@/components/ui/Section";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { resolveFirmPlaceholder } from "@/domain/branding";
 
 export default function AssumptionsDisclosuresPage() {
   return (
@@ -19,6 +20,7 @@ function Inner() {
   const disclosures = useAtlasStore((s) => s.disclosures);
   const included = useAtlasStore((s) => s.proposal.disclosureIds);
   const toggleDisclosure = useAtlasStore((s) => s.toggleDisclosure);
+  const advisor = useAtlasStore((s) => s.advisor);
   const fxRates = useAtlasStore((s) => s.fxRates);
   const client = useAtlasStore((s) => s.client);
 
@@ -78,7 +80,7 @@ function Inner() {
       <p className="text-[13px] text-ink-600 mb-3">
         Required disclosures always appear in the proposal. Turn optional ones on when they apply to this client.{" "}
         <span className="text-ink-500">
-          <code className="text-2xs bg-slatey-100 rounded px-1 py-0.5">[Firm]</code> is a placeholder for the adviser&apos;s own name and Form ADV / Form CRS.
+          <code className="text-2xs bg-slatey-100 rounded px-1 py-0.5">[Firm]</code> is a placeholder for the adviser&apos;s own name and Form ADV / Form CRS. It&apos;s replaced with your firm name once you change it from the sample in Firm &amp; Branding.
         </span>
       </p>
 
@@ -89,7 +91,7 @@ function Inner() {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="text-[13px] font-medium text-ink-900">{d.title}</div>
-                  <p className="text-[13px] text-ink-700 mt-1.5 leading-relaxed">{d.body}</p>
+                  <p className="text-[13px] text-ink-700 mt-1.5 leading-relaxed">{resolveFirmPlaceholder(d.body, advisor)}</p>
                 </div>
                 <div className="flex flex-col gap-2 items-end shrink-0">
                   {d.required ? (

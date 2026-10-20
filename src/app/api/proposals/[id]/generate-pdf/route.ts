@@ -15,6 +15,7 @@ import type {
   Recommendation,
 } from "@/domain/types";
 import { evaluateWorkspaceReadiness, readinessOk } from "@/engines/complianceEngine";
+import { checkLogoDataUrl, isValidAccentColor } from "@/domain/branding";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -39,6 +40,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   if (!body?.state?.client?.fullName) {
     return NextResponse.json({ error: "Invalid proposal state in request body." }, { status: 400 });
+  }
+
+  // Branding comes from the browser, so check it here too: the logo must be an
+  // embedded raster image (never a URL this server would fetch) and the accent a
+  // plain hex color (it is written into the document's CSS).
+  const { logoDataUrl, accentColor } = body.state.advisor ?? {};
+  if (logoDataUrl !== undefined) {
+    const check = checkLogoDataUrl(logoDataUrl);
+    if (!check.ok) return NextResponse.json({ error: `Invalid firm logo: ${check.reason}` }, { status: 400 });
+  }
+  if (accentColor !== undefined && !isValidAccentColor(accentColor)) {
+    return NextResponse.json({ error: "Invalid accent color: use a six-digit hex value such as #1F3F6E." }, { status: 400 });
   }
 
   // The UI disables the final button until readiness passes; enforce the same
