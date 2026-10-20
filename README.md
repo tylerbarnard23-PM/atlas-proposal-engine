@@ -24,7 +24,7 @@ Atlas is built for advisors at RIAs and wealth platforms, and for the people bui
 
 | Step | What happens | Where |
 |---|---|---|
-| **Ingest** | CSV, Excel, PDF text, OFX/QFX, pasted text and screenshots (OCR via Tesseract) are parsed into candidate holdings, each with a confidence level and a source trace back to the raw line. | Import Center, Statement Workbench |
+| **Ingest** | CSV, Excel, PDF, OFX/QFX, pasted text and screenshots (OCR via Tesseract) are parsed into candidate holdings, each with a confidence level and a source trace back to the raw line. PDFs are read in the browser with pdf.js (nothing is uploaded) and rebuilt into layout-aware lines; financial plans with a Balance Sheet (LifeView-style) are recognized and loaded as a client with one account per asset or liability, **reconciled against the document's own totals**. | Import Center, Statement Workbench |
 | **Normalize** | Asset class, currency and identifier detection (ticker, CUSIP, ISIN, SEDOL); duplicate and data-quality checks; advisor verification status per holding. | Accounts & Assets |
 | **Value** | Multi-currency valuation into the proposal's reporting currency. Market data comes from a provider registry (Finnhub, Twelve Data, Alpha Vantage, CoinGecko, ECB/Frankfurter FX, FRED, SEC EDGAR) and falls back to mock data, so it works without any keys. | Market Data |
 | **Analyze** | A rules engine flags concentration, currency and country exposure, illiquidity, cash drag, high fees, manual valuations and data-quality problems. | Insights |
@@ -108,6 +108,8 @@ CI runs the type check, tests, eval and production build on every pull request.
 
 The extraction eval runs the parsers over the sample statements against hand-labelled holdings and scores recall, label accuracy, currency accuracy and spurious rows. Its first run found real bugs: amounts written as `CHF 193,864.00` didn't parse, and bond face value was being read as market value. Fixing the parser to use the statement's header row took recall from **61.9% to 100%** and spurious rows from **5 to 0**. Those numbers are now the floor the eval allows.
 
+The financial-plan reader was built against a real 94-page planning report (Morgan Stanley's public LifeView marketing sample, which isn't committed here): it reads all 21 Balance Sheet lines and matches the report's stated assets ($27,997,288), liabilities ($3,520,000) and net worth ($24,477,288) to the dollar. The committed eval case is a synthetic look-alike written from scratch.
+
 | Statement | Holdings | Found | Currency |
 |---|---|---|---|
 | Brokerage CSV | 5 | 5 | 5 |
@@ -116,6 +118,7 @@ The extraction eval runs the parsers over the sample statements against hand-lab
 | Crypto wallet, OCR text | 3 | 3 | 3 |
 | Trust statement, bonds by CUSIP | 3 | 3 | 3 |
 | Bank statement (EUR) | 2 | 2 | 2 |
+| Financial plan, Balance Sheet (synthetic, 2 pages + liabilities) | 11 | 11 | 11 |
 
 ## Quickstart
 

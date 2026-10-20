@@ -507,6 +507,12 @@ export interface ExtractedHolding {
   yieldPct?: number;
   expenseRatio?: number;
   assetClass?: AssetClass;
+  subAssetClass?: SubAssetClass;
+  assetType?: AssetType;
+  liquidity?: Liquidity;
+  // As-of date of this value when the document states one (ISO yyyy-mm-dd).
+  valuationDate?: string;
+  isLiability?: boolean;
   notes?: string;
   fields: Record<string, ExtractedField>;
   warnings: DataQualityIssue[];
@@ -545,6 +551,28 @@ export interface ExtractionResult {
   detectedInstitution?: string;
   extractionMethod: string;
   extractionMs: number;
+  // What kind of document this was recognized as (e.g. a financial plan).
+  documentKind?: DocumentKind;
+  documentTitle?: string;
+  clientNameDetected?: string;
+  asOfDate?: string;
+  pageCount?: number;
+  reconciliation?: Reconciliation;
+}
+
+export type DocumentKind = "financial_plan_lifeview" | "statement_table";
+
+// Extracted totals checked against the totals the document itself states.
+export interface Reconciliation {
+  status: "matched" | "mismatch" | "unavailable";
+  assetsStated?: number;
+  assetsExtracted: number;
+  liabilitiesStated?: number;
+  liabilitiesExtracted: number;
+  netWorthStated?: number;
+  netWorthExtracted: number;
+  // Differences up to this many currency units count as a match (rounding).
+  tolerance: number;
 }
 
 export interface SourceDocument {

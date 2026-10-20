@@ -26,6 +26,7 @@ import { SEED_MARKET_QUOTES } from "@/data/seedMarketData";
 import { DISCLOSURE_LIBRARY } from "@/domain/disclosureLibrary";
 import { DEFAULT_PROPOSAL_SECTIONS } from "@/engines/proposalEngine";
 import { LEGACY_SAMPLE_FIRM_NAME } from "@/domain/branding";
+import type { ImportedWorkspace } from "@/ingestion/documents/toWorkspace";
 
 export interface AtlasState {
   client: ClientProfile;
@@ -71,6 +72,10 @@ export interface AtlasActions {
   // Clears the client, accounts, holdings and recommendations but keeps the
   // firm & branding, which are set once and reused for every client.
   startNewClient: () => void;
+  // Loads an imported document as a new engagement (keeps firm & branding).
+  loadImportedEngagement: (imported: ImportedWorkspace) => void;
+  // Adds an imported document's accounts and holdings to the current client.
+  addImportedToEngagement: (imported: ImportedWorkspace) => void;
   clearAll: () => void;
   setHasHydrated: (b: boolean) => void;
 }
@@ -297,6 +302,26 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
           const fresh = blankState();
           return { ...fresh, advisor: s.advisor, proposal: { ...fresh.proposal, advisorId: s.advisor.id } };
         }),
+      loadImportedEngagement: (imported) =>
+        set((s) => {
+          const fresh = blankState();
+          const name = imported.clientName?.trim() || "Imported client";
+          return {
+            ...fresh,
+            advisor: s.advisor,
+            client: { ...fresh.client, fullName: name, householdName: name },
+            accounts: imported.accounts,
+            holdings: imported.holdings,
+            sourceDocuments: [imported.sourceDocument],
+            proposal: { ...fresh.proposal, advisorId: s.advisor.id, title: `${name} — Wealth Proposal` },
+          };
+        }),
+      addImportedToEngagement: (imported) =>
+        set((s) => ({
+          accounts: [...s.accounts, ...imported.accounts],
+          holdings: [...s.holdings, ...imported.holdings],
+          sourceDocuments: [imported.sourceDocument, ...s.sourceDocuments],
+        })),
       clearAll: () => set(blankState()),
       setHasHydrated: (b) => set({ hasHydrated: b }),
     }),

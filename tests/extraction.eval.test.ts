@@ -9,8 +9,9 @@ import { scoreCase, summarize } from "./extraction/scoreExtraction";
 // History: the first run scored 61.9% recall with 5 spurious rows (ISO-prefixed
 // amounts like "CHF 193,864.00" didn't parse, and bond face value was read as
 // market value). After the header-aware parser fix: 100% recall, 0 spurious.
-// Currency sits at 81% only because the retirement CSV has no currency column;
-// those rows are left blank and flagged for the advisor rather than guessed.
+// Currency sits below 100% only because the retirement CSV has no currency
+// column; those rows are left blank and flagged for the advisor rather than
+// guessed. The synthetic financial plan (Balance Sheet reader) scores 11/11.
 const BASELINE = {
   holdingRecall: 1,
   labelAccuracy: 1,

@@ -17,7 +17,7 @@ export const ASSET_CLASS_LABELS: Record<AssetClass, string> = {
   insurance: "Insurance",
   structured_product: "Structured Product",
   liability: "Liability",
-  custom: "Custom Asset",
+  custom: "Other / unclassified",
 };
 
 export const ASSET_TYPE_LABELS: Record<AssetType, string> = {

@@ -1,6 +1,7 @@
 import type { ExtractedHolding } from "@/domain/types";
 import { parseCsvText } from "@/ingestion/parsers/parseCsv";
 import { parsePastedText } from "@/ingestion/parsers/parsePastedText";
+import { parseStatementPdf } from "@/ingestion/documents/parseStatementPdf";
 import type { EvalCase } from "./groundTruth";
 
 export interface CaseScore {
@@ -18,6 +19,7 @@ export interface CaseScore {
 const VALUE_TOLERANCE = 0.005;
 
 export function extract(c: EvalCase): ExtractedHolding[] {
+  if (c.parser === "pdf") return parseStatementPdf(c.pdf!, c.name).accounts.flatMap((a) => a.holdings);
   return c.parser === "csv" ? parseCsvText(c.text, c.name).account.holdings : parsePastedText(c.text, c.name).holdings;
 }
 
@@ -38,7 +40,7 @@ export function scoreCase(c: EvalCase): CaseScore {
   for (const exp of c.expected) {
     const idx = [...unused].find((i) => {
       const mv = holdings[i].marketValue;
-      return mv != null && Math.abs(mv - exp.marketValue) <= exp.marketValue * VALUE_TOLERANCE;
+      return mv != null && Math.abs(mv - exp.marketValue) <= Math.abs(exp.marketValue) * VALUE_TOLERANCE;
     });
     if (idx === undefined) {
       score.misses.push(exp.label);
@@ -52,7 +54,7 @@ export function scoreCase(c: EvalCase): CaseScore {
     if (h.currency === exp.currency) score.currencyCorrect++;
     else if (!h.currency) score.currencyMissing++;
   }
-  score.spurious = [...unused].filter((i) => (holdings[i].marketValue ?? 0) > 0).length;
+  score.spurious = [...unused].filter((i) => (holdings[i].marketValue ?? 0) !== 0).length;
   return score;
 }
 

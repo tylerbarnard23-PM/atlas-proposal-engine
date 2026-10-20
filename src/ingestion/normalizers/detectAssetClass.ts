@@ -18,7 +18,14 @@ export function detectAssetClass(text: string | undefined): AssetClass | undefin
   if (!text) return undefined;
   const upper = text.toUpperCase();
   for (const { class: c, words } of KEYWORDS) {
-    if (words.some((w) => upper.includes(w))) return c;
+    if (words.some((w) => matches(upper, w))) return c;
   }
   return undefined;
+}
+
+// Short tokens must be whole words (plurals allowed): "CD" isn't in
+// "MCDONALD'S", "GOLD" isn't in "GOLDMAN SACHS", "UL" isn't in "ULTA".
+function matches(upper: string, word: string): boolean {
+  if (word.length > 4) return upper.includes(word);
+  return new RegExp(`(^|[^A-Z0-9])${word}S?($|[^A-Z0-9])`).test(upper);
 }

@@ -7,11 +7,11 @@ export const ExcelIngestionProvider: IngestionProvider = {
   async extract(input) {
     const start = Date.now();
     const buf = Buffer.from(input.contentBase64 ?? "", "base64");
-    const { accounts } = parseExcelBuffer(buf, input.fileName);
+    const { accounts, warnings } = parseExcelBuffer(buf, input.fileName);
     return {
       ok: accounts.length > 0,
       accounts,
-      warnings: [],
+      warnings,
       extractionMethod: "xlsx",
       extractionMs: Date.now() - start,
     };

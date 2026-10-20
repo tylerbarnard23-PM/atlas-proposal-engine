@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { useAtlasStore } from "@/store/useStore";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -19,6 +20,8 @@ import { SAMPLE_MESSY_TEXT } from "@/ingestion/sampleSources/sampleMessyStatemen
 import { SAMPLE_CRYPTO_WALLET } from "@/ingestion/sampleSources/sampleCryptoWalletScreenshot";
 import { SAMPLE_RETIREMENT_CSV } from "@/ingestion/sampleSources/sampleRetirementStatement";
 import { safeId, todayIso } from "@/utils/formatting";
+import { PdfImport } from "@/components/import/PdfImport";
+import { extractionToWorkspace } from "@/ingestion/documents/toWorkspace";
 import type {
   Account,
   AccountType,
@@ -59,6 +62,8 @@ function ImportCenterInner() {
         }
       />
 
+      <IngestErrorBanner />
+
       <Tabs
         active={mode}
         onChange={(k) => setMode(k as Mode)}
@@ -77,7 +82,7 @@ function ImportCenterInner() {
       {mode === "paste" && <PasteIngestion />}
       {mode === "csv" && <CsvIngestion />}
       {mode === "excel" && <ExcelIngestion />}
-      {mode === "pdf" && <BinaryIngestion sourceType="pdf_text" hint="Upload a text-based PDF statement. Scanned PDFs should use the screenshot tab." accept=".pdf" />}
+      {mode === "pdf" && <PdfImport />}
       {mode === "image" && <BinaryIngestion sourceType="image_screenshot" hint="OCR via Tesseract — best for clean screenshots from custodian portals or wallet apps." accept="image/*" />}
       {mode === "ofx" && <OfxIngestion />}
       {mode === "manual" && <ManualEntry />}
@@ -144,12 +149,7 @@ function PasteIngestion() {
   async function run() {
     setBusy(true);
     try {
-      const r = await fetch("/api/ingest", {
-        method: "POST",
-        body: JSON.stringify({ sourceType: "pasted_text" as SourceType, text, fileName: accountHint }),
-      });
-      const data = await r.json();
-      setResult(data.result);
+      setResult(await postIngest({ sourceType: "pasted_text" as SourceType, text, fileName: accountHint }));
     } finally {
       setBusy(false);
     }
@@ -180,16 +180,12 @@ function CsvIngestion() {
   const [busy, setBusy] = React.useState(false);
   const [result, setResult] = React.useState<ExtractionResult | null>(null);
   const [accountHint, setAccountHint] = React.useState("CSV Import");
+  const [file, setFile] = React.useState<{ name: string; size: number } | null>(null);
 
   async function run() {
     setBusy(true);
     try {
-      const r = await fetch("/api/ingest", {
-        method: "POST",
-        body: JSON.stringify({ sourceType: "csv" as SourceType, text, fileName: accountHint }),
-      });
-      const data = await r.json();
-      setResult(data.result);
+      setResult(await postIngest({ sourceType: "csv" as SourceType, text, fileName: accountHint }));
     } finally {
       setBusy(false);
     }
@@ -200,7 +196,9 @@ function CsvIngestion() {
     if (!f) return;
     const t = await f.text();
     setText(t);
-    setAccountHint(f.name);
+    setAccountHint(f.name.replace(/\.(csv|tsv|txt)$/i, ""));
+    setFile({ name: f.name, size: f.size });
+    setResult(null);
   }
 
   return (
@@ -214,13 +212,13 @@ function CsvIngestion() {
           </div>
           <div className="md:col-span-2">
             <Label>Upload CSV file</Label>
-            <Input type="file" accept=".csv,.tsv,text/csv" onChange={onFile} />
+            <Input type="file" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values" onChange={onFile} />
           </div>
         </div>
         <Label>or paste CSV text</Label>
-        <Textarea rows={10} value={text} onChange={(e) => setText(e.target.value)} />
+        <Textarea rows={10} value={text} onChange={(e) => { setText(e.target.value); setFile(null); }} />
         <Button onClick={run} loading={busy} disabled={!text}>Extract holdings</Button>
-        {result && <ExtractionPreview result={result} />}
+        {result && <ExtractionPreview result={result} fileName={file?.name ?? `${accountHint} (pasted)`} sizeBytes={file?.size} />}
       </CardBody>
     </Card>
   );
@@ -229,19 +227,19 @@ function CsvIngestion() {
 function ExcelIngestion() {
   const [busy, setBusy] = React.useState(false);
   const [result, setResult] = React.useState<ExtractionResult | null>(null);
-  const [hint, setHint] = React.useState("Excel Import");
+  const [hint, setHint] = React.useState("");
+  const [file, setFile] = React.useState<File | null>(null);
 
   async function run(file: File) {
     setBusy(true);
+    setResult(null);
+    setFile(file);
     try {
       const buf = await file.arrayBuffer();
       const base64 = arrayBufferToBase64(buf);
-      const r = await fetch("/api/ingest", {
-        method: "POST",
-        body: JSON.stringify({ sourceType: "excel" as SourceType, contentBase64: base64, fileName: hint || file.name }),
-      });
-      const data = await r.json();
-      setResult(data.result);
+      setResult(
+        await postIngest({ sourceType: "excel" as SourceType, contentBase64: base64, fileName: hint || file.name.replace(/\.(xlsx|xls|xlsm)$/i, "") })
+      );
     } finally {
       setBusy(false);
     }
@@ -251,16 +249,21 @@ function ExcelIngestion() {
     <Card>
       <CardHeader><CardTitle>Excel Workbook Upload</CardTitle></CardHeader>
       <CardBody className="space-y-3">
-        <Label>Account / workbook label</Label>
-        <Input value={hint} onChange={(e) => setHint(e.target.value)} />
+        <Label>Account label (single-sheet workbooks)</Label>
+        <Input value={hint} placeholder="Defaults to the file name; multi-sheet workbooks use each sheet's name" onChange={(e) => setHint(e.target.value)} />
         <Label>Workbook</Label>
         <Input
           type="file"
-          accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-          onChange={(e) => e.target.files?.[0] && run(e.target.files[0])}
+          accept=".xlsx,.xls,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            e.target.value = ""; // choosing the same file again re-runs it
+            if (f) run(f);
+          }}
         />
+        <div className="text-2xs text-ink-500">One account per sheet (or per account number within a sheet). Title rows and totals are skipped.</div>
         {busy && <div className="text-sm text-ink-500">Parsing workbook…</div>}
-        {result && <ExtractionPreview result={result} />}
+        {result && <ExtractionPreview result={result} fileName={file?.name} sizeBytes={file?.size} />}
       </CardBody>
     </Card>
   );
@@ -284,12 +287,7 @@ function BinaryIngestion({
     try {
       const buf = await file.arrayBuffer();
       const base64 = arrayBufferToBase64(buf);
-      const r = await fetch("/api/ingest", {
-        method: "POST",
-        body: JSON.stringify({ sourceType, contentBase64: base64, fileName: label || file.name, contentType: file.type }),
-      });
-      const data = await r.json();
-      setResult(data.result);
+      setResult(await postIngest({ sourceType, contentBase64: base64, fileName: label || file.name, contentType: file.type }));
     } finally {
       setBusy(false);
     }
@@ -322,12 +320,7 @@ function OfxIngestion() {
   async function run() {
     setBusy(true);
     try {
-      const r = await fetch("/api/ingest", {
-        method: "POST",
-        body: JSON.stringify({ sourceType: "ofx_qfx" as SourceType, text }),
-      });
-      const data = await r.json();
-      setResult(data.result);
+      setResult(await postIngest({ sourceType: "ofx_qfx" as SourceType, text }));
     } finally {
       setBusy(false);
     }
@@ -554,86 +547,47 @@ function ManualEntry() {
   );
 }
 
-function ExtractionPreview({ result }: { result: ExtractionResult }) {
+function ExtractionPreview({ result, fileName, sizeBytes }: { result: ExtractionResult; fileName?: string; sizeBytes?: number }) {
+  const router = useRouter();
   const accounts = useAtlasStore((s) => s.accounts);
-  const upsertAccount = useAtlasStore((s) => s.upsertAccount);
-  const upsertHolding = useAtlasStore((s) => s.upsertHolding);
-  const addSourceDocument = useAtlasStore((s) => s.addSourceDocument);
+  const addImported = useAtlasStore((s) => s.addImportedToEngagement);
   const client = useAtlasStore((s) => s.client);
-  const [targetAccountId, setTargetAccountId] = React.useState(accounts[0]?.id ?? "");
+  // Default to new accounts: silently merging a file into whichever account
+  // happens to be listed first put one client's positions in another's account.
+  const [targetAccountId, setTargetAccountId] = React.useState("");
+  const [saved, setSaved] = React.useState<{ holdings: number; accounts: number; target?: string } | null>(null);
+  React.useEffect(() => setSaved(null), [result]);
 
   const totalHoldings = result.accounts.reduce((acc, a) => acc + a.holdings.length, 0);
+  const sourceType = (result.extractionMethod === "papaparse"
+    ? "csv"
+    : result.extractionMethod === "xlsx"
+    ? "excel"
+    : result.extractionMethod === "heuristic"
+    ? "pasted_text"
+    : result.extractionMethod === "regex"
+    ? "ofx_qfx"
+    : result.extractionMethod.startsWith("tesseract")
+    ? "image_screenshot"
+    : "pdf_text") as SourceType;
 
   function commit() {
-    const sd: SourceDocument = {
-      id: safeId("sd"),
-      fileName: result.accounts[0]?.accountName ?? "Imported",
-      sourceType: (result.extractionMethod === "papaparse"
-        ? "csv"
-        : result.extractionMethod === "xlsx"
-        ? "excel"
-        : result.extractionMethod === "heuristic"
-        ? "pasted_text"
-        : result.extractionMethod === "regex"
-        ? "ofx_qfx"
-        : result.extractionMethod.startsWith("tesseract")
-        ? "image_screenshot"
-        : "pdf_text") as SourceType,
-      uploadedAt: todayIso(),
-      extractionStatus: "extracted",
-      extractionMethod: result.extractionMethod,
-      extractionConfidence: "medium",
-      pageCount: result.accounts.length,
-      rawTextSample: result.rawText,
-      extraction: result,
-    };
-    addSourceDocument(sd);
-    let acctId = targetAccountId;
-    if (!acctId) {
-      const a: Account = {
-        id: safeId("acc"),
-        name: result.accounts[0]?.accountName ?? "Imported Account",
-        type: result.accounts[0]?.accountType ?? "brokerage",
-        institution: result.detectedInstitution,
-        baseCurrency: result.accounts[0]?.currency ?? client.baseCurrency,
-        country: client.reportingCountry,
-        asOf: todayIso().slice(0, 10),
-        createdAt: todayIso(),
-        updatedAt: todayIso(),
-      };
-      upsertAccount(a);
-      acctId = a.id;
-    }
-    let added = 0;
-    for (const acct of result.accounts) {
-      for (const eh of acct.holdings) {
-        if (eh.status === "excluded") continue;
-        const h: Holding = {
-          id: safeId("h"),
-          accountId: acctId!,
-          assetName: eh.assetName ?? eh.symbol ?? "Unnamed asset",
-          identifier: eh.identifier,
-          assetClass: eh.assetClass ?? "equity",
-          currency: eh.currency ?? client.baseCurrency,
-          quantity: eh.quantity,
-          price: eh.price,
-          nativeMarketValue: eh.marketValue ?? (eh.quantity ?? 0) * (eh.price ?? 0),
-          costBasis: eh.costBasis,
-          valuationDate: todayIso().slice(0, 10),
-          valuationSource: { kind: "statement", asOf: todayIso().slice(0, 10), confidence: eh.confidence },
-          quoteType: sd.sourceType === "image_screenshot" ? "ocr_extracted" : "eod",
-          priceFreshness: "manual",
-          advisorVerification: "unverified",
-          dataQuality: [],
-          sourceTrace: { ...eh.sourceTrace, sourceDocumentId: sd.id },
-          createdAt: todayIso(),
-          updatedAt: todayIso(),
-        };
-        upsertHolding(h);
-        added++;
-      }
-    }
-    alert(`Saved ${added} holding(s) to the engagement. Open the Statement Workbench or Accounts & Assets to review.`);
+    if (saved) return;
+    const imported = extractionToWorkspace(result, {
+      fileName: fileName || result.accounts[0]?.accountName || "Imported",
+      sizeBytes,
+      reportingCurrency: client.baseCurrency || "USD",
+      country: client.reportingCountry,
+      sourceType,
+      targetAccountId: targetAccountId || undefined,
+    });
+    if (sourceType === "image_screenshot") imported.holdings.forEach((h) => (h.quoteType = "ocr_extracted"));
+    addImported(imported);
+    setSaved({
+      holdings: imported.holdings.length,
+      accounts: imported.accounts.length,
+      target: accounts.find((a) => a.id === targetAccountId)?.name,
+    });
   }
 
   if (totalHoldings === 0) {
@@ -655,15 +609,27 @@ function ExtractionPreview({ result }: { result: ExtractionResult }) {
           <div>
             <Label className="mb-0!">Target account</Label>
           </div>
-          <Select value={targetAccountId} onChange={(e) => setTargetAccountId(e.target.value)}>
-            <option value="">Create new account</option>
+          <Select value={targetAccountId} onChange={(e) => setTargetAccountId(e.target.value)} disabled={!!saved}>
+            <option value="">
+              {result.accounts.length > 1 ? `Create ${result.accounts.length} new accounts` : "Create new account"}
+            </option>
             {accounts.map((a) => (
-              <option key={a.id} value={a.id}>{a.name}</option>
+              <option key={a.id} value={a.id}>Add to: {a.name}</option>
             ))}
           </Select>
-          <Button onClick={commit}>Save to proposal</Button>
+          <Button onClick={commit} disabled={!!saved}>{saved ? "Saved" : "Save to proposal"}</Button>
         </div>
       </div>
+      {saved && (
+        <div role="status" className="px-4 py-2.5 bg-positive-50 border-b border-positive-500/30 flex flex-wrap items-center justify-between gap-2 text-[13px] text-ink-800">
+          <span>
+            Saved {saved.holdings} holding{saved.holdings === 1 ? "" : "s"}{" "}
+            {saved.target ? `to ${saved.target}` : `in ${saved.accounts} new account${saved.accounts === 1 ? "" : "s"}`}. Values arrive as
+            &ldquo;not confirmed&rdquo; until you check them.
+          </span>
+          <Button size="sm" onClick={() => router.push("/accounts-assets?review=1")}>Review values</Button>
+        </div>
+      )}
       {result.accounts.map((a) => (
         <ExtractedAccountTable key={a.id} account={a} />
       ))}
@@ -698,7 +664,9 @@ function ExtractedAccountTable({ account }: { account: ExtractedAccount }) {
                 <td className="px-3 py-1.5 text-right tabular text-ink-700">{h.price ?? "—"}</td>
                 <td className="px-3 py-1.5 text-right tabular text-ink-900 font-medium">{h.marketValue ?? "—"}</td>
                 <td className="px-3 py-1.5 text-ink-700">{h.currency ?? "—"}</td>
-                <td className="px-3 py-1.5 text-ink-700">{h.assetClass ?? "—"}</td>
+                <td className="px-3 py-1.5 text-ink-700">
+                  {h.assetClass ? ASSET_CLASS_LABELS[h.assetClass] : h.symbol && h.quantity != null ? "Equity (assumed)" : "Unclassified"}
+                </td>
                 <td className="px-3 py-1.5">
                   <Badge tone={h.confidence === "high" ? "positive" : h.confidence === "low" ? "warning" : "neutral"}>{h.confidence}</Badge>
                 </td>
@@ -719,4 +687,62 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
     binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
   }
   return btoa(binary);
+}
+
+// --- Upload plumbing ----------------------------------------------------------
+// Every tab posts through this so failures are visible: oversized payloads are
+// caught before sending (the host rejects request bodies over ~4.5 MB), and
+// non-JSON error responses (like the host's 413 page) become readable messages.
+const MAX_INGEST_BODY_CHARS = 4_000_000;
+let reportIngestError: ((message: string | null) => void) | null = null;
+
+async function postIngest(payload: Record<string, unknown>): Promise<ExtractionResult | null> {
+  const body = JSON.stringify(payload);
+  if (body.length > MAX_INGEST_BODY_CHARS) {
+    reportIngestError?.(
+      "That file is too large to send for processing (the limit is about 2.9 MB). For PDFs, use the PDF tab, which reads the file in your browser with no size issue. For images, export a smaller or lower-resolution copy."
+    );
+    return null;
+  }
+  reportIngestError?.(null);
+  let res: Response;
+  try {
+    res = await fetch("/api/ingest", { method: "POST", headers: { "Content-Type": "application/json" }, body });
+  } catch {
+    reportIngestError?.("Couldn't reach the server. Check your connection and try again.");
+    return null;
+  }
+  const text = await res.text();
+  let data: { result?: ExtractionResult; error?: string } | null = null;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    data = null;
+  }
+  if (!res.ok || !data?.result) {
+    reportIngestError?.(
+      res.status === 413
+        ? "That file is too large for the server to accept. For PDFs, use the PDF tab; for images, use a smaller copy."
+        : data?.error ?? `Import failed (HTTP ${res.status}). Try again or use a different format.`
+    );
+    return null;
+  }
+  return data.result;
+}
+
+function IngestErrorBanner() {
+  const [message, setMessage] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    reportIngestError = setMessage;
+    return () => {
+      reportIngestError = null;
+    };
+  }, []);
+  if (!message) return null;
+  return (
+    <div role="alert" className="mb-4 flex items-start justify-between gap-3 rounded-md bg-negative-50 ring-1 ring-inset ring-negative-500/30 px-4 py-3 text-[13px] text-negative-600">
+      <span>{message}</span>
+      <button className="text-ink-500 hover:text-ink-800 text-[12px]" onClick={() => setMessage(null)}>Dismiss</button>
+    </div>
+  );
 }
