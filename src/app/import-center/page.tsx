@@ -19,6 +19,7 @@ import { SAMPLE_MESSY_TEXT } from "@/ingestion/sampleSources/sampleMessyStatemen
 import { SAMPLE_CRYPTO_WALLET } from "@/ingestion/sampleSources/sampleCryptoWalletScreenshot";
 import { SAMPLE_RETIREMENT_CSV } from "@/ingestion/sampleSources/sampleRetirementStatement";
 import { safeId, todayIso } from "@/utils/formatting";
+import { PdfImport } from "@/components/import/PdfImport";
 import type {
   Account,
   AccountType,
@@ -59,6 +60,8 @@ function ImportCenterInner() {
         }
       />
 
+      <IngestErrorBanner />
+
       <Tabs
         active={mode}
         onChange={(k) => setMode(k as Mode)}
@@ -77,7 +80,7 @@ function ImportCenterInner() {
       {mode === "paste" && <PasteIngestion />}
       {mode === "csv" && <CsvIngestion />}
       {mode === "excel" && <ExcelIngestion />}
-      {mode === "pdf" && <BinaryIngestion sourceType="pdf_text" hint="Upload a text-based PDF statement. Scanned PDFs should use the screenshot tab." accept=".pdf" />}
+      {mode === "pdf" && <PdfImport />}
       {mode === "image" && <BinaryIngestion sourceType="image_screenshot" hint="OCR via Tesseract — best for clean screenshots from custodian portals or wallet apps." accept="image/*" />}
       {mode === "ofx" && <OfxIngestion />}
       {mode === "manual" && <ManualEntry />}
@@ -144,12 +147,7 @@ function PasteIngestion() {
   async function run() {
     setBusy(true);
     try {
-      const r = await fetch("/api/ingest", {
-        method: "POST",
-        body: JSON.stringify({ sourceType: "pasted_text" as SourceType, text, fileName: accountHint }),
-      });
-      const data = await r.json();
-      setResult(data.result);
+      setResult(await postIngest({ sourceType: "pasted_text" as SourceType, text, fileName: accountHint }));
     } finally {
       setBusy(false);
     }
@@ -184,12 +182,7 @@ function CsvIngestion() {
   async function run() {
     setBusy(true);
     try {
-      const r = await fetch("/api/ingest", {
-        method: "POST",
-        body: JSON.stringify({ sourceType: "csv" as SourceType, text, fileName: accountHint }),
-      });
-      const data = await r.json();
-      setResult(data.result);
+      setResult(await postIngest({ sourceType: "csv" as SourceType, text, fileName: accountHint }));
     } finally {
       setBusy(false);
     }
@@ -236,12 +229,7 @@ function ExcelIngestion() {
     try {
       const buf = await file.arrayBuffer();
       const base64 = arrayBufferToBase64(buf);
-      const r = await fetch("/api/ingest", {
-        method: "POST",
-        body: JSON.stringify({ sourceType: "excel" as SourceType, contentBase64: base64, fileName: hint || file.name }),
-      });
-      const data = await r.json();
-      setResult(data.result);
+      setResult(await postIngest({ sourceType: "excel" as SourceType, contentBase64: base64, fileName: hint || file.name }));
     } finally {
       setBusy(false);
     }
@@ -284,12 +272,7 @@ function BinaryIngestion({
     try {
       const buf = await file.arrayBuffer();
       const base64 = arrayBufferToBase64(buf);
-      const r = await fetch("/api/ingest", {
-        method: "POST",
-        body: JSON.stringify({ sourceType, contentBase64: base64, fileName: label || file.name, contentType: file.type }),
-      });
-      const data = await r.json();
-      setResult(data.result);
+      setResult(await postIngest({ sourceType, contentBase64: base64, fileName: label || file.name, contentType: file.type }));
     } finally {
       setBusy(false);
     }
@@ -322,12 +305,7 @@ function OfxIngestion() {
   async function run() {
     setBusy(true);
     try {
-      const r = await fetch("/api/ingest", {
-        method: "POST",
-        body: JSON.stringify({ sourceType: "ofx_qfx" as SourceType, text }),
-      });
-      const data = await r.json();
-      setResult(data.result);
+      setResult(await postIngest({ sourceType: "ofx_qfx" as SourceType, text }));
     } finally {
       setBusy(false);
     }
@@ -719,4 +697,62 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
     binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
   }
   return btoa(binary);
+}
+
+// --- Upload plumbing ----------------------------------------------------------
+// Every tab posts through this so failures are visible: oversized payloads are
+// caught before sending (the host rejects request bodies over ~4.5 MB), and
+// non-JSON error responses (like the host's 413 page) become readable messages.
+const MAX_INGEST_BODY_CHARS = 4_000_000;
+let reportIngestError: ((message: string | null) => void) | null = null;
+
+async function postIngest(payload: Record<string, unknown>): Promise<ExtractionResult | null> {
+  const body = JSON.stringify(payload);
+  if (body.length > MAX_INGEST_BODY_CHARS) {
+    reportIngestError?.(
+      "That file is too large to send for processing (the limit is about 2.9 MB). For PDFs, use the PDF tab, which reads the file in your browser with no size issue. For images, export a smaller or lower-resolution copy."
+    );
+    return null;
+  }
+  reportIngestError?.(null);
+  let res: Response;
+  try {
+    res = await fetch("/api/ingest", { method: "POST", headers: { "Content-Type": "application/json" }, body });
+  } catch {
+    reportIngestError?.("Couldn't reach the server. Check your connection and try again.");
+    return null;
+  }
+  const text = await res.text();
+  let data: { result?: ExtractionResult; error?: string } | null = null;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    data = null;
+  }
+  if (!res.ok || !data?.result) {
+    reportIngestError?.(
+      res.status === 413
+        ? "That file is too large for the server to accept. For PDFs, use the PDF tab; for images, use a smaller copy."
+        : data?.error ?? `Import failed (HTTP ${res.status}). Try again or use a different format.`
+    );
+    return null;
+  }
+  return data.result;
+}
+
+function IngestErrorBanner() {
+  const [message, setMessage] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    reportIngestError = setMessage;
+    return () => {
+      reportIngestError = null;
+    };
+  }, []);
+  if (!message) return null;
+  return (
+    <div role="alert" className="mb-4 flex items-start justify-between gap-3 rounded-md bg-negative-50 ring-1 ring-inset ring-negative-500/30 px-4 py-3 text-[13px] text-negative-600">
+      <span>{message}</span>
+      <button className="text-ink-500 hover:text-ink-800 text-[12px]" onClick={() => setMessage(null)}>Dismiss</button>
+    </div>
+  );
 }

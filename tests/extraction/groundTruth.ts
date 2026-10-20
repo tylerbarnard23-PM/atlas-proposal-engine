@@ -1,4 +1,6 @@
 import type { CurrencyCode } from "@/domain/types";
+import type { PdfText } from "@/ingestion/pdf/layoutLines";
+import { PLAN_EXPECTED, PLAN_PDF } from "../fixtures/financialPlanSample";
 import { SAMPLE_BROKERAGE_CSV } from "@/ingestion/sampleSources/sampleBrokerageStatement";
 import { SAMPLE_RETIREMENT_CSV } from "@/ingestion/sampleSources/sampleRetirementStatement";
 import { SAMPLE_MESSY_TEXT } from "@/ingestion/sampleSources/sampleMessyStatement";
@@ -18,8 +20,9 @@ export interface ExpectedHolding {
 
 export interface EvalCase {
   name: string;
-  parser: "csv" | "pasted";
+  parser: "csv" | "pasted" | "pdf";
   text: string;
+  pdf?: PdfText; // layout lines, for parser "pdf"
   expected: ExpectedHolding[];
 }
 
@@ -86,5 +89,12 @@ export const EXTRACTION_CASES: EvalCase[] = [
       { label: "Checking", marketValue: 12500, currency: "EUR" },
       { label: "Savings", marketValue: 73900, currency: "EUR" },
     ],
+  },
+  {
+    name: "Financial plan (Balance Sheet, synthetic)",
+    parser: "pdf",
+    text: "",
+    pdf: PLAN_PDF,
+    expected: PLAN_EXPECTED.lines.map((l) => ({ label: l.name, marketValue: l.value, currency: "USD" as const })),
   },
 ];
