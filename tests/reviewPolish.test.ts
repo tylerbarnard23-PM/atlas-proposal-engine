@@ -41,3 +41,53 @@ describe("converting an insight twice", () => {
     expect(insightKey(a)).toBe(insightKey(b));
   });
 });
+
+describe("rejecting recommendations and dismissing insights", () => {
+  it("a rejected recommendation is out of the proposal, skipped by Approve all, and can be reopened", async () => {
+    const { useAtlasStore } = await import("@/store/useStore");
+    const s = useAtlasStore.getState();
+    s.resetSeed();
+    const [first, ...rest] = useAtlasStore.getState().recommendations;
+    s.rejectRecommendation(first.id, "Client declined");
+    let r = useAtlasStore.getState().recommendations.find((x) => x.id === first.id)!;
+    expect(r).toMatchObject({ status: "excluded", approvedByAdvisor: false, includeInPdf: false, rejectionReason: "Client declined" });
+
+    const approved = s.approveAllRecommendations();
+    expect(approved).toBe(rest.filter((x) => !x.approvedByAdvisor).length);
+    r = useAtlasStore.getState().recommendations.find((x) => x.id === first.id)!;
+    expect(r.approvedByAdvisor).toBe(false);
+
+    s.reopenRecommendation(first.id);
+    r = useAtlasStore.getState().recommendations.find((x) => x.id === first.id)!;
+    expect(r.status).toBe("draft");
+    expect(r.rejectionReason).toBeUndefined();
+  });
+
+  it("dismissing an insight is remembered by its stable key and can be restored", async () => {
+    const { useAtlasStore } = await import("@/store/useStore");
+    const s = useAtlasStore.getState();
+    s.dismissInsight({ key: "concentration:h_aapl", title: "Apple Inc represents 9%", reason: "Client preference", dismissedAt: "2026-10-20" });
+    s.dismissInsight({ key: "concentration:h_aapl", title: "Apple Inc represents 9.4%", dismissedAt: "2026-10-21" });
+    expect(useAtlasStore.getState().dismissedInsights.filter((d) => d.key === "concentration:h_aapl")).toHaveLength(1);
+    s.restoreInsight("concentration:h_aapl");
+    expect(useAtlasStore.getState().dismissedInsights.some((d) => d.key === "concentration:h_aapl")).toBe(false);
+  });
+});
+
+describe("data-quality insights", () => {
+  it("the same issue on many holdings is one insight listing them", async () => {
+    const { generateInsights } = await import("@/engines/insightEngine");
+    const msg = "The plan gives only this account's balance, not the holdings inside it.";
+    const h = (id: string, name: string) =>
+      ({
+        id, assetName: name, assetClass: "custom", currency: "USD", reportingMarketValue: 100, nativeMarketValue: 100,
+        valuationSource: { kind: "statement" }, dataQuality: [{ code: "CUSTOM_REQUIRES_REVIEW", severity: "warning", message: msg }],
+      }) as never;
+    const out = generateInsights({ holdings: [h("a", "Intel 401(k)"), h("b", "Roth IRA"), h("c", "403(b)")], reportingCurrency: "USD" });
+    const dq = out.filter((i) => i.category === "data_quality");
+    expect(dq).toHaveLength(1);
+    expect(dq[0].title).toBe(`3 holdings: ${msg}`);
+    expect(dq[0].detail).toMatch(/Intel 401\(k\), Roth IRA, 403\(b\)/);
+    expect(dq[0].relatedHoldingIds).toEqual(["a", "b", "c"]);
+  });
+});

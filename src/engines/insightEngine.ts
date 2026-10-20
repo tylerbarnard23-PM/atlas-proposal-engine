@@ -149,21 +149,30 @@ export function generateInsights({ holdings, reportingCurrency }: InsightInputs)
     });
   }
 
-  // Data quality flags
+  // Data quality flags. The same issue on many holdings (every balance-only
+  // line of an imported plan) is one insight listing them, not one each.
+  const byIssue = new Map<string, { message: string; severity: Insight["severity"]; holdings: NormalizedHolding[] }>();
   for (const h of investible) {
     for (const issue of h.dataQuality) {
-      if (issue.severity !== "info") {
-        out.push({
-          id: safeId("insight"),
-          category: "data_quality",
-          severity: issue.severity,
-          title: `${h.assetName}: ${issue.message}`,
-          detail: `${issue.code}`,
-          relatedHoldingIds: [h.id],
-          generatedAt: now,
-        });
-      }
+      if (issue.severity === "info") continue;
+      const k = `${issue.code}|${issue.message}`;
+      const entry = byIssue.get(k) ?? { message: issue.message, severity: issue.severity, holdings: [] };
+      entry.holdings.push(h);
+      byIssue.set(k, entry);
     }
+  }
+  for (const { message, severity, holdings: hs } of byIssue.values()) {
+    const names = hs.map((h) => h.assetName);
+    const shown = names.slice(0, 4).join(", ") + (names.length > 4 ? ` and ${names.length - 4} more` : "");
+    out.push({
+      id: safeId("insight"),
+      category: "data_quality",
+      severity,
+      title: hs.length === 1 ? `${names[0]}: ${message}` : `${hs.length} holdings: ${message}`,
+      detail: hs.length === 1 ? "Review it in Accounts & Assets." : `Applies to ${shown}.`,
+      relatedHoldingIds: hs.map((h) => h.id),
+      generatedAt: now,
+    });
   }
 
   return out;
