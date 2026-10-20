@@ -110,6 +110,8 @@ export function applyRecommendationsToProposed(
   const cashByAccount = new Map<string, number>();
   const bump = (acctId: string, delta: number) =>
     cashByAccount.set(acctId, (cashByAccount.get(acctId) ?? 0) + delta);
+  // Debt paydowns per liability account, funded after trades settle (below).
+  const paydowns: { accountId: string; amount: number }[] = [];
 
   for (const h of current) {
     const recs = byHolding.get(h.id);
@@ -123,16 +125,40 @@ export function applyRecommendationsToProposed(
       // Record the cash side of this rec.
       const change = value - before;
       if (h.isLiability) {
-        // change is positive when paying down debt (moving toward 0). Cash
-        // leaves the account by the same magnitude.
-        if (change > 0) bump(h.accountId, -change);
+        // change is positive when paying down debt (moving toward 0).
+        if (change > 0) paydowns.push({ accountId: h.accountId, amount: change });
       } else if (h.assetClass !== "cash") {
-        // Asset trades produce cash in the opposite direction.
+        // Asset trades produce cash in the opposite direction, in the same account.
         if (change !== 0) bump(h.accountId, -change);
       }
     }
 
     newValueById.set(h.id, value);
+  }
+
+  // A loan account rarely holds cash, so a paydown is funded from household
+  // cash: accounts with the most available cash (after this proposal's trades)
+  // are drawn first. Anything the household can't cover stays on the loan's
+  // own account, where it shows up as a cash shortfall.
+  if (paydowns.length > 0) {
+    const available = new Map<string, number>();
+    for (const h of current) {
+      if (h.isLiability || h.assetClass !== "cash") continue;
+      available.set(h.accountId, (available.get(h.accountId) ?? 0) + (h.reportingMarketValue ?? h.nativeMarketValue));
+    }
+    for (const [acct, delta] of cashByAccount) available.set(acct, (available.get(acct) ?? 0) + delta);
+    for (const p of paydowns) {
+      let remaining = p.amount;
+      const sources = [...available].filter(([, cash]) => cash > 0).sort((a, b) => b[1] - a[1]);
+      for (const [acct, cash] of sources) {
+        if (remaining <= 0) break;
+        const draw = Math.min(cash, remaining);
+        bump(acct, -draw);
+        available.set(acct, cash - draw);
+        remaining -= draw;
+      }
+      if (remaining > 0) bump(p.accountId, -remaining);
+    }
   }
 
   // Second pass: write the new values into a result list.

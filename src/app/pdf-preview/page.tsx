@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/Badge";
 import { useNormalizedHoldings } from "@/hooks/useNormalizedHoldings";
 import { evaluateWorkspaceReadiness, readinessOk } from "@/engines/complianceEngine";
 import { ReadinessChecklist } from "@/components/proposal/ReadinessChecklist";
-import { ReadinessBanner } from "@/components/proposal/ReadinessBanner";
+import { ReadinessBanner, nudgeReadiness } from "@/components/proposal/ReadinessBanner";
 import { cn } from "@/utils/cn";
 import { Lock } from "lucide-react";
 import { formatDateTime } from "@/utils/formatting";
@@ -163,11 +163,22 @@ function Inner() {
               <Button onClick={() => generate("draft")} loading={busy === "draft"} variant="secondary">
                 Generate draft PDF
               </Button>
+              {/* Not disabled when locked: clicking it shows what's left (scrolls to
+                  the steps and lights up the pages in the sidebar) instead of doing nothing. */}
               <Button
-                onClick={() => generate("final")}
+                onClick={() => {
+                  if (ready) return generate("final");
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                  nudgeReadiness();
+                }}
                 loading={busy === "final"}
-                disabled={!ready}
-                className={cn(ready && "bg-positive-600 hover:bg-positive-500 active:bg-positive-600")}
+                aria-disabled={!ready}
+                iconLeft={ready ? undefined : <Lock className="h-4 w-4" />}
+                className={cn(
+                  ready
+                    ? "bg-positive-600 hover:bg-positive-500 active:bg-positive-600"
+                    : "bg-slatey-300 text-ink-700 hover:bg-slatey-300"
+                )}
               >
                 Generate final PDF
               </Button>
@@ -180,8 +191,9 @@ function Inner() {
                     Final PDF locked: {failing.length} item{failing.length === 1 ? "" : "s"} to resolve
                   </div>
                   <p className="mt-1 text-ink-600">
-                    Each item is done on another page. Use the <span className="font-medium">Fix in…</span> links in the
-                    Readiness checklist above. You can generate a draft PDF (watermarked) at any time.
+                    Each item is done on another page: use the <span className="font-medium">Fix in…</span> links above or the
+                    highlighted items in the left menu. Click <span className="font-medium">Generate final PDF</span> to see
+                    where to go. You can generate a watermarked draft at any time.
                   </p>
                 </div>
               )}

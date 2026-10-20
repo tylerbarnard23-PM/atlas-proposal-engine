@@ -205,3 +205,28 @@ function ws_forApi() {
     proposal: { id: "p1" },
   };
 }
+
+describe("disclosure library", () => {
+  const byId = new Map(DISCLOSURE_LIBRARY.map((d) => [d.id, d]));
+
+  it("requires fees, conflicts and not-an-offer disclosures", () => {
+    for (const id of ["fees_expenses", "conflicts_of_interest", "not_an_offer"]) {
+      expect(byId.get(id)?.required).toBe(true);
+    }
+  });
+
+  it("offers client-provided information and held-away assets as optional", () => {
+    expect(byId.get("client_information")?.required).toBe(false);
+    expect(byId.get("held_away_assets")?.required).toBe(false);
+  });
+
+  it("uses a [Firm] placeholder rather than naming a real or sample firm", () => {
+    for (const id of ["fees_expenses", "conflicts_of_interest", "not_an_offer", "client_information", "held_away_assets"]) {
+      expect(byId.get(id)?.body).toContain("[Firm]");
+    }
+  });
+
+  it("caveats third-party data", () => {
+    expect(byId.get("data_source")?.body).toContain("believed to be reliable");
+  });
+});

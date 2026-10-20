@@ -473,7 +473,12 @@ export interface Disclosure {
     | "cross_border"
     | "advisor_approval"
     | "ocr_extraction"
-    | "statement_data";
+    | "statement_data"
+    | "fees"
+    | "conflicts"
+    | "not_an_offer"
+    | "client_information"
+    | "held_away";
   title: string;
   body: string;
   required: boolean;

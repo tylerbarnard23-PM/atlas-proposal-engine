@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Lightbulb, Plus } from "lucide-react";
+import { CheckCheck, CheckCircle2, Lightbulb, Plus } from "lucide-react";
 import { useAtlasStore } from "@/store/useStore";
 import { ClientOnly } from "@/components/layout/ClientOnly";
 import { PageHeader } from "@/components/ui/Section";
@@ -49,6 +49,19 @@ function Inner() {
     [normalized, recs, accounts]
   );
   const remove = useAtlasStore((s) => s.removeRecommendation);
+  const approveAll = useAtlasStore((s) => s.approveAllRecommendations);
+  const pendingCount = recs.filter((r) => !r.approvedByAdvisor).length;
+  const [approvedNotice, setApprovedNotice] = React.useState<number | null>(null);
+
+  function onApproveAll() {
+    const fromCopilot = recs.filter((r) => !r.approvedByAdvisor && r.complianceNote?.includes("Proposal Copilot")).length;
+    const ok = confirm(
+      `Approve ${pendingCount} recommendation${pendingCount === 1 ? "" : "s"} and include ${pendingCount === 1 ? "it" : "them"} in the PDF?` +
+        (fromCopilot ? `\n\n${fromCopilot} of these were drafted by the Proposal Copilot.` : "") +
+        "\n\nApproved recommendations reshape the Before / After allocation and appear in the client proposal. You can unapprove any of them afterwards."
+    );
+    if (ok) setApprovedNotice(approveAll());
+  }
   const [editing, setEditing] = React.useState<Recommendation | null>(null);
   const holdingsById = React.useMemo(
     () => Object.fromEntries(holdings.map((h) => [h.id, h])),
@@ -84,12 +97,30 @@ function Inner() {
                 Browse insights
               </Button>
             </Link>
+            <Button
+              variant="secondary"
+              onClick={onApproveAll}
+              disabled={pendingCount === 0}
+              iconLeft={<CheckCheck className="h-4 w-4" />}
+            >
+              {pendingCount === 0 ? "All approved" : `Approve all (${pendingCount})`}
+            </Button>
             <Button onClick={newRec} iconLeft={<Plus className="h-4 w-4" />}>
               New recommendation
             </Button>
           </>
         }
       />
+
+      {approvedNotice != null && approvedNotice > 0 && (
+        <div role="status" className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-positive-50 ring-1 ring-inset ring-positive-500/40 px-4 py-2.5 text-[13px]">
+          <span className="inline-flex items-center gap-1.5 font-semibold text-positive-600">
+            <CheckCircle2 className="h-4 w-4" />
+            Approved {approvedNotice} recommendation{approvedNotice === 1 ? "" : "s"} and included {approvedNotice === 1 ? "it" : "them"} in the PDF.
+          </span>
+          <Link href="/pdf-preview" className="font-medium text-navy-700 hover:underline">Check readiness in PDF Preview →</Link>
+        </div>
+      )}
 
       {shortfalls.length > 0 && (
         <div role="alert" className="mb-4 rounded-md bg-negative-50 ring-1 ring-inset ring-negative-500/30 px-4 py-3 text-[13px] text-ink-800">

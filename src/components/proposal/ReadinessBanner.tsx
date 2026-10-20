@@ -7,6 +7,33 @@ import type { ComplianceCheck } from "@/domain/types";
 import { READINESS_FIX, readinessTodo } from "./ReadinessChecklist";
 import { cn } from "@/utils/cn";
 
+// "Show me what's left": fired when someone tries a locked action (e.g. the
+// final PDF button). The banner and the sidebar items that need work pulse
+// briefly so the eye goes to where the work is.
+export const READINESS_NUDGE_EVENT = "atlas:readiness-nudge";
+
+export function nudgeReadiness() {
+  window.dispatchEvent(new Event(READINESS_NUDGE_EVENT));
+}
+
+export function useReadinessNudge(durationMs = 3500): boolean {
+  const [active, setActive] = React.useState(false);
+  React.useEffect(() => {
+    let t: ReturnType<typeof setTimeout> | undefined;
+    const on = () => {
+      setActive(true);
+      clearTimeout(t);
+      t = setTimeout(() => setActive(false), durationMs);
+    };
+    window.addEventListener(READINESS_NUDGE_EVENT, on);
+    return () => {
+      window.removeEventListener(READINESS_NUDGE_EVENT, on);
+      clearTimeout(t);
+    };
+  }, [durationMs]);
+  return active;
+}
+
 export interface ReadinessStep {
   href: string;
   label: string;
@@ -38,6 +65,7 @@ export function ReadinessBanner({
   className?: string;
 }) {
   const failing = checks.filter((c) => !c.passed);
+  const nudged = useReadinessNudge();
 
   if (failing.length === 0) {
     return (
@@ -71,13 +99,20 @@ export function ReadinessBanner({
   return (
     <div
       role="status"
-      className={cn("rounded-lg bg-warning-50 ring-1 ring-warning-500/40 px-5 py-4", className)}
+      className={cn(
+        "rounded-lg bg-warning-50 ring-1 ring-warning-500/40 px-5 py-4 transition-shadow",
+        nudged && "ring-2 ring-warning-500 shadow-[0_0_0_6px_rgba(160,120,21,0.18)] animate-pulse",
+        className
+      )}
     >
       <div className="flex items-center gap-2">
         <ListChecks className="h-5 w-5 text-warning-500" />
         <div className="font-medium text-ink-900">
           {failing.length} item{failing.length === 1 ? "" : "s"} left before the final PDF
         </div>
+        <span className="text-[12px] text-ink-600 ml-1">
+          · each is done on another page: use the buttons here or the highlighted items in the left menu
+        </span>
       </div>
       <ol className="mt-3 space-y-2">
         {steps.map((step, i) => (

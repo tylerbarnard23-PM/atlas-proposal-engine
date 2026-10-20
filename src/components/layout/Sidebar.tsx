@@ -21,7 +21,7 @@ import {
 import { cn } from "@/utils/cn";
 import { useAtlasStore } from "@/store/useStore";
 import { useWorkspaceReadiness } from "@/hooks/useWorkspaceReadiness";
-import { readinessSteps } from "@/components/proposal/ReadinessBanner";
+import { readinessSteps, useReadinessNudge } from "@/components/proposal/ReadinessBanner";
 
 interface NavItem {
   label: string;
@@ -51,6 +51,7 @@ export function Sidebar() {
   const groups = Array.from(new Set(NAV.map((n) => n.group ?? "")));
   const hydrated = useAtlasStore((s) => s.hasHydrated);
   const { failing, ready } = useWorkspaceReadiness();
+  const nudged = useReadinessNudge();
   // Open readiness items per page, so the nav itself shows where work remains.
   const openByPath = new Map(readinessSteps(failing).map((s) => [s.href.split("?")[0], s.items.length] as const));
 
@@ -84,7 +85,11 @@ export function Sidebar() {
                         "flex items-center gap-2.5 rounded-md px-2 h-8 text-[13px] transition-colors",
                         active
                           ? "bg-navy-50 text-navy-800 font-medium"
-                          : "text-ink-600 hover:bg-slatey-50 hover:text-ink-900"
+                          : "text-ink-600 hover:bg-slatey-50 hover:text-ink-900",
+                        // Pages with open readiness items light up when the advisor
+                        // tries a locked action, pointing them to where the work is.
+                        hydrated && nudged && (openByPath.get(item.href) ?? 0) > 0 &&
+                          "bg-warning-50 ring-2 ring-warning-500 text-ink-900 font-medium animate-pulse"
                       )}
                     >
                       <span

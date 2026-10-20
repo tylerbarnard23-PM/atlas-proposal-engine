@@ -182,3 +182,40 @@ describe("unfunded purchases", () => {
     expect(checks.find((c) => c.code === "trades_funded")!.passed).toBe(true);
   });
 });
+
+describe("debt paydown funding", () => {
+  const mortgage = holdings.find((h) => h.isLiability)!;
+  const householdCash = holdings.filter((h) => !h.isLiability && h.assetClass === "cash").reduce((s, h) => s + h.reportingMarketValue, 0);
+
+  it("draws a paydown from household cash in other accounts, not the loan account", async () => {
+    const { proposedCashShortfalls } = await import("@/engines/proposalEngine");
+    const paydown = rec({ type: "pay_down_debt", relatedHoldingId: mortgage.id, actionAmount: Math.floor(householdCash / 2) });
+    expect(proposedCashShortfalls(holdings, [paydown], SEED_ACCOUNTS)).toEqual([]);
+  });
+
+  it("flags a shortfall only when household cash can't cover the paydown", async () => {
+    const { proposedCashShortfalls } = await import("@/engines/proposalEngine");
+    const paydown = rec({ type: "pay_down_debt", relatedHoldingId: mortgage.id, actionAmount: Math.round(householdCash + 50_000) });
+    const shortfalls = proposedCashShortfalls(holdings, [paydown], SEED_ACCOUNTS);
+    expect(shortfalls).toHaveLength(1);
+    near(shortfalls[0].shortfall, 50_000, 1);
+  });
+
+  it("lets 'Approve all' on the sample recommendations produce a funded proposal", async () => {
+    const { SEED_RECOMMENDATIONS } = await import("@/data/seedRecommendations");
+    const { evaluateWorkspaceReadiness } = await import("@/engines/complianceEngine");
+    const allApproved = SEED_RECOMMENDATIONS.map((r) => ({ ...r, approvedByAdvisor: true, includeInPdf: true }));
+    const checks = evaluateWorkspaceReadiness({
+      client: SEED_CLIENT,
+      advisor: SEED_ADVISOR,
+      accounts: SEED_ACCOUNTS,
+      holdings,
+      recommendations: allApproved,
+      disclosures: DISCLOSURE_LIBRARY,
+    });
+    expect(checks.find((c) => c.code === "trades_funded")?.passed).toBe(true);
+    const { proposed, current } = renderBeforeAfter(allApproved);
+    expect(proposed.rows.get("Cash & Equivalents")!.value).toBeGreaterThanOrEqual(0);
+    expect(proposed.total).toBeLessThanOrEqual(current.total);
+  });
+});

@@ -30,7 +30,7 @@ export const DISCLOSURE_LIBRARY: Disclosure[] = [
     jurisdiction: "GLOBAL",
     category: "data_source",
     title: "Data Sources",
-    body: "Holdings information was sourced from client-provided statements, advisor entry, document extraction, optical character recognition, and free or free-tier market data providers where applicable. Source attribution for each value is recorded in the appendix.",
+    body: "Holdings information was sourced from client-provided statements, advisor entry, document extraction, optical character recognition, and free or free-tier market data providers where applicable. Source attribution for each value is recorded in the appendix. Information obtained from third-party sources is believed to be reliable, but its accuracy and completeness are not guaranteed.",
     required: true,
   },
   {
@@ -127,6 +127,50 @@ export const DISCLOSURE_LIBRARY: Disclosure[] = [
     category: "statement_data",
     title: "Statement Data",
     body: "Account holdings derived from custodian or institutional statements reflect the values shown on those statements as of the dates indicated. Prices and balances may have changed since the statement date.",
+    required: false,
+  },
+  // --- Added after reviewing common industry proposal disclosures. "[Firm]"
+  // is a deliberate placeholder: a firm adopting Atlas must substitute its own
+  // name and point to its own Form ADV / Form CRS. Concrete wording ("creates
+  // conflicts") follows SEC staff guidance against hedged "may" disclosure.
+  {
+    id: "fees_expenses",
+    jurisdiction: "GLOBAL",
+    category: "fees",
+    title: "Fees and Expenses",
+    body: "Advisory fees, fund expenses, transaction costs and other charges reduce investment returns and are not deducted from the values shown in this proposal. [Firm]'s advisory fees and how they are charged are described in its Form ADV Part 2A brochure and Form CRS, available on request and at adviserinfo.sec.gov.",
+    required: true,
+  },
+  {
+    id: "conflicts_of_interest",
+    jurisdiction: "GLOBAL",
+    category: "conflicts",
+    title: "Conflicts of Interest",
+    body: "[Firm] and its representatives are compensated for advisory services, which creates conflicts of interest, including an incentive to recommend placing more assets under [Firm]'s management. [Firm]'s material conflicts and how it addresses them are described in its Form ADV Part 2A brochure and Form CRS.",
+    required: true,
+  },
+  {
+    id: "not_an_offer",
+    jurisdiction: "GLOBAL",
+    category: "not_an_offer",
+    title: "Not an Offer or Agreement",
+    body: "This proposal is provided for discussion only. It is not an offer to buy or sell any security and is not an investment advisory agreement. An advisory relationship with [Firm] begins only when both parties have signed an investment advisory agreement.",
+    required: true,
+  },
+  {
+    id: "client_information",
+    jurisdiction: "GLOBAL",
+    category: "client_information",
+    title: "Client-Provided Information",
+    body: "This proposal relies on information you provided about your finances, goals, risk tolerance and circumstances. Its recommendations may not be appropriate if that information is incomplete, inaccurate or changes. Please tell [Firm] promptly about any changes.",
+    required: false,
+  },
+  {
+    id: "held_away_assets",
+    jurisdiction: "GLOBAL",
+    category: "held_away",
+    title: "Assets Held Elsewhere",
+    body: "Some accounts shown are held at other institutions and are not managed or held in custody by [Firm]. Their values come from statements or information you supplied and have not been independently verified. Statements from your custodians are the official record of your holdings.",
     required: false,
   },
 ];
