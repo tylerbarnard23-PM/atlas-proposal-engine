@@ -7,10 +7,10 @@ export const CsvIngestionProvider: IngestionProvider = {
   async extract(input) {
     const start = Date.now();
     const text = input.text ?? (input.contentBase64 ? Buffer.from(input.contentBase64, "base64").toString("utf8") : "");
-    const { account, warnings } = parseCsvText(text, input.fileName);
+    const { accounts, warnings } = parseCsvText(text, input.fileName);
     return {
       ok: true,
-      accounts: [account],
+      accounts,
       warnings,
       extractionMethod: "papaparse",
       extractionMs: Date.now() - start,
