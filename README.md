@@ -1,6 +1,6 @@
 # Atlas Proposal Engine
 
-**A reference implementation of AI-assisted wealth-proposal tooling.** Atlas takes an advisor from a pile of messy client statements to a branded, compliance-checked PDF proposal, with a Claude-powered Copilot that drafts recommendations and leaves every decision to the advisor.
+**An open-source reference implementation of AI-assisted wealth-proposal tooling.** Atlas takes an advisor from a pile of messy client statements to a branded, compliance-checked PDF proposal, with a Claude-powered Copilot that drafts recommendations and leaves every decision to the advisor.
 
 **[Live demo →](https://atlas-proposal-engine.vercel.app/)** · runs on a sample family office, no sign-up, no API key needed
 
@@ -142,4 +142,4 @@ Feedback and issues welcome.
 
 ## License
 
-No license file yet: all rights reserved by the author until one is added.
+[MIT](LICENSE). The license covers the code only; the disclaimer above still applies to anything Atlas generates.
