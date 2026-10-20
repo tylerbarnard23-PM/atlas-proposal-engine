@@ -51,7 +51,7 @@ The Copilot is a Claude agent (`claude-opus-5-5`) whose tools are Atlas's existi
 - **Bounded.** At most 10 agent turns and 5 drafts per request; requests are size-capped and validated with Zod; refusals fall back server-side (`fallbacks: "default"`).
 - **Nothing is persisted server-side.** The workspace lives in the browser; each request sends the slice the agent needs.
 
-**Demo mode.** Without `ANTHROPIC_API_KEY`, the Copilot runs a scripted planner that calls *the same tools* in a fixed order. The public demo costs nothing to run, and the tool layer has a deterministic regression baseline. The demo planner also has some judgment of its own: it won't draft a sale of an illiquid position (a primary residence, an LP interest), and it skips holdings that already have a recommendation.
+**Demo mode.** Unless live mode is explicitly enabled (below), the Copilot runs a scripted planner that calls *the same tools* in a fixed order. The public demo costs nothing to run, and the tool layer has a deterministic regression baseline. The demo planner also has some judgment of its own: it won't draft a sale of an illiquid position (a primary residence, an LP interest), and it skips holdings that already have a recommendation.
 
 ## Architecture
 
@@ -123,12 +123,11 @@ npm run dev
 
 Open http://localhost:3000. The app loads with a sample client (the Blackwell Family Office); **Settings** resets the sample or clears to a blank workspace.
 
-To try the Copilot with Claude, copy `.env.example` to `.env.local` and set `ANTHROPIC_API_KEY`. Everything else is optional:
+To try the Copilot with Claude locally, copy `.env.example` to `.env.local` and set `ANTHROPIC_API_KEY` and `COPILOT_MODE=live`. The public demo deliberately runs without a key: `/api/copilot` has no authentication, so don't enable live mode on a public deployment. Everything else is optional:
 
 | Variable | Purpose |
 |---|---|
-| `ANTHROPIC_API_KEY` | Enables the live Copilot. Without it, demo mode. |
-| `COPILOT_MODE=demo` | Forces demo mode even with a key (e.g. a public deployment). |
+| `ANTHROPIC_API_KEY` + `COPILOT_MODE=live` | Both required for the live Copilot. Otherwise, demo mode. |
 | `FINNHUB_API_KEY`, `TWELVE_DATA_API_KEY`, `ALPHA_VANTAGE_API_KEY`, `FRED_API_KEY` | Live market data. Without them, free providers and mock fallbacks. |
 
 ## Limitations and roadmap

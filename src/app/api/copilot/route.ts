@@ -9,11 +9,11 @@ export const maxDuration = 120;
 
 const MAX_BODY_BYTES = 1_000_000;
 
-// Live mode needs ANTHROPIC_API_KEY. COPILOT_MODE=demo forces the scripted
-// agent even when a key is present (e.g. a public deployment you don't want
-// billed).
+// Live mode is opt-in: it needs both ANTHROPIC_API_KEY and COPILOT_MODE=live.
+// This route has no auth, so a key that lands on a public deployment by
+// mistake must not be enough to start spending it.
 function liveEnabled(): boolean {
-  return !!process.env.ANTHROPIC_API_KEY && process.env.COPILOT_MODE !== "demo";
+  return !!process.env.ANTHROPIC_API_KEY && process.env.COPILOT_MODE === "live";
 }
 
 export async function GET() {
