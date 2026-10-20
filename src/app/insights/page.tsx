@@ -11,12 +11,14 @@ import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { ReasonPicker } from "@/components/ui/ReasonPicker";
+import { DataTaskItem } from "@/components/insights/DataTaskItem";
 import { recommendationFromInsight } from "@/engines/recommendationEngine";
 import { insightKey } from "@/engines/insightEngine";
 import type { Insight } from "@/domain/types";
 import { formatDate } from "@/utils/formatting";
 
 const DISMISS_REASONS = ["Not relevant for this client", "Client preference", "Already addressed"];
+const CATEGORY_LABEL: Record<string, string> = { data_quality: "Data to complete" };
 
 export default function InsightsPage() {
   return (
@@ -97,7 +99,7 @@ function Inner() {
             <Card key={cat}>
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle>{cat.replace("_", " ")}</CardTitle>
+                  <CardTitle>{CATEGORY_LABEL[cat] ?? cat.replace("_", " ")}</CardTitle>
                   <Badge tone="navy">{list.length}</Badge>
                 </div>
               </CardHeader>
@@ -106,6 +108,23 @@ function Inner() {
                   {list.map((i) => {
                     const key = insightKey(i);
                     const isDataQuality = i.category === "data_quality";
+                    if (i.task) {
+                      return (
+                        <li key={key} className="px-5 py-3 border-t border-ink-100 first:border-t-0">
+                          <DataTaskItem insight={i} onDismiss={() => setDismissing(key)} />
+                          {dismissing === key && (
+                            <ReasonPicker
+                              className="mt-3"
+                              prompt="Why dismiss this? (optional)"
+                              reasons={DISMISS_REASONS}
+                              confirmLabel="Dismiss"
+                              onConfirm={(reason) => dismiss(i, reason)}
+                              onCancel={() => setDismissing(null)}
+                            />
+                          )}
+                        </li>
+                      );
+                    }
                     return (
                       <li key={i.id} className="px-5 py-3 border-t border-ink-100 first:border-t-0">
                         <div className="flex items-start justify-between gap-3">
@@ -133,7 +152,7 @@ function Inner() {
                             ) : isDataQuality ? (
                               // A data problem is fixed in the data, not proposed to the client.
                               <Link href="/accounts-assets?review=1">
-                                <Button size="sm" variant="secondary">Fix in Accounts &amp; Assets</Button>
+                                <Button size="sm" variant="secondary">Open the value check</Button>
                               </Link>
                             ) : (
                               <Button size="sm" variant="secondary" onClick={() => convert(i)}>

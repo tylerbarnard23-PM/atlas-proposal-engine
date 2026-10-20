@@ -369,8 +369,12 @@ export interface Insight {
   relatedHoldingIds?: string[];
   relatedAccountIds?: string[];
   context?: InsightContextValue[];
+  /** A "Data to complete" item: which holdings are still open and which are done. */
+  task?: { kind: DataTaskKind; openIds: string[]; doneIds: string[] };
   generatedAt: string;
 }
+
+export type DataTaskKind = "balance_only" | "missing_identifier" | "stale_value";
 
 export type RecommendationType =
   | "buy"
@@ -653,6 +657,13 @@ export interface Holding {
   dataQuality: DataQualityIssue[];
   sourceTrace?: SourceTrace;
   advisorVerification: AdvisorVerificationStatus;
+  /** Advisor decisions that settle a "Data to complete" item. */
+  dataAcks?: {
+    /** Keep a balance-only account as one balance (no positions to add). */
+    keepAsBalance?: boolean;
+    /** Keep the value as of this date; void once the valuation date changes. */
+    acceptedValuationDate?: string;
+  };
   proposalApprovedValue?: ProposalApprovedValue;
   isLiability?: boolean;
   createdAt: string;

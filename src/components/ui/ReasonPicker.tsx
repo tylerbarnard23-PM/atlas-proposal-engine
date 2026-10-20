@@ -58,11 +58,7 @@ export function ReasonPicker({
         className="w-full rounded border border-ink-200 bg-white px-2.5 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-navy-500/30"
       />
       <div className="flex gap-2">
-        <Button
-          size="sm"
-          className={cn(tone === "negative" && "bg-negative-600 hover:bg-negative-500 border-negative-600")}
-          onClick={() => onConfirm(reason)}
-        >
+        <Button size="sm" variant={tone === "negative" ? "danger" : "primary"} onClick={() => onConfirm(reason)}>
           {confirmLabel}
         </Button>
         <Button size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>
