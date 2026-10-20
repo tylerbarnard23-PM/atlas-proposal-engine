@@ -86,6 +86,10 @@ function Inner() {
                 Disclosures refer to the adviser as <code className="bg-slatey-100 rounded px-1">[Firm]</code>. Once you replace the sample firm
                 name, proposals use your firm name there instead.
               </p>
+              <p className="sm:col-span-2 text-2xs text-ink-500 leading-relaxed border-t border-ink-100 pt-3">
+                The advisor of record remains responsible for the suitability and implementation of every recommendation in a
+                proposal. Atlas does not autonomously provide financial, tax, legal, or investment advice.
+              </p>
             </CardBody>
           </Card>
 

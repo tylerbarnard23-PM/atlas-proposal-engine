@@ -32,6 +32,8 @@ interface NavItem {
 }
 
 const NAV: NavItem[] = [
+  // Set up once, before any client work, so it leads the menu.
+  { label: "Firm & Branding", href: "/firm-branding", icon: <Building2 className="h-4 w-4" />, group: "Your Firm" },
   { label: "Dashboard", href: "/", icon: <LayoutDashboard className="h-4 w-4" />, group: "Overview" },
   { label: "Client Profile", href: "/client-profile", icon: <UserSquare className="h-4 w-4" />, group: "Overview" },
   { label: "Import Center", href: "/import-center", icon: <Inbox className="h-4 w-4" />, group: "Data" },
@@ -44,7 +46,6 @@ const NAV: NavItem[] = [
   { label: "Proposal Builder", href: "/proposal-builder", icon: <FileText className="h-4 w-4" />, group: "Proposal" },
   { label: "PDF Preview", href: "/pdf-preview", icon: <Eye className="h-4 w-4" />, group: "Proposal" },
   { label: "Assumptions & Disclosures", href: "/assumptions-disclosures", icon: <ScrollText className="h-4 w-4" />, group: "Proposal" },
-  { label: "Firm & Branding", href: "/firm-branding", icon: <Building2 className="h-4 w-4" />, group: "Workspace" },
   { label: "Settings", href: "/settings", icon: <Settings className="h-4 w-4" />, group: "Workspace" },
 ];
 
