@@ -16,6 +16,7 @@ import {
   Eye,
   ScrollText,
   Settings,
+  Bot,
 } from "lucide-react";
 import { cn } from "@/utils/cn";
 
@@ -35,6 +36,7 @@ const NAV: NavItem[] = [
   { label: "Market Data", href: "/market-data", icon: <Activity className="h-4 w-4" />, group: "Data" },
   { label: "Insights", href: "/insights", icon: <Lightbulb className="h-4 w-4" />, group: "Advisory" },
   { label: "Recommendations", href: "/recommendations", icon: <Wand2 className="h-4 w-4" />, group: "Advisory" },
+  { label: "Proposal Copilot", href: "/copilot", icon: <Bot className="h-4 w-4" />, group: "Advisory" },
   { label: "Proposal Builder", href: "/proposal-builder", icon: <FileText className="h-4 w-4" />, group: "Proposal" },
   { label: "PDF Preview", href: "/pdf-preview", icon: <Eye className="h-4 w-4" />, group: "Proposal" },
   { label: "Assumptions & Disclosures", href: "/assumptions-disclosures", icon: <ScrollText className="h-4 w-4" />, group: "Proposal" },
@@ -96,7 +98,7 @@ export function Sidebar() {
         ))}
       </nav>
       <div className="px-5 py-3 border-t border-ink-100 text-2xs text-ink-500 leading-relaxed">
-        Advisor-led platform · No autonomous advice · Advisor approval required.
+        Advisor-led platform · AI drafts, advisor decides · Advisor approval required.
       </div>
     </aside>
   );
