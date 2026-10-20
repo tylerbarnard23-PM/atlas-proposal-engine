@@ -125,7 +125,7 @@ function Inner() {
               </a>
             </div>
           </CardHeader>
-          <CardBody className="!p-0">
+          <CardBody className="p-0!">
             <iframe
               src={`/proposal-pdf/${proposal.id}?embed=1`}
               className="w-full h-[820px] bg-white border-t border-ink-100"
@@ -175,7 +175,7 @@ function Inner() {
 
           <Card>
             <CardHeader><CardTitle>Recent generations</CardTitle></CardHeader>
-            <CardBody className="!p-0">
+            <CardBody className="p-0!">
               {pdfHistory.length === 0 ? (
                 <div className="px-5 py-4 text-sm text-ink-500">No PDFs generated yet.</div>
               ) : (

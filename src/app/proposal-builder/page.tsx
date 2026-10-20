@@ -69,7 +69,7 @@ function Inner() {
         <div className="lg:col-span-2 space-y-5">
           <Card>
             <CardHeader><CardTitle>Sections</CardTitle></CardHeader>
-            <CardBody className="!p-0">
+            <CardBody className="p-0!">
               <ul className="divide-y divide-ink-100">
                 {sections.map((s) => (
                   <li key={s.key} className="px-5 py-3 flex items-center justify-between">

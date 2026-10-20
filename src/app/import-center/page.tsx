@@ -653,7 +653,7 @@ function ExtractionPreview({ result }: { result: ExtractionResult }) {
         </div>
         <div className="flex items-center gap-2">
           <div>
-            <Label className="!mb-0">Target account</Label>
+            <Label className="mb-0!">Target account</Label>
           </div>
           <Select value={targetAccountId} onChange={(e) => setTargetAccountId(e.target.value)}>
             <option value="">Create new account</option>

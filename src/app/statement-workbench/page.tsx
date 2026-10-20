@@ -53,7 +53,7 @@ function Inner() {
         <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-5">
           <Card>
             <CardHeader><CardTitle>Sources</CardTitle></CardHeader>
-            <CardBody className="!p-0">
+            <CardBody className="p-0!">
               <ul className="divide-y divide-ink-100">
                 {docs.map((d) => (
                   <li
