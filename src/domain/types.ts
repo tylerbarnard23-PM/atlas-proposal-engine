@@ -562,7 +562,7 @@ export interface ExtractionResult {
   reconciliation?: Reconciliation;
 }
 
-export type DocumentKind = "financial_plan_lifeview" | "statement_table";
+export type DocumentKind = "financial_plan_lifeview" | "statement_table" | "generated_proposal";
 
 // Extracted totals checked against the totals the document itself states.
 export interface Reconciliation {
