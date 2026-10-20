@@ -77,6 +77,12 @@ export const PDF_BASE_CSS = `
   .pdf-card { border: 1px solid var(--ink-100); border-radius: 6pt; padding: 12pt; break-inside: avoid; page-break-inside: avoid; }
   .pdf-stat-label { font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.14em; color: var(--ink-500); }
   .pdf-stat-value { font-family: Georgia, serif; font-size: 18pt; line-height: 1; margin-top: 4pt; }
+  /* Before / After headings: large enough to read across the table. */
+  .pdf-ba-head { display: flex; align-items: baseline; gap: 8pt; padding-bottom: 6pt; margin-bottom: 6pt; border-bottom: 2px solid var(--ink-100); }
+  .pdf-ba-head.after { border-bottom-color: var(--gold-500); }
+  .pdf-ba-tag { font-size: 8pt; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: #fff; background: var(--ink-500); border-radius: 3pt; padding: 2pt 6pt; }
+  .pdf-ba-head.after .pdf-ba-tag { background: var(--gold-500); }
+  .pdf-ba-title { font-family: Georgia, serif; font-size: 17pt; color: var(--ink-900); line-height: 1.1; }
   .pdf-stat-hint { font-size: 8pt; color: var(--ink-500); margin-top: 4pt; }
   table.pdf-table { width: 100%; border-collapse: collapse; font-size: 9pt; }
   table.pdf-table th { text-align: left; font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.14em; color: var(--ink-500); padding: 6pt 6pt; border-bottom: 1px solid var(--ink-100); font-weight: 600; }

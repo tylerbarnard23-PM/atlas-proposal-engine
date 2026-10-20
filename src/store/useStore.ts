@@ -24,6 +24,7 @@ import { SEED_HOLDINGS } from "@/data/seedHoldings";
 import { SEED_RECOMMENDATIONS } from "@/data/seedRecommendations";
 import { SEED_MARKET_QUOTES } from "@/data/seedMarketData";
 import { DISCLOSURE_LIBRARY } from "@/domain/disclosureLibrary";
+import { todayIso } from "@/utils/formatting";
 import { DEFAULT_PROPOSAL_SECTIONS } from "@/engines/proposalEngine";
 import { LEGACY_SAMPLE_FIRM_NAME } from "@/domain/branding";
 import type { ImportedWorkspace } from "@/ingestion/documents/toWorkspace";
@@ -55,6 +56,10 @@ export interface AtlasActions {
   setHoldings: (holdings: Holding[]) => void;
   upsertRecommendation: (rec: Recommendation) => void;
   removeRecommendation: (id: string) => void;
+  /** Sets the value-check state of several holdings at once (Confirm all, and its Undo). */
+  setHoldingsVerification: (ids: string[], verification: Holding["advisorVerification"]) => void;
+  /** Puts a deleted recommendation back at its old position (Undo). */
+  restoreRecommendation: (rec: Recommendation, index: number) => void;
   setInsights: (insights: Insight[]) => void;
   addSourceDocument: (doc: SourceDocument) => void;
   updateSourceDocument: (id: string, patch: Partial<SourceDocument>) => void;
@@ -236,6 +241,21 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
         })),
       removeRecommendation: (id) =>
         set((s) => ({ recommendations: s.recommendations.filter((r) => r.id !== id) })),
+      setHoldingsVerification: (ids, verification) =>
+        set((s) => {
+          const target = new Set(ids);
+          const now = todayIso();
+          return {
+            holdings: s.holdings.map((h) => (target.has(h.id) ? { ...h, advisorVerification: verification, updatedAt: now } : h)),
+          };
+        }),
+      restoreRecommendation: (rec, index) =>
+        set((s) => {
+          if (s.recommendations.some((r) => r.id === rec.id)) return {};
+          const next = [...s.recommendations];
+          next.splice(Math.max(0, Math.min(index, next.length)), 0, rec);
+          return { recommendations: next };
+        }),
       setInsights: (insights) => set({ insights }),
       addSourceDocument: (doc) => set((s) => ({ sourceDocuments: [doc, ...s.sourceDocuments] })),
       updateSourceDocument: (id, patch) =>

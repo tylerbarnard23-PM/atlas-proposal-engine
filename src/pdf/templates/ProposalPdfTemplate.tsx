@@ -468,10 +468,16 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
       .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
     pages.push(
       <PageWrap key="ba" title="Before / After Allocation" eyebrow="06">
-        <p className="pdf-text">High-level allocation comparison. Detailed line-by-line changes appear in the Recommendations section.</p>
+        <p className="pdf-text">
+          <strong>Before</strong> is the portfolio today; <strong>After</strong> is the portfolio once the recommendations in
+          this proposal are carried out. Line-by-line changes appear in the Recommendations section.
+        </p>
         <div className="pdf-grid-2" style={{ marginTop: 12 }}>
           <div className="pdf-card pdf-avoid-break">
-            <div className="pdf-stat-label">Current</div>
+            <div className="pdf-ba-head">
+              <span className="pdf-ba-tag">Before</span>
+              <span className="pdf-ba-title">Current portfolio</span>
+            </div>
             <div className="pdf-stat-value" style={{ fontSize: "16pt", marginTop: 2 }}>
               {formatCurrency(currentTotal, reportingCurrency, { compact: true })}
             </div>
@@ -486,7 +492,10 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
             </div>
           </div>
           <div className="pdf-card pdf-avoid-break">
-            <div className="pdf-stat-label">Proposed</div>
+            <div className="pdf-ba-head after">
+              <span className="pdf-ba-tag">After</span>
+              <span className="pdf-ba-title">Proposed portfolio</span>
+            </div>
             <div className="pdf-stat-value" style={{ fontSize: "16pt", marginTop: 2 }}>
               {formatCurrency(proposedTotal, reportingCurrency, { compact: true })}
             </div>
@@ -541,7 +550,7 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
               })}
             </div>
             <div className="pdf-stat-hint" style={{ marginTop: 6 }}>
-              Percentage-point shift in asset-class weight from Current to Proposed.
+              Percentage-point shift in asset-class weight from Before (current) to After (proposed).
             </div>
           </div>
         )}

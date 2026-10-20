@@ -1,5 +1,6 @@
 import type { Insight, Recommendation } from "@/domain/types";
 import { safeId, todayIso } from "@/utils/formatting";
+import { insightKey } from "./insightEngine";
 
 export function recommendationFromInsight(insight: Insight): Recommendation {
   const now = todayIso();
@@ -15,6 +16,7 @@ export function recommendationFromInsight(insight: Insight): Recommendation {
     status: "draft",
     includeInPdf: false,
     approvedByAdvisor: false,
+    sourceInsightKey: insightKey(insight),
     createdAt: now,
     updatedAt: now,
   };
