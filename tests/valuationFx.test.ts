@@ -344,6 +344,63 @@ describe("review findings: unvalued state through the proposal, and liabilities"
     expect(holdings.find((h) => h.id === "cash")!.reportingMarketValue).toBeNull();
   });
 
+  // Cash lines with a locked approved value: offsets move the approved
+  // value in its own currency, so re-valuing gives the same figure.
+  describe("cash with an approved value receives and pays out in its own valuation currency", () => {
+    const usdSec = holding({ id: "sec", nativeMarketValue: 1_000 });
+    const approvedCash = (currency: string, amount: number) =>
+      holding({ id: "cash", assetClass: "cash", nativeMarketValue: 150, proposalApprovedValue: { amount, currency, source: { kind: "advisor_override" } } });
+    const roundTrip = (holdings: Holding[], recs: Recommendation[], rates: FxRate[], accounts = [usdAccount]) => {
+      const fx = { reportingCurrency: "USD", rates };
+      const proposed = applyRecommendationsToProposed(normalizeHoldings(holdings, rates, "USD"), recs, accounts, fx);
+      return { ...proposed, renormalized: normalizeHoldings(proposed.holdings, rates, "USD") };
+    };
+    const cashOf = (hs: Holding[]) => hs.find((h) => h.id === "cash")!;
+
+    it("USD cash approved at USD 200 + USD 100 proceeds = USD 300, before and after re-normalizing", () => {
+      const r = roundTrip([usdSec, approvedCash("USD", 200)], [sale()], []);
+      expect(r.unresolved).toEqual([]);
+      expect(cashOf(r.holdings).reportingMarketValue).toBeCloseTo(300, 9);
+      expect(cashOf(r.holdings).proposalApprovedValue?.amount).toBeCloseTo(300, 9);
+      expect(cashOf(r.renormalized).reportingMarketValue).toBeCloseTo(300, 9);
+    });
+
+    it("USD cash approved at EUR 200 (EUR/USD 1.10) + USD 100 = USD 320; approved EUR grows by 100 / 1.10", () => {
+      const r = roundTrip([usdSec, approvedCash("EUR", 200)], [sale()], [EUR_USD]);
+      expect(r.unresolved).toEqual([]);
+      expect(cashOf(r.holdings).reportingMarketValue).toBeCloseTo(320, 9);
+      expect(cashOf(r.holdings).proposalApprovedValue?.amount).toBeCloseTo(200 + 100 / 1.1, 9);
+      expect(cashOf(r.holdings).proposalApprovedValue?.currency).toBe("EUR");
+      expect(cashOf(r.renormalized).reportingMarketValue).toBeCloseTo(320, 9);
+    });
+
+    it("debits work the same way: a purchase spends approved-value cash in its own currency", () => {
+      const r = roundTrip([usdSec, approvedCash("EUR", 200)], [sale({ type: "buy" })], [EUR_USD]);
+      expect(cashOf(r.holdings).reportingMarketValue).toBeCloseTo(120, 9);
+      expect(cashOf(r.holdings).proposalApprovedValue?.amount).toBeCloseTo(200 - 100 / 1.1, 9);
+      expect(cashOf(r.renormalized).reportingMarketValue).toBeCloseTo(120, 9);
+    });
+
+    it("debt funding draws approved-value cash in its own currency", () => {
+      const loan = holding({ id: "loan", accountId: "a_loan", assetName: "Loan", assetClass: "liability", isLiability: true, nativeMarketValue: -1_000 });
+      const accounts = [usdAccount, { ...usdAccount, id: "a_loan", name: "Loan" }];
+      const r = roundTrip([loan, approvedCash("EUR", 200)], [sale({ type: "pay_down_debt", relatedHoldingId: "loan", actionAmount: 110 })], [EUR_USD], accounts);
+      expect(r.unresolved).toEqual([]);
+      expect(r.holdings.find((h) => h.id === "loan")!.reportingMarketValue).toBeCloseTo(-890, 9);
+      expect(cashOf(r.holdings).reportingMarketValue).toBeCloseTo(110, 9);
+      expect(cashOf(r.holdings).proposalApprovedValue?.amount).toBeCloseTo(100, 9);
+      expect(cashOf(r.renormalized).reportingMarketValue).toBeCloseTo(110, 9);
+      expect(r.holdings.some((h) => h.id.startsWith("synth_cash"))).toBe(false);
+    });
+
+    it("approved-value cash without its own rate is unvalued: not an offset target, not a funding source", () => {
+      const r = roundTrip([usdSec, approvedCash("EUR", 200)], [sale()], []); // EUR/USD missing
+      expect(r.unresolved.map((u) => u.currency)).toEqual(["EUR"]);
+      expect(cashOf(r.holdings).reportingMarketValue).toBeNull();
+      expect(cashOf(r.holdings).proposalApprovedValue?.amount).toBe(200);
+    });
+  });
+
   // Seed workspace, fully valued, plus a loan in SEK, which has no rate.
   const sekLoan = holding({ id: "sek_loan", accountId: SEED_ACCOUNTS[0].id, assetName: "SEK bridge loan", assetClass: "liability", isLiability: true, currency: "SEK", nativeMarketValue: -500_000 });
   const withLoan = [...SEED_HOLDINGS, sekLoan];

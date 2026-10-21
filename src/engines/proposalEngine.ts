@@ -171,11 +171,26 @@ export function applyRecommendationsToProposed(
     byHolding.set(rec.relatedHoldingId, arr);
   }
 
-  // The native currency an account's cash offsets land in.
-  const cashLine = (accountId: string) =>
+  // Where an account's cash offsets land: its first cash line, else a new
+  // line in the account's base currency.
+  const cashLine = (accountId: string): MaybeNormalized | undefined =>
     current.find((h) => h.accountId === accountId && h.assetClass === "cash" && !h.isLiability);
   const cashCurrency = (accountId: string): CurrencyCode =>
     cashLine(accountId)?.currency ?? accountById.get(accountId)?.baseCurrency ?? fx.reportingCurrency;
+  // Why an account can't take a cash credit or debit, as the currency that
+  // blocks it, or null. Its cash line must be valued, with a usable rate for
+  // the currency it is valued in (a locked approved value's own currency);
+  // a new line needs the rate for the account's base currency. A zero-valued
+  // approved line can't be scaled, so its statement currency is needed too.
+  const offsetBlocker = (accountId: string): CurrencyCode | null => {
+    const line = cashLine(accountId);
+    if (!line) return rateToReporting(fx, cashCurrency(accountId)) == null ? cashCurrency(accountId) : null;
+    const value = reportingValueOf(line, fx);
+    const vc = valuationCurrencyOf(line);
+    if (value == null || rateToReporting(fx, vc) == null) return vc;
+    if (line.proposalApprovedValue && value === 0 && rateToReporting(fx, line.currency) == null) return line.currency;
+    return null;
+  };
 
   const unresolved: UnresolvedConversion[] = [];
   const unresolve = (recs: Recommendation[], h: Holding, currency: CurrencyCode) => {
@@ -240,13 +255,10 @@ export function applyRecommendationsToProposed(
     const needed = [vc];
     // A zero-valued approved holding can't be scaled, so its statement currency is needed too.
     if (h.proposalApprovedValue && start === 0 && vc !== h.currency) needed.push(h.currency);
-    if (cashOffset !== 0) {
-      const line = cashLine(h.accountId);
-      if (line && reportingValueOf(line, fx) == null) {
-        unresolve(recs, h, valuationCurrencyOf(line));
-        continue;
-      }
-      needed.push(cashCurrency(h.accountId));
+    const blocked = cashOffset !== 0 ? offsetBlocker(h.accountId) : null;
+    if (blocked) {
+      unresolve(recs, h, blocked);
+      continue;
     }
     const missing = needed.find((c) => rateToReporting(fx, c) == null);
     if (missing) {
@@ -271,7 +283,7 @@ export function applyRecommendationsToProposed(
     for (const h of current) {
       if (h.isLiability || h.assetClass !== "cash") continue;
       const v = reportingValueOf(h, fx);
-      if (v == null || rateToReporting(fx, cashCurrency(h.accountId)) == null) continue;
+      if (v == null || offsetBlocker(h.accountId)) continue;
       available.set(h.accountId, (available.get(h.accountId) ?? 0) + v);
     }
     // Proceeds count too, even in an account with no cash line yet; every
@@ -288,8 +300,9 @@ export function applyRecommendationsToProposed(
         remaining -= draw;
       }
       const loanAccount = p.holding.accountId;
-      if (remaining > 1e-9 && rateToReporting(fx, cashCurrency(loanAccount)) == null) {
-        unresolve(p.recs, p.holding, cashCurrency(loanAccount));
+      const loanBlocked = remaining > 1e-9 ? offsetBlocker(loanAccount) : null;
+      if (loanBlocked) {
+        unresolve(p.recs, p.holding, loanBlocked);
         newValueById.delete(p.holding.id);
         continue;
       }
@@ -335,13 +348,29 @@ export function applyRecommendationsToProposed(
     );
     if (cashIdx >= 0) {
       const existing: MaybeNormalized = result[cashIdx];
-      // A cash line that receives a delta was checked above to be valued.
-      const rate = rateToReporting(fx, existing.currency)!;
+      // Every account with a delta passed offsetBlocker: its cash line is
+      // valued and its valuation currency has a rate. The delta moves the
+      // value in that currency (an approved value's own), and the statement
+      // amount in its own currency where a rate exists, else in proportion,
+      // so re-valuing the line gives the same figure.
+      const before = reportingValueOf(existing, fx)!;
+      const after = before + delta;
+      const inValuationCurrency = delta / rateToReporting(fx, valuationCurrencyOf(existing))!;
+      const nativeRate = rateToReporting(fx, existing.currency);
+      const nativeMarketValue =
+        nativeRate != null
+          ? existing.nativeMarketValue + delta / nativeRate
+          : before !== 0
+          ? existing.nativeMarketValue * (after / before)
+          : existing.nativeMarketValue;
       const updated: MaybeNormalized = {
         ...existing,
-        reportingMarketValue: reportingValueOf(existing, fx)! + delta,
-        nativeMarketValue: existing.nativeMarketValue + delta / rate,
-        ...(existing.valuation?.status === "valued" ? { valuation: { ...existing.valuation, amount: existing.valuation.amount + delta / rate } } : {}),
+        reportingMarketValue: after,
+        nativeMarketValue,
+        ...(existing.proposalApprovedValue
+          ? { proposalApprovedValue: { ...existing.proposalApprovedValue, amount: existing.proposalApprovedValue.amount + inValuationCurrency } }
+          : {}),
+        ...(existing.valuation?.status === "valued" ? { valuation: { ...existing.valuation, amount: existing.valuation.amount + inValuationCurrency } } : {}),
         valuationSource: {
           ...existing.valuationSource,
           note: [existing.valuationSource.note, "Adjusted by proposed actions"]
