@@ -15,7 +15,9 @@ import { ACCOUNT_TYPE_LABELS } from "@/domain/accountTaxonomy";
 import { PDF_BASE_CSS } from "../styles/pdfStyles";
 import { formatCurrency, formatDate, formatPercent } from "@/utils/formatting";
 import { sumBy, groupBy } from "@/utils/numbers";
-import { applyRecommendationsToProposed, cashShortfallsOf, netWorth } from "@/engines/proposalEngine";
+import { applyRecommendationsToProposed, cashShortfallsOf } from "@/engines/proposalEngine";
+import { normalizeHoldings } from "@/engines/normalizationEngine";
+import { coverageLabel, describeUnvalued, formatTotal, reportingValue, valuationSummary, valuationTotal } from "@/engines/valuationTotals";
 import { dataQualityScore } from "@/engines/dataQualityEngine";
 import { PDF_SAMPLE_NOTICE } from "@/domain/legal";
 import { accentTint, checkLogoDataUrl, isValidAccentColor, resolveFirmPlaceholder } from "@/domain/branding";
@@ -147,10 +149,12 @@ export interface ProposalPdfTemplateProps {
 
 function summarize(holdings: Holding[], group: (h: Holding) => string) {
   const totals = new Map<string, number>();
+  // Valued holdings only; the document labels this when valuation is partial.
   for (const h of holdings) {
-    if (h.isLiability) continue;
+    const v = reportingValue(h);
+    if (h.isLiability || v == null) continue;
     const key = group(h);
-    totals.set(key, (totals.get(key) ?? 0) + (h.reportingMarketValue ?? h.nativeMarketValue));
+    totals.set(key, (totals.get(key) ?? 0) + v);
   }
   const total = Array.from(totals.values()).reduce((a, b) => a + b, 0);
   return Array.from(totals.entries())
@@ -163,11 +167,15 @@ function pageNumber(idx: number) {
 }
 
 export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
-  const { client, advisor, accounts, holdings, recommendations, sections, disclosures, proposal, fxRates, variant } = props;
+  const { client, advisor, accounts, recommendations, sections, disclosures, proposal, fxRates, variant } = props;
   // The currency the holdings' reportingMarketValue was normalized into (and
   // the one readiness uses); proposal.outputCurrency isn't kept in sync with
   // the Client Profile setting.
   const reportingCurrency = client.proposalOutputCurrency || proposal.outputCurrency;
+  // Value every holding here from its amount and the current rates, whatever
+  // reporting value it arrived with, so the PDF route and the preview can't
+  // render a cached figure for a holding that has lost its rate.
+  const holdings = normalizeHoldings(props.holdings, fxRates, reportingCurrency);
   const today = new Date().toLocaleDateString(client.locale ?? "en-US", { year: "numeric", month: "long", day: "numeric" });
   const isDraft = variant === "draft";
   // Branding is re-validated here so an invalid value can never reach the
@@ -184,12 +192,19 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
   const approvedRecs = recommendations.filter((r) => r.approvedByAdvisor && r.includeInPdf);
   const remainingRecs = recommendations.filter((r) => !r.approvedByAdvisor && r.includeInPdf);
 
-  const nw = netWorth(holdings);
+  const nw = valuationSummary(holdings);
+  // Partial or unavailable totals are labeled; charts describe valued holdings only.
+  const valuedOnly = nw.complete ? "" : " (valued holdings only)";
+  const unvaluedNote = describeUnvalued(nw, reportingCurrency);
   const allocClass = summarize(holdings, (h) => ASSET_CLASS_LABELS[h.assetClass] ?? "Other");
   const allocCurrency = summarize(holdings, (h) => h.currency);
   const allocCountry = summarize(holdings, (h) => h.country ?? "Unknown");
   const investible = holdings.filter((h) => !h.isLiability);
-  const totalInvestible = sumBy(investible, (h) => h.reportingMarketValue ?? h.nativeMarketValue);
+  const investibleTotal = valuationTotal(investible);
+  // Denominator for the valued subset's percentages (see `valuedOnly`).
+  const totalInvestible = investibleTotal.value ?? 0;
+  const valuedInvestible = investible.filter((h) => reportingValue(h) != null);
+  const liabilitiesLabel = nw.liabilities.value == null ? "Unavailable" : formatCurrency(Math.abs(nw.liabilities.value), reportingCurrency, { compact: true });
 
   // Proposed allocation reflects every advisor-approved recommendation,
   // independent of whether it's included in the PDF prose. Each rec's
@@ -298,21 +313,30 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
         {proposal.notes && (
           <div className="pdf-summary-box">{proposal.notes}</div>
         )}
+        {unvaluedNote && (
+          <div className="pdf-card pdf-avoid-break" style={{ marginBottom: 14, borderColor: "#9B2C2C" }}>
+            <div className="pdf-stat-label" style={{ color: "#7A2222" }}>Valuation incomplete: {coverageLabel(nw)}</div>
+            <p className="pdf-text" style={{ marginTop: 6 }}>
+              {unvaluedNote} Totals, charts and percentages in this proposal cover valued holdings only, and no portfolio-wide
+              conclusions are drawn until every holding is valued.
+            </p>
+          </div>
+        )}
         <div className="pdf-grid-4" style={{ marginBottom: 18 }}>
-          <Stat label="Net Worth" value={formatCurrency(nw.net, reportingCurrency, { compact: true })} hint="Reporting currency" />
-          <Stat label="Investible Assets" value={formatCurrency(totalInvestible, reportingCurrency, { compact: true })} hint={`${investible.length} holdings`} />
-          <Stat label="Liabilities" value={formatCurrency(nw.liabilities, reportingCurrency, { compact: true })} hint="Mortgage, debt" />
+          <Stat label={`Net Worth${valuedOnly}`} value={formatTotal(nw.net, reportingCurrency, { compact: true })} hint="Reporting currency" />
+          <Stat label={`Investible Assets${valuedOnly}`} value={formatTotal(investibleTotal, reportingCurrency, { compact: true })} hint={nw.complete ? `${investible.length} holdings` : `${investibleTotal.valuedCount} of ${investible.length} holdings valued`} />
+          <Stat label="Liabilities" value={liabilitiesLabel} hint="Mortgage, debt" />
           <Stat label="Data Quality Score" value={`${dq}`} hint={`${approvedRecs.length} advisor recs included`} />
         </div>
         <div className="pdf-grid-2">
           <div className="pdf-card">
-            <div className="pdf-stat-label">Allocation by Asset Class</div>
+            <div className="pdf-stat-label">Allocation by Asset Class{valuedOnly}</div>
             <div style={{ marginTop: 8 }}>
               <AllocationList rows={allocClass.slice(0, 6)} currency={reportingCurrency} />
             </div>
           </div>
           <div className="pdf-card">
-            <div className="pdf-stat-label">Allocation by Currency</div>
+            <div className="pdf-stat-label">Allocation by Currency{valuedOnly}</div>
             <div style={{ marginTop: 8 }}>
               <AllocationList rows={allocCurrency.slice(0, 6)} currency={reportingCurrency} />
             </div>
@@ -384,9 +408,9 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
     pages.push(
       <PageWrap key="current" title="Current Portfolio" eyebrow="03">
         <div className="pdf-grid-3" style={{ marginBottom: 14 }}>
-          <Stat label="Investible Assets" value={formatCurrency(totalInvestible, reportingCurrency, { compact: true })} hint={`${investible.length} holdings · ${accounts.length} accounts`} />
-          <Stat label="Liabilities" value={formatCurrency(nw.liabilities, reportingCurrency, { compact: true })} hint="On schedule" />
-          <Stat label="Net Worth" value={formatCurrency(nw.net, reportingCurrency, { compact: true })} hint="Reporting currency" />
+          <Stat label={`Investible Assets${valuedOnly}`} value={formatTotal(investibleTotal, reportingCurrency, { compact: true })} hint={`${investible.length} holdings · ${accounts.length} accounts`} />
+          <Stat label="Liabilities" value={liabilitiesLabel} hint="On schedule" />
+          <Stat label={`Net Worth${valuedOnly}`} value={formatTotal(nw.net, reportingCurrency, { compact: true })} hint="Reporting currency" />
         </div>
         <div className="pdf-grid-2">
           <div>
@@ -462,7 +486,7 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
 
   // ---------- BEFORE / AFTER ALLOCATION ----------
   if (enabled("before_after_allocation")) {
-    const proposedTotal = sumBy(proposedHoldings.filter((h) => !h.isLiability), (h) => h.reportingMarketValue ?? h.nativeMarketValue);
+    const proposedTotal = valuationTotal(proposedHoldings.filter((h) => !h.isLiability));
     const currentTotal = totalInvestible;
     // Compute per-asset-class percentage-point shifts between current and proposed.
     const currentByLabel = new Map(allocClass.map((s) => [s.label, s.pct]));
@@ -489,7 +513,7 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
               <span className="pdf-ba-title">Current portfolio</span>
             </div>
             <div className="pdf-stat-value" style={{ fontSize: "16pt", marginTop: 2 }}>
-              {formatCurrency(currentTotal, reportingCurrency, { compact: true })}
+              {formatTotal(investibleTotal, reportingCurrency, { compact: true })}
             </div>
             <div style={{ display: "flex", gap: 16, alignItems: "center", marginTop: 10 }}>
               <PdfPieChart data={allocClass} size={148} />
@@ -507,7 +531,7 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
               <span className="pdf-ba-title">Proposed portfolio</span>
             </div>
             <div className="pdf-stat-value" style={{ fontSize: "16pt", marginTop: 2 }}>
-              {formatCurrency(proposedTotal, reportingCurrency, { compact: true })}
+              {formatTotal(proposedTotal, reportingCurrency, { compact: true })}
             </div>
             <div style={{ display: "flex", gap: 16, alignItems: "center", marginTop: 10 }}>
               {/* PdfPieChart skips non-positive slices; an unfunded purchase is called out below instead. */}
@@ -630,22 +654,18 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
 
   // ---------- RISK / LIQUIDITY / FEE / INCOME ----------
   if (enabled("risk_review") || enabled("liquidity") || enabled("fee_analysis") || enabled("income_analysis")) {
-    const liquidityGroups = groupBy(investible, (h) => h.liquidity ?? "unspecified");
-    const liqRows = Object.entries(liquidityGroups).map(([k, items]) => {
-      const v = sumBy(items, (h) => h.reportingMarketValue ?? h.nativeMarketValue);
-      return { label: k.replace("_", " "), value: v, pct: totalInvestible > 0 ? (v / totalInvestible) * 100 : 0 };
-    }).sort((a, b) => b.value - a.value);
+    const liqRows = summarize(investible, (h) => (h.liquidity ?? "unspecified").replace("_", " "));
     const expenseRatioWeighted = totalInvestible > 0
-      ? sumBy(investible, (h) => ((h.expenseRatioPct ?? 0) / 100) * (h.reportingMarketValue ?? 0)) / totalInvestible
+      ? sumBy(valuedInvestible, (h) => ((h.expenseRatioPct ?? 0) / 100) * reportingValue(h)!) / totalInvestible
       : 0;
     const incomeWeighted = totalInvestible > 0
-      ? sumBy(investible, (h) => ((h.incomeYieldPct ?? 0) / 100) * (h.reportingMarketValue ?? 0))
+      ? sumBy(valuedInvestible, (h) => ((h.incomeYieldPct ?? 0) / 100) * reportingValue(h)!)
       : 0;
     pages.push(
       <PageWrap key="risk" title="Risk, Liquidity, Fees & Income" eyebrow="09">
         <div className="pdf-grid-2">
           <div>
-            <div className="pdf-eyebrow">Liquidity Profile</div>
+            <div className="pdf-eyebrow">Liquidity Profile{valuedOnly}</div>
             <div style={{ marginTop: 8 }}>
               <AllocationList rows={liqRows} currency={reportingCurrency} />
             </div>
@@ -658,7 +678,7 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
               <dt>Estimated annual income</dt>
               <dd>{formatCurrency(incomeWeighted, reportingCurrency, { compact: true })}</dd>
               <dt>Concentration risk count</dt>
-              <dd>{investible.filter((h) => (h.reportingMarketValue ?? 0) / Math.max(1, totalInvestible) > 0.08).length}</dd>
+              <dd>{nw.complete ? valuedInvestible.filter((h) => reportingValue(h)! / Math.max(1, totalInvestible) > 0.08).length : "Not assessed (valuation incomplete)"}</dd>
               <dt>Manually valued holdings</dt>
               <dd>{manualCount}</dd>
             </dl>
@@ -750,7 +770,7 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
                 <td>{h.identifier?.value ?? "—"}</td>
                 <td style={{ textTransform: "capitalize" }}>{(h.quoteType ?? "manual").replace("_", " ")}</td>
                 <td>{h.currency}</td>
-                <td className="right">{formatCurrency(h.reportingMarketValue ?? h.nativeMarketValue, reportingCurrency, { compact: true })}</td>
+                <td className="right">{reportingValue(h) == null ? `Not valued in ${reportingCurrency}` : formatCurrency(reportingValue(h), reportingCurrency, { compact: true })}</td>
               </tr>
             ))}
           </tbody>
@@ -814,7 +834,7 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
                 <td>{ASSET_CLASS_LABELS[h.assetClass] ?? "—"}</td>
                 <td>{h.currency}</td>
                 <td className="right">{formatCurrency(h.nativeMarketValue, h.currency, { compact: true })}</td>
-                <td className="right">{formatCurrency(h.reportingMarketValue ?? h.nativeMarketValue, reportingCurrency, { compact: true })}</td>
+                <td className="right">{reportingValue(h) == null ? `Not valued in ${reportingCurrency}` : formatCurrency(reportingValue(h), reportingCurrency, { compact: true })}</td>
               </tr>
             ))}
           </tbody>
@@ -842,7 +862,7 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
           <tbody>
             {accounts.map((a) => {
               const items = holdings.filter((h) => h.accountId === a.id);
-              const value = sumBy(items, (h) => h.reportingMarketValue ?? h.nativeMarketValue);
+              const total = valuationTotal(items);
               return (
                 <tr key={a.id}>
                   <td>{a.name}</td>
@@ -851,7 +871,10 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
                   <td>{a.country ?? "—"}</td>
                   <td>{a.baseCurrency}</td>
                   <td className="right">{items.length}</td>
-                  <td className="right">{formatCurrency(value, reportingCurrency, { compact: true })}</td>
+                  <td className="right">
+                    {formatTotal(total, reportingCurrency, { compact: true })}
+                    {total.status === "partial" && ` (${total.unvaluedCount} not valued)`}
+                  </td>
                 </tr>
               );
             })}

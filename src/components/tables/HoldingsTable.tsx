@@ -12,6 +12,7 @@ import {
 } from "@tanstack/react-table";
 import type { Holding, Account } from "@/domain/types";
 import { ASSET_CLASS_LABELS } from "@/domain/assetTaxonomy";
+import { reportingValue } from "@/engines/valuationTotals";
 import { formatCurrency } from "@/utils/formatting";
 import { Badge } from "@/components/ui/Badge";
 import { QuoteTypeBadge } from "@/components/ui/SourceTag";
@@ -97,9 +98,19 @@ export function HoldingsTable({ holdings, accounts, reportingCurrency, onRowClic
       {
         id: "value",
         header: `Value (${reportingCurrency})`,
-        accessorFn: (r) => r.reportingMarketValue ?? r.nativeMarketValue,
+        // Unvalued holdings (no FX rate) have no reporting value: shown as
+        // such and sorted last, never as their native amount or zero.
+        accessorFn: (r) => reportingValue(r) ?? undefined,
+        sortUndefined: "last",
         cell: ({ row }) => {
-          const v = row.original.reportingMarketValue ?? row.original.nativeMarketValue;
+          const v = reportingValue(row.original);
+          if (v == null) {
+            return (
+              <span className="text-[12px] font-medium text-warning-600" title={`No ${row.original.currency}/${reportingCurrency} exchange rate`}>
+                Not valued in {reportingCurrency}
+              </span>
+            );
+          }
           return (
             <span className={cn("font-medium", row.original.isLiability && "text-negative-600")}>
               {formatCurrency(v, reportingCurrency)}

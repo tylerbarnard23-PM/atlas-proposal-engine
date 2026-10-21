@@ -13,7 +13,8 @@ import { Button } from "@/components/ui/Button";
 import { ClientOnly } from "@/components/layout/ClientOnly";
 import { formatCurrency, formatPercent } from "@/utils/formatting";
 import { ASSET_CLASS_LABELS } from "@/domain/assetTaxonomy";
-import { netWorth } from "@/engines/proposalEngine";
+import { coverageLabel, formatTotal, valuationSummary } from "@/engines/valuationTotals";
+import { ValuationNotice, ValuedOnlyTag } from "@/components/valuation/ValuationNotice";
 import { dataQualityScore } from "@/engines/dataQualityEngine";
 import { evaluateWorkspaceReadiness } from "@/engines/complianceEngine";
 import { ReadinessChecklist } from "@/components/proposal/ReadinessChecklist";
@@ -40,7 +41,7 @@ function DashboardInner() {
   const sourceDocuments = useAtlasStore((s) => s.sourceDocuments);
   const { holdings, insights, reportingCurrency } = useNormalizedHoldings();
 
-  const nw = netWorth(holdings);
+  const nw = valuationSummary(holdings);
   const allByClass = summarizeAllocation(holdings, (h) => ASSET_CLASS_LABELS[h.assetClass] ?? "Other").slice(0, 8);
   const allByCountry = summarizeAllocation(holdings, (h) => h.country ?? "Unknown").slice(0, 6);
   const allByCurrency = summarizeAllocation(holdings, (h) => h.currency).slice(0, 6);
@@ -78,12 +79,17 @@ function DashboardInner() {
       />
 
       <ReadinessBanner checks={readiness} className="mb-6" />
+      <ValuationNotice summary={nw} reportingCurrency={reportingCurrency} className="mb-6" />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
         <KpiCard
-          label="Net Worth"
-          value={formatCurrency(nw.net, reportingCurrency, { compact: true })}
-          hint={`Gross ${formatCurrency(nw.gross, reportingCurrency, { compact: true })} · Liabilities ${formatCurrency(nw.liabilities, reportingCurrency, { compact: true })}`}
+          label={nw.net.status === "partial" ? "Net Worth (valued holdings only)" : "Net Worth"}
+          value={formatTotal(nw.net, reportingCurrency, { compact: true })}
+          hint={
+            nw.complete
+              ? `Gross ${formatTotal(nw.assets, reportingCurrency, { compact: true })} · Liabilities ${formatCurrency(Math.abs(nw.liabilities.value ?? 0), reportingCurrency, { compact: true })}`
+              : `${coverageLabel(nw)} · see the note above`
+          }
           tone="navy"
         />
         <KpiCard
@@ -111,7 +117,10 @@ function DashboardInner() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle>Asset Allocation</CardTitle>
-              <Badge tone="navy">By Asset Class</Badge>
+              <div className="flex gap-1.5">
+                <ValuedOnlyTag summary={nw} />
+                <Badge tone="navy">By Asset Class</Badge>
+              </div>
             </div>
           </CardHeader>
           <CardBody>
@@ -121,7 +130,10 @@ function DashboardInner() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Currency Exposure</CardTitle>
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle>Currency Exposure</CardTitle>
+              <ValuedOnlyTag summary={nw} />
+            </div>
           </CardHeader>
           <CardBody>
             <AllocationDonut data={allByCurrency} currency={reportingCurrency} />
@@ -140,7 +152,10 @@ function DashboardInner() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
         <Card>
           <CardHeader>
-            <CardTitle>Country Exposure</CardTitle>
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle>Country Exposure</CardTitle>
+              <ValuedOnlyTag summary={nw} />
+            </div>
           </CardHeader>
           <CardBody>
             <AllocationBars rows={allByCountry} currency={reportingCurrency} />

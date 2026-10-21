@@ -22,6 +22,9 @@ import type { Account, AccountType, AssetClass, Holding } from "@/domain/types";
 import { formatCurrency, formatDate, safeId, todayIso } from "@/utils/formatting";
 import { QuoteTypeBadge, ValuationSourceLine } from "@/components/ui/SourceTag";
 import { holdingsNeedingReview, type ReviewReason } from "@/engines/complianceEngine";
+import { formatTotal, valuationSummary, valuationTotal } from "@/engines/valuationTotals";
+import type { NormalizedHolding } from "@/engines/normalizationEngine";
+import { ValuationNotice } from "@/components/valuation/ValuationNotice";
 import { ValueReviewTable } from "@/components/review/ValueReviewTable";
 import { cn } from "@/utils/cn";
 
@@ -124,18 +127,23 @@ function Inner() {
         />
       ) : (
         <>
+          <ValuationNotice summary={valuationSummary(holdings)} reportingCurrency={reportingCurrency} className="mb-4" />
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
             {accounts.map((a) => {
-              const acctValue = holdings
-                .filter((h) => h.accountId === a.id)
-                .reduce((acc, h) => acc + (h.reportingMarketValue ?? h.nativeMarketValue ?? 0), 0);
+              const acctTotal = valuationTotal(holdings.filter((h) => h.accountId === a.id));
               return (
                 <Card key={a.id} className="group">
                   <CardBody>
                     <div className="text-2xs uppercase tracking-widest text-ink-500">{ACCOUNT_TYPE_LABELS[a.type]}</div>
                     <div className="text-[13px] font-medium text-ink-900 mt-0.5 truncate">{a.name}</div>
                     <div className="text-2xs text-ink-500 mt-0.5 truncate">{a.institution ?? "—"}</div>
-                    <div className="font-serif text-lg tabular text-ink-900 mt-1.5">{formatCurrency(acctValue, reportingCurrency, { compact: true })}</div>
+                    <div className="font-serif text-lg tabular text-ink-900 mt-1.5">{formatTotal(acctTotal, reportingCurrency, { compact: true })}</div>
+                    {acctTotal.status !== "complete" && (
+                      <div className="text-2xs font-medium text-warning-600">
+                        {acctTotal.status === "partial" ? "Valued holdings only: " : ""}
+                        {acctTotal.unvaluedCount} not valued in {reportingCurrency}
+                      </div>
+                    )}
                     <div className="text-2xs text-ink-500 mb-2">{a.baseCurrency} · {a.country ?? "—"}</div>
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <Button
@@ -207,6 +215,8 @@ function Inner() {
           <HoldingDetail
             key={active.id}
             holding={active}
+            valued={holdings.find((h) => h.id === active.id)}
+            reportingCurrency={reportingCurrency}
             pendingCount={pending.filter((p) => p.holding.id !== active.id).length}
             onNext={() => {
               const next = pending.find((p) => p.holding.id !== active.id);
@@ -271,12 +281,17 @@ const VERIFICATION: Record<
 
 function HoldingDetail({
   holding,
+  valued,
+  reportingCurrency,
   pendingCount,
   onNext,
   onSave,
   onRemove,
 }: {
   holding: Holding;
+  /** The same holding valued against the current FX rates (display only, never saved). */
+  valued?: NormalizedHolding;
+  reportingCurrency: string;
   pendingCount: number;
   onNext: () => void;
   onSave: (patch: Partial<Holding>) => void;
@@ -347,7 +362,14 @@ function HoldingDetail({
         <Stat label="Quantity" value={holding.quantity != null ? holding.quantity.toLocaleString() : "—"} />
         <Stat label="Price" value={holding.price != null ? formatCurrency(holding.price, holding.currency) : "—"} />
         <Stat label="Native value" value={formatCurrency(holding.nativeMarketValue, holding.currency)} />
-        <Stat label="Reporting value" value={formatCurrency(holding.reportingMarketValue ?? holding.nativeMarketValue, "USD")} />
+        <Stat
+          label="Reporting value"
+          value={
+            valued?.reportingMarketValue != null
+              ? formatCurrency(valued.reportingMarketValue, reportingCurrency)
+              : `Not valued in ${reportingCurrency} (no ${valued?.valuation.currency ?? holding.currency}/${reportingCurrency} rate)`
+          }
+        />
         <Stat label="Cost basis" value={holding.costBasis != null ? formatCurrency(holding.costBasis, holding.currency) : "—"} />
         <Stat label="Liquidity" value={holding.liquidity ?? "—"} />
         <Stat label="Valuation date" value={formatDate(holding.valuationDate)} />

@@ -1,7 +1,8 @@
 import type { DataTaskKind, Holding } from "@/domain/types";
+import type { HoldingValuation } from "./normalizationEngine";
 import { isStale } from "@/utils/dates";
 
-// "Data to complete": the three gaps in imported data an advisor can act on,
+// "Data to complete": the gaps in imported data an advisor can act on,
 // worked out from each holding's own fields (not its stored data-quality
 // notes, which are only computed for some holdings and go stale).
 
@@ -36,13 +37,16 @@ export interface DataTask {
   doneIds: string[];
 }
 
-export function dataTasks(holdings: Holding[]): DataTask[] {
+export function dataTasks(holdings: (Holding & { valuation?: HoldingValuation })[]): DataTask[] {
   const tasks: Record<DataTaskKind, DataTask> = {
+    // First: an unvalued holding is left out of every total.
+    missing_fx_rate: { kind: "missing_fx_rate", openIds: [], doneIds: [] },
     balance_only: { kind: "balance_only", openIds: [], doneIds: [] },
     missing_identifier: { kind: "missing_identifier", openIds: [], doneIds: [] },
     stale_value: { kind: "stale_value", openIds: [], doneIds: [] },
   };
   for (const h of holdings) {
+    if (h.valuation?.status === "unvalued") tasks.missing_fx_rate.openIds.push(h.id);
     if (isBalanceOnly(h)) (h.dataAcks?.keepAsBalance ? tasks.balance_only.doneIds : tasks.balance_only.openIds).push(h.id);
     if (needsIdentifier(h)) tasks.missing_identifier.openIds.push(h.id);
     if (isStaleValue(h)) {

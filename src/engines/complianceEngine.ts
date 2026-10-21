@@ -9,6 +9,8 @@ import type {
   FxRate,
 } from "@/domain/types";
 import { applyRecommendationsToProposed, cashShortfallsOf, type CashShortfall, type UnresolvedConversion } from "./proposalEngine";
+import { normalizeHoldings } from "./normalizationEngine";
+import { missingPairs, valuationSummary, type ValuationSummary } from "./valuationTotals";
 
 export interface ReadinessInputs {
   client: ClientProfile;
@@ -26,6 +28,8 @@ export interface ReadinessInputs {
   cashShortfalls?: CashShortfall[];
   // Approved recommendations that couldn't be applied for lack of an FX rate.
   unresolvedConversions?: UnresolvedConversion[];
+  // Holdings that couldn't be valued in the reporting currency.
+  valuation?: ValuationSummary;
 }
 
 export function evaluateReadiness(inp: ReadinessInputs): ComplianceCheck[] {
@@ -54,6 +58,16 @@ export function evaluateReadiness(inp: ReadinessInputs): ComplianceCheck[] {
     code: "output_currency",
     label: "Output currency selected",
     passed: !!inp.client.proposalOutputCurrency,
+  });
+  const valuation = inp.valuation;
+  checks.push({
+    code: "holdings_valued",
+    label: "All holdings valued in the reporting currency",
+    passed: !valuation || valuation.complete,
+    detail:
+      valuation && !valuation.complete
+        ? `${valuation.net.unvaluedCount} not valued: ${missingPairs(valuation.net, inp.client.proposalOutputCurrency).join(", ")} rate missing`
+        : undefined,
   });
   checks.push({
     code: "unverified_holdings",
@@ -153,14 +167,20 @@ export interface WorkspaceReadinessInputs {
 }
 
 export function evaluateWorkspaceReadiness(ws: WorkspaceReadinessInputs): ComplianceCheck[] {
-  const pending = holdingsNeedingReview(ws.holdings);
-  const approved = ws.recommendations.filter((r) => r.approvedByAdvisor);
   const fx = { reportingCurrency: ws.client.proposalOutputCurrency, rates: ws.fxRates };
-  const proposed = applyRecommendationsToProposed(ws.holdings, approved, ws.accounts, fx);
+  // Value the holdings here, from their amounts and the current rates, rather
+  // than trusting any reporting value they arrive with: the UI, the PDF route
+  // and the Copilot then all gate on the same valuation.
+  const holdings = normalizeHoldings(ws.holdings, ws.fxRates, fx.reportingCurrency);
+  const pending = holdingsNeedingReview(holdings);
+  const approved = ws.recommendations.filter((r) => r.approvedByAdvisor);
+  const proposed = applyRecommendationsToProposed(holdings, approved, ws.accounts, fx);
   return evaluateReadiness({
     cashShortfalls: cashShortfallsOf(proposed.holdings, ws.accounts, fx),
     unresolvedConversions: proposed.unresolved,
+    valuation: valuationSummary(holdings),
     ...ws,
+    holdings,
     disclosures: ws.disclosures.filter((d) => d.required),
     unverifiedHoldingsCount: pending.length,
     staleValuationsCount: pending.filter((p) => p.reasons.includes("stale")).length,

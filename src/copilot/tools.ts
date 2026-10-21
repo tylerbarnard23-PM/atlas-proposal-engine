@@ -3,7 +3,8 @@ import { z } from "zod";
 import type { Recommendation, RecommendationType } from "@/domain/types";
 import { normalizeHoldings, type NormalizedHolding } from "@/engines/normalizationEngine";
 import { generateInsights, summarizeAllocation } from "@/engines/insightEngine";
-import { applyRecToValue, netWorth } from "@/engines/proposalEngine";
+import { applyRecToValue } from "@/engines/proposalEngine";
+import { missingPairs, reportingValue, valuationSummary, valuationTotal, type ValuedTotal } from "@/engines/valuationTotals";
 import { evaluateWorkspaceReadiness, readinessOk } from "@/engines/complianceEngine";
 import { safeId, todayIso } from "@/utils/formatting";
 import type { CopilotSnapshot } from "./snapshot";
@@ -35,8 +36,15 @@ export class CopilotContext {
     this.holdings = normalizeHoldings(snapshot.holdings, snapshot.fxRates, this.reportingCurrency);
   }
 
-  get investibleTotal(): number {
-    return this.holdings.filter((h) => !h.isLiability).reduce((s, h) => s + (h.reportingMarketValue || 0), 0);
+  // Investible assets, valued in the reporting currency. Its value is only a
+  // usable denominator when the status is "complete".
+  get investible(): ValuedTotal {
+    return valuationTotal(this.holdings.filter((h) => !h.isLiability));
+  }
+
+  /** Every holding valued: portfolio weights and allocation-changing drafts are allowed. */
+  get valuationComplete(): boolean {
+    return this.holdings.every((h) => reportingValue(h) != null);
   }
 
   holding(id: string): NormalizedHolding | undefined {
@@ -48,8 +56,37 @@ export class CopilotContext {
   }
 }
 
-const round = (n: number) => Math.round(n);
+const round = (n: number | null) => (n == null ? null : Math.round(n));
 const pct = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 1000) / 10 : 0);
+// A weight needs a known part and a complete denominator; otherwise null.
+const weight = (ctx: CopilotContext, part: number | null) => {
+  const total = ctx.investible;
+  return part == null || !ctx.valuationComplete || total.value == null ? null : pct(part, total.value);
+};
+
+// What the model is told about valuation, so it can't present a partial
+// figure as complete.
+function valuationNote(ctx: CopilotContext) {
+  const unvalued = ctx.holdings.filter((h) => reportingValue(h) == null);
+  const s = valuationSummary(ctx.holdings);
+  return {
+    complete: s.complete,
+    holdings_valued: s.holdingsValued,
+    holdings_total: s.holdingsTotal,
+    unvalued: unvalued.map((h) => ({
+      holding_id: h.id,
+      name: h.assetName,
+      is_liability: !!h.isLiability,
+      currency: h.valuation.currency,
+      native_value: round(h.valuation.amount),
+      reason: h.valuation.status === "unvalued" ? h.valuation.reason : null,
+    })),
+    missing_rates: missingPairs(s.net, ctx.reportingCurrency),
+    note: s.complete
+      ? undefined
+      : "Valuation is incomplete: totals cover valued holdings only, portfolio weights are null, and allocation-changing drafts are refused until the missing rates are added in Market Data.",
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Tool implementations
@@ -57,11 +94,12 @@ const pct = (part: number, whole: number) => (whole > 0 ? Math.round((part / who
 
 function getPortfolioOverview(ctx: CopilotContext) {
   const { client } = ctx.snapshot;
-  const nw = netWorth(ctx.holdings);
-  const total = ctx.investibleTotal;
-  const top = [...ctx.holdings]
-    .filter((h) => !h.isLiability)
-    .sort((a, b) => (b.reportingMarketValue || 0) - (a.reportingMarketValue || 0))
+  const nw = valuationSummary(ctx.holdings);
+  const complete = ctx.valuationComplete;
+  // Largest valued holdings; unvalued ones are listed under `valuation`.
+  const top = ctx.holdings
+    .filter((h) => !h.isLiability && reportingValue(h) != null)
+    .sort((a, b) => reportingValue(b)! - reportingValue(a)!)
     .slice(0, 10)
     .map((h) => ({
       holding_id: h.id,
@@ -69,8 +107,8 @@ function getPortfolioOverview(ctx: CopilotContext) {
       account: ctx.accountName(h.accountId),
       asset_class: h.assetClass,
       currency: h.currency,
-      value: round(h.reportingMarketValue),
-      pct_of_investible: pct(h.reportingMarketValue, total),
+      value: round(reportingValue(h)),
+      pct_of_investible: weight(ctx, reportingValue(h)),
     }));
   return {
     reporting_currency: ctx.reportingCurrency,
@@ -85,17 +123,25 @@ function getPortfolioOverview(ctx: CopilotContext) {
       country_of_residence: client.countryOfResidence,
       restricted_securities: client.restrictedSecurities ?? [],
     },
-    net_worth: { gross_assets: round(nw.gross), liabilities: round(nw.liabilities), net: round(nw.net) },
+    // status: complete | partial (valued holdings only) | unavailable (null values).
+    net_worth: {
+      status: nw.net.status,
+      gross_assets: round(nw.assets.value),
+      liabilities: nw.liabilities.value == null ? null : round(Math.abs(nw.liabilities.value)),
+      net: round(nw.net.value),
+    },
+    valuation: valuationNote(ctx),
     counts: { accounts: ctx.snapshot.accounts.length, holdings: ctx.holdings.length },
+    // Valued holdings only; percentages are null while valuation is incomplete.
     allocation_by_asset_class: summarizeAllocation(ctx.holdings, (h) => h.assetClass).map((r) => ({
       label: r.label,
       value: round(r.value),
-      pct: Math.round(r.pct * 10) / 10,
+      pct: complete ? Math.round(r.pct * 10) / 10 : null,
     })),
     allocation_by_currency: summarizeAllocation(ctx.holdings, (h) => h.currency).map((r) => ({
       label: r.label,
       value: round(r.value),
-      pct: Math.round(r.pct * 10) / 10,
+      pct: complete ? Math.round(r.pct * 10) / 10 : null,
     })),
     top_holdings: top,
     existing_recommendations: ctx.snapshot.recommendations.map((r) => ({
@@ -145,8 +191,9 @@ function getHolding(ctx: CopilotContext, input: z.infer<typeof GetHoldingInput>)
     country: h.country ?? null,
     currency: h.currency,
     native_value: round(h.nativeMarketValue),
-    reporting_value: round(h.reportingMarketValue),
-    pct_of_investible: h.isLiability ? null : pct(h.reportingMarketValue, ctx.investibleTotal),
+    reporting_value: round(reportingValue(h)),
+    valuation_status: h.valuation.status,
+    pct_of_investible: h.isLiability ? null : weight(ctx, reportingValue(h)),
     cost_basis: h.costBasis ?? null,
     expense_ratio_pct: h.expenseRatioPct ?? null,
     liquidity: h.liquidity ?? null,
@@ -175,25 +222,40 @@ function simulate(ctx: CopilotContext, input: z.infer<typeof SimulateInput>) {
     actionAmountUnit: input.action_amount_unit,
     proposedValue: input.proposed_value,
   } as Recommendation;
-  const before = h.reportingMarketValue;
+  const before = reportingValue(h);
+  if (before == null) {
+    return {
+      holding: h.assetName,
+      currency: ctx.reportingCurrency,
+      before: null,
+      after: null,
+      delta: null,
+      pct_of_investible_before: null,
+      pct_of_investible_after: null,
+      cash_effect_in_account: null,
+      note: `This holding has no ${h.valuation.currency}/${ctx.reportingCurrency} exchange rate, so it can't be valued or simulated.`,
+    };
+  }
   const after = applyRecToValue(before, rec, !!h.isLiability);
   const delta = after - before;
-  const total = ctx.investibleTotal;
   // Sales credit cash in the same account and purchases debit it, so the
-  // investible total is unchanged; only the position's weight moves.
+  // investible total is unchanged; only the position's weight moves. Weights
+  // are null while valuation is incomplete: the denominator is unknown.
   return {
     holding: h.assetName,
     currency: ctx.reportingCurrency,
     before: round(before),
     after: round(after),
     delta: round(delta),
-    pct_of_investible_before: h.isLiability ? null : pct(before, total),
-    pct_of_investible_after: h.isLiability ? null : pct(after, total),
+    pct_of_investible_before: h.isLiability ? null : weight(ctx, before),
+    pct_of_investible_after: h.isLiability ? null : weight(ctx, after),
     cash_effect_in_account: h.assetClass === "cash" ? 0 : round(-delta),
     note:
       Math.abs(delta) < 1 && input.proposed_value == null
         ? "No allocation change: this type is allocation-neutral or needs an action_amount / proposed_value."
-        : undefined,
+        : ctx.valuationComplete
+        ? undefined
+        : "Valuation is incomplete, so weights are not shown.",
   };
 }
 
@@ -232,6 +294,21 @@ function draftRecommendation(ctx: CopilotContext, input: z.infer<typeof DraftInp
   }
   if (input.holding_id && !ctx.holding(input.holding_id)) {
     throw new ToolInputError(`No holding with id ${input.holding_id}`);
+  }
+  // While any holding is unvalued, a trade can't be sized against the
+  // portfolio honestly, so drafts that would change the allocation are
+  // refused here, in code. Advisory drafts (no holding, or no value change)
+  // still go through.
+  if (input.holding_id && !ctx.valuationComplete) {
+    const h = ctx.holding(input.holding_id)!;
+    const before = reportingValue(h);
+    const rec = { type: input.type, actionAmount: input.action_amount, actionAmountUnit: input.action_amount_unit, proposedValue: input.proposed_value } as Recommendation;
+    const changes = before == null || input.proposed_value != null || Math.abs(applyRecToValue(before, rec, !!h.isLiability) - before) >= 1;
+    if (changes) {
+      throw new ToolInputError(
+        `Valuation is incomplete (${missingPairs(valuationSummary(ctx.holdings).net, ctx.reportingCurrency).join(", ")} rate missing), so allocation-changing drafts are paused. Draft an advisory recommendation instead, or ask the advisor to add the missing rate in Market Data.`
+      );
+    }
   }
   const now = todayIso();
   const rec: Recommendation = {
@@ -345,7 +422,7 @@ const TOOLS: Record<string, ToolSpec> = {
   draft_recommendation: {
     definition: {
       name: "draft_recommendation",
-      description: `Save a recommendation draft for the advisor to review. Drafts are always unapproved and excluded from the client PDF until the advisor approves them. At most ${MAX_DRAFTS_PER_RUN} per request. Simulate first so the rationale cites engine numbers.`,
+      description: `Save a recommendation draft for the advisor to review. Drafts are always unapproved and excluded from the client PDF until the advisor approves them. At most ${MAX_DRAFTS_PER_RUN} per request. Simulate first so the rationale cites engine numbers. While any holding can't be valued (see valuation in the overview), drafts that would change the allocation are refused; advisory drafts are still accepted.`,
       input_schema: {
         type: "object",
         properties: {

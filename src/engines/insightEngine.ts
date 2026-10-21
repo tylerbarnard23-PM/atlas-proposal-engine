@@ -1,5 +1,6 @@
 import type { Insight, Holding } from "@/domain/types";
 import type { NormalizedHolding } from "./normalizationEngine";
+import { reportingValue, valuationTotal } from "./valuationTotals";
 import { groupBy, sumBy } from "@/utils/numbers";
 import { safeId, todayIso } from "@/utils/formatting";
 import { CODES_COVERED_BY_TASKS, dataTasks, isBalanceOnly, MARKET_STALE_DAYS } from "./dataTasks";
@@ -10,6 +11,8 @@ const TASK_TITLE: Record<DataTaskKind, (n: number) => string> = {
   balance_only: (n) => `${plural(n, "account has", "accounts have")} a total but no holdings inside`,
   missing_identifier: (n) => `${plural(n, "security has", "securities have")} no ticker or CUSIP`,
   stale_value: (n) => `${plural(n, "value is", "values are")} out of date`,
+  // The reporting currency is filled in by generateInsights.
+  missing_fx_rate: (n) => `${plural(n, "holding can't", "holdings can't")} be valued in {ccy}`,
 };
 const TASK_WHY: Record<DataTaskKind, string> = {
   balance_only:
@@ -17,6 +20,8 @@ const TASK_WHY: Record<DataTaskKind, string> = {
   missing_identifier:
     "Without a ticker or CUSIP the price can't be refreshed from market data. Add one, or dismiss if the holding has none.",
   stale_value: `Market-priced values older than ${MARKET_STALE_DAYS} days, and property, business, insurance or private assets older than 12 months, may no longer be accurate. Update the value, refresh the price, or keep the date: the proposal shows each value's as-of date.`,
+  missing_fx_rate:
+    "There's no exchange rate from their currency to {ccy}, so they're left out of every total and chart. Until they're valued, portfolio-wide checks (concentration, currency, country, liquidity and cash) are paused. Add the rate in Market Data.",
 };
 
 export interface InsightInputs {
@@ -34,17 +39,30 @@ const CASH_DRAG_PCT = 12;
 export function generateInsights({ holdings, reportingCurrency }: InsightInputs): Insight[] {
   const out: Insight[] = [];
   const investible = holdings.filter((h) => !h.isLiability);
-  const total = sumBy(investible, (h) => h.reportingMarketValue || 0);
-  if (total <= 0 || investible.length === 0) return out;
   const now = todayIso();
+  // Portfolio-wide conclusions (concentration, currency, country, liquidity,
+  // cash drag) need every holding's value: with a holding missing, the
+  // denominator is unknown and a percentage could justify a trade it
+  // shouldn't. They wait until valuation is complete; individual holding
+  // facts and data-quality findings don't.
+  // Complete means every holding, liabilities included: an unvalued loan
+  // leaves the household picture unknown just as an unvalued asset does.
+  // Denominators stay asset-based once valuation is complete.
+  const valued = valuationTotal(investible);
+  const total = valued.value ?? 0;
+  const allValued = holdings.every((h) => reportingValue(h) != null);
+  const portfolioWide = allValued && valued.status === "complete" && total > 0;
+  // Inside portfolio-wide checks every holding has a reporting value.
+  const rv = (h: NormalizedHolding) => reportingValue(h)!;
 
+  if (portfolioWide) {
   // Concentration. Only positions with a single issuer or a single asset
   // behind them: not cash, not diversified funds, not a balance-only account
   // whose contents are unknown, not the client's own home.
   for (const h of investible) {
     const kind = concentrationKind(h);
     if (!kind) continue;
-    const v = h.reportingMarketValue || 0;
+    const v = rv(h);
     const pct = (v / total) * 100;
     if (pct >= CONCENTRATION_PCT) {
       out.push({
@@ -71,7 +89,7 @@ export function generateInsights({ holdings, reportingCurrency }: InsightInputs)
   const byCurrency = groupBy(investible, (h) => h.currency);
   for (const [cur, items] of Object.entries(byCurrency)) {
     if (cur === reportingCurrency) continue;
-    const v = sumBy(items, (h) => h.reportingMarketValue || 0);
+    const v = sumBy(items, rv);
     const pct = (v / total) * 100;
     if (pct >= SINGLE_CURRENCY_NON_BASE_PCT) {
       out.push({
@@ -93,7 +111,7 @@ export function generateInsights({ holdings, reportingCurrency }: InsightInputs)
   const byCountry = groupBy(investible, (h) => h.country || "—");
   for (const [country, items] of Object.entries(byCountry)) {
     if (country === "US" || country === "—") continue;
-    const v = sumBy(items, (h) => h.reportingMarketValue || 0);
+    const v = sumBy(items, rv);
     const pct = (v / total) * 100;
     if (pct >= SINGLE_COUNTRY_NON_BASE_PCT) {
       out.push({
@@ -109,7 +127,7 @@ export function generateInsights({ holdings, reportingCurrency }: InsightInputs)
 
   // Illiquid exposure
   const illiquid = investible.filter((h) => h.liquidity === "illiquid" || h.liquidity === "lockup");
-  const illiquidV = sumBy(illiquid, (h) => h.reportingMarketValue || 0);
+  const illiquidV = sumBy(illiquid, rv);
   if (total > 0 && (illiquidV / total) * 100 >= ILLIQUID_PCT) {
     out.push({
       id: safeId("insight"),
@@ -124,7 +142,7 @@ export function generateInsights({ holdings, reportingCurrency }: InsightInputs)
 
   // Cash drag
   const cash = investible.filter((h) => h.assetClass === "cash");
-  const cashV = sumBy(cash, (h) => h.reportingMarketValue || 0);
+  const cashV = sumBy(cash, rv);
   if (total > 0 && (cashV / total) * 100 >= CASH_DRAG_PCT) {
     out.push({
       id: safeId("insight"),
@@ -136,6 +154,8 @@ export function generateInsights({ holdings, reportingCurrency }: InsightInputs)
       generatedAt: now,
     });
   }
+
+  } // end portfolio-wide
 
   // High fee funds
   const highFee = investible.filter((h) => (h.expenseRatioPct ?? 0) * 100 >= HIGH_FEE_BPS);
@@ -166,14 +186,15 @@ export function generateInsights({ holdings, reportingCurrency }: InsightInputs)
   }
 
   // Data to complete: gaps the advisor can fix in place (see dataTasks).
-  for (const t of dataTasks(investible)) {
+  // Every holding: a liability with no rate is as much a gap as an asset.
+  for (const t of dataTasks(holdings)) {
     const n = t.openIds.length;
     out.push({
       id: safeId("insight"),
       category: "data_quality",
       severity: "warning",
-      title: TASK_TITLE[t.kind](n),
-      detail: TASK_WHY[t.kind],
+      title: TASK_TITLE[t.kind](n).replace("{ccy}", reportingCurrency),
+      detail: TASK_WHY[t.kind].replace("{ccy}", reportingCurrency),
       relatedHoldingIds: t.openIds,
       task: { kind: t.kind, openIds: t.openIds, doneIds: t.doneIds },
       generatedAt: now,
@@ -218,10 +239,13 @@ export function summarizeAllocation(
   group: (h: Holding) => string
 ): { label: string; value: number; pct: number }[] {
   const totals = new Map<string, number>();
+  // Valued holdings only: an unvalued one is neither a slice nor a zero.
+  // Callers label the result as the valued subset when valuation is partial.
   for (const h of holdings) {
-    if (h.isLiability) continue;
+    const v = reportingValue(h);
+    if (h.isLiability || v == null) continue;
     const key = group(h);
-    totals.set(key, (totals.get(key) ?? 0) + (h.reportingMarketValue ?? h.nativeMarketValue));
+    totals.set(key, (totals.get(key) ?? 0) + v);
   }
   const total = Array.from(totals.values()).reduce((a, b) => a + b, 0);
   return Array.from(totals.entries())

@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { ACCOUNT_TYPE_LABELS } from "@/domain/accountTaxonomy";
 import type { Account, Holding, SourceDocument } from "@/domain/types";
 import type { NormalizedHolding } from "@/engines/normalizationEngine";
+import { formatTotal, valuationTotal } from "@/engines/valuationTotals";
 import { formatCurrency, formatDate, todayIso } from "@/utils/formatting";
 import { cn } from "@/utils/cn";
 
@@ -24,8 +25,11 @@ type Flag = { label: string; blocksBulk: boolean; title?: string };
 // Flags are worked out from the holding's own numbers, not its stored
 // data-quality list: that list goes stale after a correction, and one of its
 // codes also just means "not reviewed yet", which every imported row is.
-function flagsFor(h: Holding): Flag[] {
+function flagsFor(h: Holding & { valuation?: NormalizedHolding["valuation"] }): Flag[] {
   const out: Flag[] = [];
+  // The native value can still be confirmed; it just can't be converted.
+  if (h.valuation?.status === "unvalued")
+    out.push({ label: "No FX rate", blocksBulk: false, title: `No ${h.valuation.currency}/${h.valuation.reportingCurrency} exchange rate: left out of totals until one is added in Market Data.` });
   if (h.priceFreshness === "stale") out.push({ label: "Price out of date", blocksBulk: true });
   if (h.valuationSource.kind === "mock") out.push({ label: "Placeholder price", blocksBulk: true });
   if (!h.nativeMarketValue) out.push({ label: "No value", blocksBulk: true, title: "The source gave no value for this holding." });
@@ -149,9 +153,15 @@ export function ValueReviewTable({
   }
 
   function bulkConfirm(ids: string[], label: string) {
-    const total = holdings.filter((h) => ids.includes(h.id)).reduce((s, h) => s + h.reportingMarketValue, 0);
+    const t = valuationTotal(holdings.filter((h) => ids.includes(h.id)));
+    const amount =
+      t.status === "complete"
+        ? `${formatTotal(t, reportingCurrency, { compact: true })} in total`
+        : t.status === "partial"
+        ? `${formatTotal(t, reportingCurrency, { compact: true })} for the valued ones; ${t.unvaluedCount} not valued in ${reportingCurrency}`
+        : `not valued in ${reportingCurrency}`;
     const ok = window.confirm(
-      `Confirm ${ids.length} ${label} (${formatCurrency(total, reportingCurrency, { compact: true })} in total) as shown?\n\n` +
+      `Confirm ${ids.length} ${label} (${amount}) as shown?\n\n` +
         "Only do this if you've compared them with their source documents."
     );
     if (!ok) return;
@@ -310,7 +320,7 @@ export function ValueReviewTable({
             const done = rows.filter(isConfirmed).length;
             const groupClean = rows.filter((h) => !isConfirmed(h) && isClean(h)).map((h) => h.id);
             const isCollapsed = collapsed.has(id);
-            const subtotal = rows.reduce((s, h) => s + h.reportingMarketValue, 0);
+            const subtotal = valuationTotal(rows);
             if (hideConfirmed && shown.length === 0) return null;
             // An account holding just itself (a plan's balance line) needs no
             // header: one row, with the account type underneath.
@@ -343,7 +353,8 @@ export function ValueReviewTable({
                   </button>
                   {account && <span className="text-2xs text-ink-500">{ACCOUNT_TYPE_LABELS[account.type]}</span>}
                   <span className="text-2xs text-ink-500 tabular">
-                    {rows.length} holding{rows.length === 1 ? "" : "s"} · {formatCurrency(subtotal, reportingCurrency, { compact: true })}
+                    {rows.length} holding{rows.length === 1 ? "" : "s"} · {formatTotal(subtotal, reportingCurrency, { compact: true })}
+                    {subtotal.status === "partial" && ` (valued only; ${subtotal.unvaluedCount} not valued)`}
                   </span>
                   <span className={cn("text-2xs font-medium tabular", done === rows.length ? "text-positive-600" : "text-ink-600")}>
                     {done === rows.length ? "✓ all confirmed" : `${done} of ${rows.length} confirmed`}
