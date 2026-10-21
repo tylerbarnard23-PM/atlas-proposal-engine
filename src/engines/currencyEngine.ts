@@ -5,6 +5,8 @@ export interface FxResolveResult {
   asOf: string;
   source: FxRate["source"];
   isStale?: boolean;
+  /** How the rate was found: a stored pair, its inverse, or two pairs via USD. */
+  path: "same" | "direct" | "inverse" | "cross";
 }
 
 // Only a finite, positive rate is a usable rate. Zero, negative, NaN or
@@ -17,14 +19,14 @@ export function resolveFxRate(
   quote: CurrencyCode
 ): FxResolveResult | null {
   if (base === quote) {
-    return { rate: 1, asOf: new Date().toISOString(), source: "Manual" };
+    return { rate: 1, asOf: new Date().toISOString(), source: "Manual", path: "same" };
   }
   const rates = allRates.filter(usable);
   const direct = rates.find((r) => r.base === base && r.quote === quote);
-  if (direct) return { rate: direct.rate, asOf: direct.asOf, source: direct.source, isStale: direct.isStale };
+  if (direct) return { rate: direct.rate, asOf: direct.asOf, source: direct.source, isStale: direct.isStale, path: "direct" };
   const inverse = rates.find((r) => r.base === quote && r.quote === base);
   if (inverse && inverse.rate > 0) {
-    return { rate: 1 / inverse.rate, asOf: inverse.asOf, source: inverse.source, isStale: inverse.isStale };
+    return { rate: 1 / inverse.rate, asOf: inverse.asOf, source: inverse.source, isStale: inverse.isStale, path: "inverse" };
   }
   // Try via USD as bridge
   const baseToUsd = rates.find((r) => r.base === base && r.quote === "USD");
@@ -34,6 +36,7 @@ export function resolveFxRate(
       rate: baseToUsd.rate * usdToQuote.rate,
       asOf: baseToUsd.asOf < usdToQuote.asOf ? baseToUsd.asOf : usdToQuote.asOf,
       source: baseToUsd.source,
+      path: "cross",
     };
   }
   const baseToUsd2 = rates.find((r) => r.base === base && r.quote === "USD");
@@ -41,8 +44,10 @@ export function resolveFxRate(
   if (baseToUsd2 && quoteToUsd && quoteToUsd.rate > 0) {
     return {
       rate: baseToUsd2.rate / quoteToUsd.rate,
-      asOf: baseToUsd2.asOf,
+      // A cross rate is only as current as the older of its two legs.
+      asOf: baseToUsd2.asOf < quoteToUsd.asOf ? baseToUsd2.asOf : quoteToUsd.asOf,
       source: baseToUsd2.source,
+      path: "cross",
     };
   }
   return null;

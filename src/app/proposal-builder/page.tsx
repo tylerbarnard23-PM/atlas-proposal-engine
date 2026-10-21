@@ -125,8 +125,8 @@ function Inner() {
           <Card>
             <CardHeader><CardTitle>Output</CardTitle></CardHeader>
             <CardBody className="space-y-2 text-[13px]">
-              <div className="flex justify-between"><span className="text-ink-500">Currency</span><span>{proposal.outputCurrency}</span></div>
-              <div className="flex justify-between"><span className="text-ink-500">Country</span><span>{proposal.outputCountry}</span></div>
+              <div className="flex justify-between"><span className="text-ink-500">Currency</span><span>{client.proposalOutputCurrency}</span></div>
+              <div className="flex justify-between"><span className="text-ink-500">Country</span><span>{client.reportingCountry}</span></div>
               <div className="flex justify-between"><span className="text-ink-500">Status</span><span className="capitalize">{proposal.approvalStatus.replace("_", " ")}</span></div>
             </CardBody>
           </Card>

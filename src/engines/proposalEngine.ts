@@ -2,6 +2,7 @@ import type { Account, CurrencyCode, FxRate, Holding, Proposal, ProposalSection,
 import { sumBy } from "@/utils/numbers";
 import { resolveFxRate } from "./currencyEngine";
 import type { HoldingValuation } from "./normalizationEngine";
+import { amountsInReporting, type ReportingAmounts } from "./recommendationAmounts";
 
 export const DEFAULT_PROPOSAL_SECTIONS: ProposalSection[] = [
   { key: "executive_summary", label: "Executive Summary", enabled: true, required: true },
@@ -29,11 +30,13 @@ export const DEFAULT_PROPOSAL_SECTIONS: ProposalSection[] = [
 ];
 
 // Compute the post-rec value for a single holding given its current value,
-// the recommendation, and whether the holding is a liability. Pure function:
-// no cash flow side-effects, no mutation. Used by both the engine
+// the recommendation's amounts, and whether the holding is a liability. Pure
+// function: no cash flow side-effects, no mutation. Used by both the engine
 // (applyRecommendationsToProposed) and the UI (per-rec effect summary on
-// recommendation cards) so the two stay in sync.
-export function applyRecToValue(value: number, rec: Recommendation, isLiability: boolean): number {
+// recommendation cards) so the two stay in sync. The value and the amounts
+// are in the reporting currency: amounts come from amountsInReporting, the
+// one place a recommendation's own currency is converted.
+export function applyRecToValue(value: number, rec: ReportingAmounts, isLiability: boolean): number {
   if (rec.proposedValue != null) return rec.proposedValue;
 
   // Resolve the effective dollar magnitude, honoring the % vs. $ unit.
@@ -83,9 +86,11 @@ export function applyRecToValue(value: number, rec: Recommendation, isLiability:
 // - Holding.nativeMarketValue is in Holding.currency.
 // - Holding.reportingMarketValue is in the proposal's reporting currency
 //   (fx.reportingCurrency), as produced by normalizeHoldings.
-// - Recommendation.actionAmount (unit "amount") and proposedValue are in the
-//   reporting currency; a "percent" amount is a share of the holding's value.
-//   Recommendation.currency is descriptive and not used by this engine.
+// - Recommendation.actionAmount (unit "amount") and proposedValue are in
+//   Recommendation.currency and converted into the reporting currency once,
+//   by amountsInReporting; a "percent" amount is a share of the holding's
+//   value. A recommendation whose amounts have no rate is left unapplied
+//   and reported in `unresolved`.
 // - Cash offsets are computed in the reporting currency per account, then
 //   converted into the native currency of the account's cash line: its
 //   existing cash holding, else a new line in the account's base currency.
@@ -163,9 +168,21 @@ export function applyRecommendationsToProposed(
   fx: FxContext
 ): ProposedPortfolio {
   const accountById = new Map(accounts.map((a) => [a.id, a] as const));
+  const unresolved: UnresolvedConversion[] = [];
+  // Each recommendation's amounts, converted into the reporting currency once.
+  const amountsById = new Map<string, ReportingAmounts>();
   const byHolding = new Map<string, Recommendation[]>();
   for (const rec of approvedRecommendations) {
     if (!rec.relatedHoldingId) continue;
+    const h = current.find((x) => x.id === rec.relatedHoldingId);
+    const converted = amountsInReporting(rec, fx);
+    if (!converted.ok) {
+      if (h) {
+        unresolved.push({ recommendationId: rec.id, holdingId: h.id, accountId: h.accountId, currency: converted.currency, reportingCurrency: fx.reportingCurrency, reason: converted.reason });
+      }
+      continue;
+    }
+    amountsById.set(rec.id, converted.amounts);
     const arr = byHolding.get(rec.relatedHoldingId) ?? [];
     arr.push(rec);
     byHolding.set(rec.relatedHoldingId, arr);
@@ -192,7 +209,6 @@ export function applyRecommendationsToProposed(
     return null;
   };
 
-  const unresolved: UnresolvedConversion[] = [];
   const unresolve = (recs: Recommendation[], h: Holding, currency: CurrencyCode) => {
     for (const rec of recs) {
       unresolved.push({
@@ -232,7 +248,7 @@ export function applyRecommendationsToProposed(
 
     for (const rec of recs) {
       const before = value;
-      value = applyRecToValue(value, rec, !!h.isLiability);
+      value = applyRecToValue(value, amountsById.get(rec.id)!, !!h.isLiability);
 
       // Record the cash side of this rec.
       const change = value - before;
@@ -455,8 +471,6 @@ export function proposedCashShortfalls(
 export function buildProposal(opts: {
   clientId: string;
   advisorId: string;
-  outputCurrency: string;
-  outputCountry: string;
   recommendationIds: string[];
   assumptionIds: string[];
   disclosureIds: string[];
@@ -468,8 +482,6 @@ export function buildProposal(opts: {
     clientId: opts.clientId,
     advisorId: opts.advisorId,
     title: opts.title ?? "Family Wealth Proposal",
-    outputCurrency: opts.outputCurrency,
-    outputCountry: opts.outputCountry,
     createdAt: now,
     updatedAt: now,
     approvalStatus: "draft",

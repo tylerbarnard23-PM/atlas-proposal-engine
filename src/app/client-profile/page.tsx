@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/ui/Section";
 import { ClientOnly } from "@/components/layout/ClientOnly";
 import { COUNTRIES } from "@/domain/countryConfigs";
 import { CURRENCIES } from "@/domain/currencyConfigs";
+import { hasMoneyAmounts, recommendationsInOtherCurrencies } from "@/engines/recommendationAmounts";
 
 export default function ClientProfilePage() {
   return (
@@ -23,6 +24,26 @@ function ClientProfileInner() {
   const setClient = useAtlasStore((s) => s.setClient);
   const startNewClient = useAtlasStore((s) => s.startNewClient);
   const resetSeed = useAtlasStore((s) => s.resetSeed);
+  const recommendations = useAtlasStore((s) => s.recommendations);
+  const elsewhere = recommendationsInOtherCurrencies(recommendations, client.proposalOutputCurrency);
+
+  // Recommendation amounts keep the currency they were entered in; a new
+  // output currency converts them at the workspace's rates, never relabels.
+  function changeOutputCurrency(to: string) {
+    const affected = recommendations.filter((r) => r.status !== "excluded" && hasMoneyAmounts(r) && r.currency !== to);
+    if (affected.length > 0) {
+      const currencies = [...new Set(affected.map((r) => r.currency))].join(", ");
+      const ok = confirm(
+        `Report this proposal in ${to}?
+
+${affected.length} recommendation${affected.length === 1 ? " has" : "s have"} amounts in ${currencies}. ` +
+          `They stay in ${currencies} and are converted into ${to} at the workspace's current exchange rates (each card shows the rate used). ` +
+          "Nothing is relabelled. Edit a recommendation if its amount should be different."
+      );
+      if (!ok) return;
+    }
+    setClient({ proposalOutputCurrency: to });
+  }
 
   function handleNewClient() {
     if (
@@ -117,13 +138,20 @@ function ClientProfileInner() {
                 </Select>
               </Field>
               <Field label="Output currency">
-                <Select value={client.proposalOutputCurrency} onChange={(e) => setClient({ proposalOutputCurrency: e.target.value })}>
+                <Select value={client.proposalOutputCurrency} onChange={(e) => changeOutputCurrency(e.target.value)}>
                   {CURRENCIES.map((c) => (
                     <option key={c.code} value={c.code}>
                       {c.code} — {c.name}
                     </option>
                   ))}
                 </Select>
+                {elsewhere.length > 0 && (
+                  <p className="mt-1 text-2xs text-ink-500">
+                    {elsewhere.length} recommendation{elsewhere.length === 1 ? " has" : "s have"} amounts in{" "}
+                    {[...new Set(elsewhere.map((r) => r.currency))].join(", ")}, converted into {client.proposalOutputCurrency} at current
+                    workspace rates.
+                  </p>
+                )}
               </Field>
               <Field label="Locale">
                 <Input value={client.locale} onChange={(e) => setClient({ locale: e.target.value })} />

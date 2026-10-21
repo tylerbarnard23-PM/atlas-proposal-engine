@@ -13,6 +13,7 @@ import { applyRecommendationsToProposed, cashShortfallsOf, type CashShortfall, t
 import { normalizeHoldings } from "./normalizationEngine";
 import { missingPairs, valuationSummary, type ValuationSummary } from "./valuationTotals";
 import { describeImportIssue, importIssues, type ImportIssue } from "./importCompleteness";
+import { openCurrencyReviews } from "./recommendationAmounts";
 
 export interface ReadinessInputs {
   client: ClientProfile;
@@ -102,6 +103,19 @@ export function evaluateReadiness(inp: ReadinessInputs): ComplianceCheck[] {
     code: "approved_recs",
     label: "At least one approved recommendation included in PDF",
     passed: inp.recommendations.some((r) => r.approvedByAdvisor && r.includeInPdf),
+  });
+  // Saved before amounts had their own currency (#24): the old label differs
+  // from the currency the amounts were calculated in, and the advisor hasn't
+  // said which is meant. Confirming holdings doesn't touch this.
+  const reviews = openCurrencyReviews(inp.recommendations);
+  checks.push({
+    code: "recommendation_currency",
+    label: "Recommendation currencies confirmed",
+    passed: reviews.length === 0,
+    detail:
+      reviews.length > 0
+        ? reviews.map((r) => `${r.title}: calculated in ${r.currencyReview!.calculatedIn}, saved label ${r.currencyReview!.legacyLabel}`).join("; ")
+        : undefined,
   });
   const shortfalls = inp.cashShortfalls ?? [];
   checks.push({

@@ -4,6 +4,7 @@ import type { Recommendation, RecommendationType } from "@/domain/types";
 import { normalizeHoldings, type NormalizedHolding } from "@/engines/normalizationEngine";
 import { generateInsights, summarizeAllocation } from "@/engines/insightEngine";
 import { applyRecToValue } from "@/engines/proposalEngine";
+import { amountsInReporting, describeConversion } from "@/engines/recommendationAmounts";
 import { missingPairs, reportingValue, valuationSummary, valuationTotal, type ValuedTotal } from "@/engines/valuationTotals";
 import { evaluateWorkspaceReadiness, readinessOk } from "@/engines/complianceEngine";
 import { safeId, todayIso } from "@/utils/formatting";
@@ -171,12 +172,27 @@ function getPortfolioOverview(ctx: CopilotContext) {
       pct: complete ? Math.round(r.pct * 10) / 10 : null,
     })),
     top_holdings: top,
-    existing_recommendations: ctx.snapshot.recommendations.map((r) => ({
-      title: r.title,
-      type: r.type,
-      holding_id: r.relatedHoldingId ?? null,
-      approved: r.approvedByAdvisor,
-    })),
+    // Each recommendation's amounts in its own currency and, converted once,
+    // in the reporting currency, with the rate used (null when none applies).
+    existing_recommendations: ctx.snapshot.recommendations.map((r) => {
+      const converted = amountsInReporting(r, { reportingCurrency: ctx.reportingCurrency, rates: ctx.snapshot.fxRates });
+      const percent = r.actionAmountUnit === "percent";
+      return {
+        title: r.title,
+        type: r.type,
+        holding_id: r.relatedHoldingId ?? null,
+        approved: r.approvedByAdvisor,
+        currency: r.currency,
+        action_amount: r.actionAmount ?? null,
+        action_amount_unit: r.actionAmountUnit ?? "amount",
+        proposed_value: r.proposedValue ?? null,
+        action_amount_in_reporting: converted.ok && !percent ? converted.amounts.actionAmount ?? null : null,
+        proposed_value_in_reporting: converted.ok ? converted.amounts.proposedValue ?? null : null,
+        rate_used: converted.ok && converted.conversion ? { ...converted.conversion, description: describeConversion(converted.conversion) } : null,
+        not_applied_reason: converted.ok ? null : converted.reason,
+        currency_review_open: r.currencyReview?.status === "open",
+      };
+    }),
   };
 }
 
@@ -240,15 +256,22 @@ const RecShape = {
 };
 const SimulateInput = z.object({ ...RecShape, holding_id: z.string() });
 
+// A tool call's amounts (in the reporting currency), ready to apply.
+function toolAmounts(ctx: CopilotContext, input: { type: Recommendation["type"]; action_amount?: number; action_amount_unit?: "amount" | "percent"; proposed_value?: number }) {
+  const r = amountsInReporting(
+    { type: input.type, actionAmount: input.action_amount, actionAmountUnit: input.action_amount_unit, proposedValue: input.proposed_value, currency: ctx.reportingCurrency },
+    { reportingCurrency: ctx.reportingCurrency, rates: ctx.snapshot.fxRates }
+  );
+  if (!r.ok) throw new ToolInputError(r.reason);
+  return r.amounts;
+}
+
 function simulate(ctx: CopilotContext, input: z.infer<typeof SimulateInput>) {
   const h = ctx.holding(input.holding_id);
   if (!h) throw new ToolInputError(`No holding with id ${input.holding_id}`);
-  const rec = {
-    type: input.type,
-    actionAmount: input.action_amount,
-    actionAmountUnit: input.action_amount_unit,
-    proposedValue: input.proposed_value,
-  } as Recommendation;
+  // Tool amounts are in the reporting currency, so the conversion is a no-op;
+  // it still goes through the same function as everything else.
+  const rec = toolAmounts(ctx, input);
   const before = reportingValue(h);
   if (before == null) {
     return {
@@ -332,7 +355,7 @@ function draftRecommendation(ctx: CopilotContext, input: z.infer<typeof DraftInp
   if (input.holding_id && (!ctx.valuationComplete || !ctx.importsComplete)) {
     const h = ctx.holding(input.holding_id)!;
     const before = reportingValue(h);
-    const rec = { type: input.type, actionAmount: input.action_amount, actionAmountUnit: input.action_amount_unit, proposedValue: input.proposed_value } as Recommendation;
+    const rec = toolAmounts(ctx, input);
     const changes = before == null || input.proposed_value != null || Math.abs(applyRecToValue(before, rec, !!h.isLiability) - before) >= 1;
     if (changes && !ctx.valuationComplete) {
       throw new ToolInputError(
@@ -395,10 +418,10 @@ const recProperties = {
   type: { type: "string", enum: [...REC_TYPES] },
   action_amount: {
     type: "number",
-    description: "Optional size of the action. Dollars in the reporting currency, or a percent of the position when action_amount_unit is 'percent'.",
+    description: "Optional size of the action: an amount in the reporting currency, or a percent of the position when action_amount_unit is 'percent'. Drafts are saved in the reporting currency.",
   },
   action_amount_unit: { type: "string", enum: ["amount", "percent"] },
-  proposed_value: { type: "number", description: "Optional explicit target value for the position; overrides action_amount." },
+  proposed_value: { type: "number", description: "Optional explicit target value for the position in the reporting currency (even when action_amount is a percent); overrides action_amount." },
 } as const;
 
 const TOOLS: Record<string, ToolSpec> = {

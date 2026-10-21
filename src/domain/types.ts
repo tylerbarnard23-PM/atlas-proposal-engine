@@ -418,11 +418,21 @@ export interface Recommendation {
   type: RecommendationType;
   relatedAccountId?: string;
   relatedHoldingId?: string;
+  /** Unused snapshot (only the sample sets it; nothing reads it). Not converted or displayed. */
   currentValue?: number;
+  /** Target value for the linked holding, in `currency` (monetary even when actionAmount is a percent). */
   proposedValue?: number;
+  /** In `currency` when the unit is "amount"; a share of the holding's value when "percent". */
   actionAmount?: number;
   actionAmountUnit?: "amount" | "percent";
+  /**
+   * The currency the money amounts are entered in. They're converted into the
+   * reporting currency at the workspace's current rates (see
+   * engines/recommendationAmounts); the label never changes on its own.
+   */
   currency: CurrencyCode;
+  /** Set by the v5 migration when an old label differed from the currency the amounts were calculated in. */
+  currencyReview?: CurrencyReview;
   rationale: string;
   clientBenefit?: string;
   riskTradeoff?: string;
@@ -440,6 +450,18 @@ export interface Recommendation {
   rejectedAt?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+// Saved workspaces before v5 calculated recommendation amounts in whatever
+// the reporting currency was, whatever their label said. The migration keeps
+// that calculation (calculatedIn) and records the old label as evidence only:
+// it may have been a default, so it doesn't prove the intended currency.
+export interface CurrencyReview {
+  legacyLabel: CurrencyCode;
+  calculatedIn: CurrencyCode;
+  status: "open" | "kept" | "changed";
+  migratedAt: string;
+  resolvedAt?: string;
 }
 
 /** An insight the advisor reviewed and set aside; keyed by insightKey(). */
@@ -773,8 +795,8 @@ export interface Proposal {
   clientId: string;
   advisorId: string;
   title: string;
-  outputCurrency: CurrencyCode;
-  outputCountry: CountryCode;
+  // Output currency and country come from the client (proposalOutputCurrency,
+  // reportingCountry); a proposal doesn't keep its own copy.
   createdAt: string;
   updatedAt: string;
   approvalStatus: ProposalApprovalStatus;

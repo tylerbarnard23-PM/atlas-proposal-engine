@@ -256,7 +256,7 @@ describe("the proposal PDF", () => {
         sections: DEFAULT_PROPOSAL_SECTIONS,
         disclosures: DISCLOSURE_LIBRARY,
         fxRates,
-        proposal: { id: "p", outputCurrency: "USD" } as Proposal,
+        proposal: { id: "p" } as Proposal,
         variant: "draft",
       })
     ).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
@@ -460,9 +460,9 @@ describe("the sample workspace is unchanged when every rate is present", () => {
     expect(summarizeAllocation(holdings, (h) => ASSET_CLASS_LABELS[h.assetClass] ?? "Other").map((r) => [r.label, Math.round(r.value * 100) / 100])).toEqual(baseline.allocationByClass);
     expect(generateInsights({ holdings, reportingCurrency: "USD" }).map((i) => i.title).sort()).toEqual(baseline.insightTitles);
     const readiness = evaluateWorkspaceReadiness({ sourceDocuments: [], client: SEED_CLIENT, advisor: SEED_ADVISOR, accounts: SEED_ACCOUNTS, holdings, recommendations: approved, disclosures: DISCLOSURE_LIBRARY, fxRates: SEED_FX_RATES });
-    // The checks added since (holdings_valued here, imports_complete in #29)
-    // pass; every pre-existing check is unchanged.
-    const added = ["holdings_valued", "imports_complete"];
+    // The checks added since (holdings_valued here, imports_complete in #29,
+    // recommendation_currency in #24) pass; every pre-existing check is unchanged.
+    const added = ["holdings_valued", "imports_complete", "recommendation_currency"];
     expect(readiness.filter((c) => added.includes(c.code)).every((c) => c.passed)).toBe(true);
     expect(readiness.filter((c) => !added.includes(c.code)).map((c) => [c.code, c.passed, c.detail ?? null])).toEqual(baseline.readiness);
     expect(Object.fromEntries(proposed.holdings.map((h) => [h.id, Math.round((h.reportingMarketValue ?? 0) * 100) / 100]))).toEqual(baseline.proposedReporting);
@@ -470,7 +470,7 @@ describe("the sample workspace is unchanged when every rate is present", () => {
       React.createElement(ProposalPdfTemplate, {
         client: SEED_CLIENT, advisor: SEED_ADVISOR, accounts: SEED_ACCOUNTS, holdings, recommendations: approved,
         sections: DEFAULT_PROPOSAL_SECTIONS, disclosures: DISCLOSURE_LIBRARY, fxRates: SEED_FX_RATES,
-        proposal: { id: "p", outputCurrency: "USD" } as Proposal, variant: "final",
+        proposal: { id: "p" } as Proposal, variant: "final",
       })
     );
     const text = html.replace(/<style[\s\S]*?<\/style>/g, " ").replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ");

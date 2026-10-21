@@ -40,7 +40,7 @@ function Inner() {
   const [notice, setNotice] = React.useState<{ text: string; link?: boolean } | null>(null);
   const [dismissing, setDismissing] = React.useState<string | null>(null);
   const [showDismissed, setShowDismissed] = React.useState(false);
-  const { insights } = useNormalizedHoldings();
+  const { insights, reportingCurrency } = useNormalizedHoldings();
 
   React.useEffect(() => {
     setInsights(insights);
@@ -48,7 +48,7 @@ function Inner() {
 
   function convert(i: Insight) {
     if (converted.has(insightKey(i))) return;
-    const rec = recommendationFromInsight(i);
+    const rec = recommendationFromInsight(i, reportingCurrency);
     upsertRec(rec);
     setNotice({ text: `Added a draft recommendation: ${rec.title}`, link: true });
   }

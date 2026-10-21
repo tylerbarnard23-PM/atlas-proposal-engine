@@ -26,6 +26,11 @@ export const READINESS_FIX: Record<string, { href: string; label: string; hint: 
     label: "Accounts & Assets",
     hint: "An imported document wasn't fully accounted for (its rows don't reach its stated total, or some rows couldn't be read). Confirming the imported rows doesn't fix that: import a complete copy of the document, or remove that import's holdings and enter the positions from the document by hand.",
   },
+  recommendation_currency: {
+    href: "/recommendations",
+    label: "Recommendations",
+    hint: "A recommendation saved before amounts had their own currency has an old currency label that differs from the currency its amounts were calculated in. On its card, keep the amounts as calculated, treat them as the old label's currency (converted at the shown rate), or edit them.",
+  },
   disclosures_included: { href: "/assumptions-disclosures", label: "Assumptions & Disclosures", hint: "Include the required disclosures." },
 };
 
@@ -47,6 +52,7 @@ export function readinessTodo(c: ComplianceCheck): string {
     case "holdings_valued": return c.detail ? `Value all holdings (${c.detail})` : "Value all holdings in the reporting currency";
     case "fx_available": return c.detail ? `Add exchange rates (${c.detail})` : "Add exchange rates for proposed trades";
     case "imports_complete": return c.detail ? `Account for every imported document (${c.detail})` : "Account for every imported document";
+    case "recommendation_currency": return "Confirm recommendation currencies";
     case "disclosures_included": return "Include the required disclosures";
     default: return c.label;
   }

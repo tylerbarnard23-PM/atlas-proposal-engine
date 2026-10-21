@@ -32,7 +32,7 @@ describe("converting an insight twice", () => {
 
   it("gives the same observation the same key across runs, even as the percentage moves", () => {
     expect(insightKey(insight("9.1", "insight_a"))).toBe(insightKey(insight("9.4", "insight_b")));
-    expect(recommendationFromInsight(insight("9.1", "insight_a")).sourceInsightKey).toBe("concentration:h_aapl");
+    expect(recommendationFromInsight(insight("9.1", "insight_a"), "USD").sourceInsightKey).toBe("concentration:h_aapl");
   });
 
   it("keys holding-less insights by their title without numbers", () => {
