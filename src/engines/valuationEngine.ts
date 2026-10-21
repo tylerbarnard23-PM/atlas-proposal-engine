@@ -1,7 +1,9 @@
-import type { Holding } from "@/domain/types";
+import type { CurrencyCode, Holding } from "@/domain/types";
 
 export interface ResolvedValuation {
   amount: number;
+  /** The currency `amount` is in: an approved value's own, else the holding's. */
+  currency: CurrencyCode;
   source: Holding["valuationSource"];
   fromApprovedValue: boolean;
   fromMarketData: boolean;
@@ -15,6 +17,7 @@ export function resolveValuation(holding: Holding): ResolvedValuation {
   if (holding.proposalApprovedValue) {
     return {
       amount: holding.proposalApprovedValue.amount,
+      currency: holding.proposalApprovedValue.currency,
       source: holding.proposalApprovedValue.source,
       fromApprovedValue: true,
       fromMarketData: false,
@@ -24,6 +27,7 @@ export function resolveValuation(holding: Holding): ResolvedValuation {
   if (holding.valuationSource.kind === "advisor_override") {
     return {
       amount: holding.nativeMarketValue,
+      currency: holding.currency,
       source: holding.valuationSource,
       fromApprovedValue: false,
       fromMarketData: false,
@@ -33,6 +37,7 @@ export function resolveValuation(holding: Holding): ResolvedValuation {
   if (holding.marketDataSource && holding.advisorVerification === "advisor_approved") {
     return {
       amount: holding.nativeMarketValue,
+      currency: holding.currency,
       source: holding.marketDataSource,
       fromApprovedValue: false,
       fromMarketData: true,
@@ -41,6 +46,7 @@ export function resolveValuation(holding: Holding): ResolvedValuation {
   }
   return {
     amount: holding.nativeMarketValue,
+    currency: holding.currency,
     source: holding.valuationSource,
     fromApprovedValue: false,
     fromMarketData: false,

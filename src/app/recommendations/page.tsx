@@ -16,6 +16,8 @@ import { ReasonPicker } from "@/components/ui/ReasonPicker";
 import type { Holding, Recommendation, RecommendationStatus, RecommendationType } from "@/domain/types";
 import { applyRecToValue, proposedCashShortfalls } from "@/engines/proposalEngine";
 import { useNormalizedHoldings } from "@/hooks/useNormalizedHoldings";
+import { reportingValue } from "@/engines/valuationTotals";
+import type { NormalizedHolding } from "@/engines/normalizationEngine";
 import { formatCurrency, formatDate, safeId, todayIso } from "@/utils/formatting";
 
 const TYPES: RecommendationType[] = [
@@ -43,7 +45,6 @@ export default function RecommendationsPage() {
 
 function Inner() {
   const recs = useAtlasStore((s) => s.recommendations);
-  const holdings = useAtlasStore((s) => s.holdings);
   const accounts = useAtlasStore((s) => s.accounts);
   const upsert = useAtlasStore((s) => s.upsertRecommendation);
   const fxRates = useAtlasStore((s) => s.fxRates);
@@ -84,9 +85,11 @@ function Inner() {
     setDeleted({ rec: r, index: recs.findIndex((x) => x.id === r.id) });
     remove(r.id);
   }
+  // Effects are shown in the reporting currency, from holdings valued
+  // against the current rates (the same values the proposal uses).
   const holdingsById = React.useMemo(
-    () => Object.fromEntries(holdings.map((h) => [h.id, h])),
-    [holdings]
+    () => Object.fromEntries(normalized.map((h) => [h.id, h])),
+    [normalized]
   );
 
   function newRec() {
@@ -197,7 +200,7 @@ function Inner() {
           {ordered.map((r) => {
             const rejected = isRejected(r);
             const linked = r.relatedHoldingId ? holdingsById[r.relatedHoldingId] : undefined;
-            const effect = describeRecEffect(r, linked);
+            const effect = describeRecEffect(r, linked, reportingCurrency);
             return (
               <Card key={r.id} className={rejected ? "opacity-80 bg-slatey-50" : undefined}>
                 <CardBody>
@@ -338,16 +341,15 @@ function RecForm({
   onSave: () => void;
   onRemove: () => void;
 }) {
-  const holdings = useAtlasStore((s) => s.holdings);
+  const { holdings, reportingCurrency } = useNormalizedHoldings();
   const accounts = useAtlasStore((s) => s.accounts);
   const accountById = React.useMemo(
     () => Object.fromEntries(accounts.map((a) => [a.id, a])),
     [accounts]
   );
   const linkedHolding = holdings.find((h) => h.id === value.relatedHoldingId);
-  const currentValue = linkedHolding
-    ? linkedHolding.reportingMarketValue ?? linkedHolding.nativeMarketValue
-    : undefined;
+  // In the reporting currency; null when the holding can't be valued.
+  const currentValue = linkedHolding ? reportingValue(linkedHolding) : undefined;
 
   // Single source of truth for the effect summary — runs the same per-rec
   // engine helper used by applyRecommendationsToProposed and the card-level
@@ -356,8 +358,11 @@ function RecForm({
     if (!value.relatedHoldingId) {
       return "Without a linked holding, this recommendation will appear in the proposal text but won't shift the Before / After allocation.";
     }
-    if (!linkedHolding || currentValue == null) {
+    if (!linkedHolding) {
       return "Linked holding no longer exists.";
+    }
+    if (currentValue == null) {
+      return `${linkedHolding.assetName} can't be valued in ${reportingCurrency} (no ${linkedHolding.valuation.currency}/${reportingCurrency} rate), so this recommendation's effect can't be shown or applied until the rate is added in Market Data.`;
     }
     const after = applyRecToValue(currentValue, value, !!linkedHolding.isLiability);
     if (Math.abs(after - currentValue) < 1 && value.proposedValue == null) {
@@ -526,7 +531,8 @@ function RecForm({
 // per-rec helper the engine uses so the UI never drifts from the math.
 function describeRecEffect(
   rec: Recommendation,
-  linked: Holding | undefined
+  linked: NormalizedHolding | undefined,
+  reportingCurrency: string
 ): { label: string; tone: "neutral" | "positive" | "negative" | "warning" } {
   if (!rec.relatedHoldingId) {
     return { label: "Advisory only — no allocation impact.", tone: "neutral" };
@@ -534,7 +540,14 @@ function describeRecEffect(
   if (!linked) {
     return { label: "Linked holding no longer exists.", tone: "warning" };
   }
-  const before = linked.reportingMarketValue ?? linked.nativeMarketValue;
+  // Recommendation amounts are in the reporting currency, so the effect is too.
+  const before = reportingValue(linked);
+  if (before == null) {
+    return {
+      label: `${linked.assetName}: not valued in ${reportingCurrency} (no ${linked.valuation.currency}/${reportingCurrency} rate), so this can't be applied yet.`,
+      tone: "warning",
+    };
+  }
   const after = applyRecToValue(before, rec, !!linked.isLiability);
   const delta = after - before;
   if (Math.abs(delta) < 1 && rec.proposedValue == null) {
@@ -547,14 +560,14 @@ function describeRecEffect(
   const cashLabel =
     cashDelta === 0
       ? ""
-      : ` · Cash ${cashDelta > 0 ? "+" : "−"}${formatCurrency(Math.abs(cashDelta), linked.currency, { compact: true })}`;
+      : ` · Cash ${cashDelta > 0 ? "+" : "−"}${formatCurrency(Math.abs(cashDelta), reportingCurrency, { compact: true })}`;
   const sign = delta < 0 ? "−" : "+";
   return {
-    label: `${linked.assetName}: ${formatCurrency(before, linked.currency, { compact: true })} → ${formatCurrency(
+    label: `${linked.assetName}: ${formatCurrency(before, reportingCurrency, { compact: true })} → ${formatCurrency(
       after,
-      linked.currency,
+      reportingCurrency,
       { compact: true }
-    )} (${sign}${formatCurrency(Math.abs(delta), linked.currency, { compact: true })})${cashLabel}`,
+    )} (${sign}${formatCurrency(Math.abs(delta), reportingCurrency, { compact: true })})${cashLabel}`,
     tone: delta < 0 ? "negative" : "positive",
   };
 }

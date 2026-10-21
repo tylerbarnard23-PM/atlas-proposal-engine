@@ -26,7 +26,7 @@ Atlas is built for advisors at RIAs and wealth platforms, and for the people bui
 |---|---|---|
 | **Ingest** | CSV, Excel, PDF, OFX/QFX, pasted text and screenshots (OCR via Tesseract) are parsed into candidate holdings, each with a confidence level and a source trace back to the raw line. PDFs are read in the browser with pdf.js (nothing is uploaded) and rebuilt into layout-aware lines; financial plans with a Balance Sheet (LifeView-style) are recognized and loaded as a client with one account per asset or liability, **reconciled against the document's own totals**. | Import Center, Statement Workbench |
 | **Normalize** | Asset class, currency and identifier detection (ticker, CUSIP, ISIN, SEDOL); duplicate and data-quality checks; advisor verification status per holding. | Accounts & Assets |
-| **Value** | Multi-currency valuation into the proposal's reporting currency. Market data comes from a provider registry (Finnhub, Twelve Data, Alpha Vantage, CoinGecko, ECB/Frankfurter FX, FRED, SEC EDGAR) and falls back to mock data, so it works without any keys. | Market Data |
+| **Value** | Multi-currency valuation into the proposal's reporting currency. Market data comes from a provider registry (Finnhub, Twelve Data, Alpha Vantage, CoinGecko, ECB/Frankfurter FX, FRED, SEC EDGAR) and falls back to mock data, so it works without any keys. A holding with no usable exchange rate is shown as *not valued* (never converted at 1:1 or counted as zero): totals say what they exclude, portfolio-wide conclusions pause, and the final PDF stays blocked until it's valued. | Market Data |
 | **Analyze** | A rules engine flags concentration, currency and country exposure, illiquidity, cash drag, high fees, manual valuations and data-quality problems. | Insights |
 | **Recommend** | The advisor writes or converts recommendations; approved ones reshape the Before/After allocation, with sale proceeds flowing to cash in the same account. | Recommendations |
 | **Ask the Copilot** | Claude investigates the portfolio through the engines and drafts recommendations for review. See below. | Proposal Copilot |
@@ -108,7 +108,7 @@ tests/            unit tests + extraction eval
 ## Tests and evals
 
 ```bash
-npm test        # 139 tests in 10 files: proposal math and currency handling, cash flows, readiness, insights, CSV/Excel/PDF import, Copilot tools (demo mode) + the extraction eval
+npm test        # 170 tests in 11 files: proposal math and currency handling, cash flows, readiness, insights, CSV/Excel/PDF import, Copilot tools (demo mode) + the extraction eval
 npm run eval    # statement-extraction accuracy scorecard
 ```
 

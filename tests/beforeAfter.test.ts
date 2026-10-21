@@ -94,7 +94,7 @@ describe("Before / After allocation in the proposal", () => {
 
   it("moves a partial sale from the asset class into cash, keeping the total", () => {
     const aapl = bySymbol("AAPL");
-    const sold = aapl.reportingMarketValue * 0.5;
+    const sold = aapl.reportingMarketValue! * 0.5;
     const { current, proposed } = renderBeforeAfter([
       rec({ type: "sell", relatedHoldingId: aapl.id, actionAmount: 50, actionAmountUnit: "percent" }),
     ]);
@@ -107,8 +107,8 @@ describe("Before / After allocation in the proposal", () => {
   it("converts a sale of a non-USD holding at its reporting-currency value", () => {
     const nestle = holdings.find((h) => h.currency === "CHF" && h.assetClass === "equity")!;
     const { current, proposed } = renderBeforeAfter([rec({ type: "sell", relatedHoldingId: nestle.id })]);
-    near(proposed.rows.get("Equity")!.value, current.rows.get("Equity")!.value - nestle.reportingMarketValue, TOL);
-    near(proposed.rows.get("Cash & Equivalents")!.value, current.rows.get("Cash & Equivalents")!.value + nestle.reportingMarketValue, TOL);
+    near(proposed.rows.get("Equity")!.value, current.rows.get("Equity")!.value - nestle.reportingMarketValue!, TOL);
+    near(proposed.rows.get("Cash & Equivalents")!.value, current.rows.get("Cash & Equivalents")!.value + nestle.reportingMarketValue!, TOL);
     near(proposed.total, current.total, TOL);
   });
 
@@ -189,7 +189,7 @@ describe("unfunded purchases", () => {
 
 describe("debt paydown funding", () => {
   const mortgage = holdings.find((h) => h.isLiability)!;
-  const householdCash = holdings.filter((h) => !h.isLiability && h.assetClass === "cash").reduce((s, h) => s + h.reportingMarketValue, 0);
+  const householdCash = holdings.filter((h) => !h.isLiability && h.assetClass === "cash").reduce((s, h) => s + h.reportingMarketValue!, 0);
 
   it("draws a paydown from household cash in other accounts, not the loan account", async () => {
     const { proposedCashShortfalls } = await import("@/engines/proposalEngine");

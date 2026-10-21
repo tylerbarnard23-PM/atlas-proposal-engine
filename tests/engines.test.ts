@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Holding, Recommendation } from "@/domain/types";
-import { applyRecToValue, applyRecommendationsToProposed, netWorth } from "@/engines/proposalEngine";
+import { applyRecToValue, applyRecommendationsToProposed } from "@/engines/proposalEngine";
+import { valuationSummary } from "@/engines/valuationTotals";
 import { convert } from "@/engines/currencyEngine";
 import { normalizeHoldings } from "@/engines/normalizationEngine";
 import { generateInsights } from "@/engines/insightEngine";
@@ -77,7 +78,7 @@ describe("applyRecommendationsToProposed", () => {
     const after = applyRecommendationsToProposed([stock, cash], [rec({ type: "sell", relatedHoldingId: "stock", actionAmount: 30_000 })], [], USD_FX).holdings;
     expect(after.find((h) => h.id === "stock")?.reportingMarketValue).toBe(70_000);
     expect(after.find((h) => h.id === "cash")?.reportingMarketValue).toBe(35_000);
-    expect(netWorth(after).net).toBe(netWorth([stock, cash]).net);
+    expect(valuationSummary(after).net.value).toBe(valuationSummary([stock, cash]).net.value);
   });
   it("creates a synthetic cash line when the account has no cash holding", () => {
     const after = applyRecommendationsToProposed([holding({})], [rec({ type: "sell", relatedHoldingId: "h1", actionAmount: 1_000 })], [], USD_FX).holdings;
@@ -89,10 +90,10 @@ describe("applyRecommendationsToProposed", () => {
   });
 });
 
-describe("netWorth", () => {
+describe("net worth (valuationSummary)", () => {
   it("nets liabilities against assets", () => {
-    const nw = netWorth([holding({}), holding({ id: "loan", isLiability: true, reportingMarketValue: -40_000, nativeMarketValue: -40_000 })]);
-    expect(nw).toEqual({ gross: 100_000, liabilities: 40_000, net: 60_000 });
+    const nw = valuationSummary([holding({}), holding({ id: "loan", isLiability: true, reportingMarketValue: -40_000, nativeMarketValue: -40_000 })]);
+    expect([nw.assets.value, nw.liabilities.value, nw.net.value, nw.complete]).toEqual([100_000, -40_000, 60_000, true]);
   });
 });
 

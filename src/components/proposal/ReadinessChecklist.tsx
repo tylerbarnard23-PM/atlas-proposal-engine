@@ -19,6 +19,7 @@ export const READINESS_FIX: Record<string, { href: string; label: string; hint: 
   market_data: { href: "/accounts-assets?review=1", label: "Accounts & Assets", hint: "Check holdings priced from placeholder data and confirm or correct their values." },
   approved_recs: { href: "/recommendations", label: "Recommendations", hint: "Approve at least one recommendation and include it in the PDF." },
   trades_funded: { href: "/recommendations", label: "Recommendations", hint: "A proposed purchase is larger than the cash in its account. Reduce it or add a sale in the same account to fund it." },
+  holdings_valued: { href: "/market-data", label: "Market Data", hint: "Some holdings are in a currency with no exchange rate to the reporting currency, so they're left out of every total. Add or refresh the rate in Market Data." },
   fx_available: { href: "/market-data", label: "Market Data", hint: "A proposed trade is in a currency with no exchange rate to the reporting currency, so it isn't applied. Refresh FX rates in Market Data." },
   disclosures_included: { href: "/assumptions-disclosures", label: "Assumptions & Disclosures", hint: "Include the required disclosures." },
 };
@@ -38,6 +39,7 @@ export function readinessTodo(c: ComplianceCheck): string {
     case "market_data": return n ? `Check ${n} placeholder price${n === "1" ? "" : "s"}` : "Check placeholder prices";
     case "approved_recs": return "Approve a recommendation and include it in the PDF";
     case "trades_funded": return c.detail ? `Fund proposed purchases (${c.detail})` : "Fund proposed purchases";
+    case "holdings_valued": return c.detail ? `Value all holdings (${c.detail})` : "Value all holdings in the reporting currency";
     case "fx_available": return c.detail ? `Add exchange rates (${c.detail})` : "Add exchange rates for proposed trades";
     case "disclosures_included": return "Include the required disclosures";
     default: return c.label;

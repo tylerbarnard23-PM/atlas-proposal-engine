@@ -7,14 +7,19 @@ export interface FxResolveResult {
   isStale?: boolean;
 }
 
+// Only a finite, positive rate is a usable rate. Zero, negative, NaN or
+// infinite entries are ignored as if absent, so they can't produce a value.
+const usable = (r: FxRate | undefined): r is FxRate => !!r && Number.isFinite(r.rate) && r.rate > 0;
+
 export function resolveFxRate(
-  rates: FxRate[],
+  allRates: FxRate[],
   base: CurrencyCode,
   quote: CurrencyCode
 ): FxResolveResult | null {
   if (base === quote) {
     return { rate: 1, asOf: new Date().toISOString(), source: "Manual" };
   }
+  const rates = allRates.filter(usable);
   const direct = rates.find((r) => r.base === base && r.quote === quote);
   if (direct) return { rate: direct.rate, asOf: direct.asOf, source: direct.source, isStale: direct.isStale };
   const inverse = rates.find((r) => r.base === quote && r.quote === base);
@@ -43,13 +48,14 @@ export function resolveFxRate(
   return null;
 }
 
+// Converts with an explicit rate, or returns null when there isn't one. A
+// missing rate is never treated as 1:1.
 export function convert(
   amount: number,
   base: CurrencyCode,
   quote: CurrencyCode,
   rates: FxRate[]
-): number {
+): number | null {
   const r = resolveFxRate(rates, base, quote);
-  if (!r) return amount;
-  return amount * r.rate;
+  return r ? amount * r.rate : null;
 }

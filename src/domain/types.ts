@@ -374,7 +374,7 @@ export interface Insight {
   generatedAt: string;
 }
 
-export type DataTaskKind = "balance_only" | "missing_identifier" | "stale_value";
+export type DataTaskKind = "balance_only" | "missing_identifier" | "stale_value" | "missing_fx_rate";
 
 export type RecommendationType =
   | "buy"
@@ -639,7 +639,11 @@ export interface Holding {
   price?: number;
   nativeMarketValue: number;
   // computed display value in proposal output currency, set by engines:
-  reportingMarketValue?: number;
+  /**
+   * Value in the reporting currency, set by normalizeHoldings. `null` means the
+   * holding couldn't be valued (no usable FX rate); see NormalizedHolding.valuation.
+   */
+  reportingMarketValue?: number | null;
   costBasis?: number;
   unrealizedGainLoss?: number;
   incomeYieldPct?: number;

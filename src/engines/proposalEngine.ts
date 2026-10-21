@@ -295,7 +295,7 @@ export function applyRecommendationsToProposed(
       const rate = rateToReporting(fx, existing.currency)!;
       const updated: Holding = {
         ...existing,
-        reportingMarketValue: (existing.reportingMarketValue ?? existing.nativeMarketValue * rate) + delta,
+        reportingMarketValue: reportingValueOf(existing, fx)! + delta,
         nativeMarketValue: existing.nativeMarketValue + delta / rate,
         valuationSource: {
           ...existing.valuationSource,
@@ -377,11 +377,6 @@ export function proposedCashShortfalls(
   return cashShortfallsOf(applyRecommendationsToProposed(current, approvedRecommendations, accounts, fx).holdings, accounts, fx);
 }
 
-export function netWorth(holdings: Holding[]): { gross: number; liabilities: number; net: number } {
-  const assets = sumBy(holdings.filter((h) => !h.isLiability), (h) => h.reportingMarketValue ?? h.nativeMarketValue);
-  const liabilities = sumBy(holdings.filter((h) => h.isLiability), (h) => h.reportingMarketValue ?? h.nativeMarketValue);
-  return { gross: assets, liabilities: Math.abs(liabilities), net: assets + liabilities };
-}
 
 export function buildProposal(opts: {
   clientId: string;

@@ -59,11 +59,25 @@ export function runDemoCopilot(snapshot: CopilotSnapshot, question: string): Cop
   }
 
   const insights = call<InsightList>("list_insights", { min_severity: "warning" });
-  lines.push(
-    `**${overview.client.name}**: net worth ${money(overview.net_worth.net)} across ${overview.counts.accounts} accounts and ${overview.counts.holdings} holdings, reported in ${overview.reporting_currency}.`,
-    `Largest asset classes: ${overview.allocation_by_asset_class.slice(0, 3).map((a) => `${ASSET_CLASS_LABELS[a.label as AssetClass] ?? a.label} ${a.pct}%`).join(", ")}.`,
-    ""
-  );
+  const v = overview.valuation;
+  if (v.complete) {
+    lines.push(
+      `**${overview.client.name}**: net worth ${money(overview.net_worth.net!)} across ${overview.counts.accounts} accounts and ${overview.counts.holdings} holdings, reported in ${overview.reporting_currency}.`,
+      `Largest asset classes: ${overview.allocation_by_asset_class.slice(0, 3).map((a) => `${ASSET_CLASS_LABELS[a.label as AssetClass] ?? a.label} ${a.pct}%`).join(", ")}.`,
+      ""
+    );
+  } else {
+    // Never a partial figure presented as the whole: say what's missing first.
+    const names = v.unvalued.map((u) => `${u.name} (${u.currency})`).join(", ");
+    lines.push(
+      `**${overview.client.name}: valuation is incomplete.** ${v.unvalued.length} of ${v.holdings_total} holdings can't be valued in ${overview.reporting_currency} because the ${v.missing_rates.join(", ")} exchange rate is missing: ${names}.`,
+      overview.net_worth.net == null
+        ? "No total is available until they're valued."
+        : `Valued holdings only (${v.holdings_valued} of ${v.holdings_total}) come to ${money(overview.net_worth.net)} net; that is not the household's full net worth.`,
+      "Portfolio-wide checks (concentration, currency, country, liquidity and cash) and allocation-changing drafts are paused until the rate is added in Market Data.",
+      ""
+    );
+  }
 
   if (intent === "summary") {
     lines.push(`**${insights?.count ?? 0} warning-level findings** from the insight engine:`);
@@ -86,7 +100,8 @@ export function runDemoCopilot(snapshot: CopilotSnapshot, question: string): Cop
     }
     if (i.category === "concentration" && holdingId) {
       const h = call<HoldingDetail>("get_holding", { holding_id: holdingId });
-      if (!h) continue;
+      // A trim is sized against the whole portfolio: only with every holding valued.
+      if (!h || !v.complete || h.reporting_value == null) continue;
       if (!h.liquidity || !TRADEABLE.has(h.liquidity)) {
         illiquidConcentrations.push(`${h.name} (${h.pct_of_investible}%, ${h.liquidity ?? "liquidity unknown"})`);
         continue;
@@ -94,7 +109,7 @@ export function runDemoCopilot(snapshot: CopilotSnapshot, question: string): Cop
       const trim = Math.round((h.reporting_value - total * CONCENTRATION_TARGET) / 1000) * 1000;
       if (trim <= 0) continue;
       const sim = call<Simulation>("simulate_recommendation", { holding_id: holdingId, type: "reduce_concentration", action_amount: trim });
-      if (!sim) continue;
+      if (!sim || sim.before == null || sim.after == null) continue;
       call("draft_recommendation", {
         holding_id: holdingId,
         type: "reduce_concentration",
@@ -137,7 +152,9 @@ export function runDemoCopilot(snapshot: CopilotSnapshot, question: string): Cop
   if (skippedCovered > 0) {
     lines.push(`Skipped ${skippedCovered} finding${skippedCovered === 1 ? "" : "s"} on holdings that already have a recommendation on file.`, "");
   }
-  if (ctx.drafts.length === 0) {
+  if (ctx.drafts.length === 0 && !v.complete) {
+    lines.push("I didn't draft any trades: they can't be sized against the portfolio while holdings are unvalued. Add the missing rate, then ask again.");
+  } else if (ctx.drafts.length === 0) {
     lines.push(
       skippedCovered > 0
         ? "Every tradeable finding already has a recommendation on file, so I didn't draft new ones. Review the existing drafts in Recommendations."
@@ -159,9 +176,16 @@ function result(ctx: CopilotContext, trace: ToolCallRecord[], answer: string): C
 interface Overview {
   reporting_currency: string;
   client: { name: string };
-  net_worth: { net: number };
+  net_worth: { status: "complete" | "partial" | "unavailable"; net: number | null };
+  valuation: {
+    complete: boolean;
+    holdings_valued: number;
+    holdings_total: number;
+    unvalued: { name: string; currency: string }[];
+    missing_rates: string[];
+  };
   counts: { accounts: number; holdings: number };
-  allocation_by_asset_class: { label: string; value: number; pct: number }[];
+  allocation_by_asset_class: { label: string; value: number; pct: number | null }[];
   existing_recommendations: { holding_id: string | null }[];
 }
 interface InsightList {
@@ -172,12 +196,12 @@ interface HoldingDetail {
   name: string;
   liquidity: string | null;
   pct_of_investible: number | null;
-  reporting_value: number;
+  reporting_value: number | null;
   cost_basis: number | null;
 }
 interface Simulation {
-  before: number;
-  after: number;
+  before: number | null;
+  after: number | null;
   pct_of_investible_before: number | null;
   pct_of_investible_after: number | null;
 }

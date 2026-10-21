@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/Badge";
 import type { Holding, Insight } from "@/domain/types";
 import { buildIdentifier } from "@/ingestion/normalizers/detectIdentifier";
 import { staleThresholdDays } from "@/engines/dataTasks";
+import { formatNative } from "@/engines/valuationTotals";
 import { formatCurrency, formatDate, todayIso } from "@/utils/formatting";
 
 // One "Data to complete" item: what's missing, why it matters, and the fix
@@ -18,6 +19,7 @@ export function DataTaskItem({ insight, onDismiss }: { insight: Insight; onDismi
   const holdings = useAtlasStore((s) => s.holdings);
   const accounts = useAtlasStore((s) => s.accounts);
   const patch = useAtlasStore((s) => s.patchHolding);
+  const reportingCurrency = useAtlasStore((s) => s.client.proposalOutputCurrency);
   const byId = React.useMemo(() => new Map(holdings.map((h) => [h.id, h])), [holdings]);
   // The account's name, unless it's just the holding's own name again.
   const accountName = (h: Holding) => {
@@ -51,6 +53,7 @@ export function DataTaskItem({ insight, onDismiss }: { insight: Insight; onDismi
       <ul className="mt-3 rounded-md ring-1 ring-ink-100 divide-y divide-ink-100">
         {open.map((h) => (
           <li key={h.id} className="px-3 py-2.5">
+            {task.kind === "missing_fx_rate" && <MissingRateRow h={h} reportingCurrency={reportingCurrency} />}
             {task.kind === "balance_only" && <BalanceOnlyRow h={h} onKeep={() => patch(h.id, { dataAcks: { ...h.dataAcks, keepAsBalance: true } })} />}
             {task.kind === "missing_identifier" && <IdentifierRow h={h} account={accountName(h)} onSave={(v) => patch(h.id, { identifier: buildIdentifier(v) })} />}
             {task.kind === "stale_value" && (
@@ -101,6 +104,19 @@ function Name({ h, sub }: { h: Holding; sub?: React.ReactNode }) {
     <div className="min-w-0">
       <div className="text-[13px] font-medium text-ink-900 truncate">{h.assetName}</div>
       <div className="text-[12px] text-ink-500 truncate">{sub}</div>
+    </div>
+  );
+}
+
+// No usable exchange rate: the native amount is known, the reporting value
+// isn't. The fix is the rate itself, in Market Data.
+function MissingRateRow({ h, reportingCurrency }: { h: Holding; reportingCurrency: string }) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <Name h={h} sub={<span className="tabular">{formatNative({ currency: h.currency, amount: h.nativeMarketValue })} · no {h.currency}/{reportingCurrency} rate</span>} />
+      <Link href="/market-data">
+        <Button size="sm" iconLeft={<RefreshCw className="h-3.5 w-3.5" />}>Add the rate in Market Data</Button>
+      </Link>
     </div>
   );
 }
