@@ -47,7 +47,8 @@ export function CurrencyReviewPanel({
           <span className="font-semibold text-warning-600">Check this recommendation&apos;s currency.</span> Its amounts have been
           calculated in <strong>{review.calculatedIn}</strong>, but it was saved with the label <strong>{review.legacyLabel}</strong>. The
           old label is kept for reference only; it may have been a default and doesn&apos;t prove which currency was meant. Until you
-          choose, an approved recommendation in the PDF blocks the final PDF.
+          choose, an approved recommendation in the PDF blocks the final PDF. Editing only a percentage doesn&apos;t settle it: choose
+          below, or restate the money amounts.
         </div>
       </div>
       {confirmingLegacy && legacy.ok && legacy.effect ? (

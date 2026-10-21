@@ -369,3 +369,96 @@ describe("output currency and country come from the client", () => {
     expect("outputCountry" in p).toBe(false);
   });
 });
+
+// Review of #31: a percentage edit is material (it changes what the
+// recommendation does) but says nothing about the currency of its monetary
+// target, so it must not resolve the currency review.
+describe("a percentage edit doesn't confirm a monetary currency", () => {
+  const eurClient = { ...SEED_CLIENT, proposalOutputCurrency: "EUR" };
+  const target = SEED_HOLDINGS.find((h) => h.id === "h_aapl")!;
+  // Saved before v5 with the old "USD" label while reporting in EUR: 10% action, target 1,000.
+  const migrated = () =>
+    migrateRecommendationCurrency(
+      rec({ id: "r_mixed", title: "Mixed percent and target", relatedHoldingId: target.id, relatedAccountId: target.accountId, currency: "USD", actionAmount: 10, actionAmountUnit: "percent", proposedValue: 1_000 }),
+      "EUR",
+      NOW
+    );
+  const readiness = (r: Recommendation) =>
+    evaluateWorkspaceReadiness({
+      client: eurClient,
+      advisor: SEED_ADVISOR,
+      accounts: SEED_ACCOUNTS,
+      holdings: SEED_HOLDINGS.map((h) => ({ ...h, advisorVerification: "advisor_approved" as const })),
+      recommendations: [r],
+      disclosures: DISCLOSURE_LIBRARY,
+      fxRates: SEED_FX_RATES,
+      sourceDocuments: [],
+    }).find((c) => c.code === "recommendation_currency")!;
+
+  it("migrates with an open review (the target is monetary)", () => {
+    expect(migrated()).toMatchObject({ currency: "EUR", proposedValue: 1_000, actionAmount: 10, currencyReview: { legacyLabel: "USD", calculatedIn: "EUR", status: "open" } });
+  });
+
+  it("changing only the percentage clears the approval but leaves the review open", () => {
+    const before = migrated();
+    const edited = withApprovalRule(before, { ...before, actionAmount: 20 });
+    expect(edited).toMatchObject({ approvedByAdvisor: false, status: "needs_review", actionAmount: 20, proposedValue: 1_000, currency: "EUR" });
+    expect(edited.currencyReview?.status).toBe("open");
+  });
+
+  it("re-approved and included, it still blocks shared readiness and the final-PDF route", async () => {
+    const before = migrated();
+    const edited = withApprovalRule(before, { ...before, actionAmount: 20 });
+    const reapproved = withApprovalRule(edited, { ...edited, approvedByAdvisor: true, status: "approved", includeInPdf: true });
+    expect(reapproved).toMatchObject({ approvedByAdvisor: true, includeInPdf: true, currencyReview: { status: "open" } });
+    expect(readiness(reapproved)).toMatchObject({ passed: false });
+    expect(readiness(reapproved).detail).toContain("Mixed percent and target");
+    const { POST } = await import("@/app/api/proposals/[id]/generate-pdf/route");
+    const state = {
+      client: eurClient,
+      advisor: SEED_ADVISOR,
+      accounts: SEED_ACCOUNTS,
+      holdings: SEED_HOLDINGS.map((h) => ({ ...h, advisorVerification: "advisor_approved" as const })),
+      recommendations: [reapproved],
+      disclosures: DISCLOSURE_LIBRARY,
+      fxRates: SEED_FX_RATES,
+      sourceDocuments: [],
+      sections: [],
+      proposal: { id: "p1" },
+    };
+    const res = await POST(new Request("http://localhost/api/proposals/p1/generate-pdf?variant=final", { method: "POST", body: JSON.stringify({ state }) }), {
+      params: Promise.resolve({ id: "p1" }),
+    });
+    expect(res.status).toBe(422);
+    expect((await res.json()).failing).toContain("Recommendation currencies confirmed");
+  });
+
+  it("the same holds through the store's save path", async () => {
+    const { useAtlasStore } = await import("@/store/useStore");
+    const s = useAtlasStore.getState();
+    s.upsertRecommendation(migrated());
+    const saved = () => useAtlasStore.getState().recommendations.find((r) => r.id === "r_mixed")!;
+    s.upsertRecommendation({ ...saved(), actionAmount: 20 });
+    expect(saved()).toMatchObject({ approvedByAdvisor: false, currencyReview: { status: "open" } });
+    s.upsertRecommendation({ ...saved(), approvedByAdvisor: true, status: "approved", includeInPdf: true });
+    expect(saved()).toMatchObject({ approvedByAdvisor: true, currencyReview: { status: "open" } });
+    expect(openCurrencyReviews([saved()])).toHaveLength(1);
+  });
+
+  it("only a restatement of every remaining money amount, a currency change or the explicit choices resolve it", () => {
+    const flagged = migrated();
+    // Restating the monetary target resolves it as an explicit change.
+    expect(withApprovalRule(flagged, { ...flagged, proposedValue: 1_200 }).currencyReview?.status).toBe("changed");
+    // Switching the percentage to a money amount while the target stays as it was: the target isn't confirmed.
+    expect(withApprovalRule(flagged, { ...flagged, actionAmountUnit: "amount", actionAmount: 500 }).currencyReview?.status).toBe("open");
+    // Removing every money amount leaves nothing in the flagged currency.
+    expect(withApprovalRule(flagged, { ...flagged, proposedValue: undefined }).currencyReview?.status).toBe("changed");
+    // Deliberate replacement through the currency choice resolves it.
+    const replaced = changeRecommendationCurrency(flagged, "USD", "replace", fx("EUR"));
+    if (!replaced.ok) throw new Error("expected replace to succeed");
+    expect(withApprovalRule(flagged, replaced.rec).currencyReview?.status).toBe("changed");
+    // The explicit card choices are unchanged.
+    expect(resolveCurrencyReview(flagged, "keep", fx("EUR", SEED_FX_RATES), NOW)).toMatchObject({ ok: true, rec: { currencyReview: { status: "kept" }, approvedByAdvisor: true } });
+    expect(resolveCurrencyReview(flagged, "legacy", fx("EUR", SEED_FX_RATES), NOW)).toMatchObject({ ok: true, rec: { currency: "USD", approvedByAdvisor: false, currencyReview: { status: "changed" } } });
+  });
+});

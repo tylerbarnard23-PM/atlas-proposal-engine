@@ -178,12 +178,41 @@ export function changeRecommendationCurrency(
 }
 
 const unit = (r: Pick<Recommendation, "actionAmountUnit">) => r.actionAmountUnit ?? "amount";
-const moneyChanged = (a: Recommendation, b: Recommendation) =>
-  a.actionAmount !== b.actionAmount || unit(a) !== unit(b) || a.proposedValue !== b.proposedValue || a.currency !== b.currency;
+// The action amount when it's money; a percentage has no currency.
+const moneyActionAmount = (r: Recommendation) => (unit(r) === "percent" ? undefined : r.actionAmount);
 
-/** An edit that changes what the recommendation does: its amounts, currency, linked holding or type. */
+/**
+ * An edit that changes what the recommendation does: any amount (money or
+ * percentage), its unit, currency, linked holding or type. Material edits
+ * clear an approval.
+ */
 export function isMaterialEdit(prev: Recommendation, next: Recommendation): boolean {
-  return moneyChanged(prev, next) || prev.relatedHoldingId !== next.relatedHoldingId || prev.type !== next.type;
+  return (
+    prev.actionAmount !== next.actionAmount ||
+    unit(prev) !== unit(next) ||
+    prev.proposedValue !== next.proposedValue ||
+    prev.currency !== next.currency ||
+    prev.relatedHoldingId !== next.relatedHoldingId ||
+    prev.type !== next.type
+  );
+}
+
+/**
+ * Whether an edit settles which currency the recommendation's money is in.
+ * Separate from isMaterialEdit: a percentage edit is material but says
+ * nothing about the currency of a monetary target. It settles it when the
+ * currency itself changes (convert or replace), when every money amount
+ * still present was stated again (changed), or when no money amount is left.
+ * An untouched money amount keeps the question open.
+ */
+export function confirmsMoneyCurrency(prev: Recommendation, next: Recommendation): boolean {
+  if (prev.currency !== next.currency) return true;
+  const remaining: [number | undefined, number][] = [];
+  if (next.proposedValue != null) remaining.push([prev.proposedValue, next.proposedValue]);
+  const nextAmount = moneyActionAmount(next);
+  if (nextAmount != null) remaining.push([moneyActionAmount(prev), nextAmount]);
+  if (remaining.length === 0) return hasMoneyAmounts(prev);
+  return remaining.every(([before, after]) => before !== after);
 }
 
 /**
@@ -191,8 +220,10 @@ export function isMaterialEdit(prev: Recommendation, next: Recommendation): bool
  * - a material edit of an approved recommendation clears its approval
  *   (approve again after the change); approving or unapproving alone isn't
  *   an edit, and a draft approved in the same save keeps that approval;
- * - editing the money amounts or currency resolves an open currency review
- *   as "changed": the advisor has stated the amounts explicitly.
+ * - an open currency review is resolved as "changed" only by an edit that
+ *   settles the money's currency (confirmsMoneyCurrency), never by a
+ *   percentage edit alone. The card's keep / legacy choices are the other
+ *   way to resolve it (resolveCurrencyReview).
  */
 export function withApprovalRule(prev: Recommendation | undefined, next: Recommendation): Recommendation {
   if (!prev) return next;
@@ -200,7 +231,7 @@ export function withApprovalRule(prev: Recommendation | undefined, next: Recomme
   if (prev.approvedByAdvisor && next.approvedByAdvisor && isMaterialEdit(prev, next)) {
     out = { ...out, approvedByAdvisor: false, status: "needs_review" };
   }
-  if (out.currencyReview?.status === "open" && moneyChanged(prev, next)) {
+  if (out.currencyReview?.status === "open" && confirmsMoneyCurrency(prev, next)) {
     out = { ...out, currencyReview: { ...out.currencyReview, status: "changed", resolvedAt: todayIso() } };
   }
   return out;
