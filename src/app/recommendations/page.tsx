@@ -19,7 +19,9 @@ import type { Holding, Recommendation, RecommendationStatus, RecommendationType 
 import { proposedCashShortfalls } from "@/engines/proposalEngine";
 import { useNormalizedHoldings } from "@/hooks/useNormalizedHoldings";
 import { hasMoneyAmounts, newRecommendation } from "@/engines/recommendationAmounts";
-import { describeFormEffect, describeRecEffect } from "@/components/recommendations/recEffect";
+import { summarizePreview } from "@/components/recommendations/recEffect";
+import { RecPreview } from "@/components/recommendations/RecPreview";
+import { previewRecommendation } from "@/engines/recommendationPreview";
 import { CurrencyReviewPanel } from "@/components/recommendations/CurrencyReviewPanel";
 import { RecCurrencyField } from "@/components/recommendations/RecCurrencyField";
 import { formatCurrency, formatDate, todayIso } from "@/utils/formatting";
@@ -86,15 +88,18 @@ function Inner() {
     setDeleted({ rec: r, index: recs.findIndex((x) => x.id === r.id) });
     remove(r.id);
   }
-  // Effects are shown in the reporting currency, from holdings valued
-  // against the current rates (the same values the proposal uses).
-  const holdingsById = React.useMemo(
-    () => Object.fromEntries(normalized.map((h) => [h.id, h])),
-    [normalized]
-  );
   // Recommendations on holdings from an import that isn't fully accounted for.
   const sourceDocuments = useAtlasStore((s) => s.sourceDocuments);
   const fromIncomplete = React.useMemo(() => holdingsFromIncompleteImports(sourceDocuments, normalized), [sourceDocuments, normalized]);
+  // Each card's effect, simulated with the complete engine (the same
+  // simulation as the editor's live preview), so cards, preview and proposal agree.
+  const previews = React.useMemo(
+    () =>
+      Object.fromEntries(
+        recs.map((r) => [r.id, previewRecommendation({ rec: r, holdings: normalized, recommendations: recs, accounts, fx, sourceDocuments })])
+      ),
+    [recs, normalized, accounts, fx, sourceDocuments]
+  );
 
   function newRec() {
     setEditing(newRecommendation(reportingCurrency));
@@ -193,8 +198,8 @@ function Inner() {
         <div className="space-y-3">
           {ordered.map((r) => {
             const rejected = isRejected(r);
-            const linked = r.relatedHoldingId ? holdingsById[r.relatedHoldingId] : undefined;
-            const effect = describeRecEffect(r, linked, fx);
+            const preview = previews[r.id];
+            const effect = summarizePreview(preview);
             return (
               <Card key={r.id} className={rejected ? "opacity-80 bg-slatey-50" : undefined}>
                 <CardBody>
@@ -223,7 +228,8 @@ function Inner() {
                       <p className="text-sm text-ink-600 mt-1 leading-relaxed">{r.rationale}</p>
                       {!rejected && (
                       <div
-                        className={`mt-2 text-[12px] tabular px-2.5 py-1.5 rounded-md inline-block ${
+                        data-testid="rec-card-effect"
+                        className={`mt-2 text-[12px] tabular px-2.5 py-1.5 rounded-md inline-block space-y-0.5 ${
                           effect.tone === "positive"
                             ? "bg-positive-50 text-positive-600"
                             : effect.tone === "negative"
@@ -233,13 +239,17 @@ function Inner() {
                             : "bg-slatey-100 text-ink-700"
                         }`}
                       >
-                        {r.approvedByAdvisor ? "↻ " : "○ "}
-                        {effect.label}
+                        <div>
+                          {r.approvedByAdvisor ? "↻ " : "○ "}
+                          {effect.position ? `This recommendation alone: ${effect.position}` : effect.headline}
+                        </div>
+                        {effect.position && effect.cash && <div>{effect.cash}</div>}
+                        {effect.combined && <div className="text-ink-700">{effect.combined}</div>}
                       </div>
                       )}
-                      {!rejected && effect.amounts && (
+                      {!rejected && preview.amounts && (
                         <p className="mt-1 text-2xs text-ink-500 tabular">
-                          Amount: {effect.amounts}. Any figures written in the text above are as entered, not converted.
+                          Amount: {preview.amounts}. Any figures written in the text above are as entered, not converted.
                         </p>
                       )}
                       {!rejected && (
@@ -355,9 +365,15 @@ function RecForm({
     () => Object.fromEntries(accounts.map((a) => [a.id, a])),
     [accounts]
   );
-  const linkedHolding = holdings.find((h) => h.id === value.relatedHoldingId);
-  // The same steps as the engine and the cards: convert once, then apply.
-  const effect = React.useMemo(() => describeFormEffect(value, linkedHolding, fx), [value, linkedHolding, fx]);
+  const savedRecs = useAtlasStore((s) => s.recommendations);
+  const sourceDocuments = useAtlasStore((s) => s.sourceDocuments);
+  // Live: the edited recommendation (not yet saved) simulated with the
+  // complete engine; its saved version is replaced by id, never added twice.
+  const preview = React.useMemo(
+    () => previewRecommendation({ rec: value, holdings, recommendations: savedRecs, accounts, fx, sourceDocuments }),
+    [value, holdings, savedRecs, accounts, fx, sourceDocuments]
+  );
+  const targetSet = value.proposedValue != null;
 
   return (
     <div className="space-y-3">
@@ -395,12 +411,6 @@ function RecForm({
             );
           })}
         </Select>
-        {linkedHolding && effect.currentValue != null && (
-          <div className="text-2xs text-ink-500 mt-1.5">
-            Current value: {effect.currentValue}
-            {linkedHolding.currency !== reportingCurrency ? ` (holding in ${linkedHolding.currency}, valued in ${reportingCurrency})` : ""}
-          </div>
-        )}
 
         <div className="grid grid-cols-2 gap-3 mt-3">
           <div>
@@ -419,7 +429,8 @@ function RecForm({
                     ? "Signed (negative trims)"
                     : "e.g. 50000"
                 }
-                disabled={!value.relatedHoldingId && value.type !== "buy"}
+                disabled={(!value.relatedHoldingId && value.type !== "buy") || targetSet}
+                aria-label="Action amount"
               />
               <Select
                 className="w-20"
@@ -433,8 +444,10 @@ function RecForm({
                 <option value="percent">%</option>
               </Select>
             </div>
-            <div className="text-2xs text-ink-500 mt-1">
-              {value.actionAmountUnit === "percent"
+            <div className={`text-2xs mt-1 ${targetSet ? "text-warning-600 font-medium" : "text-ink-500"}`} data-testid="action-amount-note">
+              {targetSet
+                ? "Ignored while a target value is set: the target takes precedence. Clear the target to use an action amount."
+                : value.actionAmountUnit === "percent"
                 ? "Percent of the linked holding's current value."
                 : `Absolute amount in ${value.currency}.`}
             </div>
@@ -449,6 +462,7 @@ function RecForm({
               }
               placeholder="e.g. 0 to fully sell"
               disabled={!value.relatedHoldingId}
+              aria-label="Proposed value"
             />
             <div className="text-2xs text-ink-500 mt-1">
               In {value.currency}. Wins over the action amount if both are set.
@@ -456,9 +470,8 @@ function RecForm({
           </div>
         </div>
 
-        <div className="text-2xs text-ink-600 bg-slatey-50 border border-ink-100 rounded p-2 mt-2 leading-relaxed">
-          <span className="font-semibold text-ink-800">Effect on Before / After:</span> {effect.hint}
-          {effect.amounts && <div className="mt-1 tabular">Amount: {effect.amounts}.</div>}
+        <div className="mt-3">
+          <RecPreview preview={preview} />
         </div>
       </div>
 

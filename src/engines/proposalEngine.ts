@@ -357,7 +357,9 @@ export function applyRecommendationsToProposed(
   // native currency of the line it lands in. Every account that receives a
   // delta had its cash currency's rate checked above.
   for (const [accountId, delta] of cashByAccount) {
-    if (Math.abs(delta) < 1) continue; // ignore sub-dollar noise
+    // Ignore only floating-point noise: a real offset, however small (a
+    // 50-cent sale), moves cash like any other.
+    if (Math.abs(delta) < 0.005) continue;
     const account = accountById.get(accountId);
     const cashIdx = result.findIndex(
       (h) => h.accountId === accountId && h.assetClass === "cash" && !h.isLiability
