@@ -2,7 +2,7 @@
 
 The state of the project for the next working session: what's done, how it was checked, what's known to be missing, and what comes next. Update it at the end of each piece of work.
 
-_Last updated: 2026-10-21, on branch `fix/recommendation-currency` (issue #24)._
+_Last updated: 2026-10-21, on branch `fix/recommendation-currency` (issue #24, PR #31, not merged)._
 
 ## Working agreements
 - Every bug, idea or parked item gets a GitHub issue; a PR closes its issue.
@@ -21,7 +21,7 @@ _Last updated: 2026-10-21, on branch `fix/recommendation-currency` (issue #24)._
 | #21 / #25 | Currency contract for the proposed portfolio: explicit FX, no 1:1 fallback, unresolved conversions reported. |
 | #23 / #27 | Unvalued holdings stay unvalued through the proposal; totals say what they exclude; the final PDF is blocked. |
 | #29 / #30 | PDF statements: values read correctly; account totals reconciled with their currency; positioned holdings reports (UBS sample) read by column geometry; import completeness persisted and enforced. |
-| #24 (this branch) | Recommendation amounts keep their own currency (see below). |
+| #24 / #31 (open) | Recommendation amounts keep their own currency (see below). |
 
 ## #24: recommendation currency (this branch)
 - **Amount currency.** `Recommendation.currency` is the denomination of `proposedValue` (always monetary) and of `actionAmount` when its unit is `amount`. A `percent` amount stays a percentage.
@@ -70,7 +70,7 @@ _Last updated: 2026-10-21, on branch `fix/recommendation-currency` (issue #24)._
 - **Live-site import checks need a manual upload.** The automated browser couldn't put local files into the live page.
 
 ## Next step
-1. Review and merge the #24 PR on approval, then confirm the production deploy.
+1. Review PR #31 (#24); merge only on approval, then confirm the production deploy.
 2. Then #26 (FX refresh: merge and stale-rate policy), now more visible because recommendation conversions use current rates.
 3. Then #28 (dates shown a day early west of UTC).
 4. Backlog enhancements (#11–#19) stay parked until chosen.
