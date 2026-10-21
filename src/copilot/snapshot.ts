@@ -7,6 +7,7 @@ import type {
   FxRate,
   Holding,
   Recommendation,
+  SourceDocument,
 } from "@/domain/types";
 
 // The workspace lives in the advisor's browser (zustand + localStorage), so the
@@ -20,6 +21,8 @@ export interface CopilotSnapshot {
   fxRates: FxRate[];
   recommendations: Recommendation[];
   disclosures: Disclosure[];
+  /** Imports' completeness (see forReadiness); absent from older clients. */
+  sourceDocuments?: SourceDocument[];
 }
 
 // Structural guard only: the engines are defensive about optional fields, so
@@ -35,6 +38,7 @@ export const CopilotRequestSchema = z.object({
     fxRates: z.array(record).max(500),
     recommendations: z.array(record).max(200),
     disclosures: z.array(record).max(200),
+    sourceDocuments: z.array(record.and(z.object({ id: z.string(), fileName: z.string() }))).max(500).optional(),
   }),
 });
 

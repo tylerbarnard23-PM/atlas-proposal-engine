@@ -108,13 +108,25 @@ tests/            unit tests + extraction eval
 ## Tests and evals
 
 ```bash
-npm test        # 182 tests in 11 files: proposal math and currency handling, cash flows, readiness, insights, CSV/Excel/PDF import, Copilot tools (demo mode) + the extraction eval
+npm test        # 227 tests in 14 files: proposal math and currency handling, cash flows, readiness, insights, CSV/Excel/PDF import, import completeness, Copilot tools (demo mode) + the extraction eval
 npm run eval    # statement-extraction accuracy scorecard
 ```
 
 CI runs the type check, tests, eval and production build on every pull request.
 
 The extraction eval runs the parsers over the sample statements against hand-labelled holdings and scores recall, label accuracy, currency accuracy and spurious rows. Its first run found real bugs: amounts written as `CHF 193,864.00` didn't parse, and bond face value was being read as market value. Fixing the parser to use the statement's header row took recall from **61.9% to 100%** and spurious rows from **5 to 0**. Those numbers are now the floor the eval allows.
+
+### PDF statements: what's verified
+
+PDF import is verified on the document types below, not on PDFs in general. Anything else falls back to a line-based table reader that may miss or misread rows; the reconciliation and completeness checks exist so that shows up instead of passing silently.
+
+- **Statement with a simple holdings table** (one row per line, an explicit "Total Account Value" / "Grand Total" line): synthetic fixtures for issue #29. Section totals ("Total Equities") and subtotals are never holdings and never stand in for the account total; conflicting account totals are a mismatch to review; the total keeps its own currency.
+- **Holdings report laid out as a positioned table** (landscape pages stored rotated, right-aligned columns under stacked headers, wrapped names, section headings, balanced funds unbundled across asset classes): read by column geometry from the market-value column. Verified against a 13-page third-party sample report (UBS's public "Portfolio Holdings Report" sample, not committed; its tests run when the file is placed in `tests/fixtures/private/`): all **68** detailed positions, which add up to $10,648,193.74 against the stated **$10,648,193.73**. The one-cent difference is per-row rounding, inside the tolerance of half a cent per row ($0.34 for 68 rows); a larger gap is reported as a mismatch, never balanced. Summary tables, subtotals, the repeated "Total Portfolio", footnotes, disclosures and the blended balanced-fund summary are excluded. A committed synthetic report reproduces the layout.
+- **Financial plan (LifeView-style Balance Sheet)**: see below.
+
+Known limits: the positioned-table reader needs the market-value column label ("Market value" / "Current value") and right-aligned numbers; a consolidated report that doesn't say which account holds each position is imported into one account (none is invented); no symbols or identifiers are inferred when the document has none; a price or cost basis printed as 0.00 next to a real value is treated as unavailable.
+
+**Incomplete imports.** An import whose rows don't reach the document's stated total, that left rows out as unreadable, or that has no total to check against is stored as incomplete (or of unknown completeness) with its source document. Until it's resolved (a complete re-import, or removing that import's holdings), the final PDF is blocked in the UI and on the server, the dashboard, Accounts & Assets and Recommendations say so, recommendations on its holdings are badged, and the Copilot refuses trade-sizing drafts. Confirming the imported values doesn't clear it.
 
 The financial-plan reader was built against a real 94-page planning report (Morgan Stanley's public LifeView marketing sample, which isn't committed here): it reads all 21 Balance Sheet lines and matches the report's stated assets ($27,997,288), liabilities ($3,520,000) and net worth ($24,477,288) to the dollar. The committed eval case is a synthetic look-alike written from scratch.
 

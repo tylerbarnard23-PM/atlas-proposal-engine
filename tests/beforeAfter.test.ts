@@ -158,7 +158,7 @@ describe("unfunded purchases", () => {
 
   it("blocks the final PDF through the readiness check", async () => {
     const { evaluateWorkspaceReadiness } = await import("@/engines/complianceEngine");
-    const checks = evaluateWorkspaceReadiness({
+    const checks = evaluateWorkspaceReadiness({ sourceDocuments: [], 
       client: SEED_CLIENT,
       advisor: SEED_ADVISOR,
       accounts: SEED_ACCOUNTS,
@@ -174,7 +174,7 @@ describe("unfunded purchases", () => {
 
   it("passes once the purchase fits the available cash", async () => {
     const { evaluateWorkspaceReadiness } = await import("@/engines/complianceEngine");
-    const checks = evaluateWorkspaceReadiness({
+    const checks = evaluateWorkspaceReadiness({ sourceDocuments: [], 
       client: SEED_CLIENT,
       advisor: SEED_ADVISOR,
       accounts: SEED_ACCOUNTS,
@@ -209,7 +209,7 @@ describe("debt paydown funding", () => {
     const { SEED_RECOMMENDATIONS } = await import("@/data/seedRecommendations");
     const { evaluateWorkspaceReadiness } = await import("@/engines/complianceEngine");
     const allApproved = SEED_RECOMMENDATIONS.map((r) => ({ ...r, approvedByAdvisor: true, includeInPdf: true }));
-    const checks = evaluateWorkspaceReadiness({
+    const checks = evaluateWorkspaceReadiness({ sourceDocuments: [], 
       client: SEED_CLIENT,
       advisor: SEED_ADVISOR,
       accounts: SEED_ACCOUNTS,

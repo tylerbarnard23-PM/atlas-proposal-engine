@@ -168,17 +168,17 @@ describe("readiness", () => {
   const ws = { client: SEED_CLIENT, advisor: SEED_ADVISOR, accounts: SEED_ACCOUNTS, recommendations: [] as Recommendation[], disclosures: DISCLOSURE_LIBRARY };
 
   it("holdings_valued fails while a holding is unvalued, independently of fx_available", () => {
-    const checks = evaluateWorkspaceReadiness({ ...ws, holdings: SEED_HOLDINGS, fxRates: NO_CHF });
+    const checks = evaluateWorkspaceReadiness({ sourceDocuments: [], ...ws, holdings: SEED_HOLDINGS, fxRates: NO_CHF });
     const valued = checks.find((c) => c.code === "holdings_valued")!;
     expect(valued.passed).toBe(false);
     expect(valued.detail).toContain("CHF/USD");
     expect(checks.find((c) => c.code === "fx_available")?.passed).toBe(true); // no proposed trades
-    expect(evaluateWorkspaceReadiness({ ...ws, holdings: SEED_HOLDINGS, fxRates: SEED_FX_RATES }).find((c) => c.code === "holdings_valued")?.passed).toBe(true);
+    expect(evaluateWorkspaceReadiness({ sourceDocuments: [], ...ws, holdings: SEED_HOLDINGS, fxRates: SEED_FX_RATES }).find((c) => c.code === "holdings_valued")?.passed).toBe(true);
   });
 
   it("re-normalizes: holdings sent with a cached reporting value still fail without the rate", () => {
     const cached = normalizeHoldings(SEED_HOLDINGS, SEED_FX_RATES, "USD"); // valued with the CHF rate
-    expect(evaluateWorkspaceReadiness({ ...ws, holdings: cached, fxRates: NO_CHF }).find((c) => c.code === "holdings_valued")?.passed).toBe(false);
+    expect(evaluateWorkspaceReadiness({ sourceDocuments: [], ...ws, holdings: cached, fxRates: NO_CHF }).find((c) => c.code === "holdings_valued")?.passed).toBe(false);
   });
 
   it("the final-PDF route blocks on the same logic, not on cached client values", async () => {
@@ -413,7 +413,7 @@ describe("review findings: unvalued state through the proposal, and liabilities"
   });
 
   it("readiness and the Copilot agree with Insights about the liability", () => {
-    const checks = evaluateWorkspaceReadiness({ client: SEED_CLIENT, advisor: SEED_ADVISOR, accounts: SEED_ACCOUNTS, holdings: withLoan, recommendations: [], disclosures: DISCLOSURE_LIBRARY, fxRates: SEED_FX_RATES });
+    const checks = evaluateWorkspaceReadiness({ sourceDocuments: [], client: SEED_CLIENT, advisor: SEED_ADVISOR, accounts: SEED_ACCOUNTS, holdings: withLoan, recommendations: [], disclosures: DISCLOSURE_LIBRARY, fxRates: SEED_FX_RATES });
     const valued = checks.find((c) => c.code === "holdings_valued")!;
     expect(valued.passed).toBe(false);
     expect(valued.detail).toContain("SEK/USD");
@@ -459,10 +459,12 @@ describe("the sample workspace is unchanged when every rate is present", () => {
     expect(Object.fromEntries(holdings.map((h) => [h.id, Math.round(h.reportingMarketValue! * 100) / 100]))).toEqual(baseline.reporting);
     expect(summarizeAllocation(holdings, (h) => ASSET_CLASS_LABELS[h.assetClass] ?? "Other").map((r) => [r.label, Math.round(r.value * 100) / 100])).toEqual(baseline.allocationByClass);
     expect(generateInsights({ holdings, reportingCurrency: "USD" }).map((i) => i.title).sort()).toEqual(baseline.insightTitles);
-    const readiness = evaluateWorkspaceReadiness({ client: SEED_CLIENT, advisor: SEED_ADVISOR, accounts: SEED_ACCOUNTS, holdings, recommendations: approved, disclosures: DISCLOSURE_LIBRARY, fxRates: SEED_FX_RATES });
-    // The new check passes; every pre-existing check is unchanged.
-    expect(readiness.find((c) => c.code === "holdings_valued")?.passed).toBe(true);
-    expect(readiness.filter((c) => c.code !== "holdings_valued").map((c) => [c.code, c.passed, c.detail ?? null])).toEqual(baseline.readiness);
+    const readiness = evaluateWorkspaceReadiness({ sourceDocuments: [], client: SEED_CLIENT, advisor: SEED_ADVISOR, accounts: SEED_ACCOUNTS, holdings, recommendations: approved, disclosures: DISCLOSURE_LIBRARY, fxRates: SEED_FX_RATES });
+    // The checks added since (holdings_valued here, imports_complete in #29)
+    // pass; every pre-existing check is unchanged.
+    const added = ["holdings_valued", "imports_complete"];
+    expect(readiness.filter((c) => added.includes(c.code)).every((c) => c.passed)).toBe(true);
+    expect(readiness.filter((c) => !added.includes(c.code)).map((c) => [c.code, c.passed, c.detail ?? null])).toEqual(baseline.readiness);
     expect(Object.fromEntries(proposed.holdings.map((h) => [h.id, Math.round((h.reportingMarketValue ?? 0) * 100) / 100]))).toEqual(baseline.proposedReporting);
     const html = renderToStaticMarkup(
       React.createElement(ProposalPdfTemplate, {

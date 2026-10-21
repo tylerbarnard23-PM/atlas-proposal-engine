@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { forReadiness } from "@/engines/importCompleteness";
 import Link from "next/link";
 import { Bot, Check, CircleAlert, Plus, Send, Wrench } from "lucide-react";
 import { useAtlasStore } from "@/store/useStore";
@@ -75,6 +76,7 @@ function Inner() {
             fxRates: state.fxRates,
             recommendations: state.recommendations,
             disclosures: state.disclosures,
+            sourceDocuments: state.sourceDocuments.map(forReadiness),
           },
         }),
       });

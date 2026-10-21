@@ -329,7 +329,8 @@ export interface DataQualityIssue {
     | "ADVISOR_APPROVED_VALUE_MISSING"
     | "DUPLICATE_HOLDING"
     | "LIABILITY_AS_ASSET"
-    | "NEGATIVE_VALUE_REVIEW";
+    | "NEGATIVE_VALUE_REVIEW"
+    | "DOCUMENT_TOTAL_MISMATCH";
   severity: "info" | "warning" | "critical";
   message: string;
   fieldHint?: string;
@@ -577,7 +578,7 @@ export interface ExtractionResult {
   reconciliation?: Reconciliation;
 }
 
-export type DocumentKind = "financial_plan_lifeview" | "statement_table" | "generated_proposal";
+export type DocumentKind = "financial_plan_lifeview" | "statement_table" | "holdings_report" | "generated_proposal";
 
 // Extracted totals checked against the totals the document itself states.
 export interface Reconciliation {
@@ -590,6 +591,8 @@ export interface Reconciliation {
   netWorthExtracted: number;
   // Differences up to this many currency units count as a match (rounding).
   tolerance: number;
+  /** The currency the stated and extracted totals are in. */
+  currency?: CurrencyCode;
 }
 
 export interface SourceDocument {
@@ -619,8 +622,22 @@ export interface SourceDocument {
   notes?: string;
   rawTextSample?: string;
   extraction?: ExtractionResult;
+  /** Whether the import accounted for the whole document; set at import time. */
+  importCompleteness?: ImportCompleteness;
   marketDataEnriched?: boolean;
   advisorVerified?: boolean;
+}
+
+// An import is complete when its rows reconcile with the document's stated
+// total and none were left out as unreadable. "unknown": nothing to check
+// against (no stated total).
+export interface ImportCompleteness {
+  status: "complete" | "incomplete" | "unknown";
+  reason?: "total_mismatch" | "unreadable_rows" | "no_stated_total";
+  stated?: number;
+  extracted?: number;
+  currency?: CurrencyCode;
+  unreadableRows: number;
 }
 
 export interface Holding {

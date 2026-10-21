@@ -274,10 +274,10 @@ describe("a missing FX rate is reported, never assumed to be 1:1", () => {
     const sale = rec({ id: "r_foreign", relatedHoldingId: foreign.id, actionAmount: 1_000 });
     const ws = { client: SEED_CLIENT, advisor: SEED_ADVISOR, accounts: SEED_ACCOUNTS, holdings, recommendations: [sale], disclosures: DISCLOSURE_LIBRARY };
 
-    const withRates = evaluateWorkspaceReadiness({ ...ws, fxRates: SEED_FX_RATES });
+    const withRates = evaluateWorkspaceReadiness({ sourceDocuments: [], ...ws, fxRates: SEED_FX_RATES });
     expect(withRates.find((c) => c.code === "fx_available")?.passed).toBe(true);
 
-    const noRates = evaluateWorkspaceReadiness({ ...ws, fxRates: [] });
+    const noRates = evaluateWorkspaceReadiness({ sourceDocuments: [], ...ws, fxRates: [] });
     const check = noRates.find((c) => c.code === "fx_available")!;
     expect(check.passed).toBe(false);
     expect(check.detail).toContain(`${foreign.currency}/USD`);

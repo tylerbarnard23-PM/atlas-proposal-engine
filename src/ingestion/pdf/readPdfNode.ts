@@ -1,4 +1,4 @@
-import { itemsToLines, type PdfText, type PositionedText } from "./layoutLines";
+import { itemsToLines, toDisplay, type PdfText, type PositionedText } from "./layoutLines";
 
 // Server/test counterpart of readPdfInBrowser. Uses the same pdf.js version
 // (its Node build), so the server, the tests and the browser all see
@@ -12,21 +12,25 @@ export async function readPdfInNode(buffer: Buffer | Uint8Array): Promise<PdfTex
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const task = pdfjs.getDocument({ data: new Uint8Array(buffer), disableAutoFetch: true, useSystemFonts: false });
   const pages: string[][] = [];
+  const positioned: PositionedText[][] = [];
   try {
     const doc = await task.promise;
     for (let n = 1; n <= doc.numPages; n++) {
       const page = await doc.getPage(n);
       const content = await page.getTextContent();
+      // Positions as displayed, honoring the page's rotation.
+      const viewport = page.getViewport({ scale: 1 });
       const items: PositionedText[] = [];
       for (const it of content.items) {
         if (!("str" in it)) continue;
-        items.push({ str: it.str, x: it.transform[4], y: it.transform[5], width: it.width, height: it.height });
+        items.push(toDisplay(it, viewport));
       }
       pages.push(itemsToLines(items));
+      positioned.push(items);
       page.cleanup();
     }
   } finally {
     await task.destroy();
   }
-  return { pageCount: pages.length, pages };
+  return { pageCount: pages.length, pages, items: positioned };
 }

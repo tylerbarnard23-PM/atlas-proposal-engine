@@ -14,6 +14,64 @@ function splitRow(line: string): string[] {
   return line.split(/ {2,}/).map((s) => s.trim()).filter(Boolean);
 }
 
+// Money amounts carry an explicit currency marker: "USD 800.00", "$800.00",
+// "800.00 USD". A bare number ("10000") is not money: it may be a quantity.
+const ISO = "USD|EUR|GBP|CHF|CAD|JPY|AUD|SGD|HKD|MXN";
+const NUMBER = /^\(?-?\d[\d,]*(?:\.\d+)?\)?$/;
+const SYMBOL_MONEY = /^\(?-?[$£€¥]\s?\d[\d,]*(?:\.\d+)?\)?$|^[$£€¥]\(?-?\d[\d,]*(?:\.\d+)?\)?$/;
+const ISO_CODE = new RegExp(`^(?:${ISO})$`, "i");
+
+/**
+ * The money amounts a cell consists of, or null if it isn't made only of
+ * money amounts. Two adjacent amounts the layout ran together
+ * ("USD 800.00 USD 8,000,000.00") come back as two.
+ */
+export function moneyAmounts(cell: string): number[] | null {
+  const t = cell.trim().split(/\s+/).filter(Boolean);
+  if (t.length === 0) return null;
+  const out: number[] = [];
+  // Codes written after the number ("800.00 USD") or before it ("USD 800.00").
+  const suffix = t.length >= 2 && NUMBER.test(t[0]) && ISO_CODE.test(t[1]);
+  for (let i = 0; i < t.length; ) {
+    if (SYMBOL_MONEY.test(t[i])) {
+      out.push(parseLooseNumber(t[i])!);
+      i += 1;
+    } else if (!suffix && ISO_CODE.test(t[i]) && t[i + 1] && (NUMBER.test(t[i + 1]) || SYMBOL_MONEY.test(t[i + 1]))) {
+      out.push(parseLooseNumber(t[i + 1])!);
+      i += 2;
+    } else if (suffix && NUMBER.test(t[i]) && t[i + 1] && ISO_CODE.test(t[i + 1])) {
+      out.push(parseLooseNumber(t[i])!);
+      i += 2;
+    } else {
+      return null;
+    }
+  }
+  return out.every((n) => Number.isFinite(n)) ? out : null;
+}
+
+// Splits any cell made of several money amounts into one cell per amount.
+function expandMoneyCells(cells: string[]): string[] {
+  return cells.flatMap((c) => {
+    const amounts = moneyAmounts(c);
+    if (!amounts || amounts.length < 2) return [c];
+    // Re-split on the original text so each new cell keeps its marker.
+    const parts = c.trim().split(/\s+/);
+    const suffix = NUMBER.test(parts[0]) && parts.length >= 2 && ISO_CODE.test(parts[1]);
+    const cellsOut: string[] = [];
+    for (let i = 0; i < parts.length; ) {
+      if (SYMBOL_MONEY.test(parts[i])) cellsOut.push(parts[i++]);
+      else {
+        cellsOut.push(suffix ? `${parts[i]} ${parts[i + 1]}` : `${parts[i]} ${parts[i + 1]}`);
+        i += 2;
+      }
+    }
+    return cellsOut;
+  });
+}
+
+const AMBIGUOUS_MESSAGE =
+  "Couldn't tell which number is the market value (a single amount next to a bare number could be a price or a value); check this row against the statement and enter the value by hand.";
+
 function isLikelyHeader(cells: string[]): boolean {
   const joined = cells.join(" ").toLowerCase();
   return /(symbol|ticker|security|description|qty|quantity|price|value|market|cost|basis|account)/.test(joined);
@@ -56,7 +114,7 @@ export function parsePastedText(text: string, accountHint?: string): ExtractedAc
   let roles: (ColumnRole | undefined)[] = [];
 
   for (const line of lines) {
-    const cells = splitRow(line);
+    const cells = expandMoneyCells(splitRow(line));
     if (cells.length < 2) continue;
     if (!headerCells && isLikelyHeader(cells)) {
       headerCells = cells.map((c) => c.toLowerCase());
@@ -69,6 +127,7 @@ export function parsePastedText(text: string, accountHint?: string): ExtractedAc
     let marketValue: number | undefined;
     let price: number | undefined;
     let quantity: number | undefined;
+    let ambiguous = false;
 
     if (headerCells && cells.length === headerCells.length && roles.includes("marketValue")) {
       // Row lines up with the header: trust the column labels. This keeps bond
@@ -98,21 +157,40 @@ export function parsePastedText(text: string, accountHint?: string): ExtractedAc
       });
     } else {
       // Heuristic mapping: first cell that looks like a ticker (1-6 uppercase letters, optional dot/dash)
-      const numericCells: number[] = [];
+      const money: number[] = [];
+      const bare: number[] = [];
       for (const cell of cells) {
         if (!symbol && TICKER_CELL.test(cell)) {
           symbol = cell;
           continue;
         }
-        const n = parseLooseNumber(cell);
-        if (n != null) numericCells.push(n);
+        const amounts = moneyAmounts(cell);
+        if (amounts) {
+          money.push(...amounts);
+          continue;
+        }
+        const n = NUMBER.test(cell.trim()) ? parseLooseNumber(cell) : undefined;
+        if (n != null) bare.push(n);
         else if (!name && /[A-Za-z]/.test(cell)) name = name ? `${name} ${cell}` : cell;
       }
-      // Heuristic: largest numeric is market value; smallest is price; middle is quantity.
-      numericCells.sort((a, b) => a - b);
-      marketValue = numericCells.length > 0 ? numericCells[numericCells.length - 1] : undefined;
-      price = numericCells.length >= 2 ? numericCells[0] : undefined;
-      quantity = numericCells.length >= 3 ? numericCells[1] : undefined;
+      if (money.length >= 2) {
+        // Explicit amounts: the largest is the value, the smallest the price;
+        // a bare number is the quantity. A bare number is never the value.
+        const sorted = [...money].sort((a, b) => Math.abs(a) - Math.abs(b));
+        marketValue = sorted[sorted.length - 1];
+        price = sorted[0];
+        quantity = bare[0];
+      } else if (money.length === 1) {
+        if (bare.length === 0) marketValue = money[0];
+        else ambiguous = true; // a price or a value? Don't guess.
+      } else {
+        // No currency markers at all (a typical pasted table): largest number
+        // is the market value, smallest the price, the middle the quantity.
+        bare.sort((a, b) => a - b);
+        marketValue = bare.length > 0 ? bare[bare.length - 1] : undefined;
+        price = bare.length >= 2 ? bare[0] : undefined;
+        quantity = bare.length >= 3 ? bare[1] : undefined;
+      }
     }
     if (!symbol && !name && !identifierRaw) continue;
 
@@ -127,10 +205,10 @@ export function parsePastedText(text: string, accountHint?: string): ExtractedAc
       currency: detectCurrency([symbol, name, line].filter(Boolean).join(" ")),
       assetClass: detectAssetClass(name),
       fields: { _line: { fieldName: "_line", raw: line, confidence: "low" } },
-      warnings: [],
+      warnings: ambiguous ? [{ code: "CUSTOM_REQUIRES_REVIEW", severity: "warning", message: AMBIGUOUS_MESSAGE }] : [],
       confidence: "low",
       sourceTrace: { sourceType: "pasted_text", extractionMethod: "heuristic", extractionConfidence: "low", rawText: line },
-      status: "extracted",
+      status: ambiguous ? "needs_review" : "extracted",
     };
     holdings.push(validateExtractedHolding(holding));
   }

@@ -39,6 +39,8 @@ function flagsFor(h: Holding & { valuation?: NormalizedHolding["valuation"] }): 
     const gross = h.quantity * h.price;
     if (off(gross) > 0.02 && off(gross / 100) > 0.02) out.push({ label: "Qty × price ≠ value", blocksBulk: true, title: "Quantity × price differs from the value by more than 2%." });
   }
+  const mismatch = h.dataQuality.find((d) => d.code === "DOCUMENT_TOTAL_MISMATCH");
+  if (mismatch) out.push({ label: "Statement total mismatch", blocksBulk: true, title: mismatch.message });
   const balanceOnly = h.dataQuality.find((d) => /only this account's balance/.test(d.message));
   if (balanceOnly) out.push({ label: "Balance only", blocksBulk: false, title: balanceOnly.message });
   return out;

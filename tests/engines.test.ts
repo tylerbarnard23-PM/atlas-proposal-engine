@@ -169,14 +169,14 @@ describe("workspace readiness", () => {
   });
 
   it("clears stale and unverified checks once the advisor reviews those holdings", () => {
-    const before = evaluateWorkspaceReadiness(ws());
+    const before = evaluateWorkspaceReadiness({ ...ws(), sourceDocuments: [] });
     expect(before.find((c) => c.code === "unverified_holdings")?.passed).toBe(false);
     expect(before.find((c) => c.code === "stale_valuations")?.passed).toBe(false);
 
     const reviewed = SEED_HOLDINGS.map((h) =>
       h.advisorVerification === "unverified" ? { ...h, advisorVerification: "advisor_approved" as const } : h
     );
-    const after = evaluateWorkspaceReadiness({ ...ws(), holdings: reviewed });
+    const after = evaluateWorkspaceReadiness({ sourceDocuments: [], ...ws(), holdings: reviewed });
     expect(readinessOk(after)).toBe(true);
   });
 });

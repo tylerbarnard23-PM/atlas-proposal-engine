@@ -1,6 +1,6 @@
 "use client";
 
-import { itemsToLines, type PdfText, type PositionedText } from "./layoutLines";
+import { itemsToLines, toDisplay, type PdfText, type PositionedText } from "./layoutLines";
 
 export const MAX_PDF_BYTES = 25 * 1024 * 1024;
 export const MAX_PDF_PAGES = 300;
@@ -53,21 +53,25 @@ export async function readPdfInBrowser(
   }
 
   const pages: string[][] = [];
+  const positioned: PositionedText[][] = [];
   try {
     for (let n = 1; n <= doc.numPages; n++) {
       onProgress?.(n, doc.numPages);
       const page = await doc.getPage(n);
       const content = await page.getTextContent();
+      // Positions as displayed, honoring the page's rotation.
+      const viewport = page.getViewport({ scale: 1 });
       const items: PositionedText[] = [];
       for (const it of content.items) {
         if (!("str" in it)) continue;
-        items.push({ str: it.str, x: it.transform[4], y: it.transform[5], width: it.width, height: it.height });
+        items.push(toDisplay(it, viewport));
       }
       pages.push(itemsToLines(items));
+      positioned.push(items);
       page.cleanup();
     }
   } finally {
     await task.destroy();
   }
-  return { pageCount: pages.length, pages };
+  return { pageCount: pages.length, pages, items: positioned };
 }

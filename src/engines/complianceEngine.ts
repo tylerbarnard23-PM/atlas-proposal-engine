@@ -7,10 +7,12 @@ import type {
   Disclosure,
   ComplianceCheck,
   FxRate,
+  SourceDocument,
 } from "@/domain/types";
 import { applyRecommendationsToProposed, cashShortfallsOf, type CashShortfall, type UnresolvedConversion } from "./proposalEngine";
 import { normalizeHoldings } from "./normalizationEngine";
 import { missingPairs, valuationSummary, type ValuationSummary } from "./valuationTotals";
+import { describeImportIssue, importIssues, type ImportIssue } from "./importCompleteness";
 
 export interface ReadinessInputs {
   client: ClientProfile;
@@ -30,6 +32,8 @@ export interface ReadinessInputs {
   unresolvedConversions?: UnresolvedConversion[];
   // Holdings that couldn't be valued in the reporting currency.
   valuation?: ValuationSummary;
+  // Imported documents whose rows don't account for the whole document.
+  importIssues?: ImportIssue[];
 }
 
 export function evaluateReadiness(inp: ReadinessInputs): ComplianceCheck[] {
@@ -68,6 +72,13 @@ export function evaluateReadiness(inp: ReadinessInputs): ComplianceCheck[] {
       valuation && !valuation.complete
         ? `${valuation.net.unvaluedCount} not valued: ${missingPairs(valuation.net, inp.client.proposalOutputCurrency).join(", ")} rate missing`
         : undefined,
+  });
+  const issues = inp.importIssues ?? [];
+  checks.push({
+    code: "imports_complete",
+    label: "Imported documents fully accounted for",
+    passed: issues.length === 0,
+    detail: issues.length > 0 ? issues.map(describeImportIssue).join("; ") : undefined,
   });
   checks.push({
     code: "unverified_holdings",
@@ -164,6 +175,8 @@ export interface WorkspaceReadinessInputs {
   disclosures: Disclosure[];
   /** Rates used to express proposed trades in each holding's own currency. */
   fxRates: FxRate[];
+  /** Imported documents, to check each import accounted for its whole document. */
+  sourceDocuments: SourceDocument[];
 }
 
 export function evaluateWorkspaceReadiness(ws: WorkspaceReadinessInputs): ComplianceCheck[] {
@@ -179,6 +192,7 @@ export function evaluateWorkspaceReadiness(ws: WorkspaceReadinessInputs): Compli
     cashShortfalls: cashShortfallsOf(proposed.holdings, ws.accounts, fx),
     unresolvedConversions: proposed.unresolved,
     valuation: valuationSummary(holdings),
+    importIssues: importIssues(ws.sourceDocuments ?? [], ws.holdings),
     ...ws,
     holdings,
     disclosures: ws.disclosures.filter((d) => d.required),

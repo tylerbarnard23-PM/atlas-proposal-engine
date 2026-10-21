@@ -60,6 +60,15 @@ export function runDemoCopilot(snapshot: CopilotSnapshot, question: string): Cop
 
   const insights = call<InsightList>("list_insights", { min_severity: "warning" });
   const v = overview.valuation;
+  const imports = overview.completeness;
+  if (!imports.imports_complete) {
+    // An import that doesn't account for its whole document: the workspace
+    // may be missing positions, so no figure below is the whole portfolio.
+    lines.push(
+      `**Import incomplete:** ${imports.import_issues.join("; ")}. The figures below cover what was imported and may not be the whole portfolio; trade-sizing drafts are paused until the import is complete.`,
+      ""
+    );
+  }
   if (v.complete) {
     lines.push(
       `**${overview.client.name}**: net worth ${money(overview.net_worth.net!)} across ${overview.counts.accounts} accounts and ${overview.counts.holdings} holdings, reported in ${overview.reporting_currency}.`,
@@ -101,7 +110,7 @@ export function runDemoCopilot(snapshot: CopilotSnapshot, question: string): Cop
     if (i.category === "concentration" && holdingId) {
       const h = call<HoldingDetail>("get_holding", { holding_id: holdingId });
       // A trim is sized against the whole portfolio: only with every holding valued.
-      if (!h || !v.complete || h.reporting_value == null) continue;
+      if (!h || !v.complete || !imports.imports_complete || h.reporting_value == null) continue;
       if (!h.liquidity || !TRADEABLE.has(h.liquidity)) {
         illiquidConcentrations.push(`${h.name} (${h.pct_of_investible}%, ${h.liquidity ?? "liquidity unknown"})`);
         continue;
@@ -184,6 +193,7 @@ interface Overview {
     unvalued: { name: string; currency: string }[];
     missing_rates: string[];
   };
+  completeness: { valuation_complete: boolean; imports_complete: boolean; import_issues: string[] };
   counts: { accounts: number; holdings: number };
   allocation_by_asset_class: { label: string; value: number; pct: number | null }[];
   existing_recommendations: { holding_id: string | null }[];

@@ -1,6 +1,8 @@
 "use client";
 
 import * as React from "react";
+import { holdingsFromIncompleteImports } from "@/engines/importCompleteness";
+import { ImportNotice, IncompleteImportTag } from "@/components/import/ImportNotice";
 import Link from "next/link";
 import { Ban, CheckCheck, CheckCircle2, Lightbulb, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { useAtlasStore } from "@/store/useStore";
@@ -91,6 +93,9 @@ function Inner() {
     () => Object.fromEntries(normalized.map((h) => [h.id, h])),
     [normalized]
   );
+  // Recommendations on holdings from an import that isn't fully accounted for.
+  const sourceDocuments = useAtlasStore((s) => s.sourceDocuments);
+  const fromIncomplete = React.useMemo(() => holdingsFromIncompleteImports(sourceDocuments, normalized), [sourceDocuments, normalized]);
 
   function newRec() {
     setEditing({
@@ -166,6 +171,8 @@ function Inner() {
         </div>
       )}
 
+      <ImportNotice className="mb-4" />
+
       {shortfalls.length > 0 && (
         <div role="alert" className="mb-4 rounded-md bg-negative-50 ring-1 ring-inset ring-negative-500/30 px-4 py-3 text-[13px] text-ink-800">
           <div className="font-semibold text-negative-600">Approved purchases exceed available cash</div>
@@ -217,6 +224,7 @@ function Inner() {
                         )}
                         <Badge tone="neutral">{r.priority} priority</Badge>
                         {r.includeInPdf && <Badge tone="gold">In PDF prose</Badge>}
+                        {r.relatedHoldingId && fromIncomplete.has(r.relatedHoldingId) && <IncompleteImportTag />}
                       </div>
                       <h4 className={`font-serif text-lg mt-1.5 ${rejected ? "text-ink-500 line-through decoration-ink-300" : "text-ink-900"}`}>{r.title}</h4>
                       {rejected && (
