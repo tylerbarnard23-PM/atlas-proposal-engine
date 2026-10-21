@@ -25,6 +25,7 @@ type State =
 const KIND_LABEL: Record<string, string> = {
   financial_plan_lifeview: "Financial plan (LifeView-style)",
   statement_table: "Statement (holdings table)",
+  holdings_report: "Holdings report (positioned table)",
 };
 
 // Reads a PDF in the browser, recognizes the document, reconciles it against
@@ -166,7 +167,7 @@ function ImportResult({
       <ReconciliationBadge
         rec={result.reconciliation}
         lines={rows.filter(({ h }) => h.marketValue != null).length}
-        statement={result.documentKind === "statement_table"}
+        statement={result.documentKind === "statement_table" || result.documentKind === "holdings_report"}
       />
 
       {result.warnings.map((w, i) => (
@@ -233,8 +234,8 @@ function ImportResult({
   );
 }
 
-function ReconciliationBadge({ rec, lines, statement }: { rec?: Reconciliation; lines: number; statement?: boolean }) {
-  const fmt = (n?: number) => (n === undefined ? "n/a" : formatCurrency(n, "USD"));
+export function ReconciliationBadge({ rec, lines, statement }: { rec?: Reconciliation; lines: number; statement?: boolean }) {
+  const fmt = (n?: number) => (n === undefined ? "n/a" : formatCurrency(n, rec?.currency ?? "USD"));
   if (!rec || rec.status === "unavailable") {
     return (
       <div className="flex items-start gap-2 rounded-md bg-slatey-50 ring-1 ring-inset ring-ink-200 px-3 py-2 text-[13px] text-ink-700">
@@ -250,7 +251,14 @@ function ReconciliationBadge({ rec, lines, statement }: { rec?: Reconciliation; 
         {statement ? (
           <div>
             <span className="font-semibold text-positive-600">Matches the statement&apos;s total.</span> {lines} rows add up to{" "}
-            {fmt(rec.netWorthExtracted)}, the total the statement states.
+            {rec.netWorthStated === undefined || Math.abs(rec.netWorthStated - rec.netWorthExtracted) < 0.005 ? (
+              <>{fmt(rec.netWorthExtracted)}, the total the statement states.</>
+            ) : (
+              <>
+                {fmt(rec.netWorthExtracted)}; the statement states {fmt(rec.netWorthStated)}. The difference is within per-row rounding (
+                {fmt(rec.tolerance)} for {lines} rows rounded to the cent).
+              </>
+            )}
           </div>
         ) : (
           <div>
@@ -268,7 +276,8 @@ function ReconciliationBadge({ rec, lines, statement }: { rec?: Reconciliation; 
         <div>
           <span className="font-semibold text-negative-600">Doesn&apos;t match the statement&apos;s total.</span> The imported rows add up
           to {fmt(rec.netWorthExtracted)}; the statement says {fmt(rec.netWorthStated)}. Some rows may be missing or misread. You can
-          still load it, but each value must be checked against the statement before it can be confirmed.
+          still load it, but each value must be checked against the statement before it can be confirmed, and the import stays marked
+          incomplete (blocking the final PDF) even after every value is confirmed.
         </div>
       ) : (
         <div>

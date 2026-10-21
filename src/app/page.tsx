@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { ImportNotice } from "@/components/import/ImportNotice";
 import { useAtlasStore } from "@/store/useStore";
 import { useNormalizedHoldings } from "@/hooks/useNormalizedHoldings";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -57,7 +58,7 @@ function DashboardInner() {
   const countries = new Set(holdings.map((h) => h.country).filter(Boolean)).size;
   const classes = new Set(holdings.map((h) => h.assetClass)).size;
 
-  const readiness = evaluateWorkspaceReadiness({ client, advisor, accounts, holdings, recommendations, disclosures, fxRates });
+  const readiness = evaluateWorkspaceReadiness({ client, advisor, accounts, holdings, recommendations, disclosures, fxRates, sourceDocuments });
   const readyCount = readiness.filter((r) => r.passed).length;
 
   return (
@@ -80,6 +81,7 @@ function DashboardInner() {
 
       <ReadinessBanner checks={readiness} className="mb-6" />
       <ValuationNotice summary={nw} reportingCurrency={reportingCurrency} className="mb-6" />
+      <ImportNotice className="mb-6" />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
         <KpiCard

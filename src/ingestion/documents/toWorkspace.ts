@@ -1,5 +1,6 @@
 import type { Account, AssetClass, ExtractedHolding, ExtractionResult, Holding, SourceDocument, SourceType } from "@/domain/types";
 import { safeId, todayIso } from "@/utils/formatting";
+import { completenessOf } from "@/engines/importCompleteness";
 
 export interface ImportedWorkspace {
   clientName?: string;
@@ -38,6 +39,7 @@ export function extractionToWorkspace(
     pageCount: result.pageCount,
     extraction: { ...result, rawText: undefined },
   };
+  sourceDocument.importCompleteness = completenessOf(sourceDocument);
 
   const accounts: Account[] = [];
   const holdings: Holding[] = [];

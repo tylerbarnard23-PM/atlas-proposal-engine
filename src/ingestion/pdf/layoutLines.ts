@@ -10,12 +10,46 @@ export interface PositionedText {
   y: number; // baseline; larger = higher on the page (PDF coordinates)
   width?: number;
   height?: number;
+  /** pdf.js font id; distinguishes, e.g., bold headings from body text. */
+  font?: string;
 }
 
-// The text of a PDF: one array of lines per page.
+// The text of a PDF: one array of lines per page, plus (from the PDF readers)
+// the positioned text those lines were built from, for table extraction.
 export interface PdfText {
   pageCount: number;
   pages: string[][];
+  items?: PositionedText[][];
+}
+
+// pdf.js text item, as getTextContent returns it.
+interface PdfJsTextItem {
+  str: string;
+  transform: number[];
+  width: number;
+  height: number;
+  fontName?: string;
+}
+
+const multiply = (m1: number[], m2: number[]) => [
+  m1[0] * m2[0] + m1[2] * m2[1],
+  m1[1] * m2[0] + m1[3] * m2[1],
+  m1[0] * m2[2] + m1[2] * m2[3],
+  m1[1] * m2[2] + m1[3] * m2[3],
+  m1[0] * m2[4] + m1[2] * m2[5] + m1[4],
+  m1[1] * m2[4] + m1[3] * m2[5] + m1[5],
+];
+
+/**
+ * Positions a text item as the page is displayed. Pages can be stored rotated
+ * (a landscape table on a portrait page with /Rotate 90 and rotated text);
+ * reading raw coordinates then rebuilds table columns as lines. Applying the
+ * page's viewport transform puts every item where a reader sees it. For an
+ * unrotated page this is the identity (same x, same y).
+ */
+export function toDisplay(it: PdfJsTextItem, viewport: { transform: number[]; height: number }): PositionedText {
+  const m = multiply(viewport.transform, it.transform);
+  return { str: it.str, x: m[4], y: viewport.height - m[5], width: it.width, height: it.height, font: it.fontName };
 }
 
 const SAME_LINE_TOLERANCE = 2.5; // points

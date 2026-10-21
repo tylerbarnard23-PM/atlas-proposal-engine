@@ -14,10 +14,11 @@ export function useWorkspaceReadiness() {
   const recommendations = useAtlasStore((s) => s.recommendations);
   const disclosures = useAtlasStore((s) => s.disclosures);
   const fxRates = useAtlasStore((s) => s.fxRates);
+  const sourceDocuments = useAtlasStore((s) => s.sourceDocuments);
   const { holdings } = useNormalizedHoldings();
   return useMemo(() => {
-    const checks = evaluateWorkspaceReadiness({ client, advisor, accounts, holdings, recommendations, disclosures, fxRates });
+    const checks = evaluateWorkspaceReadiness({ client, advisor, accounts, holdings, recommendations, disclosures, fxRates, sourceDocuments });
     const failing = checks.filter((c) => !c.passed);
     return { checks, failing, ready: readinessOk(checks) };
-  }, [client, advisor, accounts, holdings, recommendations, disclosures, fxRates]);
+  }, [client, advisor, accounts, holdings, recommendations, disclosures, fxRates, sourceDocuments]);
 }

@@ -7,6 +7,7 @@ import { applyRecToValue } from "@/engines/proposalEngine";
 import { missingPairs, reportingValue, valuationSummary, valuationTotal, type ValuedTotal } from "@/engines/valuationTotals";
 import { evaluateWorkspaceReadiness, readinessOk } from "@/engines/complianceEngine";
 import { safeId, todayIso } from "@/utils/formatting";
+import { describeImportIssue, importIssues, type ImportIssue } from "@/engines/importCompleteness";
 import type { CopilotSnapshot } from "./snapshot";
 
 // Every tool here is a thin, read-only wrapper over the deterministic engines.
@@ -40,6 +41,15 @@ export class CopilotContext {
   // usable denominator when the status is "complete".
   get investible(): ValuedTotal {
     return valuationTotal(this.holdings.filter((h) => !h.isLiability));
+  }
+
+  /** Imported documents not fully accounted for (rows missing, unreadable, or nothing to check against). */
+  get importIssues(): ImportIssue[] {
+    return importIssues(this.snapshot.sourceDocuments ?? [], this.snapshot.holdings);
+  }
+
+  get importsComplete(): boolean {
+    return this.importIssues.length === 0;
   }
 
   /** Every holding valued: portfolio weights and allocation-changing drafts are allowed. */
@@ -88,6 +98,21 @@ function valuationNote(ctx: CopilotContext) {
   };
 }
 
+// What the model is told about import completeness: a valued portfolio can
+// still be missing positions the import couldn't read.
+function completenessNote(ctx: CopilotContext) {
+  const issues = ctx.importIssues;
+  return {
+    valuation_complete: ctx.valuationComplete,
+    imports_complete: issues.length === 0,
+    import_issues: issues.map(describeImportIssue),
+    note:
+      issues.length === 0
+        ? undefined
+        : "An import is incomplete or its completeness is unknown: the workspace may be missing positions, so don't present totals or weights as the whole portfolio, and trade-sizing drafts are refused.",
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Tool implementations
 // ---------------------------------------------------------------------------
@@ -131,6 +156,8 @@ function getPortfolioOverview(ctx: CopilotContext) {
       net: round(nw.net.value),
     },
     valuation: valuationNote(ctx),
+    // Both must be true before the portfolio is presented as complete.
+    completeness: completenessNote(ctx),
     counts: { accounts: ctx.snapshot.accounts.length, holdings: ctx.holdings.length },
     // Valued holdings only; percentages are null while valuation is incomplete.
     allocation_by_asset_class: summarizeAllocation(ctx.holdings, (h) => h.assetClass).map((r) => ({
@@ -270,6 +297,7 @@ function checkReadiness(ctx: CopilotContext) {
     recommendations: s.recommendations,
     disclosures: s.disclosures,
     fxRates: s.fxRates,
+    sourceDocuments: s.sourceDocuments ?? [],
   });
   return {
     ready: readinessOk(checks),
@@ -299,14 +327,21 @@ function draftRecommendation(ctx: CopilotContext, input: z.infer<typeof DraftInp
   // portfolio honestly, so drafts that would change the allocation are
   // refused here, in code. Advisory drafts (no holding, or no value change)
   // still go through.
-  if (input.holding_id && !ctx.valuationComplete) {
+  // The same holds while an import is incomplete: the portfolio the trade is
+  // sized against may be missing positions.
+  if (input.holding_id && (!ctx.valuationComplete || !ctx.importsComplete)) {
     const h = ctx.holding(input.holding_id)!;
     const before = reportingValue(h);
     const rec = { type: input.type, actionAmount: input.action_amount, actionAmountUnit: input.action_amount_unit, proposedValue: input.proposed_value } as Recommendation;
     const changes = before == null || input.proposed_value != null || Math.abs(applyRecToValue(before, rec, !!h.isLiability) - before) >= 1;
-    if (changes) {
+    if (changes && !ctx.valuationComplete) {
       throw new ToolInputError(
         `Valuation is incomplete (${missingPairs(valuationSummary(ctx.holdings).net, ctx.reportingCurrency).join(", ")} rate missing), so allocation-changing drafts are paused. Draft an advisory recommendation instead, or ask the advisor to add the missing rate in Market Data.`
+      );
+    }
+    if (changes) {
+      throw new ToolInputError(
+        `An import is incomplete or its completeness is unknown (${ctx.importIssues.map(describeImportIssue).join("; ")}), so trade-sizing drafts are paused. Draft an advisory recommendation instead (for example, to obtain a complete statement).`
       );
     }
   }

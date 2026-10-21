@@ -34,9 +34,10 @@ function Inner() {
   const setProposalNotes = useAtlasStore((s) => s.setProposalNotes);
   const disclosures = useAtlasStore((s) => s.disclosures);
   const fxRates = useAtlasStore((s) => s.fxRates);
+  const sourceDocuments = useAtlasStore((s) => s.sourceDocuments);
   const { holdings } = useNormalizedHoldings();
 
-  const readiness = evaluateWorkspaceReadiness({ client, advisor, accounts, holdings, recommendations: recs, disclosures, fxRates });
+  const readiness = evaluateWorkspaceReadiness({ client, advisor, accounts, holdings, recommendations: recs, disclosures, fxRates, sourceDocuments });
 
   return (
     <>

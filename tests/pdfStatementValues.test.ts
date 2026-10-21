@@ -137,3 +137,51 @@ describe("the financial-plan reader is unaffected", () => {
     expect(PLAN_EXPECTED.lines.length).toBeGreaterThan(0);
   });
 });
+
+// Review findings carried forward on PR #30.
+describe("total labels and reconciliation currency", () => {
+  const ROWS = ISSUE_29_LINES.slice(6, 9);
+  const totalLine = (label: string, amount: string) => `${label.padEnd(62)}${amount}`;
+
+  it.each(["Grand Total", "Account Total", "Portfolio Total", "Grand total"])("%s is the stated total, never a holding", async (label) => {
+    const r = await extract(statement(ROWS, totalLine(label, "USD 8,300,000.00")));
+    expect(rows(r)).toHaveLength(3);
+    expect(r.reconciliation).toMatchObject({ status: "matched", assetsStated: 8_300_000, assetsExtracted: 8_300_000 });
+  });
+
+  it("section totals don't replace the account total", async () => {
+    const r = await extract(
+      statement([...ROWS, totalLine("Total Equities", "USD 8,000,000.00"), totalLine("Total Cash", "USD 200,000.00")], totalLine("Total Account Value", "USD 8,300,000.00"))
+    );
+    expect(rows(r)).toHaveLength(3);
+    expect(r.reconciliation).toMatchObject({ status: "matched", assetsStated: 8_300_000 });
+  });
+
+  it("section totals alone are not an account total: reconciliation stays unavailable", async () => {
+    const r = await extract(statement([...ROWS, totalLine("Total Equities", "USD 8,000,000.00"), totalLine("Total Cash", "USD 200,000.00")]));
+    expect(rows(r)).toHaveLength(3);
+    expect(r.reconciliation?.status).toBe("unavailable");
+  });
+
+  it("conflicting account totals require review", async () => {
+    const r = await extract(statement([...ROWS, totalLine("Total Account Value", "USD 8,300,000.00")], totalLine("Grand Total", "USD 8,400,000.00")));
+    expect(r.reconciliation?.status).toBe("mismatch");
+    expect(r.warnings.some((w) => w.severity === "critical" && /conflicting totals/i.test(w.message))).toBe(true);
+  });
+
+  it("keeps the statement's currency and shows it in the import review", async () => {
+    const eur = [
+      "Holding                         Symbol      Qty       Price       Market Value",
+      "Siemens AG QA Import            SIE         1000      EUR 180.00  EUR 180,000.00",
+      "Total Account Value                                           EUR 180,000.00",
+    ];
+    const r = await extract([...HEADER.slice(0, 5), ...eur]);
+    expect(r.reconciliation).toMatchObject({ status: "matched", currency: "EUR", assetsStated: 180_000 });
+    const React = await import("react");
+    const { renderToStaticMarkup } = await import("react-dom/server");
+    const { ReconciliationBadge } = await import("@/components/import/PdfImport");
+    const html = renderToStaticMarkup(React.createElement(ReconciliationBadge, { rec: r.reconciliation, lines: 1, statement: true }));
+    expect(html).toContain("€180,000.00");
+    expect(html).not.toContain("$");
+  });
+});

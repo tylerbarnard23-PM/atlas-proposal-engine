@@ -14,6 +14,7 @@ import type {
   Proposal,
   ProposalSection,
   Recommendation,
+  SourceDocument,
 } from "@/domain/types";
 import { evaluateWorkspaceReadiness, readinessOk } from "@/engines/complianceEngine";
 import { checkLogoDataUrl, isValidAccentColor } from "@/domain/branding";
@@ -34,6 +35,8 @@ interface RequestBody {
     // Rates for expressing proposed trades in each holding's own currency.
     // Missing rates are reported by readiness; they never default to 1:1.
     fxRates?: FxRate[];
+    // Each import's completeness (see forReadiness), for the readiness gate.
+    sourceDocuments?: SourceDocument[];
   };
 }
 
@@ -61,7 +64,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   // The UI disables the final button until readiness passes; enforce the same
   // gate here so a direct API call can't skip it.
   if (variant === "final") {
-    const { client, advisor, accounts, holdings, recommendations, disclosures, fxRates } = body.state;
+    const { client, advisor, accounts, holdings, recommendations, disclosures, fxRates, sourceDocuments } = body.state;
     const checks = evaluateWorkspaceReadiness({
       client,
       advisor,
@@ -70,6 +73,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       recommendations: recommendations ?? [],
       disclosures: disclosures ?? [],
       fxRates: Array.isArray(fxRates) ? fxRates : [],
+      sourceDocuments: Array.isArray(sourceDocuments) ? sourceDocuments : [],
     });
     if (!readinessOk(checks)) {
       const failing = checks.filter((c) => !c.passed).map((c) => c.label);
