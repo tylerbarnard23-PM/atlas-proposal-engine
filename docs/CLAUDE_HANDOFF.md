@@ -2,7 +2,7 @@
 
 The state of the project for the next working session: what's done, how it was checked, what's known to be missing, and what comes next. Update it at the end of each piece of work.
 
-_Last updated: 2026-10-21, on branch `fix/recommendation-currency` (issue #24, PR #31, not merged; review fix for percentage edits included)._
+_Last updated: 2026-10-21, after merging PR #31 (#24). Next: #26, plan proposed, not started._
 
 ## Working agreements
 - Every bug, idea or parked item gets a GitHub issue; a PR closes its issue.
@@ -13,7 +13,13 @@ _Last updated: 2026-10-21, on branch `fix/recommendation-currency` (issue #24, P
 - Don't commit third-party PDFs. The UBS holdings-report sample goes in `tests/fixtures/private/`, which is git-ignored; its tests skip when it's absent.
 
 ## Production
-`main` at `60f43bf` (merge of #30) is live, deployment `dpl_3xARP7M9…`. It was smoke-tested on 2026-10-21. On the live site: linked recommendation effects, and the final-PDF route refusing an incomplete import. On a local production build of the same commit: the UBS import (68 positions, $10,648,193.74, matched), LifeView (21 lines, matched), and the incomplete-import gate.
+`main` at **`9d44d9f`** (merge of PR #31, pinned to head `3a1482f`, CI green on that commit) is live: deployment `dpl_4V9aw12vvUreEQq3xYLKdFJaUzEz`, READY, aliased to https://atlas-proposal-engine.vercel.app. Smoke-tested on the live site, 2026-10-21:
+- **Existing USD workspace** (a real v4 save in the browser): migrated to v5 with 25 holdings, 6 recommendations and no flags. The proposal's currency and country fields were dropped and effects were unchanged.
+- **EUR reporting with USD-labelled amounts** (the same save set to EUR, plus a mixed recommendation): both money recommendations migrated to EUR with the "USD" label kept as an open review. Maritime's target is still calculated as EUR 181,760, as before the update.
+- **Percentage-only edit** (10% → 20%) on the approved, included mixed recommendation: the approval cleared and the review stayed open. Re-approving left it open.
+- **Final-PDF gate.** With every holding confirmed, the route returned 422 with exactly "Recommendation currencies confirmed". After "Keep EUR amounts" it returned 200, rendering a final PDF. The test workspace was then restored to the migrated sample.
+
+The previous release, `60f43bf` (merge of #30), was smoke-tested the same day. On the live site: linked recommendation effects, and the import gate. On a local build of that commit: the UBS import (68 positions, $10,648,193.74, matched), LifeView (21 lines, matched), and the incomplete-import gate.
 
 ## Completed recently
 | Issue / PR | What |
@@ -21,9 +27,9 @@ _Last updated: 2026-10-21, on branch `fix/recommendation-currency` (issue #24, P
 | #21 / #25 | Currency contract for the proposed portfolio: explicit FX, no 1:1 fallback, unresolved conversions reported. |
 | #23 / #27 | Unvalued holdings stay unvalued through the proposal; totals say what they exclude; the final PDF is blocked. |
 | #29 / #30 | PDF statements: values read correctly; account totals reconciled with their currency; positioned holdings reports (UBS sample) read by column geometry; import completeness persisted and enforced. |
-| #24 / #31 (open) | Recommendation amounts keep their own currency (see below). |
+| #24 / #31 (merged `9d44d9f`) | Recommendation amounts keep their own currency (see below). |
 
-## #24: recommendation currency (this branch)
+## #24: recommendation currency (merged in PR #31)
 - **Amount currency.** `Recommendation.currency` is the denomination of `proposedValue` (always monetary) and of `actionAmount` when its unit is `amount`. A `percent` amount stays a percentage.
 - **One conversion.** `amountsInReporting` (in `src/engines/recommendationAmounts.ts`) converts once, at the workspace's current rates, and reports the rate, source, as-of date and path (direct, inverse, or cross via USD). `applyRecToValue` accepts only its output, a distinct type, so the engine, cards, form, Copilot and PDF can't skip the conversion or do it twice.
 - **Missing rate.** The recommendation is left unapplied and reported as unresolved (the `fx_available` check, and the PDF's "not applied" block).
@@ -80,7 +86,12 @@ _Last updated: 2026-10-21, on branch `fix/recommendation-currency` (issue #24, P
 - **Live-site import checks need a manual upload.** The automated browser couldn't put local files into the live page.
 
 ## Next step
-1. Review PR #31 (#24); merge only on approval, then confirm the production deploy.
-2. Then #26 (FX refresh: merge and stale-rate policy), now more visible because recommendation conversions use current rates.
-3. Then #28 (dates shown a day early west of UTC).
-4. Backlog enhancements (#11–#19) stay parked until chosen.
+1. **#26 (FX refresh, retained rates, stale-rate policy).** The plan has been proposed and is awaiting review; no code yet. Findings:
+   - **Refresh replaces everything.** The Market Data refresh replaces the whole rate set, so a partial response drops pairs.
+   - **Opposite orientations can coexist.** The provider returns USD→X pairs while the sample stores X→USD. The resolver prefers a direct pair, so a stale stored pair could beat a fresh inverse one.
+   - **Fixed currency list.** The refresh asks for a fixed list and ignores currencies brought in by imports.
+   - **Silent failure.** A failed refresh says nothing.
+   - **Staleness isn't used.** `isStale` exists but nothing sets or uses it. The sample's rates are dated 2026-04-30.
+   - **PDF.** The PDF names the rate source but not the rates or their dates.
+2. Then #28 (dates shown a day early west of UTC). Keep it separate from #26.
+3. Backlog enhancements (#11–#19) stay parked until chosen.
