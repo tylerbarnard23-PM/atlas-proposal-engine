@@ -10,6 +10,7 @@ import type { Holding, Insight } from "@/domain/types";
 import { buildIdentifier } from "@/ingestion/normalizers/detectIdentifier";
 import { staleThresholdDays } from "@/engines/dataTasks";
 import { formatNative } from "@/engines/valuationTotals";
+import { resolveValuation } from "@/engines/valuationEngine";
 import { formatCurrency, formatDate, todayIso } from "@/utils/formatting";
 
 // One "Data to complete" item: what's missing, why it matters, and the fix
@@ -111,9 +112,20 @@ function Name({ h, sub }: { h: Holding; sub?: React.ReactNode }) {
 // No usable exchange rate: the native amount is known, the reporting value
 // isn't. The fix is the rate itself, in Market Data.
 function MissingRateRow({ h, reportingCurrency }: { h: Holding; reportingCurrency: string }) {
+  // The value that needs converting: a locked approved value in its own
+  // currency, else the statement amount.
+  const v = resolveValuation(h);
   return (
     <div className="flex flex-wrap items-center justify-between gap-2">
-      <Name h={h} sub={<span className="tabular">{formatNative({ currency: h.currency, amount: h.nativeMarketValue })} · no {h.currency}/{reportingCurrency} rate</span>} />
+      <Name
+        h={h}
+        sub={
+          <span className="tabular">
+            {h.isLiability ? "Liability · " : ""}
+            {formatNative({ currency: v.currency, amount: v.amount })} · no {v.currency}/{reportingCurrency} rate
+          </span>
+        }
+      />
       <Link href="/market-data">
         <Button size="sm" iconLeft={<RefreshCw className="h-3.5 w-3.5" />}>Add the rate in Market Data</Button>
       </Link>

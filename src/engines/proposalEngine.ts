@@ -1,6 +1,7 @@
 import type { Account, CurrencyCode, FxRate, Holding, Proposal, ProposalSection, Recommendation } from "@/domain/types";
 import { sumBy } from "@/utils/numbers";
 import { resolveFxRate } from "./currencyEngine";
+import type { HoldingValuation } from "./normalizationEngine";
 
 export const DEFAULT_PROPOSAL_SECTIONS: ProposalSection[] = [
   { key: "executive_summary", label: "Executive Summary", enabled: true, required: true },
@@ -120,14 +121,26 @@ function rateToReporting(fx: FxContext, ccy: CurrencyCode): number | null {
   return r && r.rate > 0 ? r.rate : null;
 }
 
-// A holding's value in the reporting currency: its normalized reporting
-// value, else its native value converted with an explicit rate, else null.
+type MaybeNormalized = Holding & { valuation?: HoldingValuation };
+
+// A holding's value in the reporting currency, or null.
+// - A normalized holding says explicitly whether it is valued: an unvalued
+//   one stays unvalued and is never recovered from its statement amount
+//   (which may be in a different currency from the value that counts).
+// - A raw holding (no valuation) uses its reporting value, else its native
+//   value converted with an explicit rate.
 // Never the native amount read as if it were the reporting currency.
-function reportingValueOf(h: Holding, fx: FxContext): number | null {
+function reportingValueOf(h: MaybeNormalized, fx: FxContext): number | null {
+  if (h.valuation) return h.valuation.status === "valued" && h.reportingMarketValue != null ? h.reportingMarketValue : null;
   if (h.reportingMarketValue != null) return h.reportingMarketValue;
   const rate = rateToReporting(fx, h.currency);
   return rate == null ? null : h.nativeMarketValue * rate;
 }
+
+// The currency a holding is valued in: a locked approved value's own
+// currency, else the holding's.
+const valuationCurrencyOf = (h: MaybeNormalized): CurrencyCode =>
+  h.valuation?.currency ?? h.proposalApprovedValue?.currency ?? h.currency;
 
 // Apply approved recommendations to produce the proposed holdings view.
 // Hierarchy of intent for any single recommendation:
@@ -183,6 +196,7 @@ export function applyRecommendationsToProposed(
   // conversions an action actually needs are required: an allocation-neutral
   // action (hold, a fee-fund swap) changes nothing and needs no rate.
   const newValueById = new Map<string, number>();
+  const startById = new Map<string, number>();
   const cashByAccount = new Map<string, number>();
   const bump = (acctId: string, delta: number) =>
     cashByAccount.set(acctId, (cashByAccount.get(acctId) ?? 0) + delta);
@@ -194,7 +208,7 @@ export function applyRecommendationsToProposed(
     if (!recs?.length) continue;
     const start = reportingValueOf(h, fx);
     if (start == null) {
-      unresolve(recs, h, h.currency);
+      unresolve(recs, h, valuationCurrencyOf(h));
       continue;
     }
     let value = start;
@@ -219,14 +233,27 @@ export function applyRecommendationsToProposed(
     // Nothing moved: leave the holding exactly as it is.
     if (value === start && cashOffset === 0 && paydown === 0) continue;
 
-    // Writing the new native value needs the holding's rate; a cash offset
-    // needs the rate of the cash line it lands in.
-    const needed = [h.currency, ...(cashOffset !== 0 ? [cashCurrency(h.accountId)] : [])];
+    // Writing the new value needs the rate of the currency it is valued in
+    // (an approved value's own currency); a cash offset needs a valued cash
+    // line, or a usable rate for the new one it would create.
+    const vc = valuationCurrencyOf(h);
+    const needed = [vc];
+    // A zero-valued approved holding can't be scaled, so its statement currency is needed too.
+    if (h.proposalApprovedValue && start === 0 && vc !== h.currency) needed.push(h.currency);
+    if (cashOffset !== 0) {
+      const line = cashLine(h.accountId);
+      if (line && reportingValueOf(line, fx) == null) {
+        unresolve(recs, h, valuationCurrencyOf(line));
+        continue;
+      }
+      needed.push(cashCurrency(h.accountId));
+    }
     const missing = needed.find((c) => rateToReporting(fx, c) == null);
     if (missing) {
       unresolve(recs, h, missing);
       continue;
     }
+    startById.set(h.id, start);
     if (cashOffset !== 0) bump(h.accountId, cashOffset);
     if (paydown > 0) paydowns.push({ holding: h, recs, amount: paydown });
     newValueById.set(h.id, value);
@@ -274,11 +301,27 @@ export function applyRecommendationsToProposed(
     }
   }
 
-  // Second pass: write the new values, keeping each in its own currency.
-  const result: Holding[] = current.map((h) => {
+  // Second pass: write the new values, each in its own currency. A locked
+  // approved value moves in its own currency, and the statement amount moves
+  // in proportion, so re-valuing the proposed holding gives the same figure.
+  const result: Holding[] = current.map((h: MaybeNormalized) => {
     const newVal = newValueById.get(h.id);
     if (newVal === undefined) return h;
-    return { ...h, reportingMarketValue: newVal, nativeMarketValue: newVal / rateToReporting(fx, h.currency)! };
+    const vc = valuationCurrencyOf(h);
+    const inValuationCurrency = newVal / rateToReporting(fx, vc)!;
+    const start = startById.get(h.id) ?? 0;
+    const nativeMarketValue = !h.proposalApprovedValue
+      ? inValuationCurrency
+      : start !== 0
+      ? h.nativeMarketValue * (newVal / start)
+      : newVal / rateToReporting(fx, h.currency)!;
+    return {
+      ...h,
+      reportingMarketValue: newVal,
+      nativeMarketValue,
+      ...(h.proposalApprovedValue ? { proposalApprovedValue: { ...h.proposalApprovedValue, amount: inValuationCurrency } } : {}),
+      ...(h.valuation?.status === "valued" ? { valuation: { ...h.valuation, amount: inValuationCurrency } } : {}),
+    };
   });
 
   // Third pass: apply each account's net cash delta, converted into the
@@ -291,12 +334,14 @@ export function applyRecommendationsToProposed(
       (h) => h.accountId === accountId && h.assetClass === "cash" && !h.isLiability
     );
     if (cashIdx >= 0) {
-      const existing = result[cashIdx];
+      const existing: MaybeNormalized = result[cashIdx];
+      // A cash line that receives a delta was checked above to be valued.
       const rate = rateToReporting(fx, existing.currency)!;
-      const updated: Holding = {
+      const updated: MaybeNormalized = {
         ...existing,
         reportingMarketValue: reportingValueOf(existing, fx)! + delta,
         nativeMarketValue: existing.nativeMarketValue + delta / rate,
+        ...(existing.valuation?.status === "valued" ? { valuation: { ...existing.valuation, amount: existing.valuation.amount + delta / rate } } : {}),
         valuationSource: {
           ...existing.valuationSource,
           note: [existing.valuationSource.note, "Adjusted by proposed actions"]

@@ -39,16 +39,19 @@ const CASH_DRAG_PCT = 12;
 export function generateInsights({ holdings, reportingCurrency }: InsightInputs): Insight[] {
   const out: Insight[] = [];
   const investible = holdings.filter((h) => !h.isLiability);
-  if (investible.length === 0) return out;
   const now = todayIso();
   // Portfolio-wide conclusions (concentration, currency, country, liquidity,
   // cash drag) need every holding's value: with a holding missing, the
   // denominator is unknown and a percentage could justify a trade it
   // shouldn't. They wait until valuation is complete; individual holding
   // facts and data-quality findings don't.
+  // Complete means every holding, liabilities included: an unvalued loan
+  // leaves the household picture unknown just as an unvalued asset does.
+  // Denominators stay asset-based once valuation is complete.
   const valued = valuationTotal(investible);
   const total = valued.value ?? 0;
-  const portfolioWide = valued.status === "complete" && total > 0;
+  const allValued = holdings.every((h) => reportingValue(h) != null);
+  const portfolioWide = allValued && valued.status === "complete" && total > 0;
   // Inside portfolio-wide checks every holding has a reporting value.
   const rv = (h: NormalizedHolding) => reportingValue(h)!;
 
@@ -183,7 +186,8 @@ export function generateInsights({ holdings, reportingCurrency }: InsightInputs)
   }
 
   // Data to complete: gaps the advisor can fix in place (see dataTasks).
-  for (const t of dataTasks(investible)) {
+  // Every holding: a liability with no rate is as much a gap as an asset.
+  for (const t of dataTasks(holdings)) {
     const n = t.openIds.length;
     out.push({
       id: safeId("insight"),

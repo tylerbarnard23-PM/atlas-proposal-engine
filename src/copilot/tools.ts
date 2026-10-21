@@ -61,7 +61,7 @@ const pct = (part: number, whole: number) => (whole > 0 ? Math.round((part / who
 // A weight needs a known part and a complete denominator; otherwise null.
 const weight = (ctx: CopilotContext, part: number | null) => {
   const total = ctx.investible;
-  return part == null || total.status !== "complete" || total.value == null ? null : pct(part, total.value);
+  return part == null || !ctx.valuationComplete || total.value == null ? null : pct(part, total.value);
 };
 
 // What the model is told about valuation, so it can't present a partial

@@ -293,6 +293,98 @@ describe("no silent native or zero fallbacks for reporting values", () => {
   });
 });
 
+describe("review findings: unvalued state through the proposal, and liabilities", () => {
+  const EUR_USD: FxRate = { base: "EUR", quote: "USD", rate: 1.1, asOf: "2026-10-20", source: "Manual" };
+  const usdAccount = { id: "a1", name: "Custody", type: "brokerage" as const, baseCurrency: "USD", createdAt: "", updatedAt: "" };
+  const approvedEur = holding({
+    id: "sec",
+    currency: "CHF",
+    nativeMarketValue: 1_000,
+    proposalApprovedValue: { amount: 800, currency: "EUR", source: { kind: "advisor_override" } },
+  });
+  const sale = (patch: Partial<Recommendation> = {}): Recommendation => ({
+    id: "r_sale", title: "Sell", type: "sell", relatedHoldingId: "sec", actionAmount: 100, currency: "USD", rationale: "",
+    priority: "medium", status: "approved", includeInPdf: true, approvedByAdvisor: true, createdAt: "", updatedAt: "", ...patch,
+  });
+
+  it("an explicitly unvalued holding stays unvalued: the sale is unapplied, no cash, unresolved names EUR/USD", () => {
+    const fx = { reportingCurrency: "USD", rates: [CHF_USD] }; // EUR/USD missing
+    const normalized = normalizeHoldings([approvedEur], fx.rates, "USD");
+    const { holdings, unresolved } = applyRecommendationsToProposed(normalized, [sale()], [usdAccount], fx);
+    const sec = holdings.find((h) => h.id === "sec")!;
+    expect(sec.reportingMarketValue).toBeNull(); // not recovered as CHF 1,000 × 1.25
+    expect(holdings).toHaveLength(1); // no synthetic cash
+    expect(unresolved).toEqual([expect.objectContaining({ recommendationId: "r_sale", holdingId: "sec", currency: "EUR", reportingCurrency: "USD" })]);
+    expect(valuationSummary(holdings).complete).toBe(false);
+  });
+
+  it("an approved value needs its own currency's rate, not the holding's, and stays consistent on re-valuation", () => {
+    const fx = { reportingCurrency: "USD", rates: [EUR_USD] }; // CHF/USD missing, EUR/USD present
+    const normalized = normalizeHoldings([approvedEur], fx.rates, "USD");
+    expect(normalized[0].reportingMarketValue).toBeCloseTo(880, 9);
+    const { holdings, unresolved } = applyRecommendationsToProposed(normalized, [sale()], [usdAccount], fx);
+    expect(unresolved).toEqual([]);
+    const sec = holdings.find((h) => h.id === "sec")!;
+    expect(sec.reportingMarketValue).toBeCloseTo(780, 9);
+    expect(sec.proposalApprovedValue?.amount).toBeCloseTo(780 / 1.1, 9); // the approved value moves, in EUR
+    expect(sec.proposalApprovedValue?.currency).toBe("EUR");
+    // Re-valuing the proposed holding gives the same figure.
+    expect(normalizeHoldings([sec], fx.rates, "USD")[0].reportingMarketValue).toBeCloseTo(780, 9);
+    expect(holdings.find((h) => h.id === "synth_cash_a1")?.reportingMarketValue).toBeCloseTo(100, 9);
+    expect(valuationSummary(holdings).complete).toBe(true);
+  });
+
+  it("an unvalued cash line is never a funding source or an offset target", () => {
+    const fx = { reportingCurrency: "USD", rates: [] as FxRate[] };
+    const usdSec = holding({ id: "sec", nativeMarketValue: 1_000 });
+    const chfCash = holding({ id: "cash", assetClass: "cash", currency: "CHF", nativeMarketValue: 100 });
+    const normalized = normalizeHoldings([usdSec, chfCash], fx.rates, "USD");
+    const { holdings, unresolved } = applyRecommendationsToProposed(normalized, [sale()], [usdAccount], fx);
+    expect(unresolved.map((u) => u.currency)).toEqual(["CHF"]);
+    expect(holdings.find((h) => h.id === "cash")!.reportingMarketValue).toBeNull();
+  });
+
+  // Seed workspace, fully valued, plus a loan in SEK, which has no rate.
+  const sekLoan = holding({ id: "sek_loan", accountId: SEED_ACCOUNTS[0].id, assetName: "SEK bridge loan", assetClass: "liability", isLiability: true, currency: "SEK", nativeMarketValue: -500_000 });
+  const withLoan = [...SEED_HOLDINGS, sekLoan];
+
+  it("an unvalued liability pauses portfolio-wide conclusions and is listed in Data to complete", () => {
+    const insights = generateInsights({ holdings: normalizeHoldings(withLoan, SEED_FX_RATES, "USD"), reportingCurrency: "USD" });
+    const categories = new Set(insights.map((i) => i.category));
+    for (const c of ["concentration", "currency", "country", "liquidity"]) expect(categories.has(c as never)).toBe(false);
+    expect(insights.find((i) => i.task?.kind === "missing_fx_rate")?.task?.openIds).toEqual(["sek_loan"]);
+  });
+
+  it("readiness and the Copilot agree with Insights about the liability", () => {
+    const checks = evaluateWorkspaceReadiness({ client: SEED_CLIENT, advisor: SEED_ADVISOR, accounts: SEED_ACCOUNTS, holdings: withLoan, recommendations: [], disclosures: DISCLOSURE_LIBRARY, fxRates: SEED_FX_RATES });
+    const valued = checks.find((c) => c.code === "holdings_valued")!;
+    expect(valued.passed).toBe(false);
+    expect(valued.detail).toContain("SEK/USD");
+    const ctx = new CopilotContext({ client: SEED_CLIENT, advisor: SEED_ADVISOR, accounts: SEED_ACCOUNTS, holdings: withLoan, recommendations: [], disclosures: DISCLOSURE_LIBRARY, fxRates: SEED_FX_RATES } as never);
+    const o = JSON.parse(executeTool(ctx, "get_portfolio_overview", {}).content);
+    expect(o.valuation.complete).toBe(false);
+    expect(o.valuation.unvalued).toEqual([expect.objectContaining({ holding_id: "sek_loan", is_liability: true, currency: "SEK" })]);
+    expect(o.top_holdings.every((h: { pct_of_investible: number | null }) => h.pct_of_investible === null)).toBe(true);
+    const usd = SEED_HOLDINGS.find((h) => h.currency === "USD" && !h.isLiability && h.assetClass === "equity")!;
+    expect(executeTool(ctx, "draft_recommendation", { holding_id: usd.id, type: "sell", action_amount: 1_000, title: "Sell some", priority: "medium", rationale: "Testing a trade draft." }).isError).toBe(true);
+  });
+
+  it("a liability-only workspace still reports the missing rate", () => {
+    const insights = generateInsights({ holdings: normalizeHoldings([sekLoan], [], "USD"), reportingCurrency: "USD" });
+    const task = insights.find((i) => i.task?.kind === "missing_fx_rate");
+    expect(task?.title).toBe("1 holding can't be valued in USD");
+    expect(task?.task?.openIds).toEqual(["sek_loan"]);
+  });
+
+  it("once valuation is complete, concentration is measured against assets, not net of liabilities", () => {
+    const a = holding({ id: "a", assetName: "Alpha Corp", identifier: { type: "ticker", value: "ALP" }, assetType: "stock", nativeMarketValue: 600 });
+    const b = holding({ id: "b", assetName: "Beta Corp", identifier: { type: "ticker", value: "BET" }, assetType: "stock", nativeMarketValue: 400 });
+    const loan = holding({ id: "loan", assetName: "Loan", assetClass: "liability", isLiability: true, nativeMarketValue: -900 });
+    const insights = generateInsights({ holdings: normalizeHoldings([a, b, loan], [], "USD"), reportingCurrency: "USD" });
+    expect(insights.find((i) => i.relatedHoldingIds?.[0] === "a")?.title).toBe("Alpha Corp represents 60.0% of investible assets");
+  });
+});
+
 describe("the sample workspace is unchanged when every rate is present", () => {
   beforeAll(() => {
     vi.useFakeTimers({ toFake: ["Date"] });
