@@ -329,7 +329,8 @@ export interface DataQualityIssue {
     | "ADVISOR_APPROVED_VALUE_MISSING"
     | "DUPLICATE_HOLDING"
     | "LIABILITY_AS_ASSET"
-    | "NEGATIVE_VALUE_REVIEW";
+    | "NEGATIVE_VALUE_REVIEW"
+    | "DOCUMENT_TOTAL_MISMATCH";
   severity: "info" | "warning" | "critical";
   message: string;
   fieldHint?: string;

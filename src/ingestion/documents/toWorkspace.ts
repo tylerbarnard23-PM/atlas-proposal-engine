@@ -62,6 +62,9 @@ export function extractionToWorkspace(
     const accountId = opts.targetAccountId ?? account.id;
     for (const eh of ea.holdings) {
       if (eh.status === "excluded") continue;
+      // A row whose value couldn't be read is left for the advisor to add by
+      // hand, never loaded as a zero or a guessed value.
+      if (eh.status === "needs_review" && eh.marketValue == null) continue;
       const asOf = eh.valuationDate ?? ea.statementDate ?? result.asOfDate ?? now.slice(0, 10);
       const value = eh.marketValue ?? (eh.quantity ?? 0) * (eh.price ?? 0);
       holdings.push({

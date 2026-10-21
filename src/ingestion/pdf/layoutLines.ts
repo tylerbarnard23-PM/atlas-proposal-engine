@@ -35,18 +35,30 @@ export function itemsToLines(items: PositionedText[]): string[] {
   return rows.map((row) => {
     row.sort((a, b) => a.x - b.x);
     let line = "";
-    let prevEnd: number | undefined;
+    let prev: PositionedText | undefined;
     for (const f of row) {
-      if (prevEnd !== undefined) {
-        const gap = f.x - prevEnd;
-        const size = f.height && f.height > 0 ? f.height : 10;
-        line += gap > size * 1.5 ? "  " : gap > 0.5 ? " " : "";
+      if (prev?.width !== undefined) {
+        const gap = f.x - (prev.x + prev.width);
+        line += gap > columnGap(prev, f) ? "  " : gap > 0.5 ? " " : "";
       }
       line += f.str;
-      prevEnd = f.width !== undefined ? f.x + f.width : undefined;
+      prev = f;
     }
     return line.replace(/\s+$/, "");
   });
+}
+
+// The gap that separates columns rather than words. Measured against the
+// font's own character width: in a monospaced statement two spaces (2 × 5.4pt
+// at 9pt Courier) already mark a column, though they're less than 1.5× the
+// font size. Bounded so a proportional font's single word space (about a
+// quarter of the size) stays a single space.
+function columnGap(a: PositionedText, b: PositionedText): number {
+  const size = (b.height && b.height > 0 ? b.height : a.height && a.height > 0 ? a.height : 10);
+  const widths = [a, b].filter((t) => t.width && t.str.length > 0).map((t) => t.width! / t.str.length);
+  if (widths.length === 0) return size * 1.5;
+  const charWidth = widths.reduce((s, w) => s + w, 0) / widths.length;
+  return Math.min(size * 1.5, Math.max(size * 0.6, charWidth * 1.6));
 }
 
 // Collapses runs of whitespace, for parsers that match on single spaces.

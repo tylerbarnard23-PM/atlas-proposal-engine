@@ -163,7 +163,11 @@ function ImportResult({
         {result.pageCount && <span>· {result.pageCount} pages</span>}
       </div>
 
-      <ReconciliationBadge rec={result.reconciliation} lines={rows.length} />
+      <ReconciliationBadge
+        rec={result.reconciliation}
+        lines={rows.filter(({ h }) => h.marketValue != null).length}
+        statement={result.documentKind === "statement_table"}
+      />
 
       {result.warnings.map((w, i) => (
         <div key={i} className="flex items-start gap-2 text-[12px] text-ink-600">
@@ -199,7 +203,13 @@ function ImportResult({
                 <td className="px-3 py-1.5 text-ink-600">{h.assetClass === "custom" ? "Other / unclassified (balance only)" : h.assetClass ? ASSET_CLASS_LABELS[h.assetClass] : "—"}</td>
                 <td className="px-3 py-1.5 text-ink-600 tabular">{h.valuationDate ?? "—"}</td>
                 <td className={`px-3 py-1.5 text-right tabular font-medium ${(h.marketValue ?? 0) < 0 ? "text-negative-600" : "text-ink-900"}`}>
-                  {formatCurrency(h.marketValue ?? 0, h.currency ?? "USD")}
+                  {h.marketValue == null ? (
+                    <span className="text-[12px] text-warning-600" title={h.sourceTrace.rawText}>
+                      Needs review: not imported
+                    </span>
+                  ) : (
+                    formatCurrency(h.marketValue, h.currency ?? "USD")
+                  )}
                 </td>
               </tr>
             ))}
@@ -223,7 +233,7 @@ function ImportResult({
   );
 }
 
-function ReconciliationBadge({ rec, lines }: { rec?: Reconciliation; lines: number }) {
+function ReconciliationBadge({ rec, lines, statement }: { rec?: Reconciliation; lines: number; statement?: boolean }) {
   const fmt = (n?: number) => (n === undefined ? "n/a" : formatCurrency(n, "USD"));
   if (!rec || rec.status === "unavailable") {
     return (
@@ -237,21 +247,36 @@ function ReconciliationBadge({ rec, lines }: { rec?: Reconciliation; lines: numb
     return (
       <div role="status" className="flex items-start gap-2 rounded-md bg-positive-50 ring-1 ring-inset ring-positive-500/40 px-3 py-2 text-[13px] text-ink-800">
         <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0 text-positive-500" />
-        <div>
-          <span className="font-semibold text-positive-600">Matches the document&apos;s totals.</span> {lines} lines · assets{" "}
-          {fmt(rec.assetsExtracted)} · liabilities {fmt(rec.liabilitiesExtracted)} · net worth {fmt(rec.netWorthExtracted)}
-        </div>
+        {statement ? (
+          <div>
+            <span className="font-semibold text-positive-600">Matches the statement&apos;s total.</span> {lines} rows add up to{" "}
+            {fmt(rec.netWorthExtracted)}, the total the statement states.
+          </div>
+        ) : (
+          <div>
+            <span className="font-semibold text-positive-600">Matches the document&apos;s totals.</span> {lines} lines · assets{" "}
+            {fmt(rec.assetsExtracted)} · liabilities {fmt(rec.liabilitiesExtracted)} · net worth {fmt(rec.netWorthExtracted)}
+          </div>
+        )}
       </div>
     );
   }
   return (
     <div role="alert" className="flex items-start gap-2 rounded-md bg-negative-50 ring-1 ring-inset ring-negative-500/30 px-3 py-2 text-[13px] text-ink-800">
       <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-negative-500" />
-      <div>
-        <span className="font-semibold text-negative-600">Doesn&apos;t match the document&apos;s totals.</span> Extracted assets{" "}
-        {fmt(rec.assetsExtracted)} vs stated {fmt(rec.assetsStated)}; liabilities {fmt(rec.liabilitiesExtracted)} vs{" "}
-        {fmt(rec.liabilitiesStated)}. Some lines may be missing. You can still load it, then add the missing items by hand.
-      </div>
+      {statement ? (
+        <div>
+          <span className="font-semibold text-negative-600">Doesn&apos;t match the statement&apos;s total.</span> The imported rows add up
+          to {fmt(rec.netWorthExtracted)}; the statement says {fmt(rec.netWorthStated)}. Some rows may be missing or misread. You can
+          still load it, but each value must be checked against the statement before it can be confirmed.
+        </div>
+      ) : (
+        <div>
+          <span className="font-semibold text-negative-600">Doesn&apos;t match the document&apos;s totals.</span> Extracted assets{" "}
+          {fmt(rec.assetsExtracted)} vs stated {fmt(rec.assetsStated)}; liabilities {fmt(rec.liabilitiesExtracted)} vs{" "}
+          {fmt(rec.liabilitiesStated)}. Some lines may be missing. You can still load it, then add the missing items by hand.
+        </div>
+      )}
     </div>
   );
 }
