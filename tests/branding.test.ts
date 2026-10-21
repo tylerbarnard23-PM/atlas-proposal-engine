@@ -90,6 +90,7 @@ describe("branding in the proposal", () => {
     renderToStaticMarkup(
       React.createElement(ProposalPdfTemplate, {
         client: SEED_CLIENT,
+        fxRates: SEED_FX_RATES,
         advisor,
         accounts: SEED_ACCOUNTS,
         holdings,

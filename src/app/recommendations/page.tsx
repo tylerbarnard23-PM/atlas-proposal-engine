@@ -46,10 +46,15 @@ function Inner() {
   const holdings = useAtlasStore((s) => s.holdings);
   const accounts = useAtlasStore((s) => s.accounts);
   const upsert = useAtlasStore((s) => s.upsertRecommendation);
+  const fxRates = useAtlasStore((s) => s.fxRates);
   const { holdings: normalized, reportingCurrency } = useNormalizedHoldings();
   const shortfalls = React.useMemo(
-    () => proposedCashShortfalls(normalized, recs.filter((r) => r.approvedByAdvisor), accounts),
-    [normalized, recs, accounts]
+    () =>
+      proposedCashShortfalls(normalized, recs.filter((r) => r.approvedByAdvisor), accounts, {
+        reportingCurrency,
+        rates: fxRates,
+      }),
+    [normalized, recs, accounts, reportingCurrency, fxRates]
   );
   const remove = useAtlasStore((s) => s.removeRecommendation);
   const approveAll = useAtlasStore((s) => s.approveAllRecommendations);

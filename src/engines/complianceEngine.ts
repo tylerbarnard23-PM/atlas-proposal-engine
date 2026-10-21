@@ -6,8 +6,9 @@ import type {
   Recommendation,
   Disclosure,
   ComplianceCheck,
+  FxRate,
 } from "@/domain/types";
-import { proposedCashShortfalls, type CashShortfall } from "./proposalEngine";
+import { applyRecommendationsToProposed, cashShortfallsOf, type CashShortfall, type UnresolvedConversion } from "./proposalEngine";
 
 export interface ReadinessInputs {
   client: ClientProfile;
@@ -23,6 +24,8 @@ export interface ReadinessInputs {
   totalInsightsCount: number;
   // Accounts whose proposed cash goes negative (purchases exceed cash).
   cashShortfalls?: CashShortfall[];
+  // Approved recommendations that couldn't be applied for lack of an FX rate.
+  unresolvedConversions?: UnresolvedConversion[];
 }
 
 export function evaluateReadiness(inp: ReadinessInputs): ComplianceCheck[] {
@@ -85,6 +88,16 @@ export function evaluateReadiness(inp: ReadinessInputs): ComplianceCheck[] {
         ? shortfalls.map((s) => `${s.accountName} short ${Math.round(s.shortfall).toLocaleString()}`).join("; ")
         : undefined,
   });
+  const unresolved = inp.unresolvedConversions ?? [];
+  checks.push({
+    code: "fx_available",
+    label: "Exchange rates available for proposed trades",
+    passed: unresolved.length === 0,
+    detail:
+      unresolved.length > 0
+        ? [...new Set(unresolved.map((u) => `${u.currency}/${u.reportingCurrency}`))].join(", ") + " rate missing"
+        : undefined,
+  });
   checks.push({
     code: "disclosures_included",
     label: "Required disclosures included",
@@ -135,13 +148,20 @@ export interface WorkspaceReadinessInputs {
   holdings: Holding[];
   recommendations: Recommendation[];
   disclosures: Disclosure[];
+  /** Rates used to express proposed trades in each holding's own currency. */
+  fxRates: FxRate[];
 }
 
 export function evaluateWorkspaceReadiness(ws: WorkspaceReadinessInputs): ComplianceCheck[] {
   const pending = holdingsNeedingReview(ws.holdings);
   const approved = ws.recommendations.filter((r) => r.approvedByAdvisor);
+  const proposed = applyRecommendationsToProposed(ws.holdings, approved, ws.accounts, {
+    reportingCurrency: ws.client.proposalOutputCurrency,
+    rates: ws.fxRates,
+  });
   return evaluateReadiness({
-    cashShortfalls: proposedCashShortfalls(ws.holdings, approved, ws.accounts),
+    cashShortfalls: cashShortfallsOf(proposed.holdings, ws.accounts),
+    unresolvedConversions: proposed.unresolved,
     ...ws,
     disclosures: ws.disclosures.filter((d) => d.required),
     unverifiedHoldingsCount: pending.length,

@@ -32,11 +32,12 @@ function Inner() {
   const recs = useAtlasStore((s) => s.recommendations);
   const proposal = useAtlasStore((s) => s.proposal);
   const disclosures = useAtlasStore((s) => s.disclosures);
+  const fxRates = useAtlasStore((s) => s.fxRates);
   const pdfHistory = useAtlasStore((s) => s.pdfHistory);
   const recordPdfJob = useAtlasStore((s) => s.recordPdfJob);
   const { holdings } = useNormalizedHoldings();
 
-  const checks = evaluateWorkspaceReadiness({ client, advisor, accounts, holdings, recommendations: recs, disclosures });
+  const checks = evaluateWorkspaceReadiness({ client, advisor, accounts, holdings, recommendations: recs, disclosures, fxRates });
   const ready = readinessOk(checks);
   const failing = checks.filter((c) => !c.passed);
 
@@ -66,6 +67,7 @@ function Inner() {
             sections: proposal.sections,
             disclosures: disclosures.filter((d) => proposal.disclosureIds.includes(d.id)),
             proposal,
+            fxRates,
           },
         }),
       });

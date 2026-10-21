@@ -9,6 +9,7 @@ import type {
   AdvisorProfile,
   ClientProfile,
   Disclosure,
+  FxRate,
   Holding,
   Proposal,
   ProposalSection,
@@ -30,6 +31,9 @@ interface RequestBody {
     sections: ProposalSection[];
     disclosures: Disclosure[];
     proposal: Proposal;
+    // Rates for expressing proposed trades in each holding's own currency.
+    // Missing rates are reported by readiness; they never default to 1:1.
+    fxRates?: FxRate[];
   };
 }
 
@@ -57,7 +61,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   // The UI disables the final button until readiness passes; enforce the same
   // gate here so a direct API call can't skip it.
   if (variant === "final") {
-    const { client, advisor, accounts, holdings, recommendations, disclosures } = body.state;
+    const { client, advisor, accounts, holdings, recommendations, disclosures, fxRates } = body.state;
     const checks = evaluateWorkspaceReadiness({
       client,
       advisor,
@@ -65,6 +69,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       holdings: holdings ?? [],
       recommendations: recommendations ?? [],
       disclosures: disclosures ?? [],
+      fxRates: Array.isArray(fxRates) ? fxRates : [],
     });
     if (!readinessOk(checks)) {
       const failing = checks.filter((c) => !c.passed).map((c) => c.label);
@@ -75,7 +80,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
   }
 
-  const props = { ...body.state, variant };
+  const props = { ...body.state, fxRates: Array.isArray(body.state.fxRates) ? body.state.fxRates : [], variant };
   // Dynamically load react-dom/server inside the handler so the App Router
   // doesn't statically reject the import. (Next.js disallows static
   // `react-dom/server` imports in API routes; dynamic import is allowed.)

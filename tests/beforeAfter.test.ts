@@ -17,6 +17,7 @@ import { DISCLOSURE_LIBRARY } from "@/domain/disclosureLibrary";
 // markup, so a regression anywhere between the engine and the chart shows up.
 
 const holdings = normalizeHoldings(SEED_HOLDINGS, SEED_FX_RATES, "USD");
+const USD_FX = { reportingCurrency: "USD", rates: SEED_FX_RATES };
 const bySymbol = (s: string) => holdings.find((h) => h.identifier?.value === s)!;
 
 function rec(patch: Partial<Recommendation>): Recommendation {
@@ -58,6 +59,7 @@ function renderBeforeAfter(recommendations: Recommendation[], hs: NormalizedHold
       recommendations,
       sections: DEFAULT_PROPOSAL_SECTIONS,
       disclosures: DISCLOSURE_LIBRARY,
+      fxRates: SEED_FX_RATES,
       proposal: { id: "p_test" } as Proposal,
       variant: "final",
     })
@@ -163,6 +165,7 @@ describe("unfunded purchases", () => {
       holdings,
       recommendations: [tooBig],
       disclosures: DISCLOSURE_LIBRARY,
+      fxRates: SEED_FX_RATES,
     });
     const funded = checks.find((c) => c.code === "trades_funded")!;
     expect(funded.passed).toBe(false);
@@ -178,6 +181,7 @@ describe("unfunded purchases", () => {
       holdings,
       recommendations: [rec({ type: "buy", relatedHoldingId: vti.id, actionAmount: 100_000 })],
       disclosures: DISCLOSURE_LIBRARY,
+      fxRates: SEED_FX_RATES,
     });
     expect(checks.find((c) => c.code === "trades_funded")!.passed).toBe(true);
   });
@@ -190,13 +194,13 @@ describe("debt paydown funding", () => {
   it("draws a paydown from household cash in other accounts, not the loan account", async () => {
     const { proposedCashShortfalls } = await import("@/engines/proposalEngine");
     const paydown = rec({ type: "pay_down_debt", relatedHoldingId: mortgage.id, actionAmount: Math.floor(householdCash / 2) });
-    expect(proposedCashShortfalls(holdings, [paydown], SEED_ACCOUNTS)).toEqual([]);
+    expect(proposedCashShortfalls(holdings, [paydown], SEED_ACCOUNTS, USD_FX)).toEqual([]);
   });
 
   it("flags a shortfall only when household cash can't cover the paydown", async () => {
     const { proposedCashShortfalls } = await import("@/engines/proposalEngine");
     const paydown = rec({ type: "pay_down_debt", relatedHoldingId: mortgage.id, actionAmount: Math.round(householdCash + 50_000) });
-    const shortfalls = proposedCashShortfalls(holdings, [paydown], SEED_ACCOUNTS);
+    const shortfalls = proposedCashShortfalls(holdings, [paydown], SEED_ACCOUNTS, USD_FX);
     expect(shortfalls).toHaveLength(1);
     near(shortfalls[0].shortfall, 50_000, 1);
   });
@@ -212,6 +216,7 @@ describe("debt paydown funding", () => {
       holdings,
       recommendations: allApproved,
       disclosures: DISCLOSURE_LIBRARY,
+      fxRates: SEED_FX_RATES,
     });
     expect(checks.find((c) => c.code === "trades_funded")?.passed).toBe(true);
     const { proposed, current } = renderBeforeAfter(allApproved);

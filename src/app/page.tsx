@@ -36,6 +36,7 @@ function DashboardInner() {
   const accounts = useAtlasStore((s) => s.accounts);
   const recommendations = useAtlasStore((s) => s.recommendations);
   const disclosures = useAtlasStore((s) => s.disclosures);
+  const fxRates = useAtlasStore((s) => s.fxRates);
   const sourceDocuments = useAtlasStore((s) => s.sourceDocuments);
   const { holdings, insights, reportingCurrency } = useNormalizedHoldings();
 
@@ -55,7 +56,7 @@ function DashboardInner() {
   const countries = new Set(holdings.map((h) => h.country).filter(Boolean)).size;
   const classes = new Set(holdings.map((h) => h.assetClass)).size;
 
-  const readiness = evaluateWorkspaceReadiness({ client, advisor, accounts, holdings, recommendations, disclosures });
+  const readiness = evaluateWorkspaceReadiness({ client, advisor, accounts, holdings, recommendations, disclosures, fxRates });
   const readyCount = readiness.filter((r) => r.passed).length;
 
   return (

@@ -1,5 +1,6 @@
-import type { Account, Holding, Proposal, ProposalSection, Recommendation } from "@/domain/types";
+import type { Account, CurrencyCode, FxRate, Holding, Proposal, ProposalSection, Recommendation } from "@/domain/types";
 import { sumBy } from "@/utils/numbers";
+import { resolveFxRate } from "./currencyEngine";
 
 export const DEFAULT_PROPOSAL_SECTIONS: ProposalSection[] = [
   { key: "executive_summary", label: "Executive Summary", enabled: true, required: true },
@@ -76,6 +77,49 @@ export function applyRecToValue(value: number, rec: Recommendation, isLiability:
   }
 }
 
+// Currency contract for the proposed portfolio
+// ---------------------------------------------
+// - Holding.nativeMarketValue is in Holding.currency.
+// - Holding.reportingMarketValue is in the proposal's reporting currency
+//   (fx.reportingCurrency), as produced by normalizeHoldings.
+// - Recommendation.actionAmount (unit "amount") and proposedValue are in the
+//   reporting currency; a "percent" amount is a share of the holding's value.
+//   Recommendation.currency is descriptive and not used by this engine.
+// - Cash offsets are computed in the reporting currency per account, then
+//   converted into the native currency of the account's cash line: its
+//   existing cash holding, else a new line in the account's base currency.
+// - Every native value is derived from the reporting value with an explicit
+//   rate from fx.rates. A missing rate never falls back to 1:1: the affected
+//   recommendation is left unapplied and reported in `unresolved`.
+
+export interface FxContext {
+  reportingCurrency: CurrencyCode;
+  rates: FxRate[];
+}
+
+export interface UnresolvedConversion {
+  recommendationId: string;
+  holdingId: string;
+  accountId: string;
+  /** The currency that couldn't be converted to or from the reporting currency. */
+  currency: CurrencyCode;
+  reportingCurrency: CurrencyCode;
+  reason: string;
+}
+
+export interface ProposedPortfolio {
+  holdings: Holding[];
+  /** Approved recommendations that couldn't be applied for lack of an FX rate. */
+  unresolved: UnresolvedConversion[];
+}
+
+// Rate to convert 1 unit of `ccy` into the reporting currency, or null.
+function rateToReporting(fx: FxContext, ccy: CurrencyCode): number | null {
+  if (ccy === fx.reportingCurrency) return 1;
+  const r = resolveFxRate(fx.rates, ccy, fx.reportingCurrency);
+  return r && r.rate > 0 ? r.rate : null;
+}
+
 // Apply approved recommendations to produce the proposed holdings view.
 // Hierarchy of intent for any single recommendation:
 //   1. Explicit proposedValue → set the holding to that value.
@@ -93,8 +137,9 @@ export function applyRecToValue(value: number, rec: Recommendation, isLiability:
 export function applyRecommendationsToProposed(
   current: Holding[],
   approvedRecommendations: Recommendation[],
-  accounts: Account[] = []
-): Holding[] {
+  accounts: Account[],
+  fx: FxContext
+): ProposedPortfolio {
   const accountById = new Map(accounts.map((a) => [a.id, a] as const));
   const byHolding = new Map<string, Recommendation[]>();
   for (const rec of approvedRecommendations) {
@@ -104,8 +149,28 @@ export function applyRecommendationsToProposed(
     byHolding.set(rec.relatedHoldingId, arr);
   }
 
+  // The native currency an account's cash offsets land in.
+  const cashLine = (accountId: string) =>
+    current.find((h) => h.accountId === accountId && h.assetClass === "cash" && !h.isLiability);
+  const cashCurrency = (accountId: string): CurrencyCode =>
+    cashLine(accountId)?.currency ?? accountById.get(accountId)?.baseCurrency ?? fx.reportingCurrency;
+
+  const unresolved: UnresolvedConversion[] = [];
+  const unresolve = (recs: Recommendation[], h: Holding, currency: CurrencyCode) => {
+    for (const rec of recs) {
+      unresolved.push({
+        recommendationId: rec.id,
+        holdingId: h.id,
+        accountId: h.accountId,
+        currency,
+        reportingCurrency: fx.reportingCurrency,
+        reason: `No ${currency}/${fx.reportingCurrency} exchange rate, so this recommendation was not applied.`,
+      });
+    }
+  };
+
   // First pass: compute new values for each touched holding and record the
-  // resulting cash impact per account.
+  // resulting cash impact per account (all in the reporting currency).
   const newValueById = new Map<string, number>();
   const cashByAccount = new Map<string, number>();
   const bump = (acctId: string, delta: number) =>
@@ -116,7 +181,14 @@ export function applyRecommendationsToProposed(
   for (const h of current) {
     const recs = byHolding.get(h.id);
     if (!recs?.length) continue;
-    let value = h.reportingMarketValue ?? h.nativeMarketValue;
+    // Both the holding's currency and the currency its cash offset lands in
+    // must convert, or the rec can't be expressed in native terms.
+    const missing = [h.currency, cashCurrency(h.accountId)].find((c) => rateToReporting(fx, c) == null);
+    if (missing) {
+      unresolve(recs, h, missing);
+      continue;
+    }
+    let value = h.reportingMarketValue ?? h.nativeMarketValue * rateToReporting(fx, h.currency)!;
 
     for (const rec of recs) {
       const before = value;
@@ -139,17 +211,20 @@ export function applyRecommendationsToProposed(
   // A loan account rarely holds cash, so a paydown is funded from household
   // cash: accounts with the most available cash (after this proposal's trades)
   // are drawn first. Anything the household can't cover stays on the loan's
-  // own account, where it shows up as a cash shortfall.
+  // own account, where it shows up as a cash shortfall. Cash in a currency
+  // with no rate can't be valued, so it isn't drawn on.
   if (paydowns.length > 0) {
     const available = new Map<string, number>();
     for (const h of current) {
-      if (h.isLiability || h.assetClass !== "cash") continue;
+      if (h.isLiability || h.assetClass !== "cash" || rateToReporting(fx, h.currency) == null) continue;
       available.set(h.accountId, (available.get(h.accountId) ?? 0) + (h.reportingMarketValue ?? h.nativeMarketValue));
     }
     for (const [acct, delta] of cashByAccount) available.set(acct, (available.get(acct) ?? 0) + delta);
     for (const p of paydowns) {
       let remaining = p.amount;
-      const sources = [...available].filter(([, cash]) => cash > 0).sort((a, b) => b[1] - a[1]);
+      const sources = [...available]
+        .filter(([acct, cash]) => cash > 0 && rateToReporting(fx, cashCurrency(acct)) != null)
+        .sort((a, b) => b[1] - a[1]);
       for (const [acct, cash] of sources) {
         if (remaining <= 0) break;
         const draw = Math.min(cash, remaining);
@@ -161,15 +236,16 @@ export function applyRecommendationsToProposed(
     }
   }
 
-  // Second pass: write the new values into a result list.
+  // Second pass: write the new values, keeping each in its own currency.
   const result: Holding[] = current.map((h) => {
     const newVal = newValueById.get(h.id);
-    return newVal === undefined
-      ? h
-      : { ...h, reportingMarketValue: newVal, nativeMarketValue: newVal };
+    if (newVal === undefined) return h;
+    return { ...h, reportingMarketValue: newVal, nativeMarketValue: newVal / rateToReporting(fx, h.currency)! };
   });
 
-  // Third pass: apply each account's net cash delta.
+  // Third pass: apply each account's net cash delta, converted into the
+  // native currency of the line it lands in. Every account that receives a
+  // delta had its cash currency's rate checked above.
   for (const [accountId, delta] of cashByAccount) {
     if (Math.abs(delta) < 1) continue; // ignore sub-dollar noise
     const account = accountById.get(accountId);
@@ -178,10 +254,11 @@ export function applyRecommendationsToProposed(
     );
     if (cashIdx >= 0) {
       const existing = result[cashIdx];
+      const rate = rateToReporting(fx, existing.currency)!;
       const updated: Holding = {
         ...existing,
-        reportingMarketValue: (existing.reportingMarketValue ?? existing.nativeMarketValue) + delta,
-        nativeMarketValue: existing.nativeMarketValue + delta,
+        reportingMarketValue: (existing.reportingMarketValue ?? existing.nativeMarketValue * rate) + delta,
+        nativeMarketValue: existing.nativeMarketValue + delta / rate,
         valuationSource: {
           ...existing.valuationSource,
           note: [existing.valuationSource.note, "Adjusted by proposed actions"]
@@ -194,7 +271,8 @@ export function applyRecommendationsToProposed(
       };
       result[cashIdx] = updated;
     } else {
-      const fallbackCurrency = account?.baseCurrency ?? "USD";
+      const currency = cashCurrency(accountId);
+      const rate = rateToReporting(fx, currency)!;
       result.push({
         id: `synth_cash_${accountId}`,
         accountId,
@@ -202,8 +280,8 @@ export function applyRecommendationsToProposed(
         assetClass: "cash",
         subAssetClass: "cash_equivalents",
         country: account?.country,
-        currency: fallbackCurrency,
-        nativeMarketValue: delta,
+        currency,
+        nativeMarketValue: delta / rate,
         reportingMarketValue: delta,
         liquidity: "cash",
         valuationDate: new Date().toISOString().slice(0, 10),
@@ -223,7 +301,7 @@ export function applyRecommendationsToProposed(
     }
   }
 
-  return result;
+  return { holdings: result, unresolved };
 }
 
 export interface CashShortfall {
@@ -232,15 +310,10 @@ export interface CashShortfall {
   shortfall: number; // positive amount of cash missing, in the reporting currency
 }
 
-// Accounts whose cash would go negative after the approved recommendations,
-// i.e. purchases (or debt paydowns) larger than the cash available in that
+// Accounts whose cash would go negative in a proposed portfolio, i.e.
+// purchases (or debt paydowns) larger than the cash available in that
 // account. The proposal must not present negative cash as an allocation.
-export function proposedCashShortfalls(
-  current: Holding[],
-  approvedRecommendations: Recommendation[],
-  accounts: Account[] = []
-): CashShortfall[] {
-  const proposed = applyRecommendationsToProposed(current, approvedRecommendations, accounts);
+export function cashShortfallsOf(proposed: Holding[], accounts: Account[]): CashShortfall[] {
   const cashByAccount = new Map<string, number>();
   for (const h of proposed) {
     if (h.isLiability || h.assetClass !== "cash") continue;
@@ -250,6 +323,15 @@ export function proposedCashShortfalls(
   return [...cashByAccount]
     .filter(([, cash]) => cash < -0.5)
     .map(([accountId, cash]) => ({ accountId, accountName: names.get(accountId) ?? accountId, shortfall: -cash }));
+}
+
+export function proposedCashShortfalls(
+  current: Holding[],
+  approvedRecommendations: Recommendation[],
+  accounts: Account[],
+  fx: FxContext
+): CashShortfall[] {
+  return cashShortfallsOf(applyRecommendationsToProposed(current, approvedRecommendations, accounts, fx).holdings, accounts);
 }
 
 export function netWorth(holdings: Holding[]): { gross: number; liabilities: number; net: number } {
