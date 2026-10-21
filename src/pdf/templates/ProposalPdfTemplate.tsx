@@ -195,9 +195,10 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
   // independent of whether it's included in the PDF prose. Each rec's
   // intent is interpreted by applyRecommendationsToProposed (sell zeroes,
   // reduce subtracts, increase/buy adds, with offsetting cash flow).
-  const proposed = applyRecommendationsToProposed(holdings, proposedRecs, accounts, { reportingCurrency, rates: fxRates });
+  const fx = { reportingCurrency, rates: fxRates };
+  const proposed = applyRecommendationsToProposed(holdings, proposedRecs, accounts, fx);
   const proposedHoldings = proposed.holdings;
-  const cashShortfalls = cashShortfallsOf(proposedHoldings, accounts);
+  const cashShortfalls = cashShortfallsOf(proposedHoldings, accounts, fx);
   // Approved recommendations left out of the proposed view for lack of an FX rate.
   const unconverted = proposed.unresolved;
   const allocProposedClass = summarize(proposedHoldings, (h) => ASSET_CLASS_LABELS[h.assetClass] ?? "Other");
@@ -519,11 +520,16 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
               <AllocationList rows={allocProposedClassOrdered} currency={reportingCurrency} />
             </div>
             <div className="pdf-stat-hint" style={{ marginTop: 8 }}>
-              {proposedRecs.length === 0
-                ? "Approve a recommendation with a linked holding to see its effect on the proposed allocation."
-                : deltas.length > 0
-                ? `${proposedRecs.length} approved recommendation${proposedRecs.length === 1 ? "" : "s"} applied. Sales credit cash; purchases debit it.`
-                : "Approved recommendations had no allocation impact (advisory-only or net-flat actions)."}
+              {(() => {
+                const notApplied = new Set(unconverted.map((u) => u.recommendationId)).size;
+                const applied = proposedRecs.length - notApplied;
+                const skipped = notApplied > 0 ? ` ${notApplied} not applied: exchange rate missing (see below).` : "";
+                if (proposedRecs.length === 0) return "Approve a recommendation with a linked holding to see its effect on the proposed allocation.";
+                if (applied === 0) return `No approved recommendation could be applied.${skipped}`;
+                if (deltas.length > 0)
+                  return `${applied} approved recommendation${applied === 1 ? "" : "s"} applied. Sales credit cash; purchases debit it.${skipped}`;
+                return `Approved recommendations had no allocation impact (advisory-only or net-flat actions).${skipped}`;
+              })()}
             </div>
           </div>
         </div>

@@ -155,12 +155,10 @@ export interface WorkspaceReadinessInputs {
 export function evaluateWorkspaceReadiness(ws: WorkspaceReadinessInputs): ComplianceCheck[] {
   const pending = holdingsNeedingReview(ws.holdings);
   const approved = ws.recommendations.filter((r) => r.approvedByAdvisor);
-  const proposed = applyRecommendationsToProposed(ws.holdings, approved, ws.accounts, {
-    reportingCurrency: ws.client.proposalOutputCurrency,
-    rates: ws.fxRates,
-  });
+  const fx = { reportingCurrency: ws.client.proposalOutputCurrency, rates: ws.fxRates };
+  const proposed = applyRecommendationsToProposed(ws.holdings, approved, ws.accounts, fx);
   return evaluateReadiness({
-    cashShortfalls: cashShortfallsOf(proposed.holdings, ws.accounts),
+    cashShortfalls: cashShortfallsOf(proposed.holdings, ws.accounts, fx),
     unresolvedConversions: proposed.unresolved,
     ...ws,
     disclosures: ws.disclosures.filter((d) => d.required),

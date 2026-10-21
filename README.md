@@ -108,7 +108,7 @@ tests/            unit tests + extraction eval
 ## Tests and evals
 
 ```bash
-npm test        # 134 tests in 10 files: proposal math and currency handling, cash flows, readiness, insights, CSV/Excel/PDF import, Copilot tools (demo mode) + the extraction eval
+npm test        # 139 tests in 10 files: proposal math and currency handling, cash flows, readiness, insights, CSV/Excel/PDF import, Copilot tools (demo mode) + the extraction eval
 npm run eval    # statement-extraction accuracy scorecard
 ```
 

@@ -107,7 +107,7 @@ describe("proposed holdings keep native and reporting currencies apart", () => {
       USD
     );
     expect(byId(holdings, "cash").nativeMarketValue).toBeCloseTo(-100, 9); // CHF 100 − CHF 200
-    expect(cashShortfallsOf(holdings, [account()])).toEqual([{ accountId: "acct_ch", accountName: "Zurich custody", shortfall: 125 }]);
+    expect(cashShortfallsOf(holdings, [account()], USD)).toEqual([{ accountId: "acct_ch", accountName: "Zurich custody", shortfall: 125 }]);
   });
 
   it("creates a cash line in the account's base currency when none exists", () => {
@@ -172,6 +172,67 @@ describe("proposed holdings keep native and reporting currencies apart", () => {
   });
 });
 
+describe("review findings: native-only cash and allocation-neutral actions", () => {
+  it("funds a paydown from CHF cash that has no reporting value, converting it explicitly", () => {
+    const loan = holding({ id: "loan", accountId: "acct_loan", assetName: "USD loan", assetClass: "liability", currency: "USD", isLiability: true, nativeMarketValue: -1_000, reportingMarketValue: -1_000 });
+    const chfCash = holding({ id: "chf_cash", accountId: "acct_ch", assetName: "CHF cash", assetClass: "cash", nativeMarketValue: 100, reportingMarketValue: undefined });
+    const accounts = [account({ id: "acct_loan", name: "Loan", baseCurrency: "USD" }), account()];
+    const { holdings, unresolved } = applyRecommendationsToProposed(
+      [loan, chfCash],
+      [rec({ type: "pay_down_debt", relatedHoldingId: "loan", actionAmount: 125 })],
+      accounts,
+      USD
+    );
+    expect(unresolved).toEqual([]);
+    expect(byId(holdings, "loan").reportingMarketValue).toBeCloseTo(-875, 9);
+    expect(byId(holdings, "chf_cash").nativeMarketValue).toBeCloseTo(0, 9);
+    expect(byId(holdings, "chf_cash").reportingMarketValue).toBeCloseTo(0, 9);
+    expect(holdings.some((h) => h.id.startsWith("synth_cash"))).toBe(false);
+    expect(cashShortfallsOf(holdings, accounts, USD)).toEqual([]);
+  });
+
+  it("values native-only cash with the FX context when checking for shortfalls", () => {
+    // CHF -100 with no reporting value is USD 125 short, not "100".
+    const overdrawn = holding({ id: "chf_cash", assetClass: "cash", nativeMarketValue: -100, reportingMarketValue: undefined });
+    expect(cashShortfallsOf([overdrawn], [account()], USD)).toEqual([{ accountId: "acct_ch", accountName: "Zurich custody", shortfall: 125 }]);
+  });
+
+  it("an allocation-neutral recommendation needs no exchange rate", () => {
+    const usdSecurity = holding({ currency: "USD", nativeMarketValue: 1_000, reportingMarketValue: 1_000 });
+    const before = [usdSecurity, cash(100)];
+    const result = applyRecommendationsToProposed(before, [rec({ type: "hold", relatedHoldingId: "sec" })], [account()], {
+      reportingCurrency: "USD",
+      rates: [],
+    });
+    expect(result).toEqual({ holdings: before, unresolved: [] });
+  });
+
+  it("sale proceeds in an account with no cash line still fund a paydown", () => {
+    const loan = holding({ id: "loan", accountId: "acct_loan", assetName: "USD loan", assetClass: "liability", currency: "USD", isLiability: true, nativeMarketValue: -1_000, reportingMarketValue: -1_000 });
+    const accounts = [account({ id: "acct_loan", name: "Loan", baseCurrency: "USD" }), account()];
+    const { holdings, unresolved } = applyRecommendationsToProposed(
+      [loan, security],
+      [rec({ id: "sale", relatedHoldingId: "sec", actionAmount: 400 }), rec({ id: "pay", type: "pay_down_debt", relatedHoldingId: "loan", actionAmount: 400 })],
+      accounts,
+      USD
+    );
+    expect(unresolved).toEqual([]);
+    expect(byId(holdings, "loan").reportingMarketValue).toBeCloseTo(-600, 9);
+    // USD 400 of proceeds raised and spent in the Zurich account: no cash left, no shortfall.
+    expect(holdings.find((h) => h.id === "synth_cash_acct_loan")).toBeUndefined();
+    expect(cashShortfallsOf(holdings, accounts, USD)).toEqual([]);
+  });
+
+  it("a genuine trade in the same setup still reports the missing cash-offset rate", () => {
+    const usdSecurity = holding({ currency: "USD", nativeMarketValue: 1_000, reportingMarketValue: 1_000 });
+    const result = applyRecommendationsToProposed([usdSecurity, cash(100)], [rec({ relatedHoldingId: "sec", actionAmount: 400 })], [account()], {
+      reportingCurrency: "USD",
+      rates: [],
+    });
+    expect(result.unresolved.map((u) => u.currency)).toEqual(["CHF"]);
+  });
+});
+
 describe("a missing FX rate is reported, never assumed to be 1:1", () => {
   it("leaves the recommendation unapplied and lists it as unresolved", () => {
     const before = [security, cash(100)];
@@ -231,6 +292,9 @@ describe("a missing FX rate is reported, never assumed to be 1:1", () => {
       })
     );
     expect(html).toContain("Proposed actions not applied");
+    // The Proposed column says why nothing moved, not "no allocation impact".
+    expect(html).toContain("No approved recommendation could be applied. 1 not applied: exchange rate missing");
+    expect(html).not.toContain("had no allocation impact");
   });
 });
 
