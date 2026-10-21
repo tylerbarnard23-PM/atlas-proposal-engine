@@ -11,6 +11,8 @@ import { SEED_ACCOUNTS } from "@/data/seedAccounts";
 import { SEED_ADVISOR, SEED_CLIENT } from "@/data/seedClient";
 import { DISCLOSURE_LIBRARY } from "@/domain/disclosureLibrary";
 
+const USD_FX = { reportingCurrency: "USD", rates: SEED_FX_RATES };
+
 const rec = (patch: Partial<Recommendation>): Recommendation => ({
   id: "r1",
   title: "t",
@@ -72,18 +74,18 @@ describe("applyRecommendationsToProposed", () => {
   it("credits sale proceeds to cash in the same account, keeping the total flat", () => {
     const stock = holding({ id: "stock" });
     const cash = holding({ id: "cash", assetClass: "cash", nativeMarketValue: 5_000, reportingMarketValue: 5_000 });
-    const after = applyRecommendationsToProposed([stock, cash], [rec({ type: "sell", relatedHoldingId: "stock", actionAmount: 30_000 })]);
+    const after = applyRecommendationsToProposed([stock, cash], [rec({ type: "sell", relatedHoldingId: "stock", actionAmount: 30_000 })], [], USD_FX).holdings;
     expect(after.find((h) => h.id === "stock")?.reportingMarketValue).toBe(70_000);
     expect(after.find((h) => h.id === "cash")?.reportingMarketValue).toBe(35_000);
     expect(netWorth(after).net).toBe(netWorth([stock, cash]).net);
   });
   it("creates a synthetic cash line when the account has no cash holding", () => {
-    const after = applyRecommendationsToProposed([holding({})], [rec({ type: "sell", relatedHoldingId: "h1", actionAmount: 1_000 })]);
+    const after = applyRecommendationsToProposed([holding({})], [rec({ type: "sell", relatedHoldingId: "h1", actionAmount: 1_000 })], [], USD_FX).holdings;
     expect(after.some((h) => h.id === "synth_cash_a1" && h.reportingMarketValue === 1_000)).toBe(true);
   });
   it("ignores advisory-only recommendations", () => {
     const before = [holding({})];
-    expect(applyRecommendationsToProposed(before, [rec({ type: "sell" })])).toEqual(before);
+    expect(applyRecommendationsToProposed(before, [rec({ type: "sell" })], [], USD_FX)).toEqual({ holdings: before, unresolved: [] });
   });
 });
 
@@ -155,6 +157,7 @@ describe("workspace readiness", () => {
     holdings: SEED_HOLDINGS,
     recommendations: [rec({})],
     disclosures: DISCLOSURE_LIBRARY,
+    fxRates: SEED_FX_RATES,
   });
 
   it("lists every unreviewed holding with why it blocks the PDF", () => {

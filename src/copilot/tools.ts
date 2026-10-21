@@ -207,6 +207,7 @@ function checkReadiness(ctx: CopilotContext) {
     holdings: ctx.holdings,
     recommendations: s.recommendations,
     disclosures: s.disclosures,
+    fxRates: s.fxRates,
   });
   return {
     ready: readinessOk(checks),

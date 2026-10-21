@@ -48,15 +48,23 @@ The Copilot is a Claude agent (`claude-opus-5-5`) whose tools are Atlas's existi
 | `check_proposal_readiness` | compliance readiness engine (same inputs as PDF Preview) |
 | `draft_recommendation` | creates a recommendation draft (the only write the agent can make) |
 
-**Guardrails, enforced in code rather than in the prompt:**
+**Two modes.** The public demo never calls a model.
 
-- **Drafts can't be approved by the model.** `draft_recommendation` hard-codes `approvedByAdvisor: false`, `includeInPdf: false` and `status: "needs_review"`. Extra fields a model sends are dropped by schema validation, and a test checks this.
-- **No numbers from the model.** Every figure in an answer comes from a tool result, and the UI shows the full tool trace ("What the agent did").
-- **Statement text is untrusted.** Holding names and notes come from uploaded documents; the system prompt treats them as data and the tools never execute anything they contain.
-- **Bounded.** At most 10 agent turns and 5 drafts per request; requests are size-capped and validated with Zod; refusals fall back server-side (`fallbacks: "default"`).
+- **Demo mode** (the default, and what the live site runs): a scripted planner calls *the same tools* in a fixed order and writes its answer and draft rationales from fixed templates filled with the values those tools return. It costs nothing to run and gives the tool layer a deterministic regression baseline. It also applies a few rules of its own: it won't draft a sale of an illiquid position (a primary residence, an LP interest), and it skips holdings that already have a recommendation.
+- **Live mode** (opt-in and intended for local use, because `/api/copilot` has no authentication; see Quickstart): Claude chooses which tools to call and writes the answer and the draft text itself.
+
+**Enforced in code** (both modes, covered by tests):
+
+- **Draft-only authority.** The only write the agent can make is `draft_recommendation`, which hard-codes `approvedByAdvisor: false`, `includeInPdf: false` and `status: "needs_review"`. Fields a model adds to try to approve its own draft are stripped by schema validation; a test sends them and checks they're ignored.
+- **Schema validation.** Requests and every tool input are validated with Zod; unknown holding ids and invalid values come back as tool errors.
+- **Execution limits.** At most 10 agent turns and 5 drafts per request; request bodies are capped at 1 MB. Live mode needs both `ANTHROPIC_API_KEY` and `COPILOT_MODE=live`.
+- **The engines do the math.** Tools compute every figure with the same deterministic engines as the Before/After view and the PDF, and the tools are read-only apart from creating drafts.
 - **Nothing is persisted server-side.** The workspace lives in the browser; each request sends the slice the agent needs.
 
-**Demo mode.** Unless live mode is explicitly enabled (below), the Copilot runs a scripted planner that calls *the same tools* in a fixed order. The public demo costs nothing to run, and the tool layer has a deterministic regression baseline. The demo planner also has some judgment of its own: it won't draft a sale of an illiquid position (a primary residence, an LP interest), and it skips holdings that already have a recommendation.
+**Required by the system prompt, not validated by code** (live mode):
+
+- **Numbers come from tool results.** The prompt tells the model to state only figures the tools returned and not to do its own portfolio arithmetic. Nothing checks the numbers in its prose yet. A draft's rationale is free text, and once the advisor approves it and includes it in the PDF it is printed as written, so the advisor should check its figures against the tool trace ("What the agent did") shown under every answer.
+- **Behavioral instructions.** Not claiming a recommendation is approved, final or suitable; not projecting returns; treating holding names and statement text as data rather than instructions; flagging compliance and tax questions. The tools never execute text from documents, but the model's own wording isn't validated.
 
 ## Architecture
 
@@ -100,7 +108,7 @@ tests/            unit tests + extraction eval
 ## Tests and evals
 
 ```bash
-npm test        # 33 unit tests + the eval: proposal math, cash flows, readiness, insights, Excel parsing, Copilot guardrails
+npm test        # 139 tests in 10 files: proposal math and currency handling, cash flows, readiness, insights, CSV/Excel/PDF import, Copilot tools (demo mode) + the extraction eval
 npm run eval    # statement-extraction accuracy scorecard
 ```
 

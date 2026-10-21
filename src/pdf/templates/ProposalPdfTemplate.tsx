@@ -8,13 +8,14 @@ import type {
   Proposal,
   ProposalSection,
   Recommendation,
+  FxRate,
 } from "@/domain/types";
 import { ASSET_CLASS_LABELS } from "@/domain/assetTaxonomy";
 import { ACCOUNT_TYPE_LABELS } from "@/domain/accountTaxonomy";
 import { PDF_BASE_CSS } from "../styles/pdfStyles";
 import { formatCurrency, formatDate, formatPercent } from "@/utils/formatting";
 import { sumBy, groupBy } from "@/utils/numbers";
-import { applyRecommendationsToProposed, netWorth, proposedCashShortfalls } from "@/engines/proposalEngine";
+import { applyRecommendationsToProposed, cashShortfallsOf, netWorth } from "@/engines/proposalEngine";
 import { dataQualityScore } from "@/engines/dataQualityEngine";
 import { PDF_SAMPLE_NOTICE } from "@/domain/legal";
 import { accentTint, checkLogoDataUrl, isValidAccentColor, resolveFirmPlaceholder } from "@/domain/branding";
@@ -139,6 +140,8 @@ export interface ProposalPdfTemplateProps {
   sections: ProposalSection[];
   disclosures: Disclosure[];
   proposal: Proposal;
+  /** Rates for expressing proposed trades in each holding's own currency. */
+  fxRates: FxRate[];
   variant: "draft" | "final";
 }
 
@@ -160,8 +163,11 @@ function pageNumber(idx: number) {
 }
 
 export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
-  const { client, advisor, accounts, holdings, recommendations, sections, disclosures, proposal, variant } = props;
-  const reportingCurrency = proposal.outputCurrency;
+  const { client, advisor, accounts, holdings, recommendations, sections, disclosures, proposal, fxRates, variant } = props;
+  // The currency the holdings' reportingMarketValue was normalized into (and
+  // the one readiness uses); proposal.outputCurrency isn't kept in sync with
+  // the Client Profile setting.
+  const reportingCurrency = client.proposalOutputCurrency || proposal.outputCurrency;
   const today = new Date().toLocaleDateString(client.locale ?? "en-US", { year: "numeric", month: "long", day: "numeric" });
   const isDraft = variant === "draft";
   // Branding is re-validated here so an invalid value can never reach the
@@ -189,8 +195,12 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
   // independent of whether it's included in the PDF prose. Each rec's
   // intent is interpreted by applyRecommendationsToProposed (sell zeroes,
   // reduce subtracts, increase/buy adds, with offsetting cash flow).
-  const proposedHoldings = applyRecommendationsToProposed(holdings, proposedRecs, accounts);
-  const cashShortfalls = proposedCashShortfalls(holdings, proposedRecs, accounts);
+  const fx = { reportingCurrency, rates: fxRates };
+  const proposed = applyRecommendationsToProposed(holdings, proposedRecs, accounts, fx);
+  const proposedHoldings = proposed.holdings;
+  const cashShortfalls = cashShortfallsOf(proposedHoldings, accounts, fx);
+  // Approved recommendations left out of the proposed view for lack of an FX rate.
+  const unconverted = proposed.unresolved;
   const allocProposedClass = summarize(proposedHoldings, (h) => ASSET_CLASS_LABELS[h.assetClass] ?? "Other");
 
   // Align legend ordering with the current allocation so colors stay stable
@@ -510,14 +520,30 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
               <AllocationList rows={allocProposedClassOrdered} currency={reportingCurrency} />
             </div>
             <div className="pdf-stat-hint" style={{ marginTop: 8 }}>
-              {proposedRecs.length === 0
-                ? "Approve a recommendation with a linked holding to see its effect on the proposed allocation."
-                : deltas.length > 0
-                ? `${proposedRecs.length} approved recommendation${proposedRecs.length === 1 ? "" : "s"} applied. Sales credit cash; purchases debit it.`
-                : "Approved recommendations had no allocation impact (advisory-only or net-flat actions)."}
+              {(() => {
+                const notApplied = new Set(unconverted.map((u) => u.recommendationId)).size;
+                const applied = proposedRecs.length - notApplied;
+                const skipped = notApplied > 0 ? ` ${notApplied} not applied: exchange rate missing (see below).` : "";
+                if (proposedRecs.length === 0) return "Approve a recommendation with a linked holding to see its effect on the proposed allocation.";
+                if (applied === 0) return `No approved recommendation could be applied.${skipped}`;
+                if (deltas.length > 0)
+                  return `${applied} approved recommendation${applied === 1 ? "" : "s"} applied. Sales credit cash; purchases debit it.${skipped}`;
+                return `Approved recommendations had no allocation impact (advisory-only or net-flat actions).${skipped}`;
+              })()}
             </div>
           </div>
         </div>
+
+        {unconverted.length > 0 && (
+          <div className="pdf-card pdf-avoid-break" style={{ marginTop: 14, borderColor: "#9B2C2C" }}>
+            <div className="pdf-stat-label" style={{ color: "#7A2222" }}>Proposed actions not applied</div>
+            <p className="pdf-text" style={{ marginTop: 6 }}>
+              {unconverted.length} approved recommendation{unconverted.length === 1 ? " is" : "s are"} not reflected in the
+              proposed allocation because no exchange rate is available for{" "}
+              {[...new Set(unconverted.map((u) => `${u.currency}/${u.reportingCurrency}`))].join(", ")}.
+            </p>
+          </div>
+        )}
 
         {cashShortfalls.length > 0 && (
           <div className="pdf-card pdf-avoid-break" style={{ marginTop: 14, borderColor: "#9B2C2C" }}>
