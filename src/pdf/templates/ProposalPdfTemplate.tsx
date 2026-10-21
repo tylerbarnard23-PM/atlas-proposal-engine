@@ -16,6 +16,7 @@ import { PDF_BASE_CSS } from "../styles/pdfStyles";
 import { formatCurrency, formatDate, formatPercent } from "@/utils/formatting";
 import { sumBy, groupBy } from "@/utils/numbers";
 import { applyRecommendationsToProposed, cashShortfallsOf } from "@/engines/proposalEngine";
+import { describeAmounts } from "@/engines/recommendationAmounts";
 import { normalizeHoldings } from "@/engines/normalizationEngine";
 import { coverageLabel, describeUnvalued, formatTotal, reportingValue, valuationSummary, valuationTotal } from "@/engines/valuationTotals";
 import { dataQualityScore } from "@/engines/dataQualityEngine";
@@ -168,10 +169,9 @@ function pageNumber(idx: number) {
 
 export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
   const { client, advisor, accounts, recommendations, sections, disclosures, proposal, fxRates, variant } = props;
-  // The currency the holdings' reportingMarketValue was normalized into (and
-  // the one readiness uses); proposal.outputCurrency isn't kept in sync with
-  // the Client Profile setting.
-  const reportingCurrency = client.proposalOutputCurrency || proposal.outputCurrency;
+  // The client's output currency is the only reporting currency: holdings are
+  // normalized into it and readiness uses it. The proposal keeps no copy.
+  const reportingCurrency = client.proposalOutputCurrency;
   // Value every holding here from its amount and the current rates, whatever
   // reporting value it arrived with, so the PDF route and the preview can't
   // render a cached figure for a holding that has lost its rate.
@@ -469,6 +469,11 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
               <span className={`pdf-pill ${r.priority === "high" ? "warn" : r.priority === "medium" ? "navy" : "neutral"}`}>{r.priority} priority</span>
             </div>
             <p className="pdf-text">{r.rationale}</p>
+            {/* Entered in another currency: the amount, its converted value and the rate used. */}
+            {(() => {
+              const amounts = describeAmounts(r, fx);
+              return amounts ? <p className="pdf-text" style={{ marginTop: 4 }}>Amount: {amounts}.</p> : null;
+            })()}
             <div className="pdf-grid-3" style={{ marginTop: 6 }}>
               {r.clientBenefit && <KvBlock label="Client benefit" value={r.clientBenefit} />}
               {r.riskTradeoff && <KvBlock label="Risk / tradeoff" value={r.riskTradeoff} />}

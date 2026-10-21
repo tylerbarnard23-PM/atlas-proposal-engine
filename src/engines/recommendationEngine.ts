@@ -1,8 +1,9 @@
-import type { Insight, Recommendation } from "@/domain/types";
+import type { CurrencyCode, Insight, Recommendation } from "@/domain/types";
 import { safeId, todayIso } from "@/utils/formatting";
 import { insightKey } from "./insightEngine";
 
-export function recommendationFromInsight(insight: Insight): Recommendation {
+// Drafts start in the reporting currency; any amount the advisor adds is in it.
+export function recommendationFromInsight(insight: Insight, reportingCurrency: CurrencyCode): Recommendation {
   const now = todayIso();
   const base: Recommendation = {
     id: safeId("rec"),
@@ -10,7 +11,7 @@ export function recommendationFromInsight(insight: Insight): Recommendation {
     type: "custom",
     relatedHoldingId: insight.relatedHoldingIds?.[0],
     relatedAccountId: insight.relatedAccountIds?.[0],
-    currency: "USD",
+    currency: reportingCurrency,
     rationale: insight.detail,
     priority: insight.severity === "critical" ? "high" : insight.severity === "warning" ? "medium" : "low",
     status: "draft",

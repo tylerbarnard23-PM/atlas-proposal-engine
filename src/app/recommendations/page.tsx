@@ -16,11 +16,13 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Drawer } from "@/components/ui/Drawer";
 import { ReasonPicker } from "@/components/ui/ReasonPicker";
 import type { Holding, Recommendation, RecommendationStatus, RecommendationType } from "@/domain/types";
-import { applyRecToValue, proposedCashShortfalls } from "@/engines/proposalEngine";
+import { proposedCashShortfalls } from "@/engines/proposalEngine";
 import { useNormalizedHoldings } from "@/hooks/useNormalizedHoldings";
-import { reportingValue } from "@/engines/valuationTotals";
-import type { NormalizedHolding } from "@/engines/normalizationEngine";
-import { formatCurrency, formatDate, safeId, todayIso } from "@/utils/formatting";
+import { hasMoneyAmounts, newRecommendation } from "@/engines/recommendationAmounts";
+import { describeFormEffect, describeRecEffect } from "@/components/recommendations/recEffect";
+import { CurrencyReviewPanel } from "@/components/recommendations/CurrencyReviewPanel";
+import { RecCurrencyField } from "@/components/recommendations/RecCurrencyField";
+import { formatCurrency, formatDate, todayIso } from "@/utils/formatting";
 
 const TYPES: RecommendationType[] = [
   "buy", "sell", "hold", "reduce", "increase", "rebalance", "transfer",
@@ -51,13 +53,10 @@ function Inner() {
   const upsert = useAtlasStore((s) => s.upsertRecommendation);
   const fxRates = useAtlasStore((s) => s.fxRates);
   const { holdings: normalized, reportingCurrency } = useNormalizedHoldings();
+  const fx = React.useMemo(() => ({ reportingCurrency, rates: fxRates }), [reportingCurrency, fxRates]);
   const shortfalls = React.useMemo(
-    () =>
-      proposedCashShortfalls(normalized, recs.filter((r) => r.approvedByAdvisor), accounts, {
-        reportingCurrency,
-        rates: fxRates,
-      }),
-    [normalized, recs, accounts, reportingCurrency, fxRates]
+    () => proposedCashShortfalls(normalized, recs.filter((r) => r.approvedByAdvisor), accounts, fx),
+    [normalized, recs, accounts, fx]
   );
   const remove = useAtlasStore((s) => s.removeRecommendation);
   const approveAll = useAtlasStore((s) => s.approveAllRecommendations);
@@ -98,19 +97,7 @@ function Inner() {
   const fromIncomplete = React.useMemo(() => holdingsFromIncompleteImports(sourceDocuments, normalized), [sourceDocuments, normalized]);
 
   function newRec() {
-    setEditing({
-      id: safeId("rec"),
-      title: "",
-      type: "custom",
-      currency: "USD",
-      rationale: "",
-      priority: "medium",
-      status: "draft",
-      includeInPdf: false,
-      approvedByAdvisor: false,
-      createdAt: todayIso(),
-      updatedAt: todayIso(),
-    });
+    setEditing(newRecommendation(reportingCurrency));
   }
 
   return (
@@ -207,7 +194,7 @@ function Inner() {
           {ordered.map((r) => {
             const rejected = isRejected(r);
             const linked = r.relatedHoldingId ? holdingsById[r.relatedHoldingId] : undefined;
-            const effect = describeRecEffect(r, linked, reportingCurrency);
+            const effect = describeRecEffect(r, linked, fx);
             return (
               <Card key={r.id} className={rejected ? "opacity-80 bg-slatey-50" : undefined}>
                 <CardBody>
@@ -249,6 +236,14 @@ function Inner() {
                         {r.approvedByAdvisor ? "↻ " : "○ "}
                         {effect.label}
                       </div>
+                      )}
+                      {!rejected && effect.amounts && (
+                        <p className="mt-1 text-2xs text-ink-500 tabular">
+                          Amount: {effect.amounts}. Any figures written in the text above are as entered, not converted.
+                        </p>
+                      )}
+                      {!rejected && (
+                        <CurrencyReviewPanel rec={r} fx={fx} onResolve={(next) => upsert({ ...next, updatedAt: todayIso() })} onEdit={() => setEditing(r)} />
                       )}
                     </div>
                     <div className="flex flex-col gap-2 shrink-0">
@@ -321,6 +316,7 @@ function Inner() {
         {editing && (
           <RecForm
             value={editing}
+            wasApproved={!!recs.find((x) => x.id === editing.id)?.approvedByAdvisor}
             onChange={(p) => setEditing({ ...editing, ...p })}
             onSave={() => {
               upsert({ ...editing!, updatedAt: todayIso() });
@@ -340,54 +336,28 @@ function Inner() {
 
 function RecForm({
   value,
+  wasApproved,
   onChange,
   onSave,
   onRemove,
 }: {
   value: Recommendation;
+  wasApproved: boolean;
   onChange: (p: Partial<Recommendation>) => void;
   onSave: () => void;
   onRemove: () => void;
 }) {
   const { holdings, reportingCurrency } = useNormalizedHoldings();
+  const fxRates = useAtlasStore((s) => s.fxRates);
+  const fx = React.useMemo(() => ({ reportingCurrency, rates: fxRates }), [reportingCurrency, fxRates]);
   const accounts = useAtlasStore((s) => s.accounts);
   const accountById = React.useMemo(
     () => Object.fromEntries(accounts.map((a) => [a.id, a])),
     [accounts]
   );
   const linkedHolding = holdings.find((h) => h.id === value.relatedHoldingId);
-  // In the reporting currency; null when the holding can't be valued.
-  const currentValue = linkedHolding ? reportingValue(linkedHolding) : undefined;
-
-  // Single source of truth for the effect summary — runs the same per-rec
-  // engine helper used by applyRecommendationsToProposed and the card-level
-  // summary, so the form, the cards, and the proposal can never disagree.
-  const effectHint = React.useMemo(() => {
-    if (!value.relatedHoldingId) {
-      return "Without a linked holding, this recommendation will appear in the proposal text but won't shift the Before / After allocation.";
-    }
-    if (!linkedHolding) {
-      return "Linked holding no longer exists.";
-    }
-    if (currentValue == null) {
-      return `${linkedHolding.assetName} can't be valued in ${reportingCurrency} (no ${linkedHolding.valuation.currency}/${reportingCurrency} rate), so this recommendation's effect can't be shown or applied until the rate is added in Market Data.`;
-    }
-    const after = applyRecToValue(currentValue, value, !!linkedHolding.isLiability);
-    if (Math.abs(after - currentValue) < 1 && value.proposedValue == null) {
-      switch (value.type) {
-        case "tax_loss_harvest":
-        case "replace_high_fee_fund":
-        case "improve_asset_location":
-          return "Net-flat on allocation — same exposure, different vehicle/lot.";
-        default:
-          return "No allocation shift yet — set an action amount or proposed value.";
-      }
-    }
-    const delta = after - currentValue;
-    const cashDirection = delta < 0 ? "credit" : "debit";
-    const cashAbs = formatCurrency(Math.abs(delta), linkedHolding.currency, { compact: true });
-    return `${linkedHolding.assetName}: ${formatCurrency(currentValue, linkedHolding.currency, { compact: true })} → ${formatCurrency(after, linkedHolding.currency, { compact: true })}. Cash ${cashDirection} ${cashAbs} in the same account.`;
-  }, [value, linkedHolding, currentValue]);
+  // The same steps as the engine and the cards: convert once, then apply.
+  const effect = React.useMemo(() => describeFormEffect(value, linkedHolding, fx), [value, linkedHolding, fx]);
 
   return (
     <div className="space-y-3">
@@ -407,8 +377,7 @@ function RecForm({
         <option value="medium">Medium</option>
         <option value="high">High</option>
       </Select>
-      <Label>Currency</Label>
-      <Input value={value.currency} onChange={(e) => onChange({ currency: e.target.value })} />
+      <RecCurrencyField value={value} fx={fx} onChange={(next) => onChange(next)} />
 
       <div className="border-t border-ink-100 pt-3">
         <Label>Linked holding</Label>
@@ -426,9 +395,10 @@ function RecForm({
             );
           })}
         </Select>
-        {linkedHolding && currentValue != null && (
+        {linkedHolding && effect.currentValue != null && (
           <div className="text-2xs text-ink-500 mt-1.5">
-            Current value: {currentValue.toLocaleString()} {linkedHolding.currency}
+            Current value: {effect.currentValue}
+            {linkedHolding.currency !== reportingCurrency ? ` (holding in ${linkedHolding.currency}, valued in ${reportingCurrency})` : ""}
           </div>
         )}
 
@@ -459,14 +429,14 @@ function RecForm({
                 }
                 aria-label="Action amount unit"
               >
-                <option value="amount">$</option>
+                <option value="amount">{value.currency}</option>
                 <option value="percent">%</option>
               </Select>
             </div>
             <div className="text-2xs text-ink-500 mt-1">
               {value.actionAmountUnit === "percent"
                 ? "Percent of the linked holding's current value."
-                : "Absolute amount in the recommendation's currency."}
+                : `Absolute amount in ${value.currency}.`}
             </div>
           </div>
           <div>
@@ -481,13 +451,14 @@ function RecForm({
               disabled={!value.relatedHoldingId}
             />
             <div className="text-2xs text-ink-500 mt-1">
-              Wins over the action amount if both are set.
+              In {value.currency}. Wins over the action amount if both are set.
             </div>
           </div>
         </div>
 
         <div className="text-2xs text-ink-600 bg-slatey-50 border border-ink-100 rounded p-2 mt-2 leading-relaxed">
-          <span className="font-semibold text-ink-800">Effect on Before / After:</span> {effectHint}
+          <span className="font-semibold text-ink-800">Effect on Before / After:</span> {effect.hint}
+          {effect.amounts && <div className="mt-1 tabular">Amount: {effect.amounts}.</div>}
         </div>
       </div>
 
@@ -511,7 +482,10 @@ function RecForm({
           />
           <div>
             <div className="font-medium text-ink-900">Advisor approved</div>
-            <div className="text-2xs text-ink-500">Approving applies this recommendation to the Before / After allocation immediately.</div>
+            <div className="text-2xs text-ink-500">
+              Approving applies this recommendation to the Before / After allocation immediately.
+              {wasApproved && " Changing its amounts, currency, linked holding or type clears the approval when you save; approve it again afterwards."}
+            </div>
           </div>
         </label>
         <label className="flex items-start gap-2 text-[13px]">
@@ -533,49 +507,4 @@ function RecForm({
       </div>
     </div>
   );
-}
-
-// Tiny effect summary used on each recommendation card. Calls the same
-// per-rec helper the engine uses so the UI never drifts from the math.
-function describeRecEffect(
-  rec: Recommendation,
-  linked: NormalizedHolding | undefined,
-  reportingCurrency: string
-): { label: string; tone: "neutral" | "positive" | "negative" | "warning" } {
-  if (!rec.relatedHoldingId) {
-    return { label: "Advisory only — no allocation impact.", tone: "neutral" };
-  }
-  if (!linked) {
-    return { label: "Linked holding no longer exists.", tone: "warning" };
-  }
-  // Recommendation amounts are in the reporting currency, so the effect is too.
-  const before = reportingValue(linked);
-  if (before == null) {
-    return {
-      label: `${linked.assetName}: not valued in ${reportingCurrency} (no ${linked.valuation.currency}/${reportingCurrency} rate), so this can't be applied yet.`,
-      tone: "warning",
-    };
-  }
-  const after = applyRecToValue(before, rec, !!linked.isLiability);
-  const delta = after - before;
-  if (Math.abs(delta) < 1 && rec.proposedValue == null) {
-    return {
-      label: `${linked.assetName}: no shift yet — set an action amount or proposed value.`,
-      tone: "warning",
-    };
-  }
-  const cashDelta = linked.isLiability && delta > 0 ? -delta : -delta; // sale credits cash
-  const cashLabel =
-    cashDelta === 0
-      ? ""
-      : ` · Cash ${cashDelta > 0 ? "+" : "−"}${formatCurrency(Math.abs(cashDelta), reportingCurrency, { compact: true })}`;
-  const sign = delta < 0 ? "−" : "+";
-  return {
-    label: `${linked.assetName}: ${formatCurrency(before, reportingCurrency, { compact: true })} → ${formatCurrency(
-      after,
-      reportingCurrency,
-      { compact: true }
-    )} (${sign}${formatCurrency(Math.abs(delta), reportingCurrency, { compact: true })})${cashLabel}`,
-    tone: delta < 0 ? "negative" : "positive",
-  };
 }

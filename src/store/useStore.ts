@@ -27,6 +27,7 @@ import { SEED_MARKET_QUOTES } from "@/data/seedMarketData";
 import { DISCLOSURE_LIBRARY } from "@/domain/disclosureLibrary";
 import { todayIso } from "@/utils/formatting";
 import { DEFAULT_PROPOSAL_SECTIONS } from "@/engines/proposalEngine";
+import { migrateRecommendationCurrency, withApprovalRule } from "@/engines/recommendationAmounts";
 import { LEGACY_SAMPLE_FIRM_NAME } from "@/domain/branding";
 import type { ImportedWorkspace } from "@/ingestion/documents/toWorkspace";
 
@@ -102,8 +103,6 @@ function initialProposal(): Proposal {
     clientId: SEED_CLIENT.id,
     advisorId: SEED_ADVISOR.id,
     title: "Blackwell Family Office — 2026 Wealth Proposal",
-    outputCurrency: SEED_CLIENT.proposalOutputCurrency,
-    outputCountry: SEED_CLIENT.reportingCountry,
     createdAt: now,
     updatedAt: now,
     approvalStatus: "draft",
@@ -168,8 +167,6 @@ const blankState = (): AtlasState => {
       clientId,
       advisorId,
       title: "Wealth Proposal",
-      outputCurrency: "USD",
-      outputCountry: "US",
       createdAt: now,
       updatedAt: now,
       approvalStatus: "draft",
@@ -217,6 +214,25 @@ export function migrateAtlasState(persisted: unknown, version: number): AtlasSta
         ? { ...advisor, firmName: SEED_ADVISOR.firmName, email: SEED_ADVISOR.email }
         : advisor;
   }
+  // v5 (#24): recommendation amounts are denominated in their own currency.
+  // Until now the engine calculated them in the reporting currency whatever
+  // their label said, so each takes that currency (every effect stays the
+  // same); a differing old label is kept for the advisor to review. The
+  // proposal's own output currency and country are dropped: the client
+  // settings are the only source.
+  if (version < 5 && state) {
+    const calculatedIn = state.client?.proposalOutputCurrency || "USD";
+    const now = new Date().toISOString();
+    if (Array.isArray(state.recommendations)) {
+      state.recommendations = state.recommendations.map((r) => migrateRecommendationCurrency(r, calculatedIn, now));
+    }
+    if (state.proposal) {
+      const { outputCurrency: _c, outputCountry: _k, ...proposal } = state.proposal as Proposal & { outputCurrency?: string; outputCountry?: string };
+      void _c;
+      void _k;
+      state.proposal = proposal;
+    }
+  }
   return state;
 }
 
@@ -245,10 +261,12 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
         })),
       removeHolding: (id) => set((s) => ({ holdings: s.holdings.filter((h) => h.id !== id) })),
       setHoldings: (holdings) => set({ holdings }),
+      // Every save goes through the edit rules: a material change to an
+      // approved recommendation clears its approval (see withApprovalRule).
       upsertRecommendation: (rec) =>
         set((s) => ({
           recommendations: s.recommendations.some((r) => r.id === rec.id)
-            ? s.recommendations.map((r) => (r.id === rec.id ? { ...r, ...rec } : r))
+            ? s.recommendations.map((r) => (r.id === rec.id ? withApprovalRule(r, { ...r, ...rec }) : r))
             : [...s.recommendations, rec],
         })),
       removeRecommendation: (id) =>
@@ -394,7 +412,7 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);
       },
-      version: 4,
+      version: 5,
       // v2: the seeded fictional advisor no longer carries real credential
       // marks (CFA, CFP®); strip them from workspaces saved before the change,
       // and drop "running" PDF jobs orphaned by the old append-only history.

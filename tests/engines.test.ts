@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Holding, Recommendation } from "@/domain/types";
 import { applyRecToValue, applyRecommendationsToProposed } from "@/engines/proposalEngine";
+import { amountsInReporting } from "@/engines/recommendationAmounts";
 import { valuationSummary } from "@/engines/valuationTotals";
 import { convert } from "@/engines/currencyEngine";
 import { normalizeHoldings } from "@/engines/normalizationEngine";
@@ -45,29 +46,36 @@ const holding = (patch: Partial<Holding>): Holding => ({
   ...patch,
 });
 
+// applyRecToValue takes amounts already in the reporting currency.
+const amounts = (r: Recommendation) => {
+  const out = amountsInReporting(r, { reportingCurrency: r.currency, rates: [] });
+  if (!out.ok) throw new Error(out.reason);
+  return out.amounts;
+};
+
 describe("applyRecToValue", () => {
   it("sells a dollar amount as a partial sale", () => {
-    expect(applyRecToValue(100_000, rec({ type: "sell", actionAmount: 40_000 }), false)).toBe(60_000);
+    expect(applyRecToValue(100_000, amounts(rec({ type: "sell", actionAmount: 40_000 })), false)).toBe(60_000);
   });
   it("sells a percentage of the position", () => {
-    expect(applyRecToValue(100_000, rec({ type: "sell", actionAmount: 25, actionAmountUnit: "percent" }), false)).toBe(75_000);
+    expect(applyRecToValue(100_000, amounts(rec({ type: "sell", actionAmount: 25, actionAmountUnit: "percent" })), false)).toBe(75_000);
   });
   it("fully exits on a sell with no amount", () => {
-    expect(applyRecToValue(100_000, rec({ type: "sell" }), false)).toBe(0);
+    expect(applyRecToValue(100_000, amounts(rec({ type: "sell" })), false)).toBe(0);
   });
   it("never sells below zero", () => {
-    expect(applyRecToValue(10_000, rec({ type: "reduce", actionAmount: 50_000 }), false)).toBe(0);
+    expect(applyRecToValue(10_000, amounts(rec({ type: "reduce", actionAmount: 50_000 })), false)).toBe(0);
   });
   it("lets an explicit proposed value win over the action amount", () => {
-    expect(applyRecToValue(100_000, rec({ type: "sell", actionAmount: 10_000, proposedValue: 5_000 }), false)).toBe(5_000);
+    expect(applyRecToValue(100_000, amounts(rec({ type: "sell", actionAmount: 10_000, proposedValue: 5_000 })), false)).toBe(5_000);
   });
   it("treats fee-replacement and tax-loss swaps as allocation-neutral", () => {
-    expect(applyRecToValue(100_000, rec({ type: "replace_high_fee_fund", actionAmount: 50_000 }), false)).toBe(100_000);
-    expect(applyRecToValue(100_000, rec({ type: "tax_loss_harvest" }), false)).toBe(100_000);
+    expect(applyRecToValue(100_000, amounts(rec({ type: "replace_high_fee_fund", actionAmount: 50_000 })), false)).toBe(100_000);
+    expect(applyRecToValue(100_000, amounts(rec({ type: "tax_loss_harvest" })), false)).toBe(100_000);
   });
   it("pays down a liability toward zero, not past it", () => {
-    expect(applyRecToValue(-200_000, rec({ type: "pay_down_debt", actionAmount: 50_000 }), true)).toBe(-150_000);
-    expect(applyRecToValue(-20_000, rec({ type: "pay_down_debt", actionAmount: 50_000 }), true)).toBe(0);
+    expect(applyRecToValue(-200_000, amounts(rec({ type: "pay_down_debt", actionAmount: 50_000 })), true)).toBe(-150_000);
+    expect(applyRecToValue(-20_000, amounts(rec({ type: "pay_down_debt", actionAmount: 50_000 })), true)).toBe(0);
   });
 });
 

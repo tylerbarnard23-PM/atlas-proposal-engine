@@ -122,7 +122,8 @@ describe("proposed holdings keep native and reporting currencies apart", () => {
   it("a new cash line for an unknown account is in the reporting currency, not USD by default", () => {
     const eur: FxContext = { reportingCurrency: "EUR", rates: [{ base: "CHF", quote: "EUR", rate: 1.1, asOf: "2026-10-20", source: "Manual" }] };
     const sec = holding({ reportingMarketValue: 1_100 });
-    const { holdings } = applyRecommendationsToProposed([sec], [rec({ relatedHoldingId: "sec", actionAmount: 110 })], [], eur);
+    // EUR 110: the amount is entered in the reporting currency (#24).
+    const { holdings } = applyRecommendationsToProposed([sec], [rec({ relatedHoldingId: "sec", actionAmount: 110, currency: "EUR" })], [], eur);
     // The holding's own CHF cash currency isn't known (no account, no cash line),
     // so the offset lands in a reporting-currency line.
     const synth = byId(holdings, "synth_cash_acct_ch");
@@ -287,7 +288,7 @@ describe("a missing FX rate is reported, never assumed to be 1:1", () => {
         ...ws,
         fxRates: [],
         sections: DEFAULT_PROPOSAL_SECTIONS,
-        proposal: { id: "p", outputCurrency: "USD" } as Proposal,
+        proposal: { id: "p" } as Proposal,
         variant: "draft",
       })
     );
@@ -313,7 +314,7 @@ describe("the proposal uses the currency the holdings were normalized into", () 
         disclosures: DISCLOSURE_LIBRARY,
         fxRates: SEED_FX_RATES,
         sections: DEFAULT_PROPOSAL_SECTIONS,
-        proposal: { id: "p", outputCurrency: "USD" } as Proposal, // not updated when the client setting changed
+        proposal: { id: "p" } as Proposal, // not updated when the client setting changed
         variant: "draft",
       })
     );
