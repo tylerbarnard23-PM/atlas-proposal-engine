@@ -2,7 +2,7 @@
   "name": "atlas-proposal-engine",
   "version": "0.1.0",
   "private": true,
-  "license": "MIT",
+  "license": "UNLICENSED",
   "engines": {
     "node": "24.x"
   },

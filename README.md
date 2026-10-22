@@ -160,7 +160,7 @@ To try the Copilot with Claude locally, copy `.env.example` to `.env.local` and 
 | `ANTHROPIC_API_KEY` + `COPILOT_MODE=live` | Both required for the live Copilot. Otherwise, demo mode. |
 | `FINNHUB_API_KEY`, `TWELVE_DATA_API_KEY`, `ALPHA_VANTAGE_API_KEY`, `FRED_API_KEY` | Live market data. Without them, free providers and mock fallbacks. |
 
-## White-label, sample output and forks
+## White-label and sample output
 
 Atlas is white-label: clients see the adviser's firm, logo and colors, not Atlas. The sample firm, **Harbor & Pine Wealth Partners**, is fictional, and its name is deliberately unrelated to the product. Disclosures refer to the adviser as `[Firm]` until a real firm name is set in Firm & Branding.
 
@@ -168,7 +168,7 @@ Every PDF Atlas generates is marked as a sample: a SAMPLE watermark on final PDF
 
 > **The one Atlas mark on client documents.** The sample notice (`PDF_SAMPLE_NOTICE` in `src/domain/legal.ts`, the SAMPLE watermark and cover label, and the `SAMPLE_` filename prefix) is the only place Atlas appears on a client-facing PDF. A white-label adopter would remove it; doing so means taking responsibility for the output, as described below.
 
-You're welcome to fork Atlas under the MIT license. If you adapt it for real client work, removing the sample markings is your decision, and so is everything that comes with it: compliance review, books-and-records retention, supervision, data security and vendor due diligence are the responsibility of whoever deploys it.
+If you adapt it for real client work, removing the sample markings is your decision, and so is everything that comes with it: compliance review, books-and-records retention, supervision, data security and vendor due diligence are the responsibility of whoever deploys it.
 
 ## Limitations and roadmap
 
@@ -181,4 +181,4 @@ Feedback and issues welcome.
 
 ## License
 
-[MIT](LICENSE). The license covers the code only; the disclaimer above still applies to anything Atlas generates.
+Copyright (c) 2026 Tyler Barnard. All rights reserved. Third-party dependencies remain under their respective licenses.
