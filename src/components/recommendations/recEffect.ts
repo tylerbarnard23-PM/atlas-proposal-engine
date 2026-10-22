@@ -75,7 +75,8 @@ export function summarizePreview(p: RecommendationPreview): PreviewSummary {
   if (p.combined) {
     const n = p.combined.others.length;
     const pos = p.combined.position ? describeMovement(p.combined.position, cur) : "";
-    combined = `With ${n} other approved recommendation${n === 1 ? "" : "s"}: ${pos}; this recommendation's part ${signedMoney(p.combined.thisChange, cur)}. ${describeCash(p.combined.cash, cur, positionIsCash)}`;
+    const short = p.combined.shortfalls.map((sf) => ` Shortfall: ${sf.accountName} short ${formatCurrency(sf.shortfall, cur)}.`).join("");
+    combined = `With ${n} other approved recommendation${n === 1 ? "" : "s"} (in proposal order): ${pos}; adding this recommendation changes it by ${signedMoney(p.combined.thisChange, cur)}. ${describeCash(p.combined.cash, cur, positionIsCash)}${short}`;
   }
   if (p.state === "no_change") {
     return {

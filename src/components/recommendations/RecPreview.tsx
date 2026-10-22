@@ -80,17 +80,22 @@ export function RecPreview({ preview }: { preview: RecommendationPreview }) {
       {preview.combined && (
         <div className="rounded-md bg-slatey-50 ring-1 ring-inset ring-ink-200 p-2.5 text-[12px] text-ink-700 space-y-1">
           <div className="font-semibold text-ink-800">
-            Combined with {preview.combined.others.length} other approved recommendation{preview.combined.others.length === 1 ? "" : "s"}:{" "}
-            {preview.combined.others.map((o) => o.title).join("; ")}
+            Combined with {preview.combined.others.length} other approved recommendation{preview.combined.others.length === 1 ? "" : "s"}, in proposal
+            order: {preview.combined.others.map((o) => o.title).join("; ")}
           </div>
           {preview.combined.position && <div className="tabular">{describeMovement(preview.combined.position, cur)}</div>}
-          <div className="tabular">This recommendation&apos;s part: {signedMoney(preview.combined.thisChange, cur)}</div>
+          <div className="tabular">Adding this recommendation changes the combined result by {signedMoney(preview.combined.thisChange, cur)}</div>
           {preview.combined.cash.length > 0 && (
             <div className="tabular">
               Cash:{" "}
               {preview.combined.cash
                 .map((c) => (c.synthetic ? `new cash line in ${c.accountName} ${money(c.after, cur)}` : `${c.name} ${money(c.before, cur)} → ${money(c.after, cur)}`))
                 .join("; ")}
+            </div>
+          )}
+          {preview.combined.shortfalls.length > 0 && (
+            <div className="tabular text-warning-600">
+              Shortfall: {preview.combined.shortfalls.map((sf) => `${sf.accountName} short ${formatCurrency(sf.shortfall, cur)}`).join("; ")}
             </div>
           )}
         </div>

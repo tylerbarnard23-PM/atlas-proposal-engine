@@ -190,7 +190,7 @@ describe("standalone versus combined", () => {
     expect(p.standalone!.position).toMatchObject({ before: 100_000, after: 60_000 });
     expect(p.combined).toMatchObject({ others: [{ id: "r2", title: "Earlier trim" }], position: { before: 100_000, after: 50_000, change: -50_000 }, thisChange: -40_000 });
     expect(p.combined!.cash).toEqual([expect.objectContaining({ holdingId: "brk_cash", before: 10_000, after: 60_000 })]);
-    expect(summarizePreview(p).combined).toMatch(/^With 1 other approved recommendation: Example Equity: \$100,000\.00 → \$50,000\.00/);
+    expect(summarizePreview(p).combined).toMatch(/^With 1 other approved recommendation \(in proposal order\): Example Equity: \$100,000\.00 → \$50,000\.00/);
   });
 
   it("another approved recommendation in the same account (different position) also shows combined cash", () => {
@@ -258,5 +258,153 @@ describe("the Copilot simulates with the same engine", () => {
     expect(cash).toMatchObject({ before: 179_478.88, after: 179_475.88, delta: -3, cash_movements: [] });
     const paydown = JSON.parse(executeTool(ctx, "simulate_recommendation", { holding_id: "mortgage", type: "pay_down_debt", action_amount: 70_000 }).content);
     expect(paydown.cash_movements).toEqual([expect.objectContaining({ holding: "UBS BANK USA DEPOSIT ACCOUNT", account: "UBS", change: -70_000 })]);
+  });
+});
+
+// Review of PR #34 (2026-10-22): the combined result must be the full
+// proposal engine's own output, in saved order, and must appear whenever
+// another approved recommendation actually affects the position or its
+// account's cash, including through household funding of a debt paydown.
+describe("combined results agree with the full proposal", () => {
+  const ordered = [holding("sec", "brk", "equity", 100_000, { assetName: "Example Equity" }), holding("brk_cash", "brk", "cash", 10_000, { assetName: "Brokerage cash" })];
+  const approved = (patch: Partial<Recommendation>) => rec({ approvedByAdvisor: true, includeInPdf: true, status: "approved", ...patch });
+  const full = (hs: Holding[], store: Recommendation[]) =>
+    applyRecommendationsToProposed(normalizeHoldings(hs, RATES, "USD"), store.filter((r) => r.approvedByAdvisor), ACCOUNTS, fx()).holdings;
+  const valueIn = (hs: Holding[], id: string) => hs.find((h) => h.id === id)?.reportingMarketValue;
+
+  it("keeps saved order: [A target 80,000, B sell 10%] ends at 72,000 on both cards, as in the proposal", () => {
+    const A = approved({ id: "A", title: "Target 80,000", proposedValue: 80_000 });
+    const B = approved({ id: "B", title: "Sell 10%", actionAmount: 10, actionAmountUnit: "percent" });
+    const store = [A, B];
+    expect(valueIn(full(ordered, store), "sec")).toBe(72_000);
+    for (const r of store) {
+      const p = preview(r, { holdings: ordered, recommendations: store });
+      expect(p.combined!.position!.after).toBe(72_000);
+      // Every cash line in the combined result matches the full proposal.
+      for (const c of p.combined!.cash) expect(c.after).toBe(valueIn(full(ordered, store), c.holdingId));
+    }
+    // A's marginal effect in proposal order: [B] alone ends at 90,000; [A, B] at 72,000.
+    expect(preview(A, { holdings: ordered, recommendations: store }).combined!.thisChange).toBe(-18_000);
+  });
+
+  it("an edited saved recommendation replaces the original in place, once", () => {
+    const A = approved({ id: "A", title: "Sell 40,000", actionAmount: 40_000, actionAmountUnit: "amount" });
+    const B = approved({ id: "B", title: "Sell 10%", actionAmount: 10, actionAmountUnit: "percent" });
+    const store = [A, B];
+    const editedA = { ...A, actionAmount: 20_000 };
+    const p = preview(editedA, { holdings: ordered, recommendations: store });
+    // (100,000 − 20,000) × 0.9, as the proposal computes once the edit is saved in place.
+    const expected = valueIn(full(ordered, [editedA, B]), "sec");
+    expect(expected).toBe(72_000);
+    expect(p.standalone!.position!.after).toBe(80_000);
+    expect(p.combined!.position!.after).toBe(expected);
+    expect(p.combined!.others.map((o) => o.id)).toEqual(["B"]);
+    // A new draft is appended after the saved ones.
+    const draft = rec({ id: "NEW", actionAmount: 5_000, actionAmountUnit: "amount" });
+    expect(preview(draft, { holdings: ordered, recommendations: store }).combined!.position!.after).toBe(
+      valueIn(full(ordered, [...store, { ...draft, approvedByAdvisor: true }]), "sec")
+    );
+  });
+
+  it("detects household funding: a mortgage paydown elsewhere that draws on the purchase's account", () => {
+    const hs = [
+      holding("sec", "brk", "equity", 100_000, { assetName: "Example Equity" }),
+      holding("brk_cash", "brk", "cash", 600_000, { assetName: "Brokerage cash" }),
+      holding("bank_cash", "bank", "cash", 50_000, { assetName: "Bank cash" }),
+      holding("mortgage", "loan", "liability", -550_000, { assetName: "Mortgage", isLiability: true }),
+    ];
+    const pay = approved({ id: "P", title: "Pay off mortgage", type: "pay_down_debt", relatedHoldingId: "mortgage", relatedAccountId: "loan", actionAmount: 550_000, actionAmountUnit: "amount" });
+    const buy = approved({ id: "S", title: "Buy more", type: "buy", actionAmount: 150_000, actionAmountUnit: "amount" });
+    const store = [pay, buy];
+    const proposal = full(hs, store);
+    const p = preview(buy, { holdings: hs, recommendations: store });
+    // Standalone: the purchase alone.
+    expect(p.standalone!.cash).toEqual([expect.objectContaining({ holdingId: "brk_cash", after: 450_000 })]);
+    // Combined: labelled, naming the paydown, matching the proposal line by line.
+    expect(p.combined).not.toBeNull();
+    expect(p.combined!.others).toEqual([{ id: "P", title: "Pay off mortgage" }]);
+    const brk = p.combined!.cash.find((c) => c.holdingId === "brk_cash")!;
+    expect(brk.after).toBe(valueIn(proposal, "brk_cash"));
+    expect(brk.after).toBeCloseTo(0, 6);
+    for (const c of p.combined!.cash) expect(c.after).toBe(valueIn(proposal, c.holdingId));
+    // 600,000 − 150,000 + 50,000 = 500,000 of household cash for a 550,000 paydown: 50,000 short on the loan account.
+    expect(p.combined!.shortfalls).toEqual([expect.objectContaining({ accountId: "loan" })]);
+    expect(p.combined!.shortfalls[0].shortfall).toBeCloseTo(50_000, 6);
+    expect(p.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "shortfall", blocksFinal: true, message: expect.stringMatching(/^With the other approved recommendations, Mortgage would be short \$50,000\.00/) }),
+      ])
+    );
+    expect(summarizePreview(p).combined).toMatch(/^With 1 other approved recommendation \(in proposal order\): Example Equity:/);
+  });
+
+  it("the paydown's own card shows the combined result when another approved recommendation changes its funding", () => {
+    const hs = [
+      holding("sec", "brk", "equity", 100_000, { assetName: "Example Equity" }),
+      holding("brk_cash", "brk", "cash", 600_000, { assetName: "Brokerage cash" }),
+      holding("bank_cash", "bank", "cash", 50_000, { assetName: "Bank cash" }),
+      holding("mortgage", "loan", "liability", -550_000, { assetName: "Mortgage", isLiability: true }),
+    ];
+    const pay = approved({ id: "P", title: "Pay off mortgage", type: "pay_down_debt", relatedHoldingId: "mortgage", relatedAccountId: "loan", actionAmount: 550_000, actionAmountUnit: "amount" });
+    const buy = approved({ id: "S", title: "Buy more", type: "buy", actionAmount: 100_000, actionAmountUnit: "amount" });
+    const store = [pay, buy];
+    const p = preview(pay, { holdings: hs, recommendations: store });
+    // Alone, the paydown draws 550,000 from the brokerage.
+    expect(p.standalone!.cash).toEqual([expect.objectContaining({ holdingId: "brk_cash", after: 50_000 })]);
+    // With the purchase, the proposal funds it from brokerage 500,000 and bank 50,000.
+    expect(p.combined!.others).toEqual([{ id: "S", title: "Buy more" }]);
+    const proposal = full(hs, store);
+    expect(p.combined!.cash.map((c) => [c.holdingId, c.after])).toEqual([
+      ["brk_cash", valueIn(proposal, "brk_cash")],
+      ["bank_cash", valueIn(proposal, "bank_cash")],
+    ]);
+    expect(valueIn(proposal, "bank_cash")).toBeCloseTo(0, 6);
+  });
+
+  it("doesn't show a combined result for approved recommendations that touch nothing here", () => {
+    const hs = [...ordered, holding("bank_cash", "bank", "cash", 50_000), holding("bank_eq", "bank", "equity", 20_000)];
+    const elsewhere = approved({ id: "E", title: "Elsewhere", relatedHoldingId: "bank_eq", relatedAccountId: "bank", actionAmount: 5_000, actionAmountUnit: "amount" });
+    const mine = approved({ id: "M", actionAmount: 1_000, actionAmountUnit: "amount" });
+    expect(preview(mine, { holdings: hs, recommendations: [elsewhere, mine] }).combined).toBeNull();
+  });
+
+  it("shortfall wording covers debt paydowns, not only purchases", () => {
+    const hs = [holding("bank_cash", "bank", "cash", 50_000), holding("mortgage", "loan", "liability", -100_000, { assetName: "Mortgage", isLiability: true })];
+    const p = preview(rec({ type: "pay_down_debt", relatedHoldingId: "mortgage", relatedAccountId: "loan", actionAmount: 80_000, actionAmountUnit: "amount" }), { holdings: hs });
+    const w = p.warnings.find((x) => x.kind === "shortfall")!;
+    expect(w.message).toBe(
+      "Mortgage would be short $30,000.00 of cash. Reduce the amount, or fund it with a sale or more cash; a cash shortfall from a purchase or debt paydown blocks the final PDF."
+    );
+  });
+});
+
+describe("the editor's preview panel as rendered", () => {
+  const render = async (p: ReturnType<typeof preview>) => {
+    const React = await import("react");
+    const { renderToStaticMarkup } = await import("react-dom/server");
+    const { RecPreview } = await import("@/components/recommendations/RecPreview");
+    return renderToStaticMarkup(React.createElement(RecPreview, { preview: p }))
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&#x27;/g, "'")
+      .replace(/\s+/g, " ");
+  };
+
+  it("shows current, proposed, signed change, percentage and the labelled combined result", async () => {
+    const hs = [holding("sec", "brk", "equity", 100_000, { assetName: "Example Equity" }), holding("brk_cash", "brk", "cash", 10_000, { assetName: "Brokerage cash" })];
+    const A = rec({ id: "A", title: "Target 80,000", proposedValue: 80_000, approvedByAdvisor: true, status: "approved" });
+    const B = rec({ id: "B", title: "Sell 10%", actionAmount: 10, actionAmountUnit: "percent", approvedByAdvisor: true, status: "approved" });
+    const text = await render(preview(A, { holdings: hs, recommendations: [A, B] }));
+    expect(text).toContain("Current value $100,000.00 Proposed value $80,000.00 Change −$20,000.00 Change % −20.00%");
+    expect(text).toContain("Combined with 1 other approved recommendation, in proposal order: Sell 10%");
+    expect(text).toContain("Example Equity: $100,000.00 → $72,000.00 (−$28,000.00, −28.00%)");
+    expect(text).toContain("Adding this recommendation changes the combined result by −$18,000.00");
+    expect(text).toContain("Cash: Brokerage cash $10,000.00 → $38,000.00");
+  });
+
+  it("renders the #33 screenshot case without an invented cash credit", async () => {
+    const text = await render(preview(rec({ type: "reduce", relatedHoldingId: "ubs_cash", relatedAccountId: "ubs", actionAmount: 3, actionAmountUnit: "amount" })));
+    expect(text).toContain("Current value $179,478.88 Proposed value $179,475.88 Change −$3.00 Change % −0.0017%");
+    expect(text).toContain("No other cash moves: this is a cash position.");
+    expect(text).not.toMatch(/credit/i);
   });
 });

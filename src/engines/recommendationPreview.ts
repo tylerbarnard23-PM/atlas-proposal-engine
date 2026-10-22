@@ -11,9 +11,13 @@ import { holdingsFromIncompleteImports, importIssues, describeImportIssue } from
 // approved or changed: inputs are read, never mutated.
 //
 // - Standalone: this recommendation alone, on the current holdings.
-// - Combined: with every other approved recommendation that touches the same
-//   position or account, shown separately. The recommendation being edited
-//   replaces its saved version (by id), so it is never applied twice.
+// - Combined: the full proposal engine's own result with every other
+//   approved recommendation, in saved order, shown separately whenever those
+//   recommendations actually change this position or its account's cash
+//   (including through household funding of a debt paydown). The
+//   recommendation being edited replaces its saved version in place, by id,
+//   so it is never applied twice and the engine's order is kept; a new draft
+//   goes last, where saving it would put it.
 
 export interface Movement {
   holdingId: string;
@@ -112,6 +116,27 @@ function compare(
   return { applied, position, cash, shortfalls };
 }
 
+const valueAt = (hs: Holding[], id: string) => {
+  const h = hs.find((x) => x.id === id) as MaybeValued | undefined;
+  return h ? valueOf(h) : null;
+};
+
+// Whether two engine outputs differ at the linked position, at any cash line
+// in its account (including a cash line one of them creates), or at any of
+// `funding`: the cash lines this recommendation itself moves elsewhere (a
+// paydown's household sources).
+function changesHere(a: Holding[], b: Holding[], linked: Holding, funding: Set<string>): boolean {
+  const ids = new Set(
+    [...a, ...b]
+      .filter((h) => h.id === linked.id || funding.has(h.id) || (h.accountId === linked.accountId && h.assetClass === "cash" && !h.isLiability))
+      .map((h) => h.id)
+  );
+  for (const id of ids) {
+    if (Math.abs((valueAt(a, id) ?? 0) - (valueAt(b, id) ?? 0)) >= EPSILON) return true;
+  }
+  return false;
+}
+
 export function previewRecommendation(input: {
   /** The recommendation as edited (a draft or a saved one being changed). */
   rec: Recommendation;
@@ -186,35 +211,42 @@ export function previewRecommendation(input: {
     return { ...base, state: "cannot_apply", holding: holdingInfo, standalone: { applied: false, position: movement(linked, linked, () => holdingInfo.accountName), cash: [], shortfalls: [] }, combined: null, warnings };
   }
   const standalone = compare(current, alone.holdings, linked.id, accounts, fx, currentShortfalls, true);
-  for (const s of standalone.shortfalls) {
-    warnings.push({
-      kind: "shortfall",
-      message: `${s.accountName} would be short ${s.shortfall.toLocaleString("en-US", { style: "currency", currency: fx.reportingCurrency })} of cash. Reduce the amount or fund it with a sale in that account; an unfunded purchase blocks the final PDF.`,
-      blocksFinal: true,
-    });
-  }
+  const shortfallText = (s: CashShortfall) =>
+    `${s.accountName} would be short ${s.shortfall.toLocaleString("en-US", { style: "currency", currency: fx.reportingCurrency })} of cash. Reduce the amount, or fund it with a sale or more cash; a cash shortfall from a purchase or debt paydown blocks the final PDF.`;
+  for (const s of standalone.shortfalls) warnings.push({ kind: "shortfall", message: shortfallText(s), blocksFinal: true });
 
-  // Combined: other approved recommendations on the same position or account.
-  // The edited recommendation replaces its saved version by id.
-  const others = input.recommendations.filter(
-    (r) =>
-      r.id !== rec.id &&
-      r.approvedByAdvisor &&
-      r.status !== "excluded" &&
-      !!r.relatedHoldingId &&
-      (r.relatedHoldingId === linked.id || holdings.find((h) => h.id === r.relatedHoldingId)?.accountId === linked.accountId)
-  );
+  // Combined: the list the full proposal would use, in saved order, with
+  // this recommendation in place of its saved version (a new draft last).
+  const inPlace = input.recommendations.some((r) => r.id === rec.id)
+    ? input.recommendations.map((r) => (r.id === rec.id ? rec : r))
+    : [...input.recommendations, rec];
+  const otherApproved = inPlace.filter((r) => r.id !== rec.id && r.approvedByAdvisor);
   let combined: RecommendationPreview["combined"] = null;
-  if (others.length > 0) {
-    const allOthers = input.recommendations.filter((r) => r.id !== rec.id && r.approvedByAdvisor && r.status !== "excluded");
-    const withoutThis = applyRecommendationsToProposed(current, allOthers, accounts, fx);
-    const withThis = applyRecommendationsToProposed(current, [...allOthers, rec], accounts, fx);
-    const scenario = compare(current, withThis.holdings, linked.id, accounts, fx, currentShortfalls, !withThis.unresolved.some((u) => u.recommendationId === rec.id));
-    const positionWithout = withoutThis.holdings.find((h) => h.id === linked.id) as MaybeValued | undefined;
-    const positionWith = withThis.holdings.find((h) => h.id === linked.id) as MaybeValued | undefined;
-    const a = positionWith ? valueOf(positionWith) : null;
-    const b = positionWithout ? valueOf(positionWithout) : null;
-    combined = { ...scenario, others: others.map((r) => ({ id: r.id, title: r.title })), thisChange: a != null && b != null ? a - b : 0 };
+  if (otherApproved.length > 0) {
+    const withoutThis = applyRecommendationsToProposed(current, otherApproved, accounts, fx);
+    const withThis = applyRecommendationsToProposed(current, inPlace.filter((r) => r.id === rec.id || r.approvedByAdvisor), accounts, fx);
+    // Relevant when the other approved recommendations change this position,
+    // its account's cash or the cash this recommendation draws on, on their
+    // own or together with this one.
+    const funding = new Set(standalone.cash.map((c) => c.holdingId));
+    const here = (a: Holding[], b: Holding[]) => changesHere(a, b, linked, funding);
+    if (here(current, withoutThis.holdings) || here(alone.holdings, withThis.holdings)) {
+      const touching = otherApproved.filter((r) => here(current, applyRecommendationsToProposed(current, [r], accounts, fx).holdings));
+      const scenario = compare(current, withThis.holdings, linked.id, accounts, fx, currentShortfalls, !withThis.unresolved.some((u) => u.recommendationId === rec.id));
+      const a = valueAt(withThis.holdings, linked.id);
+      const b = valueAt(withoutThis.holdings, linked.id);
+      combined = {
+        ...scenario,
+        others: (touching.length > 0 ? touching : otherApproved).map((r) => ({ id: r.id, title: r.title })),
+        thisChange: a != null && b != null ? a - b : 0,
+      };
+      const standaloneShort = new Set(standalone.shortfalls.map((s) => s.accountId));
+      for (const s of scenario.shortfalls) {
+        if (!standaloneShort.has(s.accountId)) {
+          warnings.push({ kind: "shortfall", message: `With the other approved recommendations, ${shortfallText(s)}`, blocksFinal: true });
+        }
+      }
+    }
   }
 
   const moved = Math.abs(standalone.position?.change ?? 0) >= EPSILON || standalone.cash.length > 0;

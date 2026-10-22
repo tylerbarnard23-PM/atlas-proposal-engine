@@ -2,7 +2,9 @@
 
 The state of the project for the next working session: what's done, how it was checked, what's known to be missing, and what comes next. Update it at the end of each piece of work.
 
-_Last updated: 2026-10-21, on branch `feat/recommendation-preview` (#33, open PR, not merged). Order: #33, then #26, then #28._
+_Last updated: 2026-10-22, on branch `feat/recommendation-preview` (#33, PR #34 open, not merged), after the review fixes below. Order: #34, then #26, then #28._
+
+> **Roadmap checkpoint lives in PR #58** (`docs/advisor-roadmap-2026-10-22`): the accepted 25-item roadmap (epic #36), `ROADMAP.md`, and the PII protection prerequisite #59. When #34 and #58 are both merged, keep #58's roadmap checkpoint and PII section at the top of this file *and* the #33 section below; neither replaces the other. This branch doesn't change the roadmap or #59.
 
 ## Working agreements
 - Every bug, idea or parked item gets a GitHub issue; a PR closes its issue.
@@ -32,7 +34,11 @@ The previous release, `60f43bf` (merge of #30), was smoke-tested the same day. O
 
 ## #33: live recommendation preview (this branch)
 - **Engine simulation.** `previewRecommendation` (`src/engines/recommendationPreview.ts`) runs the complete proposal engine in isolation on the current holdings and compares before and after. It covers actual cash offsets, household funding of debt paydowns, new cash lines, missing rates, unvalued holdings and shortfalls. Nothing is inferred by negating the position change: a cash position's own change moves no other cash.
-- **Standalone and combined.** The standalone result is this recommendation alone. When another approved recommendation touches the same position or account, a separately labelled combined result appears. The edited recommendation replaces its saved version by id, so it's never applied twice. The preview never saves, approves or mutates anything.
+- **Standalone and combined.** The standalone result is this recommendation alone. The combined result is the full proposal engine's own output with every other approved recommendation, separately labelled "in proposal order".
+  - **Order.** The edited recommendation replaces its saved version *in place* by id (never applied twice, saved order kept); a new draft is appended, where saving would put it. Order matters: [A target 80,000, B sell 10%] on 100,000 ends at 72,000, and both cards, the editor and the proposal now agree.
+  - **Relevance by effect.** The combined result appears when other approved recommendations change this position, its account's cash, or the cash this recommendation itself draws on (a paydown's household sources), alone or together with this one. This catches household funding of a mortgage paydown across accounts, in both directions. "This recommendation changes it by" is its marginal effect in proposal order.
+  - **Shortfalls.** Combined shortfalls are shown and get a "With the other approved recommendations, …" warning that blocks the final PDF. Shortfall wording covers purchases and debt paydowns.
+  - The preview never saves, approves or mutates anything.
 - **Editor.** A prominent live preview shows the position, account, value date and reporting currency, with current value, proposed value, signed change and percentage change at full precision ("N/A" when the current value is zero). It also shows the cash lines that move, shortfalls, the entered amount with its conversion and rate, and warnings: missing rate, unvalued, incomplete import and currency review, each marked if it blocks the final PDF. A target value disables the action amount and marks it ignored.
 - **Cards** show the same simulation (standalone, plus combined where relevant) at full precision.
 - **Copilot.** `simulate_recommendation` uses the same simulation and returns `cash_movements` and `shortfalls` (it used to return an inferred `cash_effect_in_account`).
@@ -42,7 +48,7 @@ The previous release, `60f43bf` (merge of #30), was smoke-tested the same day. O
   | Check | Result |
   |---|---|
   | typecheck | pass |
-  | tests | 272 passed in 16 files (270 + 2 skipped without the private PDF) |
+  | tests | 280 passed in 16 files (278 + 2 skipped without the private PDF) |
   | eval | unchanged |
   | build | pass |
   | sample baseline | unchanged |
@@ -57,6 +63,12 @@ The previous release, `60f43bf` (merge of #30), was smoke-tested the same day. O
   - Holdings and recommendations were unchanged while previewing; closing without saving saved nothing.
   - Editing an approved 10,000 sale to 20,000 previewed $101,961.00 (no double counting). After save and reload the card matched the preview, the approval was cleared, and the live holding was unchanged.
   - Migration-review and incomplete-import warnings showed in the preview and on the card.
+
+- **Review fixes (2026-10-22, at `b95f6ce`).** Two defects were found: the combined result appended the previewed recommendation last instead of keeping saved order, and it missed household funding across accounts. Also, the shortfall wording called every shortfall an unfunded purchase.
+  - **Tests first.** 8 regression tests were added; 7 failed against `b95f6ce` (6 new plus the updated combined label), while the no-false-combined and rendered screenshot-case guards passed. Every combined test compares with `applyRecommendationsToProposed`'s full output. The editor panel (`RecPreview`) is now rendered in tests.
+  - **Browser** (local production build, synthetic workspaces, browser's own workspace restored afterwards):
+    - Order case: both cards showed $72,000.00. Editing A's target to 85,000 previewed $76,500.00. After save and reload A stayed first, its approval was cleared, then it was re-approved. The proposal page showed Equity $76.5K and Cash $33.5K, matching.
+    - Funding case (brokerage cash 600,000, bank 50,000, approved 550,000 mortgage paydown, purchase 150,000): the purchase card and editor showed the combined result with brokerage and bank → $0.00 and a $50,000.00 Mortgage shortfall. Edited to 100,000, saved and reloaded: no shortfall, and the paydown's own card also showed the combined funding. The proposal page showed Cash $0.0 and Equity $200.0K, matching.
 
 ## #24: recommendation currency (merged in PR #31)
 - **Amount currency.** `Recommendation.currency` is the denomination of `proposedValue` (always monetary) and of `actionAmount` when its unit is `amount`. A `percent` amount stays a percentage.
@@ -115,10 +127,12 @@ The previous release, `60f43bf` (merge of #30), was smoke-tested the same day. O
 - **Live-site import checks need a manual upload.** The automated browser couldn't put local files into the live page.
 - **Preview (#33).**
   - The simulation reflects the engine's existing model. Unbundled cash slices from a holdings report count as account cash, and a paydown or purchase debit lands on the account's first cash line.
-  - The combined result covers other approved recommendations on the same position or account. Effects through household funding in other accounts appear only in the standalone and full proposal views.
+  - Relevance is judged at this position, its account's cash and the cash lines this recommendation moves. An approved recommendation that only changes some other account (with no effect on any of those) doesn't produce a combined result, by design.
+  - "Changes it by" is the marginal effect in proposal order, not a standalone attribution; with order-dependent actions it differs from the standalone change (A: −20,000 alone, −18,000 marginal in the example).
+  - Each card runs a few engine simulations (standalone, with and without others, and one per other approved recommendation to name them). Fine at sample sizes; not measured for very large workspaces.
 
 ## Next step
-1. **#33:** review the open PR; merge only on approval, then confirm the production deploy.
+1. **#33 / PR #34:** review the fixes; merge only on approval, then confirm the production deploy. PR #32 is superseded by #34 (it carries #32's commit); close it only on the owner's instruction.
 2. **#26 (FX refresh, retained rates, stale-rate policy):** planning only. The direction is accepted and recorded on #26 (comment 6325161797). Refinements:
    - **Seven calendar days** is an initial product policy, not an institutional standard. Use a named constant, and don't present it as a rule.
    - **A stale-rate confirmation expires** after a defined period (proposed: seven days from the confirmation) as well as when the rates in use change.
