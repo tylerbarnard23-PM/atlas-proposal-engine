@@ -1,6 +1,7 @@
 import type { CurrencyCode, Recommendation } from "@/domain/types";
 import { safeId, todayIso } from "@/utils/formatting";
 import { resolveFxRate, type FxResolveResult } from "./currencyEngine";
+import { STALE_FX_DAYS, fxAgeDays } from "./fxAge";
 import type { FxContext } from "./proposalEngine";
 
 // Recommendation money amounts (issue #24)
@@ -86,10 +87,15 @@ export const money = (n: number, currency: string) =>
 
 const rateText = (rate: number) => (rate >= 0.1 ? rate.toFixed(4) : rate.toPrecision(4));
 
-/** "0.8000 EUR per USD (ECB, as of 2026-10-20; current workspace rate, recalculated when rates change)" */
-export function describeConversion(c: AmountConversion): string {
+/**
+ * "0.8000 EUR per USD (ECB, as of 2026-10-20; current workspace rate, recalculated when rates change)".
+ * Given the current date, a rate older than the policy also says how old it is.
+ */
+export function describeConversion(c: AmountConversion, now?: Date): string {
   const how = c.path === "cross" ? ", cross rate via USD" : "";
-  return `${rateText(c.rate)} ${c.to} per ${c.from} (${c.source}${how}, as of ${c.asOf.slice(0, 10)}; current workspace rate, recalculated when rates change)`;
+  const age = now ? fxAgeDays(c.asOf, now) : 0;
+  const stale = now && age > STALE_FX_DAYS ? `, ${age} days old, older than the ${STALE_FX_DAYS}-day policy` : "";
+  return `${rateText(c.rate)} ${c.to} per ${c.from} (${c.source}${how}, as of ${c.asOf.slice(0, 10)}${stale}; current workspace rate, recalculated when rates change)`;
 }
 
 /**
@@ -111,7 +117,7 @@ export function describeAmounts(rec: AmountFields, fx: FxContext): string | null
   }
   if (amount != null) parts.push(pair("", amount, result.amounts.actionAmount));
   if (rec.proposedValue != null) parts.push(pair("Target ", rec.proposedValue, result.amounts.proposedValue));
-  return `${parts.join("; ")} at ${describeConversion(result.conversion!)}`;
+  return `${parts.join("; ")} at ${describeConversion(result.conversion!, fx.now)}`;
 }
 
 /** A blank recommendation, in the reporting currency. */

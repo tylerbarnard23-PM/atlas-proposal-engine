@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { FxNotice } from "@/components/market-data/FxNotice";
 import { ImportNotice } from "@/components/import/ImportNotice";
 import { useAtlasStore } from "@/store/useStore";
 import { useNormalizedHoldings } from "@/hooks/useNormalizedHoldings";
@@ -40,6 +41,7 @@ function DashboardInner() {
   const disclosures = useAtlasStore((s) => s.disclosures);
   const fxRates = useAtlasStore((s) => s.fxRates);
   const sourceDocuments = useAtlasStore((s) => s.sourceDocuments);
+  const fxConfirmation = useAtlasStore((s) => s.fxConfirmation);
   const { holdings, insights, reportingCurrency } = useNormalizedHoldings();
 
   const nw = valuationSummary(holdings);
@@ -58,7 +60,7 @@ function DashboardInner() {
   const countries = new Set(holdings.map((h) => h.country).filter(Boolean)).size;
   const classes = new Set(holdings.map((h) => h.assetClass)).size;
 
-  const readiness = evaluateWorkspaceReadiness({ client, advisor, accounts, holdings, recommendations, disclosures, fxRates, sourceDocuments });
+  const readiness = evaluateWorkspaceReadiness({ client, advisor, accounts, holdings, recommendations, disclosures, fxRates, sourceDocuments, fxConfirmation });
   const readyCount = readiness.filter((r) => r.passed).length;
 
   return (
@@ -82,6 +84,7 @@ function DashboardInner() {
       <ReadinessBanner checks={readiness} className="mb-6" />
       <ValuationNotice summary={nw} reportingCurrency={reportingCurrency} className="mb-6" />
       <ImportNotice className="mb-6" />
+      <FxNotice className="mb-6" />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
         <KpiCard

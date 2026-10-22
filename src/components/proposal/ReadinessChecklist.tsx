@@ -20,6 +20,11 @@ export const READINESS_FIX: Record<string, { href: string; label: string; hint: 
   approved_recs: { href: "/recommendations", label: "Recommendations", hint: "Approve at least one recommendation and include it in the PDF." },
   trades_funded: { href: "/recommendations", label: "Recommendations", hint: "A proposed purchase is larger than the cash in its account. Reduce it or add a sale in the same account to fund it." },
   holdings_valued: { href: "/market-data", label: "Market Data", hint: "Some holdings are in a currency with no exchange rate to the reporting currency, so they're left out of every total. Add or refresh the rate in Market Data." },
+  fx_current: {
+    href: "/market-data",
+    label: "Market Data",
+    hint: "An exchange rate the proposal uses is older than the 7-day policy (or is unverified fallback data). Refresh FX in Market Data, or confirm the rates you want to keep; a confirmation lapses after 7 days or when those rates or their use change.",
+  },
   fx_available: { href: "/market-data", label: "Market Data", hint: "A proposed trade is in a currency with no exchange rate to the reporting currency, so it isn't applied. Refresh FX rates in Market Data." },
   imports_complete: {
     href: "/accounts-assets?review=1",
@@ -50,6 +55,7 @@ export function readinessTodo(c: ComplianceCheck): string {
     case "approved_recs": return "Approve a recommendation and include it in the PDF";
     case "trades_funded": return c.detail ? `Fund proposed purchases (${c.detail})` : "Fund proposed purchases";
     case "holdings_valued": return c.detail ? `Value all holdings (${c.detail})` : "Value all holdings in the reporting currency";
+    case "fx_current": return "Refresh or confirm exchange rates in use";
     case "fx_available": return c.detail ? `Add exchange rates (${c.detail})` : "Add exchange rates for proposed trades";
     case "imports_complete": return c.detail ? `Account for every imported document (${c.detail})` : "Account for every imported document";
     case "recommendation_currency": return "Confirm recommendation currencies";

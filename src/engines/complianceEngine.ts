@@ -6,6 +6,7 @@ import type {
   Recommendation,
   Disclosure,
   ComplianceCheck,
+  FxConfirmation,
   FxRate,
   SourceDocument,
 } from "@/domain/types";
@@ -14,6 +15,7 @@ import { normalizeHoldings } from "./normalizationEngine";
 import { missingPairs, valuationSummary, type ValuationSummary } from "./valuationTotals";
 import { describeImportIssue, importIssues, type ImportIssue } from "./importCompleteness";
 import { openCurrencyReviews } from "./recommendationAmounts";
+import { describeFreshness, fxFreshness, type FxFreshness } from "./fxPolicy";
 
 export interface ReadinessInputs {
   client: ClientProfile;
@@ -35,6 +37,8 @@ export interface ReadinessInputs {
   valuation?: ValuationSummary;
   // Imported documents whose rows don't account for the whole document.
   importIssues?: ImportIssue[];
+  // Age and confirmation of the exchange rates the calculations use (#26).
+  fxFreshness?: FxFreshness;
 }
 
 export function evaluateReadiness(inp: ReadinessInputs): ComplianceCheck[] {
@@ -128,6 +132,14 @@ export function evaluateReadiness(inp: ReadinessInputs): ComplianceCheck[] {
         : undefined,
   });
   const unresolved = inp.unresolvedConversions ?? [];
+  if (inp.fxFreshness) {
+    checks.push({
+      code: "fx_current",
+      label: "Exchange rates current",
+      passed: inp.fxFreshness.current,
+      detail: describeFreshness(inp.fxFreshness),
+    });
+  }
   checks.push({
     code: "fx_available",
     label: "Exchange rates available for proposed trades",
@@ -191,6 +203,10 @@ export interface WorkspaceReadinessInputs {
   fxRates: FxRate[];
   /** Imported documents, to check each import accounted for its whole document. */
   sourceDocuments: SourceDocument[];
+  /** The advisor's confirmation of stale rates in use, if any (#26). */
+  fxConfirmation?: FxConfirmation | null;
+  /** The clock for rate age and confirmation expiry; the server's own when omitted. */
+  now?: Date;
 }
 
 export function evaluateWorkspaceReadiness(ws: WorkspaceReadinessInputs): ComplianceCheck[] {
@@ -207,6 +223,15 @@ export function evaluateWorkspaceReadiness(ws: WorkspaceReadinessInputs): Compli
     unresolvedConversions: proposed.unresolved,
     valuation: valuationSummary(holdings),
     importIssues: importIssues(ws.sourceDocuments ?? [], ws.holdings),
+    fxFreshness: fxFreshness({
+      holdings: ws.holdings,
+      accounts: ws.accounts,
+      recommendations: ws.recommendations,
+      fxRates: ws.fxRates,
+      reportingCurrency: fx.reportingCurrency,
+      confirmation: ws.fxConfirmation ?? null,
+      now: ws.now ?? new Date(),
+    }),
     ...ws,
     holdings,
     disclosures: ws.disclosures.filter((d) => d.required),

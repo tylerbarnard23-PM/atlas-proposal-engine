@@ -55,7 +55,7 @@ function Inner() {
   const upsert = useAtlasStore((s) => s.upsertRecommendation);
   const fxRates = useAtlasStore((s) => s.fxRates);
   const { holdings: normalized, reportingCurrency } = useNormalizedHoldings();
-  const fx = React.useMemo(() => ({ reportingCurrency, rates: fxRates }), [reportingCurrency, fxRates]);
+  const fx = React.useMemo(() => ({ reportingCurrency, rates: fxRates, now: new Date() }), [reportingCurrency, fxRates]);
   const shortfalls = React.useMemo(
     () => proposedCashShortfalls(normalized, recs.filter((r) => r.approvedByAdvisor), accounts, fx),
     [normalized, recs, accounts, fx]
@@ -359,7 +359,7 @@ function RecForm({
 }) {
   const { holdings, reportingCurrency } = useNormalizedHoldings();
   const fxRates = useAtlasStore((s) => s.fxRates);
-  const fx = React.useMemo(() => ({ reportingCurrency, rates: fxRates }), [reportingCurrency, fxRates]);
+  const fx = React.useMemo(() => ({ reportingCurrency, rates: fxRates, now: new Date() }), [reportingCurrency, fxRates]);
   const accounts = useAtlasStore((s) => s.accounts);
   const accountById = React.useMemo(
     () => Object.fromEntries(accounts.map((a) => [a.id, a])),

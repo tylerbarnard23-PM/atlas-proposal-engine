@@ -458,13 +458,26 @@ describe("the sample workspace is unchanged when every rate is present", () => {
     expect({ gross: s.assets.value, liabilities: Math.abs(s.liabilities.value!), net: s.net.value }).toEqual(baseline.netWorth);
     expect(Object.fromEntries(holdings.map((h) => [h.id, Math.round(h.reportingMarketValue! * 100) / 100]))).toEqual(baseline.reporting);
     expect(summarizeAllocation(holdings, (h) => ASSET_CLASS_LABELS[h.assetClass] ?? "Other").map((r) => [r.label, Math.round(r.value * 100) / 100])).toEqual(baseline.allocationByClass);
-    expect(generateInsights({ holdings, reportingCurrency: "USD" }).map((i) => i.title).sort()).toEqual(baseline.insightTitles);
+    // #26 adds one intended insight: the sample's reference rates (2026-04-30)
+    // are older than the 7-day FX policy on the capture date. Every other title is unchanged.
+    const titles = generateInsights({ holdings, reportingCurrency: "USD" }).map((i) => i.title).sort();
+    const fxTask = "5 holdings are valued with exchange rates older than 7 days";
+    expect(titles).toContain(fxTask);
+    expect(titles.filter((t) => t !== fxTask)).toEqual(baseline.insightTitles);
     const readiness = evaluateWorkspaceReadiness({ sourceDocuments: [], client: SEED_CLIENT, advisor: SEED_ADVISOR, accounts: SEED_ACCOUNTS, holdings, recommendations: approved, disclosures: DISCLOSURE_LIBRARY, fxRates: SEED_FX_RATES });
     // The checks added since (holdings_valued here, imports_complete in #29,
     // recommendation_currency in #24) pass; every pre-existing check is unchanged.
     const added = ["holdings_valued", "imports_complete", "recommendation_currency"];
     expect(readiness.filter((c) => added.includes(c.code)).every((c) => c.passed)).toBe(true);
-    expect(readiness.filter((c) => !added.includes(c.code)).map((c) => [c.code, c.passed, c.detail ?? null])).toEqual(baseline.readiness);
+    // #26: "Exchange rates current" intentionally fails for the sample's stale rates in use.
+    expect(readiness.find((c) => c.code === "fx_current")).toEqual({
+      code: "fx_current",
+      label: "Exchange rates current",
+      passed: false,
+      detail:
+        "CAD/USD 174 days old (2026-04-30, ECB); CHF/USD 174 days old (2026-04-30, ECB); EUR/USD 174 days old (2026-04-30, ECB); GBP/USD 174 days old (2026-04-30, ECB); JPY/USD 174 days old (2026-04-30, ECB). Refresh in Market Data or confirm them (policy: 7 days).",
+    });
+    expect(readiness.filter((c) => ![...added, "fx_current"].includes(c.code)).map((c) => [c.code, c.passed, c.detail ?? null])).toEqual(baseline.readiness);
     expect(Object.fromEntries(proposed.holdings.map((h) => [h.id, Math.round((h.reportingMarketValue ?? 0) * 100) / 100]))).toEqual(baseline.proposedReporting);
     const html = renderToStaticMarkup(
       React.createElement(ProposalPdfTemplate, {
@@ -474,6 +487,11 @@ describe("the sample workspace is unchanged when every rate is present", () => {
       })
     );
     const text = html.replace(/<style[\s\S]*?<\/style>/g, " ").replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ");
-    expect(text).toBe(baseline.pdfText);
+    // #26 adds one block to the Assumptions page: the rates actually used. The
+    // rest of the document is unchanged from the baseline.
+    const block =
+      " Exchange rates used in this proposal Rate Value As of Source Age Status CAD/USD 0.7320 2026-04-30 ECB 174 days stale CHF/USD 1.1180 2026-04-30 ECB 174 days stale EUR/USD 1.0850 2026-04-30 ECB 174 days stale GBP/USD 1.2620 2026-04-30 ECB 174 days stale JPY/USD 0.006380 2026-04-30 ECB 174 days stale Reference rates, not transaction rates. A rate is treated as current for 7 days after its date, an initial product policy rather than an industry or regulatory standard. Not confirmed: CAD/USD, CHF/USD, EUR/USD, GBP/USD, JPY/USD are older than 7 days or unverified, and the advisor hasn&#x27;t confirmed them.";
+    expect(text.split(block)).toHaveLength(2);
+    expect(text.replace(block, "")).toBe(baseline.pdfText);
   });
 });

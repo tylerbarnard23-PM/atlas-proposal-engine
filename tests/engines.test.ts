@@ -184,8 +184,13 @@ describe("workspace readiness", () => {
     const reviewed = SEED_HOLDINGS.map((h) =>
       h.advisorVerification === "unverified" ? { ...h, advisorVerification: "advisor_approved" as const } : h
     );
-    const after = evaluateWorkspaceReadiness({ sourceDocuments: [], ...ws(), holdings: reviewed });
+    // The sample's reference rates are dated 2026-04-30; on a date within the
+    // 7-day FX policy every check passes.
+    const after = evaluateWorkspaceReadiness({ sourceDocuments: [], ...ws(), holdings: reviewed, now: new Date("2026-05-01T12:00:00Z") });
     expect(readinessOk(after)).toBe(true);
+    // Later, the same rates are stale (#26): only "Exchange rates current" fails.
+    const later = evaluateWorkspaceReadiness({ sourceDocuments: [], ...ws(), holdings: reviewed, now: new Date("2026-10-22T12:00:00Z") });
+    expect(later.filter((c) => !c.passed).map((c) => c.code)).toEqual(["fx_current"]);
   });
 });
 

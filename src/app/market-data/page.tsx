@@ -11,6 +11,7 @@ import { useNormalizedHoldings } from "@/hooks/useNormalizedHoldings";
 import { holdingsEligibleForEnrichment } from "@/engines/marketDataEngine";
 import { formatCurrency, formatDateTime } from "@/utils/formatting";
 import { QuoteTypeBadge } from "@/components/ui/SourceTag";
+import { FxRatesPanel } from "@/components/market-data/FxRatesPanel";
 
 interface ProviderStatus {
   id: string;
@@ -33,8 +34,6 @@ function Inner() {
   const { holdings, reportingCurrency } = useNormalizedHoldings();
   const md = useAtlasStore((s) => s.marketDataByIdentifier);
   const apply = useAtlasStore((s) => s.applyMarketDataResults);
-  const setFx = useAtlasStore((s) => s.setFxRates);
-  const fxRates = useAtlasStore((s) => s.fxRates);
   const [busy, setBusy] = React.useState(false);
   const [providers, setProviders] = React.useState<ProviderStatus[]>([]);
 
@@ -61,17 +60,6 @@ function Inner() {
     }
   }
 
-  async function refreshFx() {
-    setBusy(true);
-    try {
-      const r = await fetch("/api/market-data/fx?base=USD&quotes=EUR,GBP,CHF,JPY,CAD,AUD,SGD,HKD,MXN");
-      const data = await r.json();
-      if (Array.isArray(data.rates) && data.rates.length > 0) setFx(data.rates);
-    } finally {
-      setBusy(false);
-    }
-  }
-
   return (
     <>
       <PageHeader
@@ -80,9 +68,6 @@ function Inner() {
         description="The platform routes quotes through configured providers, falling back to free sources, then to manual or mock values. Every result is timestamped and labeled."
         actions={
           <>
-            <Button variant="secondary" onClick={refreshFx} loading={busy}>
-              Refresh FX
-            </Button>
             <Button onClick={refreshAll} loading={busy}>
               Refresh quotes
             </Button>
@@ -116,36 +101,7 @@ function Inner() {
       </div>
 
       <SectionDivider>FX Reference Rates</SectionDivider>
-      <Card className="mb-6">
-        <CardBody>
-          <div className="overflow-x-auto">
-            <table className="w-full text-[13px]">
-              <thead>
-                <tr className="text-ink-500">
-                  <th className="text-left px-3 py-2 font-medium">Base</th>
-                  <th className="text-left px-3 py-2 font-medium">Quote</th>
-                  <th className="text-right px-3 py-2 font-medium">Rate</th>
-                  <th className="text-left px-3 py-2 font-medium">As of</th>
-                  <th className="text-left px-3 py-2 font-medium">Source</th>
-                </tr>
-              </thead>
-              <tbody>
-                {fxRates.map((f, i) => (
-                  <tr key={i} className="border-t border-ink-100 tabular">
-                    <td className="px-3 py-1.5">{f.base}</td>
-                    <td className="px-3 py-1.5">{f.quote}</td>
-                    <td className="px-3 py-1.5 text-right">{f.rate.toFixed(4)}</td>
-                    <td className="px-3 py-1.5">{new Date(f.asOf).toLocaleDateString()}</td>
-                    <td className="px-3 py-1.5">
-                      <Badge tone="navy">{f.source}</Badge>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </CardBody>
-      </Card>
+      <FxRatesPanel />
 
       <SectionDivider>Quote Coverage</SectionDivider>
 

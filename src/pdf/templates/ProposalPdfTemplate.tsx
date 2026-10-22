@@ -1,5 +1,6 @@
 import * as React from "react";
 import type {
+  FxConfirmation,
   Account,
   AdvisorProfile,
   ClientProfile,
@@ -17,6 +18,8 @@ import { formatCurrency, formatDate, formatPercent } from "@/utils/formatting";
 import { sumBy, groupBy } from "@/utils/numbers";
 import { applyRecommendationsToProposed, cashShortfallsOf } from "@/engines/proposalEngine";
 import { describeAmounts } from "@/engines/recommendationAmounts";
+import { resolveFxRate } from "@/engines/currencyEngine";
+import { STALE_FX_DAYS, fxFreshness, utcDate, utcMinute, type FxFreshness } from "@/engines/fxPolicy";
 import { normalizeHoldings } from "@/engines/normalizationEngine";
 import { coverageLabel, describeUnvalued, formatTotal, reportingValue, valuationSummary, valuationTotal } from "@/engines/valuationTotals";
 import { dataQualityScore } from "@/engines/dataQualityEngine";
@@ -146,6 +149,10 @@ export interface ProposalPdfTemplateProps {
   /** Rates for expressing proposed trades in each holding's own currency. */
   fxRates: FxRate[];
   variant: "draft" | "final";
+  /** The advisor's confirmation of stale rates in use (#26). */
+  fxConfirmation?: FxConfirmation | null;
+  /** When the document is produced (ISO); the rate ages are computed against it. */
+  now?: string;
 }
 
 function summarize(holdings: Holding[], group: (h: Holding) => string) {
@@ -210,7 +217,10 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
   // independent of whether it's included in the PDF prose. Each rec's
   // intent is interpreted by applyRecommendationsToProposed (sell zeroes,
   // reduce subtracts, increase/buy adds, with offsetting cash flow).
-  const fx = { reportingCurrency, rates: fxRates };
+  const now = props.now ? new Date(props.now) : new Date();
+  const fx = { reportingCurrency, rates: fxRates, now };
+  // The rates the calculations below actually use, with their age (#26).
+  const fxStatus = fxFreshness({ holdings: props.holdings, accounts, recommendations, fxRates, reportingCurrency, confirmation: props.fxConfirmation ?? null, now });
   const proposed = applyRecommendationsToProposed(holdings, proposedRecs, accounts, fx);
   const proposedHoldings = proposed.holdings;
   const cashShortfalls = cashShortfallsOf(proposedHoldings, accounts, fx);
@@ -795,6 +805,7 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
           <li>Income and expense ratio figures are estimates derived from advisor-entered fields where available.</li>
           <li>The proposal does not model trading costs, custodian fees, market impact, taxes, or after-tax outcomes unless explicitly stated.</li>
         </ul>
+        <FxRatesUsed status={fxStatus} reportingCurrency={reportingCurrency} rates={fxRates} holdings={props.holdings} recommendations={recommendations} />
       </PageWrap>
     );
   }
@@ -993,6 +1004,90 @@ function AllocationList({ rows, currency }: { rows: { label: string; value: numb
           <div className="val">{formatCurrency(r.value, currency, { compact: true })}</div>
         </div>
       ))}
+    </div>
+  );
+}
+
+// The exchange rates the proposal's figures actually use: each stored rate
+// (in the orientation it's stored), its own date, source and age, any cross
+// rates through USD, and the advisor's confirmation of rates older than the
+// policy (#26). Rates that are stored but unused aren't listed.
+function FxRatesUsed({
+  status,
+  reportingCurrency,
+  rates,
+  holdings,
+  recommendations,
+}: {
+  status: FxFreshness;
+  reportingCurrency: string;
+  rates: FxRate[];
+  holdings: Holding[];
+  recommendations: Recommendation[];
+}) {
+  const rateText = (r: number) => (r >= 0.1 ? r.toFixed(4) : r.toPrecision(4));
+  const crosses = [
+    ...new Set([...holdings.map((h) => h.proposalApprovedValue?.currency ?? h.currency), ...recommendations.filter((r) => r.approvedByAdvisor).map((r) => r.currency)]),
+  ]
+    .filter((c) => c !== reportingCurrency)
+    .map((c) => ({ from: c, r: resolveFxRate(rates, c, reportingCurrency) }))
+    .filter((x) => x.r?.path === "cross");
+  const c = status.confirmation;
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div className="pdf-stat-label">Exchange rates used in this proposal</div>
+      {status.inUse.length === 0 ? (
+        <p className="pdf-text" style={{ marginTop: 6 }}>No currency conversion was needed: every value is already in {reportingCurrency}.</p>
+      ) : (
+        <table className="pdf-table" style={{ marginTop: 6 }}>
+          <thead>
+            <tr>
+              <th>Rate</th>
+              <th style={{ textAlign: "right" }}>Value</th>
+              <th>As of</th>
+              <th>Source</th>
+              <th>Age</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {status.inUse.map((l) => (
+              <tr key={l.key}>
+                <td>{l.base}/{l.quote}</td>
+                <td style={{ textAlign: "right" }}>{rateText(l.rate)}</td>
+                <td>{utcDate(l.asOf)}</td>
+                <td>{l.source}</td>
+                <td>{l.ageDays} day{l.ageDays === 1 ? "" : "s"}</td>
+                <td>
+                  {l.unverified ? "unverified (fallback data)" : l.stale ? "stale" : "current"}
+                  {l.notInLastRefresh ? "; not in last refresh" : ""}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {crosses.map(({ from, r }) => (
+        <p key={from} className="pdf-text" style={{ marginTop: 4 }}>
+          {from} → {reportingCurrency} is a cross rate through USD ({r!.legs.map((leg) => `${leg.base}/${leg.quote}`).join(" and ")}).
+        </p>
+      ))}
+      <p className="pdf-text" style={{ marginTop: 4 }}>
+        Reference rates, not transaction rates. A rate is treated as current for {STALE_FX_DAYS} days after its date, an initial product policy rather than
+        an industry or regulatory standard.
+      </p>
+      {status.attention.length > 0 &&
+        (c.state === "valid" ? (
+          <p className="pdf-text" style={{ marginTop: 4 }}>
+            Rates older than {STALE_FX_DAYS} days ({c.record!.pairs.join(", ")}, oldest {c.record!.oldestRateDate}) were confirmed by the advisor on{" "}
+            {utcMinute(c.record!.confirmedAt)}; the confirmation expires {utcMinute(c.record!.expiresAt)}.
+          </p>
+        ) : (
+          <p className="pdf-text" style={{ marginTop: 4 }}>
+            Not confirmed: {status.attention.map((l) => `${l.base}/${l.quote}`).join(", ")} {status.attention.length === 1 ? "is" : "are"} older than {STALE_FX_DAYS} days
+            or unverified, and the advisor hasn&apos;t confirmed {status.attention.length === 1 ? "it" : "them"}.
+          </p>
+        ))}
     </div>
   );
 }

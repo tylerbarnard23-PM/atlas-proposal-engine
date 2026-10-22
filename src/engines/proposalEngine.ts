@@ -101,6 +101,8 @@ export function applyRecToValue(value: number, rec: ReportingAmounts, isLiabilit
 export interface FxContext {
   reportingCurrency: CurrencyCode;
   rates: FxRate[];
+  /** The current date, for rate-age labels only; no calculation depends on it. */
+  now?: Date;
 }
 
 export interface UnresolvedConversion {

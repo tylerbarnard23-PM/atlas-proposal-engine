@@ -14,6 +14,8 @@ export type HoldingValuation =
       rate: number;
       rateAsOf: string;
       rateSource: string;
+      /** The stored rates used (none when no conversion was needed). */
+      rateLegs: FxRate[];
     }
   | {
       status: "unvalued";
@@ -42,7 +44,7 @@ export function normalizeHoldings(
     const fx = resolveFxRate(rates, resolved.currency, reportingCurrency);
     const quality = h.dataQuality.length > 0 ? h.dataQuality : evaluateHoldingQuality(h);
     const valuation: HoldingValuation = fx
-      ? { status: "valued", currency: resolved.currency, amount: resolved.amount, rate: fx.rate, rateAsOf: fx.asOf, rateSource: fx.source }
+      ? { status: "valued", currency: resolved.currency, amount: resolved.amount, rate: fx.rate, rateAsOf: fx.asOf, rateSource: fx.source, rateLegs: fx.legs }
       : { status: "unvalued", reason: "missing_fx_rate", currency: resolved.currency, amount: resolved.amount, reportingCurrency };
     return {
       ...h,

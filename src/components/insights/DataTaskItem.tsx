@@ -8,7 +8,9 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import type { Holding, Insight } from "@/domain/types";
 import { buildIdentifier } from "@/ingestion/normalizers/detectIdentifier";
-import { staleThresholdDays } from "@/engines/dataTasks";
+import { staleRateLeg, staleThresholdDays } from "@/engines/dataTasks";
+import { fxAgeDays, utcDate } from "@/engines/fxAge";
+import { normalizeHoldings } from "@/engines/normalizationEngine";
 import { formatNative } from "@/engines/valuationTotals";
 import { resolveValuation } from "@/engines/valuationEngine";
 import { formatCurrency, formatDate, todayIso } from "@/utils/formatting";
@@ -55,6 +57,7 @@ export function DataTaskItem({ insight, onDismiss }: { insight: Insight; onDismi
         {open.map((h) => (
           <li key={h.id} className="px-3 py-2.5">
             {task.kind === "missing_fx_rate" && <MissingRateRow h={h} reportingCurrency={reportingCurrency} />}
+            {task.kind === "stale_fx_rate" && <StaleRateRow h={h} />}
             {task.kind === "balance_only" && <BalanceOnlyRow h={h} onKeep={() => patch(h.id, { dataAcks: { ...h.dataAcks, keepAsBalance: true } })} />}
             {task.kind === "missing_identifier" && <IdentifierRow h={h} account={accountName(h)} onSave={(v) => patch(h.id, { identifier: buildIdentifier(v) })} />}
             {task.kind === "stale_value" && (
@@ -128,6 +131,36 @@ function MissingRateRow({ h, reportingCurrency }: { h: Holding; reportingCurrenc
       />
       <Link href="/market-data">
         <Button size="sm" iconLeft={<RefreshCw className="h-3.5 w-3.5" />}>Add the rate in Market Data</Button>
+      </Link>
+    </div>
+  );
+}
+
+// A holding valued with a rate older than the FX policy or unverified (#26):
+// the rate's date and age, and where to refresh or confirm it.
+function StaleRateRow({ h }: { h: Holding }) {
+  const fxRates = useAtlasStore((s) => s.fxRates);
+  const reportingCurrency = useAtlasStore((s) => s.client.proposalOutputCurrency);
+  const now = new Date();
+  const leg = staleRateLeg(normalizeHoldings([h], fxRates, reportingCurrency)[0], now);
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <Name
+        h={h}
+        sub={
+          <span className="tabular">
+            {leg ? (
+              <>
+                {leg.base}/{leg.quote} {leg.source === "Mock" ? "unverified fallback data" : `as of ${utcDate(leg.asOf)}, ${fxAgeDays(leg.asOf, now)} days old`}
+              </>
+            ) : (
+              "rate confirmed"
+            )}
+          </span>
+        }
+      />
+      <Link href="/market-data">
+        <Button size="sm" iconLeft={<RefreshCw className="h-3.5 w-3.5" />}>Refresh or confirm in Market Data</Button>
       </Link>
     </div>
   );

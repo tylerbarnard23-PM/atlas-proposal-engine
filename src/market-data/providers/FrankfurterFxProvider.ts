@@ -63,20 +63,32 @@ export const FrankfurterFxProvider: MarketDataProvider = {
   },
 };
 
-// Fetch a full table of FX rates against a base currency.
-export async function fetchFrankfurterRates(base: string, quotes: string[]): Promise<FxRate[]> {
+// Fetch a table of FX rates against a base currency. Success or failure is
+// explicit: a failed request returns an error, never an empty "success" or
+// fallback data, so the caller can keep its existing rates and say so.
+export async function fetchFrankfurterRates(
+  base: string,
+  quotes: string[]
+): Promise<{ ok: true; rates: FxRate[] } | { ok: false; error: string }> {
+  const to = quotes.filter((q) => q !== base);
+  if (to.length === 0) return { ok: true, rates: [] };
   try {
-    const url = `https://api.frankfurter.app/latest?from=${base}&to=${quotes.filter((q) => q !== base).join(",")}`;
+    const url = `https://api.frankfurter.app/latest?from=${base}&to=${to.join(",")}`;
     const res = await fetch(url, { next: { revalidate: 3600 } } as RequestInit);
-    if (!res.ok) return [];
-    const data = (await res.json()) as { rates: Record<string, number>; date: string };
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const data = (await res.json()) as { rates?: Record<string, number>; date?: string };
+    if (!data.rates || !data.date || !Number.isFinite(Date.parse(data.date))) return { ok: false, error: "Unexpected response from the rate provider." };
+    // The provider's own date for the rates (ECB publication date), not the fetch time.
     const asOf = new Date(data.date + "T00:00:00Z").toISOString();
-    const rates: FxRate[] = [{ base, quote: base, rate: 1, asOf, source: "ECB" }];
+    const rates: FxRate[] = [];
     for (const [quote, rate] of Object.entries(data.rates)) {
-      rates.push({ base, quote, rate, asOf, source: "ECB" });
+      if (Number.isFinite(rate) && rate > 0) rates.push({ base, quote, rate, asOf, source: "ECB" });
     }
-    return rates;
-  } catch {
-    return [];
+    return { ok: true, rates };
+  } catch (err) {
+    // Node's fetch reports "fetch failed" with the real reason (DNS, TLS, refused) in `cause`.
+    const e = err as Error & { cause?: { code?: string; message?: string } };
+    const cause = e.cause?.code ?? e.cause?.message;
+    return { ok: false, error: `${e.message || "Network error"}${cause ? ` (${cause})` : ""}` };
   }
 }

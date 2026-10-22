@@ -29,6 +29,7 @@ function Inner() {
   const sections = useAtlasStore((s) => s.proposalSections);
   const disclosures = useAtlasStore((s) => s.disclosures);
   const fxRates = useAtlasStore((s) => s.fxRates);
+  const fxConfirmation = useAtlasStore((s) => s.fxConfirmation);
   const { holdings } = useNormalizedHoldings();
 
   return (
@@ -42,6 +43,7 @@ function Inner() {
       sections={sections}
       disclosures={disclosures.filter((d) => proposal.disclosureIds.includes(d.id) || d.required)}
       fxRates={fxRates}
+      fxConfirmation={fxConfirmation}
       variant={variant}
     />
   );
