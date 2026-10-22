@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { holdingsFromIncompleteImports } from "@/engines/importCompleteness";
+import { unresolvedRecommendationLinks } from "@/engines/recommendationLinks";
 import { ImportNotice, IncompleteImportTag } from "@/components/import/ImportNotice";
 import Link from "next/link";
 import { Ban, CheckCheck, CheckCircle2, Lightbulb, Plus, RotateCcw, Trash2 } from "lucide-react";
@@ -93,6 +94,11 @@ function Inner() {
   // Recommendations on holdings from an import that isn't fully accounted for.
   const sourceDocuments = useAtlasStore((s) => s.sourceDocuments);
   const fromIncomplete = React.useMemo(() => holdingsFromIncompleteImports(sourceDocuments, normalized), [sourceDocuments, normalized]);
+  // Linked holding or account removed: kept for the advisor's review (engines/recommendationLinks).
+  const unresolved = React.useMemo(
+    () => new Map(unresolvedRecommendationLinks({ recommendations: recs, holdings: normalized, accounts }).map((l) => [l.recommendationId, l])),
+    [recs, normalized, accounts]
+  );
   // Each card's effect, simulated with the complete engine (the same
   // simulation as the editor's live preview), so cards, preview and proposal agree.
   const previews = React.useMemo(
@@ -219,6 +225,11 @@ function Inner() {
                         <Badge tone="neutral">{r.priority} priority</Badge>
                         {r.includeInPdf && <Badge tone="gold">In PDF prose</Badge>}
                         {r.relatedHoldingId && fromIncomplete.has(r.relatedHoldingId) && <IncompleteImportTag />}
+                        {unresolved.has(r.id) && (
+                          <Badge tone="warning" title="Relink it to a current holding or account, reject it or delete it. The final PDF waits for this review.">
+                            Linked {unresolved.get(r.id)!.holdingId ? `holding ${unresolved.get(r.id)!.holdingId}` : `account ${unresolved.get(r.id)!.accountId}`} removed: review
+                          </Badge>
+                        )}
                       </div>
                       <h4 className={`font-serif text-lg mt-1.5 ${rejected ? "text-ink-500 line-through decoration-ink-300" : "text-ink-900"}`}>{r.title}</h4>
                       {rejected && (
@@ -405,6 +416,9 @@ function RecForm({
           onChange={(e) => onChange({ relatedHoldingId: e.target.value || undefined })}
         >
           <option value="">— None (advisory only) —</option>
+          {value.relatedHoldingId && !holdings.some((h) => h.id === value.relatedHoldingId) && (
+            <option value={value.relatedHoldingId}>Removed holding ({value.relatedHoldingId}): choose a current one or None</option>
+          )}
           {holdings.map((h) => {
             const acct = accountById[h.accountId];
             return (

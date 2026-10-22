@@ -6,18 +6,16 @@ import { useAtlasStore } from "@/store/useStore";
 import { Card, CardBody } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import {
-  BACKUP_MAX_BYTES,
   BACKUP_NOTICE,
   BACKUP_OMISSIONS,
-  backupFileName,
   backupPreview,
-  createBackup,
-  parseBackup,
+  exportBackup,
+  readBackupFile,
   restoredState,
-  serializeBackup,
   type BackupPreview,
   type WorkspaceBackup,
 } from "@/engines/workspaceBackup";
+import { describeLink, linksNeedingReview } from "@/engines/recommendationLinks";
 import { formatTotal } from "@/engines/valuationTotals";
 import { formatDateTime } from "@/utils/formatting";
 
@@ -38,24 +36,45 @@ type Pending = { backup: WorkspaceBackup; preview: BackupPreview; fileName: stri
 
 export function WorkspaceBackupPanel() {
   const restoreWorkspace = useAtlasStore((s) => s.restoreWorkspace);
+  const recommendations = useAtlasStore((s) => s.recommendations);
+  const holdings = useAtlasStore((s) => s.holdings);
+  const accounts = useAtlasStore((s) => s.accounts);
+  const needReview = React.useMemo(() => linksNeedingReview({ recommendations, holdings, accounts }), [recommendations, holdings, accounts]);
   const [pending, setPending] = React.useState<Pending | null>(null);
   const [errors, setErrors] = React.useState<string[] | null>(null);
   const [message, setMessage] = React.useState<string | null>(null);
   const [replaceFirm, setReplaceFirm] = React.useState(false);
   const fileInput = React.useRef<HTMLInputElement>(null);
 
+  // The exact file is validated as a restore would (engines/workspaceBackup
+  // exportBackup) before anything is downloaded or announced.
   function exportWorkspace() {
-    const now = new Date();
-    const text = serializeBackup(createBackup(useAtlasStore.getState(), now));
-    const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = backupFileName(now);
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-    setMessage(`Exported ${a.download}. Keep it somewhere private: it isn't encrypted.`);
+    setErrors(null);
+    setMessage(null);
+    const state = useAtlasStore.getState();
+    const result = exportBackup(state, new Date(), { disclosureIds: state.disclosures.map((d) => d.id) });
+    if (!result.ok) {
+      setErrors(result.errors);
+      return;
+    }
+    try {
+      const url = URL.createObjectURL(new Blob([result.text], { type: "application/json" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = result.fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch (err) {
+      setErrors([`The browser couldn't save the file (${(err as Error).message || "unknown error"}). Nothing was changed.`]);
+      return;
+    }
+    const review = linksNeedingReview(state);
+    setMessage(
+      `Exported ${result.fileName}. Keep it somewhere private: it isn't encrypted.` +
+        (review.length > 0 ? ` It includes ${review.length} recommendation${review.length === 1 ? "" : "s"} still marked for review.` : "")
+    );
   }
 
   function reset() {
@@ -69,18 +88,19 @@ export function WorkspaceBackupPanel() {
     setMessage(null);
     reset();
     if (!file) return;
-    if (file.size > BACKUP_MAX_BYTES) {
-      setErrors([`${file.name} is larger than ${BACKUP_MAX_BYTES / 1024 / 1024} MB, so it isn't an Atlas workspace backup. Nothing was changed.`]);
-      return;
-    }
-    const state = useAtlasStore.getState();
-    const parsed = parseBackup(await file.text(), { disclosureIds: state.disclosures.map((d) => d.id) });
-    if (!parsed.ok) {
-      setErrors(parsed.errors);
+    try {
+      const state = useAtlasStore.getState();
+      const parsed = await readBackupFile(file, { disclosureIds: state.disclosures.map((d) => d.id) });
+      if (!parsed.ok) {
+        setErrors(parsed.errors);
+        if (fileInput.current) fileInput.current.value = "";
+        return;
+      }
+      setPending({ backup: parsed.backup, preview: backupPreview(parsed.backup, useAtlasStore.getState(), new Date()), fileName: file.name });
+    } catch (err) {
+      setErrors([`${file.name} couldn't be checked (${(err as Error).message || "unknown error"}).`]);
       if (fileInput.current) fileInput.current.value = "";
-      return;
     }
-    setPending({ backup: parsed.backup, preview: backupPreview(parsed.backup, state, new Date()), fileName: file.name });
   }
 
   function replace() {
@@ -107,6 +127,14 @@ export function WorkspaceBackupPanel() {
           <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-warning-500" />
           <span>{BACKUP_NOTICE}</span>
         </div>
+        {needReview.length > 0 && (
+          <div role="status" data-testid="backup-review-note" className="rounded-md bg-warning-50 ring-1 ring-inset ring-warning-500/40 px-3 py-2 text-[13px] text-ink-800">
+            {needReview.length} recommendation{needReview.length === 1 ? " refers" : "s refer"} to a holding or account that was removed and{" "}
+            {needReview.length === 1 ? "is" : "are"} marked for review ({needReview.map(describeLink).join("; ")}). A backup keeps{" "}
+            {needReview.length === 1 ? "it" : "them"} as {needReview.length === 1 ? "it is" : "they are"}, still marked; the final PDF waits until you relink, reject or
+            delete {needReview.length === 1 ? "it" : "them"} in Recommendations.
+          </div>
+        )}
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" iconLeft={<Download className="h-4 w-4" />} onClick={exportWorkspace}>
             Export workspace backup
@@ -120,7 +148,9 @@ export function WorkspaceBackupPanel() {
             accept=".json,application/json"
             className="hidden"
             data-testid="backup-file"
-            onChange={(e) => void choose(e.target.files?.[0])}
+            onChange={(e) => {
+              void choose(e.target.files?.[0]);
+            }}
           />
         </div>
         <details className="text-2xs text-ink-500">
@@ -139,7 +169,7 @@ export function WorkspaceBackupPanel() {
         )}
         {errors && (
           <div role="alert" data-testid="backup-errors" className="rounded-md bg-negative-50 ring-1 ring-inset ring-negative-500/30 px-3 py-2 text-[13px] text-ink-800">
-            <div className="font-semibold text-negative-600">Not restored. Nothing was changed.</div>
+            <div className="font-semibold text-negative-600">Nothing was exported, restored or changed.</div>
             <ul className="list-disc pl-5 mt-1">
               {errors.map((e) => (
                 <li key={e}>{e}</li>
@@ -165,6 +195,12 @@ export function WorkspaceBackupPanel() {
                   {!p.incoming.valuation.complete && ` (${p.incoming.valuation.holdingsValued} of ${p.incoming.valuation.holdingsTotal} holdings valued)`}
                 </div>
                 <div>FX confirmation: {CONFIRMATION_LABEL[p.incoming.fxConfirmation]}</div>
+                {p.incoming.recommendationsNeedingReview > 0 && (
+                  <div>
+                    {p.incoming.recommendationsNeedingReview} recommendation{p.incoming.recommendationsNeedingReview === 1 ? "" : "s"} marked for review: the linked
+                    holding or account was removed. The final PDF waits for that review.
+                  </div>
+                )}
                 {p.incoming.sourceFilesNotIncluded.length > 0 && (
                   <div>
                     {p.incoming.sourceDocuments} source document{p.incoming.sourceDocuments === 1 ? "" : "s"}; original files not included:{" "}

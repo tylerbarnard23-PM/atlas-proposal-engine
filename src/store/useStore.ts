@@ -31,6 +31,7 @@ import { todayIso } from "@/utils/formatting";
 import { DEFAULT_PROPOSAL_SECTIONS } from "@/engines/proposalEngine";
 import { confirmStaleRates } from "@/engines/fxPolicy";
 import { fxClock } from "@/engines/fxClock";
+import { markRemovedLinks } from "@/engines/recommendationLinks";
 import { migrateRecommendationCurrency, withApprovalRule } from "@/engines/recommendationAmounts";
 import { LEGACY_SAMPLE_FIRM_NAME } from "@/domain/branding";
 import type { ImportedWorkspace } from "@/ingestion/documents/toWorkspace";
@@ -286,10 +287,17 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
             ? s.accounts.map((a) => (a.id === account.id ? { ...a, ...account } : a))
             : [...s.accounts, account],
         })),
+      // Recommendations linked to what's removed are kept for review, not
+      // deleted or redirected (engines/recommendationLinks).
       removeAccount: (id) =>
         set((s) => ({
           accounts: s.accounts.filter((a) => a.id !== id),
           holdings: s.holdings.filter((h) => h.accountId !== id),
+          recommendations: markRemovedLinks(
+            s.recommendations,
+            { holdingIds: new Set(s.holdings.filter((h) => h.accountId === id).map((h) => h.id)), accountIds: new Set([id]) },
+            todayIso()
+          ),
         })),
       upsertHolding: (h) =>
         set((s) => ({
@@ -297,7 +305,11 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
             ? s.holdings.map((x) => (x.id === h.id ? { ...x, ...h } : x))
             : [...s.holdings, h],
         })),
-      removeHolding: (id) => set((s) => ({ holdings: s.holdings.filter((h) => h.id !== id) })),
+      removeHolding: (id) =>
+        set((s) => ({
+          holdings: s.holdings.filter((h) => h.id !== id),
+          recommendations: markRemovedLinks(s.recommendations, { holdingIds: new Set([id]), accountIds: new Set() }, todayIso()),
+        })),
       setHoldings: (holdings) => set({ holdings }),
       // Every save goes through the edit rules: a material change to an
       // approved recommendation clears its approval (see withApprovalRule).

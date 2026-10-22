@@ -169,8 +169,9 @@ describe("export", () => {
     expect(Object.keys(b).sort()).toEqual(["engagement", "exportedAt", "firm", "format", "notice", "omitted", "schemaVersion", "workspaceVersion"]);
     expect(b).toMatchObject({ format: "atlas-workspace-backup", schemaVersion: 1, workspaceVersion: 6, exportedAt: NOW.toISOString() });
     expect(Object.keys(b.engagement).sort()).toEqual(
-      ["accounts", "client", "dismissedInsights", "fxConfirmation", "fxRates", "fxRefresh", "holdings", "pdfHistory", "proposal", "proposalSections", "recommendations", "sourceDocuments"].sort()
+      ["accounts", "client", "dismissedInsights", "fxConfirmation", "fxRates", "fxRefresh", "holdings", "pdfHistory", "proposal", "proposalSections", "recommendations", "sourceDocuments", "unresolvedLinks"].sort()
     );
+    expect(b.engagement.unresolvedLinks).toEqual([]); // every recommendation link resolves in this workspace
     expect(Object.keys(b.firm)).toEqual(["advisor"]);
     expect(b.notice).toMatch(/not encrypted/i);
     expect(b.notice).not.toMatch(/\bsecure\b(?! for)/i);

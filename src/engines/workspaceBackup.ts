@@ -5,6 +5,7 @@ import { normalizeHoldings } from "./normalizationEngine";
 import { valuationSummary } from "./valuationTotals";
 import { fxFreshness } from "./fxPolicy";
 import { completenessOf } from "./importCompleteness";
+import { linksNeedingReview, unresolvedRecommendationLinks } from "./recommendationLinks";
 import { localCalendarDay } from "@/utils/formatting";
 
 // Workspace backup and restore (R23a, #55)
@@ -24,7 +25,8 @@ export const BACKUP_FORMAT = "atlas-workspace-backup";
 export const BACKUP_SCHEMA_VERSION = 1;
 /** The saved-workspace schema (store version) the records follow. */
 export const BACKUP_WORKSPACE_VERSION = 6;
-export const BACKUP_MAX_BYTES = 5 * 1024 * 1024;
+/** Above what browser storage can hold, so any workspace the app can save fits; it bounds a file read before validation. */
+export const BACKUP_MAX_BYTES = 20 * 1024 * 1024;
 
 export const BACKUP_NOTICE =
   "Not encrypted: this file holds the engagement's client and portfolio data in plain text. Use it with synthetic (demo) data only; real client data needs encrypted storage and the other protections in issue #59 first.";
@@ -43,12 +45,18 @@ export const BACKUP_OMISSIONS = [
 // restore (unknown fields are rejected), and as the export allowlist.
 // ---------------------------------------------------------------------------
 
-const text = (max = 20_000) => z.string().max(max);
-const id = z.string().min(1).max(200);
+// Limits match what the app itself permits: free text and lists have no
+// per-field cap (the app imposes none), so only the whole file's size bounds
+// them. Currency codes, enums and finite numbers are what the app writes.
+const text = () => z.string();
+const id = z.string().min(1);
 const currency = z.string().regex(/^[A-Z]{3}$/, "Expected a three-letter currency code");
-const country = z.string().min(1).max(64);
+const country = z.string().min(1);
 const finite = z.number().finite();
-const date = z.string().max(64).refine((v) => Number.isFinite(Date.parse(v)), "Expected a valid date");
+/** A timestamp the app generates (toISOString): must be a valid date. */
+const date = z.string().refine((v) => Number.isFinite(Date.parse(v)), "Expected a valid date");
+/** A calendar date taken from a document or entered by the advisor: kept as given (as the app does). */
+const dateText = z.string();
 const confidence = z.enum(["high", "medium", "low", "unknown"]);
 const sourceType = z.enum(["manual", "csv", "excel", "pdf_text", "pdf_scanned", "image_screenshot", "pasted_text", "ofx_qfx", "api_feed", "custom"]);
 const severity = z.enum(["info", "warning", "critical"]);
@@ -94,40 +102,40 @@ function schemas(strict: boolean) {
 
   const identifier = obj({
     type: z.enum(["ticker", "cusip", "isin", "sedol", "figi", "lei", "internal", "wallet_address", "custom", "none"]),
-    value: text(500),
-    exchange: text(100).optional(),
+    value: text(),
+    exchange: text().optional(),
   });
   const sourceTrace = obj({
     sourceDocumentId: id.optional(),
     sourceType,
     page: z.number().int().nonnegative().optional(),
     rawText: text().optional(),
-    extractionMethod: text(200).optional(),
+    extractionMethod: text().optional(),
     extractionConfidence: confidence.optional(),
     extractedAt: date.optional(),
-    extractedFieldName: text(200).optional(),
+    extractedFieldName: text().optional(),
   });
   const valuationSource = obj({
     kind: z.enum(["statement", "advisor_entered", "advisor_override", "market_data", "manual_valuation", "mock"]),
-    providerId: text(200).optional(),
-    providerName: text(200).optional(),
-    asOf: date.optional(),
+    providerId: text().optional(),
+    providerName: text().optional(),
+    asOf: dateText.optional(),
     confidence: confidence.optional(),
     note: text().optional(),
   });
-  const dataQualityIssue = obj({ code: dataQualityCode, severity, message: text(), fieldHint: text(200).optional() });
+  const dataQualityIssue = obj({ code: dataQualityCode, severity, message: text(), fieldHint: text().optional() });
   const holding = obj({
     id,
     accountId: id,
-    assetName: text(1_000),
+    assetName: text(),
     identifier: identifier.optional(),
     assetType: assetType.optional(),
     assetClass,
     subAssetClass: subAssetClass.optional(),
     country: country.optional(),
-    region: text(200).optional(),
+    region: text().optional(),
     currency,
-    exchange: text(100).optional(),
+    exchange: text().optional(),
     quantity: finite.optional(),
     price: finite.optional(),
     nativeMarketValue: finite,
@@ -136,35 +144,35 @@ function schemas(strict: boolean) {
     incomeYieldPct: finite.optional(),
     expenseRatioPct: finite.optional(),
     liquidity: liquidity.optional(),
-    valuationDate: date.optional(),
+    valuationDate: dateText.optional(),
     valuationSource,
     marketDataSource: valuationSource.optional(),
     quoteType: z.enum(["real_time", "delayed", "eod", "reference", "manual", "ocr_extracted", "advisor_entered", "mock"]).optional(),
     priceFreshness: z.enum(["live", "delayed", "eod", "stale", "manual", "mock"]).optional(),
     riskRating: z.enum(["low", "moderate", "elevated", "high"]).optional(),
-    taxTreatment: text(500).optional(),
+    taxTreatment: text().optional(),
     restrictions: text().optional(),
     advisorNotes: text().optional(),
-    dataQuality: z.array(dataQualityIssue).max(200),
+    dataQuality: z.array(dataQualityIssue),
     sourceTrace: sourceTrace.optional(),
     advisorVerification: z.enum(["unverified", "advisor_reviewed", "advisor_approved", "locked_for_proposal", "rejected"]),
-    dataAcks: obj({ keepAsBalance: z.boolean().optional(), acceptedValuationDate: date.optional() }).optional(),
-    proposalApprovedValue: obj({ amount: finite, currency, source: valuationSource, lockedAt: date.optional(), lockedBy: text(200).optional() }).optional(),
+    dataAcks: obj({ keepAsBalance: z.boolean().optional(), acceptedValuationDate: dateText.optional() }).optional(),
+    proposalApprovedValue: obj({ amount: finite, currency, source: valuationSource, lockedAt: date.optional(), lockedBy: text().optional() }).optional(),
     isLiability: z.boolean().optional(),
     createdAt: date,
     updatedAt: date,
   });
   const account = obj({
     id,
-    name: text(500),
+    name: text(),
     type: accountType,
-    institution: text(500).optional(),
-    accountNumberMasked: text(100).optional(),
-    custodian: text(500).optional(),
+    institution: text().optional(),
+    accountNumberMasked: text().optional(),
+    custodian: text().optional(),
     baseCurrency: currency,
     country: country.optional(),
-    registration: text(500).optional(),
-    asOf: date.optional(),
+    registration: text().optional(),
+    asOf: dateText.optional(),
     notes: text().optional(),
     isLiabilityAccount: z.boolean().optional(),
     createdAt: date,
@@ -172,15 +180,15 @@ function schemas(strict: boolean) {
   });
   const client = obj({
     id,
-    fullName: text(500),
-    preferredName: text(500).optional(),
-    householdName: text(500).optional(),
+    fullName: text(),
+    preferredName: text().optional(),
+    householdName: text().optional(),
     countryOfResidence: country,
     taxResidency: country,
     reportingCountry: country,
     baseCurrency: currency,
     proposalOutputCurrency: currency,
-    locale: text(35),
+    locale: text(),
     riskTolerance: z.enum(["conservative", "moderate", "growth", "aggressive"]),
     investmentObjective: text(),
     timeHorizonYears: finite,
@@ -188,15 +196,15 @@ function schemas(strict: boolean) {
     incomeNeeds: z.enum(["none", "modest", "significant"]),
     taxSensitivity: z.enum(["low", "moderate", "high"]),
     esgPreferences: text().optional(),
-    restrictedSecurities: z.array(text(200)).max(500).optional(),
+    restrictedSecurities: z.array(text()).optional(),
     specialInstructions: text().optional(),
     advisorDiscoveryNotes: text().optional(),
   });
   const advisor = obj({
     id,
-    name: text(500),
-    email: text(500),
-    firmName: text(500),
+    name: text(),
+    email: text(),
+    firmName: text(),
     logoDataUrl: z
       .string()
       .optional()
@@ -206,13 +214,13 @@ function schemas(strict: boolean) {
         if (!check.ok) ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Firm logo: ${check.reason}` });
       }),
     accentColor: z.string().optional().refine((v) => v === undefined || isValidAccentColor(v), "Firm accent color must be a six-digit hex value"),
-    phone: text(100).optional(),
-    licenseNumbers: z.array(text(200)).max(100).optional(),
-    jurisdictions: z.array(country).max(100).optional(),
+    phone: text().optional(),
+    licenseNumbers: z.array(text()).optional(),
+    jurisdictions: z.array(country).optional(),
   });
   const recommendation = obj({
     id,
-    title: text(1_000),
+    title: text(),
     type: recommendationType,
     relatedAccountId: id.optional(),
     relatedHoldingId: id.optional(),
@@ -238,7 +246,7 @@ function schemas(strict: boolean) {
     status: z.enum(["draft", "needs_review", "approved", "excluded", "implemented"]),
     includeInPdf: z.boolean(),
     approvedByAdvisor: z.boolean(),
-    sourceInsightKey: text(500).optional(),
+    sourceInsightKey: text().optional(),
     rejectionReason: text().optional(),
     rejectedAt: date.optional(),
     createdAt: date,
@@ -256,21 +264,21 @@ function schemas(strict: boolean) {
   const fxRefresh = obj({
     at: date,
     ok: z.boolean(),
-    provider: text(200),
-    error: text(2_000).optional(),
-    requested: z.array(currency).max(500),
-    updated: z.array(text(20)).max(500),
-    retained: z.array(text(20)).max(500),
-    manualKept: z.array(text(20)).max(500),
+    provider: text(),
+    error: text().optional(),
+    requested: z.array(currency),
+    updated: z.array(text()),
+    retained: z.array(text()),
+    manualKept: z.array(text()),
   });
   // A record, re-evaluated against its fingerprint and lifetime after restore
   // (engines/fxPolicy); the times are checked there, not trusted here.
   const fxConfirmation = obj({
-    confirmedAt: text(64),
-    expiresAt: text(64),
-    pairs: z.array(text(20)).max(500),
-    oldestRateDate: text(64),
-    fingerprint: text(64),
+    confirmedAt: text(),
+    expiresAt: text(),
+    pairs: z.array(text()),
+    oldestRateDate: text(),
+    fingerprint: text(),
     reportingCurrency: currency,
   });
   const reconciliation = obj({
@@ -288,29 +296,29 @@ function schemas(strict: boolean) {
   // text or the file itself.
   const sourceDocument = obj({
     id,
-    fileName: text(1_000),
+    fileName: text(),
     sourceType,
     sizeBytes: finite.nonnegative().optional(),
     uploadedAt: date,
-    institution: text(500).optional(),
-    accountNumberMasked: text(100).optional(),
-    statementDate: date.optional(),
+    institution: text().optional(),
+    accountNumberMasked: text().optional(),
+    statementDate: dateText.optional(),
     extractionStatus: z.enum([
       "uploaded", "extracting", "extracted", "needs_review", "market_data_pending", "market_data_enriched", "partially_reviewed",
       "verified", "saved_to_proposal", "excluded", "failed",
     ]),
     extractionConfidence: confidence.optional(),
-    extractionMethod: text(200).optional(),
+    extractionMethod: text().optional(),
     pageCount: z.number().int().nonnegative().optional(),
     notes: text().optional(),
     extraction: obj({
       ok: z.boolean(),
-      extractionMethod: text(200),
+      extractionMethod: text(),
       extractionMs: finite,
       documentKind: z.enum(["financial_plan_lifeview", "statement_table", "holdings_report", "generated_proposal"]).optional(),
-      asOfDate: date.optional(),
+      asOfDate: dateText.optional(),
       pageCount: z.number().int().nonnegative().optional(),
-      detectedInstitution: text(500).optional(),
+      detectedInstitution: text().optional(),
       reconciliation: reconciliation.optional(),
     }).optional(),
     importCompleteness: obj({
@@ -324,22 +332,22 @@ function schemas(strict: boolean) {
     marketDataEnriched: z.boolean().optional(),
     advisorVerified: z.boolean().optional(),
   });
-  const section = obj({ key: text(100), label: text(200), enabled: z.boolean(), required: z.boolean().optional() });
+  const section = obj({ key: text(), label: text(), enabled: z.boolean(), required: z.boolean().optional() });
   const proposal = obj({
     id,
     clientId: id,
     advisorId: id,
-    title: text(1_000),
+    title: text(),
     createdAt: date,
     updatedAt: date,
     approvalStatus: z.enum(["draft", "in_review", "advisor_approved", "delivered"]),
-    sections: z.array(section).max(100),
-    recommendationIds: z.array(id).max(10_000),
-    assumptionIds: z.array(id).max(10_000),
-    disclosureIds: z.array(id).max(1_000),
+    sections: z.array(section),
+    recommendationIds: z.array(id),
+    assumptionIds: z.array(id),
+    disclosureIds: z.array(id),
     notes: text().optional(),
   });
-  const dismissedInsight = obj({ key: text(500), title: text(1_000), reason: text().optional(), dismissedAt: date });
+  const dismissedInsight = obj({ key: text(), title: text(), reason: text().optional(), dismissedAt: date });
   const pdfJob = obj({
     id,
     proposalId: id,
@@ -347,31 +355,34 @@ function schemas(strict: boolean) {
     startedAt: date,
     completedAt: date.optional(),
     status: z.enum(["pending", "running", "succeeded", "failed"]),
-    filename: text(500).optional(),
-    errorMessage: text(2_000).optional(),
-    warnings: z.array(text(2_000)).max(100).optional(),
+    filename: text().optional(),
+    errorMessage: text().optional(),
+    warnings: z.array(text()).optional(),
   });
   const engagement = obj({
     client,
-    accounts: z.array(account).max(5_000),
-    holdings: z.array(holding).max(50_000),
-    recommendations: z.array(recommendation).max(10_000),
-    fxRates: z.array(fxRate).max(1_000),
+    accounts: z.array(account),
+    holdings: z.array(holding),
+    recommendations: z.array(recommendation),
+    fxRates: z.array(fxRate),
     fxRefresh: fxRefresh.nullable(),
     fxConfirmation: fxConfirmation.nullable(),
-    sourceDocuments: z.array(sourceDocument).max(1_000),
+    sourceDocuments: z.array(sourceDocument),
     proposal,
-    proposalSections: z.array(section).max(100),
-    dismissedInsights: z.array(dismissedInsight).max(10_000),
-    pdfHistory: z.array(pdfJob).max(100),
+    proposalSections: z.array(section),
+    dismissedInsights: z.array(dismissedInsight),
+    pdfHistory: z.array(pdfJob),
+    // Recommendations whose holding or account was removed (engines/
+    // recommendationLinks), recorded so restore can tell them from corruption.
+    unresolvedLinks: z.array(obj({ recommendationId: id, holdingId: id.optional(), accountId: id.optional() })),
   });
   const envelope = obj({
     format: z.literal(BACKUP_FORMAT),
     schemaVersion: z.literal(BACKUP_SCHEMA_VERSION),
     workspaceVersion: z.literal(BACKUP_WORKSPACE_VERSION),
     exportedAt: date,
-    notice: text(2_000),
-    omitted: z.array(text(2_000)).max(50),
+    notice: text(),
+    omitted: z.array(text()),
     engagement,
     firm: obj({ advisor }),
   });
@@ -445,6 +456,7 @@ export function createBackup(state: WorkspaceData, now: Date): WorkspaceBackup {
     dismissedInsights: state.dismissedInsights,
     // A running or pending job was orphaned by a closed tab (as in the v2 migration).
     pdfHistory: state.pdfHistory.filter((j) => j.status === "succeeded" || j.status === "failed"),
+    unresolvedLinks: unresolvedRecommendationLinks(state),
   };
   return {
     format: BACKUP_FORMAT,
@@ -459,6 +471,67 @@ export function createBackup(state: WorkspaceData, now: Date): WorkspaceBackup {
 }
 
 export const serializeBackup = (b: WorkspaceBackup) => JSON.stringify(b, null, 2);
+
+/** An import's completeness as readiness sees it (stored, or derived for older imports). */
+export const importCompletenessOf = (d: SourceDocument) => d.importCompleteness ?? completenessOf(d);
+
+export type ExportedBackup = { ok: true; text: string; fileName: string; backup: WorkspaceBackup } | { ok: false; errors: string[] };
+
+/**
+ * The export contract: the exact text to download, checked by the same
+ * validation a restore applies (including its UTF-8 size), so a file Atlas
+ * writes can always be restored. Nothing is truncated or dropped to pass;
+ * when it can't pass, the reasons say what to change. Never throws.
+ */
+export function exportBackup(state: WorkspaceData, now: Date, opts: { disclosureIds: string[] }): ExportedBackup {
+  let backup: WorkspaceBackup;
+  let text: string;
+  try {
+    backup = createBackup(state, now);
+    text = serializeBackup(backup);
+  } catch (err) {
+    return { ok: false, errors: [`The backup couldn't be created (${(err as Error).message}). Nothing was exported or changed.`] };
+  }
+  const bytes = byteLength(text);
+  if (bytes > BACKUP_MAX_BYTES) {
+    return {
+      ok: false,
+      errors: [
+        `The backup would be ${(bytes / 1024 / 1024).toFixed(1)} MB; the limit is ${BACKUP_MAX_BYTES / 1024 / 1024} MB. Shorten very long notes or remove records you no longer need, then export again. Nothing was exported or changed.`,
+      ],
+    };
+  }
+  const check = parseBackup(text, opts);
+  if (!check.ok) {
+    return { ok: false, errors: [...check.errors.map((e) => withRecordName(e, backup)), "Fix these in the workspace, then export again. Nothing was exported or changed."] };
+  }
+  return { ok: true, text, fileName: backupFileName(now), backup: check.backup };
+}
+
+// "engagement.holdings.3.nativeMarketValue: ..." -> names the record, so the advisor can find it.
+function withRecordName(error: string, backup: WorkspaceBackup): string {
+  const m = /^engagement\.(holdings|accounts|recommendations|sourceDocuments)\.(\d+)\./.exec(error);
+  if (!m) return error;
+  const list = backup.engagement[m[1] as "holdings"] as unknown as Record<string, unknown>[];
+  const rec = list[Number(m[2])];
+  const name = (rec?.assetName ?? rec?.name ?? rec?.title ?? rec?.fileName) as string | undefined;
+  const kind = ({ holdings: "Holding", accounts: "Account", recommendations: "Recommendation", sourceDocuments: "Source document" } as Record<string, string>)[m[1]];
+  return name ? `${kind} "${name}": ${error}` : error;
+}
+
+/** Reads and validates a chosen file; never throws (an unreadable file is reported). */
+export async function readBackupFile(file: Pick<File, "size" | "name" | "text">, opts: { disclosureIds: string[] }): Promise<ParsedBackup> {
+  if (file.size > BACKUP_MAX_BYTES) {
+    return { ok: false, errors: [`${file.name} is larger than ${BACKUP_MAX_BYTES / 1024 / 1024} MB, so it isn't an Atlas workspace backup.`] };
+  }
+  let text: string;
+  try {
+    text = await file.text();
+  } catch (err) {
+    return { ok: false, errors: [`${file.name} couldn't be read (${(err as Error).message || "unknown error"}).`] };
+  }
+  return parseBackup(text, opts);
+}
 
 /** A generic name: no client identity, the viewer's local date. */
 export const backupFileName = (now: Date = new Date()) => `atlas-workspace-backup-${localCalendarDay(now)}.json`;
@@ -517,10 +590,21 @@ function referenceErrors(e: BackupEngagement, disclosureIds: Set<string>): strin
     const doc = h.sourceTrace?.sourceDocumentId;
     if (doc && !docs.has(doc)) errors.push(`Holding ${h.id} refers to source document ${doc}, which isn't in the backup.`);
   }
+  // A recommendation's link either resolves or is recorded as unresolved
+  // (its holding or account was removed in the app); anything else is corrupt.
+  const recorded = new Map(e.unresolvedLinks.map((l) => [l.recommendationId, l]));
+  unique("unresolved link for recommendation", e.unresolvedLinks.map((l) => l.recommendationId));
   for (const r of e.recommendations) {
-    if (r.relatedHoldingId && !holdings.has(r.relatedHoldingId)) errors.push(`Recommendation ${r.id} refers to holding ${r.relatedHoldingId}, which isn't in the backup.`);
-    if (r.relatedAccountId && !accounts.has(r.relatedAccountId)) errors.push(`Recommendation ${r.id} refers to account ${r.relatedAccountId}, which isn't in the backup.`);
+    const l = recorded.get(r.id);
+    const holdingMissing = !!r.relatedHoldingId && !holdings.has(r.relatedHoldingId);
+    const accountMissing = !!r.relatedAccountId && !accounts.has(r.relatedAccountId);
+    if (holdingMissing && l?.holdingId !== r.relatedHoldingId) errors.push(`Recommendation ${r.id} refers to holding ${r.relatedHoldingId}, which isn't in the backup.`);
+    if (accountMissing && l?.accountId !== r.relatedAccountId) errors.push(`Recommendation ${r.id} refers to account ${r.relatedAccountId}, which isn't in the backup.`);
+    if (l && ((l.holdingId && !holdingMissing) || (l.accountId && !accountMissing) || (!l.holdingId && !l.accountId))) {
+      errors.push(`The backup lists recommendation ${r.id}'s link as unresolved, but it isn't.`);
+    }
   }
+  for (const l of e.unresolvedLinks) if (!recs.has(l.recommendationId)) errors.push(`The backup lists an unresolved link for recommendation ${l.recommendationId}, which isn't in the backup.`);
   const p = e.proposal;
   if (p.clientId !== e.client.id) errors.push(`The proposal belongs to client ${p.clientId}, not the backup's client ${e.client.id}.`);
   for (const r of p.recommendationIds) if (!recs.has(r)) errors.push(`The proposal lists recommendation ${r}, which isn't in the backup.`);
@@ -584,6 +668,8 @@ export interface BackupPreview {
     holdings: number;
     recommendations: number;
     approvedRecommendations: number;
+    /** Recommendations whose holding or account was removed and that aren't rejected: the final PDF waits for their review. */
+    recommendationsNeedingReview: number;
     sourceDocuments: number;
     sourceFilesNotIncluded: string[];
     valuation: ReturnType<typeof valuationSummary>;
@@ -611,6 +697,7 @@ export function backupPreview(backup: WorkspaceBackup, current: WorkspaceData, n
       holdings: e.holdings.length,
       recommendations: e.recommendations.length,
       approvedRecommendations: e.recommendations.filter((r) => r.approvedByAdvisor).length,
+      recommendationsNeedingReview: linksNeedingReview({ recommendations: e.recommendations, holdings: e.holdings, accounts: e.accounts }).length,
       sourceDocuments: e.sourceDocuments.length,
       sourceFilesNotIncluded: e.sourceDocuments.map((d) => d.fileName),
       valuation: valuationSummary(holdings),
