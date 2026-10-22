@@ -1,6 +1,29 @@
 # Handoff
 
-## #28 calendar dates — 22 October 2026 (PR #63, in review, not merged)
+## Release checkpoint — 22 October 2026: PR #63 (#28) merged and live
+
+- **Merge.** PR #63 was merged pinned to its reviewed head `786cd8f10b2233070f0cdd32e3bf54cf2d11edfe` as merge commit `23db797c58b2241e8b0c229818ebeecb06755d47` (parents `04d4396` and `786cd8f`).
+  - Before merging, the head was verified unchanged, the PR was mergeable and clean, and both checks passed on that exact commit (CI run 39829107743; Vercel preview). `main` has no branch protection.
+  - Issue #28 closed as completed at 2026-10-22 18:20 UTC.
+- **CI on `main`** for `23db797` (run 39830399892) passed: typecheck; 19 test files, **335 tests passed and 2 skipped** (337; the 2 need the private UBS PDF, which CI doesn't have); extraction eval unchanged (recall 100%, label 100%, currency 87.5%, 0 wrong, 0 spurious); build.
+- **Production.** Deployment `dpl_4FLG7i5QibQQFV2ywyLob3R3V88Y`, built from `main` at `23db797`, is READY and aliased to https://atlas-proposal-engine.vercel.app (Vercel functions run in UTC).
+- **Follow-up logged before merging:** [#64](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/64). Several writers still record "today" in calendar fields as the UTC day: advisor override and value-confirmation `asOf`, the synthetic cash line, a new account's `asOf`, the import fallback date, and the PDF filename's date stamp. Not started. No existing issue covered it.
+- **Live smoke test, performed on production** in the in-app browser (America/New_York) with a synthetic workspace. This origin's saved workspace (25 holdings, 6 recommendations, 10 rates) was backed up and restored byte-identical (38,704 bytes). Synthetic workspace: USD reporting; holdings valued 2026-04-30, 2026-03-08 (US daylight saving) and a legacy `2026-01-01T00:00:00Z`; CHF 1,000 on a stale ECB CHF/USD rate (2026-04-30); an approved recommendation last updated `2026-10-20T02:30:00Z`.
+  - **App:** each holding's detail showed its stored day in New York: Apr 30, Jan 1 (legacy UTC midnight; not Dec 31), Mar 8 and Apr 30, 2026, in both "Valuation date" and the source line.
+  - **Draft PDFs from the UTC server:**
+    - Two were generated (200 `application/pdf`, about 251 KB each, in memory), with advisor zones `America/New_York` and `Pacific/Kiritimati` (UTC+14). At 18:21 UTC it was Oct 22 in New York and Oct 23 in Kiritimati.
+    - Inspected visually: the New York PDF's Data Sources & Quality table read Apr 30, Jan 1, Mar 8 and Apr 30, 2026, matching the app.
+    - The cover date read October 22 (New York) and October 23 (Kiritimati).
+    - "Approved by advisor on" read 10/19/2026 (New York) and 10/20/2026 (Kiritimati), each correct for `2026-10-20T02:30Z` in that zone.
+  - **FX freshness and readiness, unchanged:**
+    - a direct final-PDF request with the stale, unconfirmed rate returned 422 with only "Exchange rates current";
+    - confirming in Market Data gave 16/16, unlocked;
+    - withdrawing gave 15/16 with "CHF/USD 175 days old (2026-04-30, ECB)…", locked.
+  - **Not performed on production:** a final PDF, a real FX refresh, and the date-input defaults. The defaults and the full zone matrix (UTC, New York, Los Angeles, Tokyo, Auckland, daylight-saving and year boundaries) are covered by the automated tests in `tests/calendarDates.test.ts` (prior evidence, CI-verified), not by this smoke test.
+- **R18 (#51)** stays Planned. Its #26 and #28 slices are complete; the reviewable candidate refresh remains.
+- **Next:** no feature is started. The roadmap's remaining P0 items (R23a backup/restore, R25 study protocol/baseline) and the logged follow-ups (#61, #64) await the owner's selection.
+
+## #28 calendar dates — 22 October 2026 (PR #63, merged `23db797`, live)
 
 Branch `fix/calendar-date-display` from main `04d4396` (the merge of release-checkpoint PR #62, pinned to `c1825d0`; CI passed on main). This is a presentation-only fix: no stored value changes and no migration. #61 and other roadmap work are not part of it.
 
@@ -55,7 +78,7 @@ Branch `fix/calendar-date-display` from main `04d4396` (the merge of release-che
     - the PDF was inspected on the Assumptions page only.
   - **Observation:** the refresh summary names a manual pair by its sorted key ("USD/VND") while the table shows the stored orientation ("VND/USD"); logged as [#61](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/61). Cosmetic; no value is affected.
 - **R18 (#51)** stays Planned: #26 was its P0 slice. The reviewable candidate refresh remains.
-- **Next:** #28 (dates shown a day early west of UTC), separately. Now in review as PR #63 (see the top). This checkpoint was recorded by PR #62, merged as `04d4396`.
+- **Next:** #28 (dates shown a day early west of UTC), separately. Since merged in PR #63 (see the release checkpoint at the top). This checkpoint was recorded by PR #62, merged as `04d4396`.
 
 ## #26 FX refresh and stale-rate policy — 22 October 2026 (PR #60, merged `e54d56e`, live)
 
@@ -210,7 +233,7 @@ The text below is retained historical context from the existing handoff. Its old
 
 The state of the project for the next working session: what's done, how it was checked, what's known to be missing, and what comes next. Update it at the end of each piece of work.
 
-_Section last updated: 2026-10-22, when PR #60 was merged (`e54d56e`); #28 is in review as PR #63. Newer checkpoints at the top supersede older next-step notes._
+_Section last updated: 2026-10-22, when PR #63 (#28) was merged (`23db797`). Newer checkpoints at the top supersede older next-step notes._
 
 > The roadmap checkpoint and PII prerequisite (#59) at the top of this file and the #33 section below are both current; neither replaces the other.
 
@@ -223,7 +246,7 @@ _Section last updated: 2026-10-22, when PR #60 was merged (`e54d56e`); #28 is in
 - Don't commit third-party PDFs. The UBS holdings-report sample goes in `tests/fixtures/private/`, which is git-ignored; its tests skip when it's absent.
 
 ## Production
-Current production is `e54d56e` (PR #60, #26); see the release checkpoint at the top. Before that: `4e6da18` (PR #34). Earlier release: `9d44d9f` (merge of PR #31, pinned to head `3a1482f`, CI green on that commit), deployment `dpl_4V9aw12vvUreEQq3xYLKdFJaUzEz`. Smoke-tested on the live site, 2026-10-21:
+Current production is `23db797` (PR #63, #28); see the release checkpoint at the top. Before that: `e54d56e` (PR #60, #26) and `4e6da18` (PR #34). Earlier release: `9d44d9f` (merge of PR #31, pinned to head `3a1482f`, CI green on that commit), deployment `dpl_4V9aw12vvUreEQq3xYLKdFJaUzEz`. Smoke-tested on the live site, 2026-10-21:
 - **Existing USD workspace** (a real v4 save in the browser): migrated to v5 with 25 holdings, 6 recommendations and no flags. The proposal's currency and country fields were dropped and effects were unchanged.
 - **EUR reporting with USD-labelled amounts** (the same save set to EUR, plus a mixed recommendation): both money recommendations migrated to EUR with the "USD" label kept as an open review. Maritime's target is still calculated as EUR 181,760, as before the update.
 - **Percentage-only edit** (10% → 20%) on the approved, included mixed recommendation: the approval cleared and the review stayed open. Re-approving left it open.
@@ -240,6 +263,7 @@ The previous release, `60f43bf` (merge of #30), was smoke-tested the same day. O
 | #24 / #31 (merged `9d44d9f`) | Recommendation amounts keep their own currency (see below). |
 | #33 / #34 (merged `4e6da18`) | Live recommendation preview from the complete engine (see below). |
 | #26 / #60 (merged `e54d56e`) | FX refresh merges by pair; rates aged from their dates; stale rates in use need a refresh or an expiring confirmation (see the top). |
+| #28 / #63 (merged `23db797`) | Calendar dates show the same day in every time zone; PDF timestamps follow the advisor's zone (see the top). |
 
 ## #33: live recommendation preview (merged in PR #34)
 - **Engine simulation.** `previewRecommendation` (`src/engines/recommendationPreview.ts`) runs the complete proposal engine in isolation on the current holdings and compares before and after. It covers actual cash offsets, household funding of debt paydowns, new cash lines, missing rates, unvalued holdings and shortfalls. Nothing is inferred by negating the position change: a cash position's own change moves no other cash.
@@ -355,5 +379,5 @@ The previous release, `60f43bf` (merge of #30), was smoke-tested the same day. O
    - **Silent failure.** A failed refresh says nothing.
    - **Staleness isn't used.** `isStale` exists but nothing sets or uses it. The sample's rates are dated 2026-04-30.
    - **PDF.** The PDF names the rate source but not the rates or their dates.
-3. **#28** (dates shown a day early west of UTC): in review as PR #63 (see the top); merge only on approval. Kept separate from #26.
+3. ~~**#28** (dates shown a day early west of UTC)~~: merged in PR #63 as `23db797` and live (see the release checkpoint at the top). Follow-up #64 (UTC "today" writes) is logged and not started.
 4. Backlog enhancements (#11–#19) stay parked until chosen.

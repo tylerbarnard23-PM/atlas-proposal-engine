@@ -1,6 +1,6 @@
 # R18 — Review valuation and FX refresh changes before applying them
 
-Accepted for planning: 22 October 2026. **Status: Planned.** The P0 #26 slice is complete (PR #60, merged `e54d56e`, 22 October 2026); the reviewable candidate refresh and the rest of this plan are not implemented.
+Accepted for planning: 22 October 2026. **Status: Planned.** The P0 slices are complete: #26 (PR #60, merged `e54d56e`) and #28 (PR #63, merged `23db797`), 22 October 2026. The reviewable candidate refresh and the rest of this plan are not implemented.
 Tracking issue: #51. Parent roadmap: #36. Original review recommendation: **18 of 25**.
 Phase: P0 fixes; P1 reviewable refresh. Relative scope: M; no calendar estimate is committed.
 Canonical plan: [R18-valuation-and-fx-review.md](R18-valuation-and-fx-review.md).
@@ -24,7 +24,7 @@ The advisor sees exactly what refreshed, what stayed and how a candidate refresh
 - Date-only labels follow #28; source timestamps and confirmation times retain instant semantics.
 
 ## Implementation slices
-1. Deliver #26 and #28 separately (PR #34 is merged; #26 is done in PR #60; #28 is in review as PR #63).
+1. Deliver #26 and #28 separately (PR #34 is merged; #26 is done in PR #60; #28 is done in PR #63).
 2. Add candidate refresh/status results and current-versus-candidate valuation comparison.
 3. Expose changed recommendation effects and approval/review consequences before commit.
 4. Use shared readiness in UI, Copilot and PDF route and list rates actually used in output.
