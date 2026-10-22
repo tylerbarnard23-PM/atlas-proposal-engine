@@ -2,6 +2,13 @@
 
 ## R23a workspace backup and restore — 22 October 2026 (PR #66, in review, not merged)
 
+**Saved state, end of 22 October 2026**
+- **PR #66 is open and unmerged.** Branch `feat/r23a-backup-restore` is pushed. Its last code commit is the relinking fix (`36f184b`), followed by docs (`1a6cb43`).
+- **CI on the relinking head** (run 39840998371): typecheck; 22 test files, **376 passed and 2 skipped (378 total)**; extraction eval; build. All passed.
+- **Clean-up:** the browser's saved workspace was restored byte-identical after every check (102 holdings, 200,907 bytes), and every task-started dev server was stopped. Nothing was merged or deployed.
+- **Next session:** Codex reviews the final relinking changes (`36f184b`: `linkToHolding`, the editor picker, `tests/recommendationRelink.test.ts`) before any merge of PR #66. Merge only on the owner's approval.
+- **Untouched:** R23b (several engagements, switching and archiving) and the other roadmap items, including #61 and #64. #55 stays open.
+
 Branch `feat/r23a-backup-restore` from main `5bd1e7b` (the merge of release-checkpoint PR #65, pinned to `54b8182`). It's part of #55; **#55 stays open** for R23b (several engagements, switching and archiving), which is not implemented. The design was recorded on #55 before coding (comment 6348256683).
 
 - **What it does.**
