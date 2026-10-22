@@ -21,6 +21,13 @@ import { ProposalPdfTemplate } from "@/pdf/templates/ProposalPdfTemplate";
 import { DEFAULT_PROPOSAL_SECTIONS } from "@/engines/proposalEngine";
 import { SEED_ADVISOR, SEED_CLIENT } from "@/data/seedClient";
 import { DISCLOSURE_LIBRARY } from "@/domain/disclosureLibrary";
+import { chromium } from "./support/fakeChromium";
+
+// The final-PDF route's browser stage is faked (see support/fakeChromium): its
+// readiness tests passed through a real Chromium launch and PDF print, which
+// stalled on CI.
+vi.mock("puppeteer-core", async () => (await import("./support/fakeChromium")).puppeteerModule);
+vi.mock("@/pdf/chromiumPath", async () => (await import("./support/fakeChromium")).chromiumPathModule);
 
 // Issue #26: FX refresh merges instead of replacing, freshness is computed
 // from dates with an injected clock, and stale rates actually used by the
@@ -265,21 +272,44 @@ describe("explicit confirmation", () => {
     expect(incomplete.find((x) => x.code === "fx_current")!.passed).toBe(true);
   });
 
-  it.skip("the final-PDF route refuses stale rates without a valid confirmation, using the server clock", async () => {
+  it("the final-PDF route refuses stale rates without a valid confirmation, using the server clock", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(NOW);
+    chromium.reset();
     const { POST } = await import("@/app/api/proposals/[id]/generate-pdf/route");
     const post = async (extra: object) => {
       const state = { ...base(), sections: [], proposal: { id: "p1" }, ...extra };
       const res = await POST(new Request("http://localhost/api/proposals/p1/generate-pdf?variant=final", { method: "POST", body: JSON.stringify({ state }) }), { params: Promise.resolve({ id: "p1" }) });
-      return res.status === 422 ? ((await res.json()).failing as string[]) : [];
+      return { status: res.status, failing: res.status === 422 ? ((await res.json()).failing as string[]) : [], type: res.headers.get("content-type") };
     };
-    expect(await post({})).toContain("Exchange rates current");
+    const fxOnly = { status: 422, failing: ["Exchange rates current"] };
     const c = confirmStaleRates({ ...stale(), now: NOW })!;
-    expect(await post({ fxConfirmation: c })).not.toContain("Exchange rates current");
-    // A confirmation the client claims is still valid, but whose fingerprint doesn't match, is refused.
-    expect(await post({ fxConfirmation: { ...c, fingerprint: "0000000000000000" } })).toContain("Exchange rates current");
-  }, 30_000); // the route's first import can exceed the 5 s default on CI
+    // Missing.
+    expect(await post({})).toMatchObject(fxOnly);
+    // Malformed: not a confirmation record at all, or unreadable times.
+    expect(await post({ fxConfirmation: { ...c, pairs: "EUR/USD" } })).toMatchObject(fxOnly);
+    expect(await post({ fxConfirmation: { ...c, confirmedAt: "garbage" } })).toMatchObject(fxOnly);
+    // Changed: a forged fingerprint, or the covered rate itself.
+    expect(await post({ fxConfirmation: { ...c, fingerprint: "0000000000000000" } })).toMatchObject(fxOnly);
+    expect(await post({ fxConfirmation: c, fxRates: [rate("EUR", "USD", 1.2), ...base().fxRates.slice(1)] })).toMatchObject(fxOnly);
+    // Expired, by the server's clock alone.
+    vi.setSystemTime(new Date(Date.parse(c.expiresAt)));
+    expect(await post({ fxConfirmation: c })).toMatchObject(fxOnly);
+    vi.setSystemTime(NOW);
+    // Valid, but another gate fails: still refused, for that reason only.
+    expect(await post({ fxConfirmation: c, holdings: [...base().holdings, holding("aud_eq", "AUD", 1)] })).toMatchObject({
+      status: 422,
+      failing: ["All holdings valued in the reporting currency"],
+    });
+    expect(await post({ fxConfirmation: c, recommendations: [] })).toMatchObject({ status: 422, failing: ["At least one approved recommendation included in PDF"] });
+    expect(chromium.launches).toBe(0); // nothing refused reached the browser
+    // Valid, and every check passes: the route renders the proposal and reaches the browser boundary.
+    expect(await post({ fxConfirmation: c })).toEqual({ status: 200, failing: [], type: "application/pdf" });
+    expect(chromium.launches).toBe(1);
+    expect(chromium.closed).toBe(1);
+    expect(chromium.html[0]).toContain("Exchange rates used in this proposal");
+    expect(chromium.html[0]).toContain("were confirmed by the advisor on");
+  });
 });
 
 describe("honest status in the outputs", () => {

@@ -24,7 +24,7 @@ Branch `fix/fx-refresh-staleness` from main `618e670`. Implements #26's accepted
 - Finding 2: the clock's boundary, expiry without workspace edits (server readiness agrees at the same instant), the day-7/day-8 midnight and return-to-page refresh, with no timer left after unsubscribing.
 - Finding 3 reproduced on `ad3ea98` (invalid `expiresAt`, a 2099 `expiresAt` and a future `confirmedAt` were all valid). Now invalid, at the policy and the final-PDF route (422), with the exact 7-day boundary and the missing-rate gate kept.
 - Also found and fixed: a current leg turning stale after confirmation isn't covered by it; a stored `USD/USD` identity rate is no longer reported as "not returned" by a refresh.
-- CI: the final-PDF-route test in `fxPolicy.test.ts` timed out at 5 s on CI (`b976bf3`, `c11ce20`, `6dcdefd`; 2.3 s when it passed on `ad3ea98`) on the route's first import. The two FX route tests now have an explicit 30 s timeout; assertions unchanged.
+- CI: see "CI timeout: cause and fix" below (the earlier "first import" explanation was wrong).
 
 **Shared-clock follow-up (on `7afdd86`):**
 - **Bug (reproduced first).** The page subscribes to the clock at 12:00 and the user confirms at 12:10, with no midnight, focus or edit in between.
@@ -40,6 +40,37 @@ Branch `fix/fx-refresh-staleness` from main `618e670`. Implements #26's accepted
   - Withdrawing and confirming again 15 minutes later works.
   - The exact expiry still fires by time alone, and no timer is left afterwards.
   - Separately, a deadline already passed in real time but not by the snapshot ticks at once.
+
+**CI timeout: cause and fix (after `790ab58`, run 39813520266).**
+- **What failed.** The fxPolicy test "the final-PDF route refuses stale rates without a valid confirmation" timed out:
+  - at 5 s on `b976bf3`, `c11ce20` and `6dcdefd`;
+  - at 30 s on `790ab58`;
+  - it passed in 2.3 s on `ad3ea98`.
+- **Where it stalled.** Its valid-confirmation request passed every readiness check, so the route went on to resolve the runner's Chrome, launch it and print a real PDF; it was the only route test that got that far. A temporary diagnostic commit (`df6028f`, run 39818495413, removed in the next commit) timed each stage on CI:
+  - route import: 91 ms;
+  - readiness and template render: ~0.2 s;
+  - **launching `/usr/bin/google-chrome`: 25.3 s.** Chrome printed nothing for 14 s, then D-Bus errors, and DevTools was listening at 19 s;
+  - page, content, PDF and close: ~3.4 s;
+  - total: 200 `application/pdf` at 28.9 s.
+  - The same route run straight afterwards took 0.5 s (launch 0.22 s).
+- **Conclusion.** The cost is Chrome's first, cold start on a busy CI runner, not the import (my earlier "cold import" explanation and its 30 s timeout were wrong).
+- **Fake `Date`.** `Date` stayed frozen at `NOW` through every stage and the PDF still completed, so fake time doesn't block this path. Chrome's 19 s start happens in its own process, before puppeteer connects. The probe always ran the fake-`Date` case first, so the order wasn't swapped.
+- **Fix.**
+  - The readiness-focused route tests in `fxPolicy.test.ts` and `fxReview.test.ts` replace only the Chromium boundary: `puppeteer-core` and the host-browser lookup, in `tests/support/fakeChromium.ts`. They keep the real route, request parsing, server-clock readiness and template rendering.
+  - The 30 s timeouts are removed; the route tests now take 60–110 ms.
+- **What the tests now assert.**
+  - Missing, malformed (not a record, or unreadable time), changed (forged fingerprint, or the covered rate itself) and expired (server clock) confirmations each return 422 with only "Exchange rates current" failing.
+  - A valid confirmation alongside another failure (an unvalued holding, or no approved recommendation) returns 422 for that check only.
+  - Nothing refused launches a browser.
+  - With every check passing, the route renders the proposal (including the rates-used block and the confirmation) and reaches the browser boundary, returning 200 `application/pdf` and closing the browser.
+- **Checks on the fix.**
+  - The focused files passed 10 runs in a row.
+  - With the route's readiness gate bypassed, both route tests fail.
+  - The store test restores the store, its clock subscription and its deadline even if an assertion fails.
+- **Real PDF generation** stays covered separately:
+  - the recorded local smoke (draft PDFs generated through the local route and inspected visually);
+  - the diagnostic CI run (real Chrome, 200 `application/pdf`);
+  - the same probe run locally on this code, under both fake and real `Date`.
 
 **Validation (run on the branch):**
 

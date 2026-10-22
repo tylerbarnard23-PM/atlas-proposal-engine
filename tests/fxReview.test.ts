@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Account, FxConfirmation, FxRate, Holding, SourceDocument } from "@/domain/types";
@@ -10,6 +10,13 @@ import { DEFAULT_PROPOSAL_SECTIONS } from "@/engines/proposalEngine";
 import { ProposalPdfTemplate } from "@/pdf/templates/ProposalPdfTemplate";
 import { SEED_ADVISOR, SEED_CLIENT } from "@/data/seedClient";
 import { DISCLOSURE_LIBRARY } from "@/domain/disclosureLibrary";
+import { chromium } from "./support/fakeChromium";
+
+// The final-PDF route's browser stage is faked (see support/fakeChromium): its
+// readiness tests passed through a real Chromium launch and PDF print, which
+// stalled on CI.
+vi.mock("puppeteer-core", async () => (await import("./support/fakeChromium")).puppeteerModule);
+vi.mock("@/pdf/chromiumPath", async () => (await import("./support/fakeChromium")).chromiumPathModule);
 
 // Review of PR #60 (2026-10-22): a confirmation is bound to every rate the
 // calculations use, browser status follows the clock without workspace
@@ -187,6 +194,10 @@ describe("confirming on a page that has been open a while (shared clock)", () =>
     const { fxClock } = await import("@/engines/fxClock");
     const { fxDeadline } = await import("@/engines/fxPolicy");
     const input = ws([holding("eur", "EUR", 1_000)], [rate("EUR", "USD", 1.1, OLD)]);
+    const saved = useAtlasStore.getState();
+    onTestFinished(() => {
+      useAtlasStore.setState(saved, true); // restore the store for other tests
+    });
     useAtlasStore.setState({
       holdings: input.holdings,
       accounts: ACCOUNTS,
@@ -205,6 +216,11 @@ describe("confirming on a page that has been open a while (shared clock)", () =>
     };
     let notified = 0;
     const unsubscribe = fxClock.subscribe(() => notified++); // the page mounts at 12:00
+    onTestFinished(() => {
+      // Even if an assertion fails: no subscription or deadline outlives the test.
+      fxClock.setDeadline("test", null);
+      unsubscribe();
+    });
     expect(view()).toMatchObject({ panel: "none", notice: true, ready: false });
 
     vi.setSystemTime(new Date(NOW.getTime() + 10 * 60_000)); // 12:10: no boundary, event or edit
@@ -264,11 +280,13 @@ describe("confirmation time semantics", () => {
 
   it("the final-PDF route rejects them, and the missing-data gates still apply", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
+    chromium.reset();
     const { POST } = await import("@/app/api/proposals/[id]/generate-pdf/route");
     const post = async (fxConfirmation: FxConfirmation, holdings = input.holdings, sourceDocuments: SourceDocument[] = []) => {
       const body = { state: { client: SEED_CLIENT, advisor: SEED_ADVISOR, accounts: ACCOUNTS, holdings, recommendations: [], disclosures: DISCLOSURE_LIBRARY, fxRates: input.fxRates, sourceDocuments, sections: [], proposal: { id: "p1" }, fxConfirmation } };
       const res = await POST(new Request("http://localhost/api/proposals/p1/generate-pdf?variant=final", { method: "POST", body: JSON.stringify(body) }), { params: Promise.resolve({ id: "p1" }) });
-      return res.status === 422 ? ((await res.json()).failing as string[]) : [];
+      expect(res.status).toBe(422);
+      return (await res.json()).failing as string[];
     };
     vi.setSystemTime(after(8));
     expect(await post({ ...c(), expiresAt: "not a date" })).toContain("Exchange rates current");
@@ -276,8 +294,11 @@ describe("confirmation time semantics", () => {
     vi.setSystemTime(NOW);
     expect(await post(confirmStaleRates({ ...input, now: after(1) })!)).toContain("Exchange rates current");
     // A valid confirmation clears only this check: an unvalued holding still blocks.
-    expect(await post(c(), [...input.holdings, holding("aud", "AUD", 1)])).toContain("All holdings valued in the reporting currency");
-  }, 30_000); // the route's first import can exceed the 5 s default on CI
+    const unvalued = await post(c(), [...input.holdings, holding("aud", "AUD", 1)]);
+    expect(unvalued).toContain("All holdings valued in the reporting currency");
+    expect(unvalued).not.toContain("Exchange rates current");
+    expect(chromium.launches).toBe(0);
+  });
 });
 
 describe("refresh summary", () => {
