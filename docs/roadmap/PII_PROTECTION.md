@@ -129,3 +129,7 @@ Guidance checked 22 October 2026:
 - [Claude consumer/Code training policy](https://privacy.claude.com/en/articles/10023580-is-my-data-used-for-model-training)
 
 Policies and supported vendor features must be rechecked at implementation. This plan is not a claim of GLBA, SEC, GDPR, SOC 2 or other legal/regulatory/certification compliance.
+
+## Agent-provider evaluation integration
+
+R22 / #54's [AGENT_EVALUATION.md](AGENT_EVALUATION.md) uses synthetic fixtures and sanitized reports. Provider adapters, model-bound tool results, retries and any explicitly configured fallback inherit this privacy gate. No silent cross-vendor fallback; behavioral evaluation does not approve a vendor's processing/retention/region policy. Observability must not retain unrestricted prompts, raw tool payloads, reasoning text or client identifiers. Test allowed/forbidden fields using synthetic canaries in every provider path, including errors and retries. No real-data provider or live deployment is enabled by this plan.

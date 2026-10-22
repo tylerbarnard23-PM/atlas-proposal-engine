@@ -113,3 +113,7 @@ Confirm repository and working-tree state without discarding work. PR #34 is mer
 
 Next, follow existing #26's accepted policy/comment and R18's sequencing, with #28 kept separate. Use one bounded implementation branch/PR and the required validation. Before later schema migrations, deliver R23a backup/validated restore. Follow the selected plan's dependencies and preserve the existing engines, saved data, currencies, import safeguards and working links. Update the roadmap and handoff with actual evidence. Do not start all 25 at once or claim planned features are already delivered.
 ```
+
+## Agent changes require separate evidence
+
+For R22 / #54 follow [AGENT_EVALUATION.md](AGENT_EVALUATION.md). Keep provider SDK details behind a minimal adapter while shared deterministic tools enforce authority and financial correctness. Offline loop tests run in CI; synthetic paid live-model evaluations are opt-in with explicit budgets; browser tests distinguish fake-provider integration from real-model evidence. Provider/model/prompt/tool changes need relevant live regression evidence before release. Preserve requested versus actual model provenance, privacy-safe traces, bounded retries and draft deduplication. Additional providers are experimental until evaluated and approved under #59. Do not imply Claude Code/Desktop is an Atlas installation dependency or a subscription includes API credit.

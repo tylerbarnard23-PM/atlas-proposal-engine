@@ -1,5 +1,9 @@
 # Handoff
 
+## Agent planning addition — 22 October 2026
+
+R22 / issue #54 now includes [AGENT_EVALUATION.md](roadmap/AGENT_EVALUATION.md): Claude-first provider adapter/configuration, optional separately evaluated providers, offline orchestration tests, paid opt-in synthetic live evaluations and browser acceptance. Atlas users do not need Claude Desktop/Code; the current no-key demo remains scripted and the live implementation remains Anthropic-specific until changed. Evaluate cheaper models before changing the default. No paid calls, runtime changes or additional provider approval occur in this save. Preserve #59 and #26 then #28 sequencing; foundational agent tests may precede later contextual features. Do not substitute parser/demo/tool tests for proof of live-agent behavior.
+
 ## PII planning addition — 22 October 2026
 
 The owner asked how to secure client data. Issue #59 and [PII_PROTECTION.md](roadmap/PII_PROTECTION.md) now define a prerequisite across the roadmap. Keep all 25 original IDs intact. Start with data inventory, minimal/pseudonymous payloads and retention boundaries; require working identity/authorization, encrypted persistence/key management, safe logs/exports and verified egress/isolation tests before real client use. Public demo remains synthetic-only. These controls are planned, not implemented, and no production configuration changed.

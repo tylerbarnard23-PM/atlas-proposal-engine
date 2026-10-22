@@ -113,3 +113,7 @@ For every implementation: identify the exact issue/slice, preserve saved data, r
 Read [CLAUDE_HANDOFF.md](docs/CLAUDE_HANDOFF.md), this roadmap and [IMPLEMENTATION_GUIDE.md](docs/roadmap/IMPLEMENTATION_GUIDE.md). PR #34 is merged; implement the already accepted #26 direction as its own change next, with #28 separate. Use R23a before the larger stored-schema migrations. New construction work starts from R07/R12/R02 contracts and progresses through R05/R04/R06 to R03.
 
 Keep work in bounded PRs. Record real commit heads, checks and preview/deployment evidence; do not assume a delayed Vercel preview belongs to a newer commit.
+
+## Agent provider and evaluation requirement — 22 October 2026
+
+R22 / #54 now includes [provider support and agent evaluation](docs/roadmap/AGENT_EVALUATION.md). Keep Claude as the first supported provider behind a minimal adapter; Atlas installation does not require Claude Desktop/Code, and scripted demo mode needs no key. Additional providers require their own behavioral evidence and #59 vendor/privacy approval. Add offline orchestration tests to CI, opt-in budgeted synthetic live-model evaluations, and browser acceptance flows. Record numerical evidence, authority boundaries, actual model, task quality, cost and latency; parser eval results are not agent eval results. Foundation tests may be a bounded earlier slice; contextual UI dependencies and #26 then #28 sequencing remain unchanged. All new capabilities remain Planned.

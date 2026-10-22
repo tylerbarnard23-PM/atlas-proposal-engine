@@ -41,6 +41,20 @@ Assistance explains or drafts a bounded change using the current context and det
 - Browser: mode indicator, draft preview and cancel/save without unintended writes.
 For implementation, also follow repository-required typecheck, full tests, extraction eval, production build and a relevant browser check. Do not claim these passed from this planning work.
 
+## Provider support and agent evaluation addition — 22 October 2026
+
+Follow [AGENT_EVALUATION.md](AGENT_EVALUATION.md) as part of R22 / #54. Keep Claude as the first supported live provider behind a small typed adapter; do not require Claude Desktop/Code to install Atlas. Demo mode requires no key. Additional providers are optional, experimental until evaluated, and subject to #59; no paid service or default model change is selected here.
+
+Add offline live-loop tests to normal CI, opt-in bounded paid live-model evaluations, and browser acceptance coverage. Tool/demo/parser tests alone do not establish live-agent quality. Foundation tests can be delivered before the later contextual UI work.
+
+Additional acceptance:
+- [ ] Current Anthropic behavior survives the adapter; unsupported provider/model/effort combinations fail clearly, with no silent vendor failover.
+- [ ] Requested/actual model, mode, evidence and bounded execution outcomes are visible with privacy-safe observability.
+- [ ] Offline tests cover multi-turn tool execution, errors/refusals/truncation, retries/limits, no duplicate drafts and enforced authority.
+- [ ] A versioned synthetic live suite measures supported numerical claims, tool selection, task outcomes, injection handling, costs and latency against predefined gates.
+- [ ] Browser tests cover evidence → simulation → review/save → advisor approval → matching proposal, cancellation/reload and stale context.
+- [ ] Every supported model/provider has its own recorded evaluation evidence; no production-grade claim follows from agent presence alone.
+
 ## Dependencies and sequencing
 - [R03](R03-allocation-workspace.md)
 - [R08](R08-contextual-holding-preview.md)
