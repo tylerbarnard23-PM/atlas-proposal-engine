@@ -6,7 +6,7 @@ Read [ROADMAP.md](../../ROADMAP.md) and the selected R01–R25 plan before codin
 
 The owner selected the complete numbered roadmap. Do not ask again whether those directions should be planned or implemented. Use the detailed plan and session context for routine choices. Surface a concrete unresolved decision when it materially changes financial meaning, requires a paid/new external service or changes the selected scope; continue independent work while that decision is resolved.
 
-The current task saved plans only. PR #34 remains open for review at b95f6ce30be0ebfe290dea6f687e0fc54b352580. Review it before its follow-up. Existing merge/deployment approval requirements remain in effect. No new branding name, provider purchase, live-model enablement or trade execution is selected.
+The roadmap save recorded plans only. PR #34 has since been reviewed, fixed and merged (`4e6da18`); its follow-up (R08) builds on it. Existing merge/deployment approval requirements remain in effect. No new branding name, provider purchase, live-model enablement or trade execution is selected.
 
 ## Shared implementation rules
 
@@ -50,7 +50,7 @@ Use the existing engines and clearly typed input/output contracts; the UI must n
 ## Migration sequence
 
 1. R23a adds schema-validated export/restore before substantial persisted-schema changes.
-2. Preserve the current v5 workspace and its current currency/approval behavior as a migration fixture. Existing PR #34 tests remain a baseline after its review.
+2. Preserve the current v5 workspace and its current currency/approval behavior as a migration fixture. Existing PR #34 tests (merged) remain a baseline.
 3. Add the minimum scope, objective and explicit-intent contracts; do not silently reinterpret legacy monetary instructions.
 4. Migrate recommendations into an editable legacy scenario with equivalent effects. Flag ambiguous intent for restatement, without rewriting the historical evidence.
 5. Add proposed positions, funding and model targets against that scenario.
@@ -109,7 +109,7 @@ Update ROADMAP.md, the issue and CLAUDE_HANDOFF.md at each stopping point. Repor
 Read docs/CLAUDE_HANDOFF.md, ROADMAP.md and docs/roadmap/IMPLEMENTATION_GUIDE.md.
 All 25 numbered enhancements are accepted; the saved work is planning, not implementation.
 
-Confirm repository and working-tree state without discarding work. PR #34 remains the first review checkpoint at b95f6ce30be0ebfe290dea6f687e0fc54b352580. Review its exact current head and report concrete findings; do not merge it without the owner's explicit approval.
+Confirm repository and working-tree state without discarding work. PR #34 is merged (4e6da18) and live; its checkpoint is resolved.
 
-After that checkpoint is resolved, follow existing #26's accepted policy/comment and R18's sequencing, with #28 kept separate. Use one bounded implementation branch/PR and the required validation. Before later schema migrations, deliver R23a backup/validated restore. Follow the selected plan's dependencies and preserve the existing engines, saved data, currencies, import safeguards and working links. Update the roadmap and handoff with actual evidence. Do not start all 25 at once or claim planned features are already delivered.
+Next, follow existing #26's accepted policy/comment and R18's sequencing, with #28 kept separate. Use one bounded implementation branch/PR and the required validation. Before later schema migrations, deliver R23a backup/validated restore. Follow the selected plan's dependencies and preserve the existing engines, saved data, currencies, import safeguards and working links. Update the roadmap and handoff with actual evidence. Do not start all 25 at once or claim planned features are already delivered.
 ```

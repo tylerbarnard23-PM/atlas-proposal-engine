@@ -3,7 +3,7 @@
 Accepted for planning: 22 October 2026. **Status: Planned; not implemented by this document.**
 Tracking issue: #51. Parent roadmap: #36. Original review recommendation: **18 of 25**.
 Phase: P0 fixes; P1 reviewable refresh. Relative scope: M; no calendar estimate is committed.
-Canonical plan: [R18-valuation-and-fx-review.md](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R18-valuation-and-fx-review.md).
+Canonical plan: [R18-valuation-and-fx-review.md](R18-valuation-and-fx-review.md).
 
 ## Advisor problem
 Partial FX replacement, stale/provenance gaps and silent refresh failure can alter or invalidate a draft without a clear explanation.
@@ -24,7 +24,7 @@ The advisor sees exactly what refreshed, what stayed and how a candidate refresh
 - Date-only labels follow #28; source timestamps and confirmation times retain instant semantics.
 
 ## Implementation slices
-1. Deliver #26 and #28 separately after reviewing PR #34.
+1. Deliver #26 and #28 separately (PR #34 is merged).
 2. Add candidate refresh/status results and current-versus-candidate valuation comparison.
 3. Expose changed recommendation effects and approval/review consequences before commit.
 4. Use shared readiness in UI, Copilot and PDF route and list rates actually used in output.
@@ -67,4 +67,4 @@ Capture actual evidence in the issue/PR; no usability results are assumed.
 ## Out of scope / boundary
 No automatic provider subscription, silent stale acceptance or actual transaction FX quotation.
 
-All work follows the shared implementation rules in [IMPLEMENTATION_GUIDE.md](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/IMPLEMENTATION_GUIDE.md). PR #34 stays a separate review checkpoint; no feature is closed by saving this plan.
+All work follows the shared implementation rules in [IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md). PR #34 stays a separate review checkpoint; no feature is closed by saving this plan.

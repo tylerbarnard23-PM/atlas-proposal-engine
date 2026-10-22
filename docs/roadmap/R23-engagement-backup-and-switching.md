@@ -3,7 +3,7 @@
 Accepted for planning: 22 October 2026. **Status: Planned; not implemented by this document.**
 Tracking issue: #55. Parent roadmap: #36. Original review recommendation: **23 of 25**.
 Phase: P0 backup; P1/P2 client isolation. Relative scope: L staged; no calendar estimate is committed.
-Canonical plan: [R23-engagement-backup-and-switching.md](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R23-engagement-backup-and-switching.md).
+Canonical plan: [R23-engagement-backup-and-switching.md](R23-engagement-backup-and-switching.md).
 
 ## Advisor problem
 Reload persistence is useful, but starting another client clears the engagement and there is no backup/client list flow.
@@ -63,7 +63,7 @@ Capture actual evidence in the issue/PR; no usability results are assumed.
 ## Out of scope / boundary
 No silent cloud sync, institutional retention claim or real-client hosting authorization.
 
-All work follows the shared implementation rules in [IMPLEMENTATION_GUIDE.md](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/IMPLEMENTATION_GUIDE.md). PR #34 stays a separate review checkpoint; no feature is closed by saving this plan.
+All work follows the shared implementation rules in [IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md). PR #34 stays a separate review checkpoint; no feature is closed by saving this plan.
 
 ## Client-data privacy prerequisite
 

@@ -4,27 +4,39 @@
 
 The owner asked how to secure client data. Issue #59 and [PII_PROTECTION.md](roadmap/PII_PROTECTION.md) now define a prerequisite across the roadmap. Keep all 25 original IDs intact. Start with data inventory, minimal/pseudonymous payloads and retention boundaries; require working identity/authorization, encrypted persistence/key management, safe logs/exports and verified egress/isolation tests before real client use. Public demo remains synthetic-only. These controls are planned, not implemented, and no production configuration changed.
 
+## Checkpoint update — 22 October 2026: PR #34 merged and live
+
+- **PR #34 (#33) merged** at reviewed head `c632b13` as merge commit `4e6da18` (`4e6da186a62e92b76d886e6e32e67af23410a688`). Before merging: the head was verified unchanged, the PR was mergeable/clean, and both checks (typecheck/test/build, Vercel preview) passed on that exact commit. `main` has no branch protection, so those checks are the only gate.
+- **Production:** deployment `dpl_Ef4fRq6dTx6WXe9hCQYovk4rmKpT` for `4e6da18` is READY and aliased to https://atlas-proposal-engine.vercel.app.
+- **Live smoke test** (synthetic workspace; the browser's own saved workspace was restored afterwards):
+  - The dashboard loaded (sample: net worth $17.75M, readiness 12/15).
+  - The recommendation editor showed current $100,000.00, proposed $80,000.00, change −$20,000.00, −20.00%.
+  - For [A target 80,000, B sell 10%], both cards and the editor showed the combined result $72,000.00. The proposal page's Before/After showed Equity $72.0K and Cash $38.0K, matching.
+  - The live draft-PDF route returned 200 `application/pdf` (233 KB, `%PDF-1.4`, SAMPLE_ filename). The PDF's pages weren't opened or inspected.
+- **PR #32** was closed as superseded: its only commit (74aa628) is in main as 46c1230 with identical content.
+- **Next:** #26, then #28, as below. PR #58 (this roadmap) is still open for review.
+
 ## Current roadmap checkpoint — 22 October 2026
 
 Tyler accepted **all 25** recommendations for the advisor workflow roadmap. Detailed plans and tracking are in [ROADMAP.md](../ROADMAP.md), [IMPLEMENTATION_GUIDE.md](roadmap/IMPLEMENTATION_GUIDE.md) and epic [#36](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/36). All feature statuses remain **Planned** until implementation evidence is recorded.
 
 - This save is documentation/issue planning only, on `docs/advisor-roadmap-2026-10-22`, based on main `1d6f0c0a67dac79c2a6a3bbe498fba79793a452c`.
-- PR #31 is merged; PR #34 is the current open review checkpoint at `b95f6ce30be0ebfe290dea6f687e0fc54b352580`. Its precise preview is already implemented on that branch, not recreated by R08.
-- Review #34 first, then existing #26, then #28 separately. Preserve #26's accepted policy and refinements. R23a backup/restore precedes the larger migrations.
+- PR #31 is merged. PR #34 was reviewed and fixed (`c632b13`) and is merged as `4e6da18`; its precise preview is on main and is reused, not recreated, by R08.
+- Next: existing #26, then #28 separately. Preserve #26's accepted policy and refinements. R23a backup/restore precedes the larger migrations.
 - Naming #35 remains separate before LinkedIn publication and must preserve saved data and working links. No name change is made by this save.
 - Four existing issues are expanded; 21 follow-up issues plus the parent roadmap issue track the selected work. #18 coordinates separate policy/tax/version tasks.
 - The accepted roadmap supersedes the older instruction below to park #11–#19 until selected. The owner has now selected the complete roadmap.
 - Routine choices within these accepted plans do not require asking again whether the scope was selected. Existing merge/deployment approval requirements remain.
 - Do not replace this roadmap checkpoint with the older #31/#32 handoff when integrating PR #34; preserve both the #34 validation/limitations and the accepted roadmap.
-- No application behavior, PR #34 head, merge or deployment was changed. No new production smoke test is claimed.
+- The roadmap save itself changed no application behavior and claimed no smoke test. The PR #34 merge, deployment and live smoke test are recorded in the update above.
 
 The text below is retained historical context from the existing handoff. Its older branch/production/next-step statements are superseded by this checkpoint; consult current GitHub refs before work.
 
 The state of the project for the next working session: what's done, how it was checked, what's known to be missing, and what comes next. Update it at the end of each piece of work.
 
-_Last updated: 2026-10-22, on branch `feat/recommendation-preview` (#33, PR #34 open, not merged), after the review fixes below. Order: #34, then #26, then #28._
+_Section last updated: 2026-10-22, when PR #34 was merged (`4e6da18`). Order: #26, then #28._
 
-> **Roadmap checkpoint lives in PR #58** (`docs/advisor-roadmap-2026-10-22`): the accepted 25-item roadmap (epic #36), `ROADMAP.md`, and the PII protection prerequisite #59. When #34 and #58 are both merged, keep #58's roadmap checkpoint and PII section at the top of this file *and* the #33 section below; neither replaces the other. This branch doesn't change the roadmap or #59.
+> The roadmap checkpoint and PII prerequisite (#59) at the top of this file and the #33 section below are both current; neither replaces the other.
 
 ## Working agreements
 - Every bug, idea or parked item gets a GitHub issue; a PR closes its issue.
@@ -35,7 +47,7 @@ _Last updated: 2026-10-22, on branch `feat/recommendation-preview` (#33, PR #34 
 - Don't commit third-party PDFs. The UBS holdings-report sample goes in `tests/fixtures/private/`, which is git-ignored; its tests skip when it's absent.
 
 ## Production
-`main` at **`9d44d9f`** (merge of PR #31, pinned to head `3a1482f`, CI green on that commit) is live: deployment `dpl_4V9aw12vvUreEQq3xYLKdFJaUzEz`, READY, aliased to https://atlas-proposal-engine.vercel.app. Smoke-tested on the live site, 2026-10-21:
+Current production is `4e6da18` (PR #34); see the checkpoint update at the top. Earlier release: `9d44d9f` (merge of PR #31, pinned to head `3a1482f`, CI green on that commit), deployment `dpl_4V9aw12vvUreEQq3xYLKdFJaUzEz`. Smoke-tested on the live site, 2026-10-21:
 - **Existing USD workspace** (a real v4 save in the browser): migrated to v5 with 25 holdings, 6 recommendations and no flags. The proposal's currency and country fields were dropped and effects were unchanged.
 - **EUR reporting with USD-labelled amounts** (the same save set to EUR, plus a mixed recommendation): both money recommendations migrated to EUR with the "USD" label kept as an open review. Maritime's target is still calculated as EUR 181,760, as before the update.
 - **Percentage-only edit** (10% → 20%) on the approved, included mixed recommendation: the approval cleared and the review stayed open. Re-approving left it open.
@@ -50,9 +62,9 @@ The previous release, `60f43bf` (merge of #30), was smoke-tested the same day. O
 | #23 / #27 | Unvalued holdings stay unvalued through the proposal; totals say what they exclude; the final PDF is blocked. |
 | #29 / #30 | PDF statements: values read correctly; account totals reconciled with their currency; positioned holdings reports (UBS sample) read by column geometry; import completeness persisted and enforced. |
 | #24 / #31 (merged `9d44d9f`) | Recommendation amounts keep their own currency (see below). |
-| #33 (this branch, open) | Live recommendation preview from the complete engine (see below). |
+| #33 / #34 (merged `4e6da18`) | Live recommendation preview from the complete engine (see below). |
 
-## #33: live recommendation preview (this branch)
+## #33: live recommendation preview (merged in PR #34)
 - **Engine simulation.** `previewRecommendation` (`src/engines/recommendationPreview.ts`) runs the complete proposal engine in isolation on the current holdings and compares before and after. It covers actual cash offsets, household funding of debt paydowns, new cash lines, missing rates, unvalued holdings and shortfalls. Nothing is inferred by negating the position change: a cash position's own change moves no other cash.
 - **Standalone and combined.** The standalone result is this recommendation alone. The combined result is the full proposal engine's own output with every other approved recommendation, separately labelled "in proposal order".
   - **Order.** The edited recommendation replaces its saved version *in place* by id (never applied twice, saved order kept); a new draft is appended, where saving would put it. Order matters: [A target 80,000, B sell 10%] on 100,000 ends at 72,000, and both cards, the editor and the proposal now agree.
@@ -68,7 +80,7 @@ The previous release, `60f43bf` (merge of #30), was smoke-tested the same day. O
   | Check | Result |
   |---|---|
   | typecheck | pass |
-  | tests | 280 passed in 16 files (278 + 2 skipped without the private PDF) |
+  | tests | 280 of 280 passed locally (16 files) with the private UBS PDF present; without it, as in CI, 278 passed and 2 were skipped |
   | eval | unchanged |
   | build | pass |
   | sample baseline | unchanged |
@@ -117,7 +129,7 @@ The previous release, `60f43bf` (merge of #30), was smoke-tested the same day. O
 | Check | Result |
 |---|---|
 | typecheck | pass |
-| tests | 254 passed in 15 files (252 + 2 skipped in CI without the private PDF) |
+| tests | 254 of 254 passed locally (15 files) with the private UBS PDF present; without it, as in CI, 252 passed and 2 were skipped |
 | eval | unchanged: recall 100%, 0 spurious |
 | build | pass |
 | sample baseline | unchanged (values, readiness, PDF text) |
@@ -152,7 +164,7 @@ The previous release, `60f43bf` (merge of #30), was smoke-tested the same day. O
   - Each card runs a few engine simulations (standalone, with and without others, and one per other approved recommendation to name them). Fine at sample sizes; not measured for very large workspaces.
 
 ## Next step
-1. **#33 / PR #34:** review the fixes; merge only on approval, then confirm the production deploy. PR #32 is superseded by #34 (it carries #32's commit); close it only on the owner's instruction.
+1. ~~#33 / PR #34~~: merged as `4e6da18` and live (see the checkpoint update at the top). PR #32 closed as superseded.
 2. **#26 (FX refresh, retained rates, stale-rate policy):** planning only. The direction is accepted and recorded on #26 (comment 6325161797). Refinements:
    - **Seven calendar days** is an initial product policy, not an institutional standard. Use a named constant, and don't present it as a rule.
    - **A stale-rate confirmation expires** after a defined period (proposed: seven days from the confirmation) as well as when the rates in use change.

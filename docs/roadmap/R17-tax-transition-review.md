@@ -3,7 +3,7 @@
 Accepted for planning: 22 October 2026. **Status: Planned; not implemented by this document.**
 Tracking issue: #50. Parent roadmap: #36. Original review recommendation: **17 of 25**.
 Phase: P3. Relative scope: L; no calendar estimate is committed.
-Canonical plan: [R17-tax-transition-review.md](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R17-tax-transition-review.md).
+Canonical plan: [R17-tax-transition-review.md](R17-tax-transition-review.md).
 
 ## Advisor problem
 Proposed sales and cross-account funding are not accompanied by structured known/unknown tax context.
@@ -42,9 +42,9 @@ Advisors can identify estimated realized gains/losses and implementation questio
 For implementation, also follow repository-required typecheck, full tests, extraction eval, production build and a relevant browser check. Do not claim these passed from this planning work.
 
 ## Dependencies and sequencing
-- [R04](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R04-proposed-investments-and-replacements.md)
-- [R06](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R06-funding-and-cash-controls.md)
-- [R12](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R12-client-objectives-and-constraints.md)
+- [R04](R04-proposed-investments-and-replacements.md)
+- [R06](R06-funding-and-cash-controls.md)
+- [R12](R12-client-objectives-and-constraints.md)
 R23a means the export/restore slice of recommendation 23; R23b means its multi-engagement isolation slice. A dependency on another plan means its required contract/slice must exist, not that all later extensions must ship first.
 
 ## Likely touchpoints
@@ -65,4 +65,4 @@ Capture actual evidence in the issue/PR; no usability results are assumed.
 ## Out of scope / boundary
 No comprehensive tax optimizer, wash-sale guarantee, tax filing or invented tax rates.
 
-All work follows the shared implementation rules in [IMPLEMENTATION_GUIDE.md](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/IMPLEMENTATION_GUIDE.md). PR #34 stays a separate review checkpoint; no feature is closed by saving this plan.
+All work follows the shared implementation rules in [IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md). PR #34 stays a separate review checkpoint; no feature is closed by saving this plan.

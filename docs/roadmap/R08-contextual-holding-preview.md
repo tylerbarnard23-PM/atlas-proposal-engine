@@ -3,7 +3,7 @@
 Accepted for planning: 22 October 2026. **Status: Planned; not implemented by this document.**
 Tracking issue: #43. Parent roadmap: #36. Original review recommendation: **8 of 25**.
 Phase: P2. Relative scope: M; no calendar estimate is committed.
-Canonical plan: [R08-contextual-holding-preview.md](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R08-contextual-holding-preview.md).
+Canonical plan: [R08-contextual-holding-preview.md](R08-contextual-holding-preview.md).
 
 ## Advisor problem
 PR #34 supplies precise previews, but advisors still start on a separate recommendation page and may miss cross-account interactions.
@@ -42,10 +42,10 @@ For implementation, also follow repository-required typecheck, full tests, extra
 
 ## Dependencies and sequencing
 - PR #34
-- [R03](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R03-allocation-workspace.md)
-- [R04](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R04-proposed-investments-and-replacements.md)
-- [R05](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R05-draft-scenarios.md)
-- [R06](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R06-funding-and-cash-controls.md)
+- [R03](R03-allocation-workspace.md)
+- [R04](R04-proposed-investments-and-replacements.md)
+- [R05](R05-draft-scenarios.md)
+- [R06](R06-funding-and-cash-controls.md)
 R23a means the export/restore slice of recommendation 23; R23b means its multi-engagement isolation slice. A dependency on another plan means its required contract/slice must exist, not that all later extensions must ship first.
 
 ## Likely touchpoints
@@ -63,6 +63,6 @@ Fewer page changes and correct comprehension of standalone versus combined effec
 Capture actual evidence in the issue/PR; no usability results are assumed.
 
 ## Out of scope / boundary
-Do not rebuild the preview or widen PR #34 before its current review.
+Do not rebuild the preview; PR #34 (merged) is the base to extend.
 
-All work follows the shared implementation rules in [IMPLEMENTATION_GUIDE.md](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/IMPLEMENTATION_GUIDE.md). PR #34 stays a separate review checkpoint; no feature is closed by saving this plan.
+All work follows the shared implementation rules in [IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md). PR #34 stays a separate review checkpoint; no feature is closed by saving this plan.

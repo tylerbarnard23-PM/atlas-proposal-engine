@@ -3,7 +3,7 @@
 Accepted for planning: 22 October 2026. **Status: Planned; not implemented by this document.**
 Tracking issue: #48. Parent roadmap: #36. Original review recommendation: **13 of 25**.
 Phase: P3. Relative scope: M; no calendar estimate is committed.
-Canonical plan: [R13-personalized-insights-and-tasks.md](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R13-personalized-insights-and-tasks.md).
+Canonical plan: [R13-personalized-insights-and-tasks.md](R13-personalized-insights-and-tasks.md).
 
 ## Advisor problem
 Fixed thresholds and repeated manual-valuation notices mix investment opportunities with service/data work.
@@ -42,10 +42,10 @@ Advisors can identify the next useful action for this client's scope and avoid d
 For implementation, also follow repository-required typecheck, full tests, extraction eval, production build and a relevant browser check. Do not claim these passed from this planning work.
 
 ## Dependencies and sequencing
-- [R02](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R02-proposal-scope.md)
-- [R07](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R07-explicit-recommendation-intent.md)
-- [R11](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R11-data-quality-exception-queue.md)
-- [R12](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R12-client-objectives-and-constraints.md)
+- [R02](R02-proposal-scope.md)
+- [R07](R07-explicit-recommendation-intent.md)
+- [R11](R11-data-quality-exception-queue.md)
+- [R12](R12-client-objectives-and-constraints.md)
 R23a means the export/restore slice of recommendation 23; R23b means its multi-engagement isolation slice. A dependency on another plan means its required contract/slice must exist, not that all later extensions must ship first.
 
 ## Likely touchpoints
@@ -66,4 +66,4 @@ Capture actual evidence in the issue/PR; no usability results are assumed.
 ## Out of scope / boundary
 No autonomous advice or unsourced ranking claims.
 
-All work follows the shared implementation rules in [IMPLEMENTATION_GUIDE.md](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/IMPLEMENTATION_GUIDE.md). PR #34 stays a separate review checkpoint; no feature is closed by saving this plan.
+All work follows the shared implementation rules in [IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md). PR #34 stays a separate review checkpoint; no feature is closed by saving this plan.

@@ -3,7 +3,7 @@
 Accepted for planning: 22 October 2026. **Status: Planned; not implemented by this document.**
 Tracking issue: #46. Parent roadmap: #36. Original review recommendation: **11 of 25**.
 Phase: P1. Relative scope: M; no calendar estimate is committed.
-Canonical plan: [R11-data-quality-exception-queue.md](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R11-data-quality-exception-queue.md).
+Canonical plan: [R11-data-quality-exception-queue.md](R11-data-quality-exception-queue.md).
 
 ## Advisor problem
 An aggregate score of 0 hides priorities, and bonds quoted per 100 of face value receive misleading quantity-times-price warnings.
@@ -64,4 +64,4 @@ Capture actual evidence in the issue/PR; no usability results are assumed.
 ## Out of scope / boundary
 No reduction of safeguards simply to improve a score.
 
-All work follows the shared implementation rules in [IMPLEMENTATION_GUIDE.md](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/IMPLEMENTATION_GUIDE.md). PR #34 stays a separate review checkpoint; no feature is closed by saving this plan.
+All work follows the shared implementation rules in [IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md). PR #34 stays a separate review checkpoint; no feature is closed by saving this plan.

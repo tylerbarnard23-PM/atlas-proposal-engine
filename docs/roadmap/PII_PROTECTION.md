@@ -105,7 +105,7 @@ This is a cross-cutting prerequisite supporting R09/R10 source intake, R12 disco
 - **Before any real-client pilot:** server identity/authorization, encrypted persistent storage/key management, approved AI/vendor policy, retention and verified end-to-end boundaries.
 - **Before remote sharing:** additionally prove tenant isolation, private serialization and expiry/revocation from R21.
 
-Keep PR #34's review and existing #26/#28 sequencing intact; privacy planning can proceed alongside them. No auth vendor/database/key service is chosen and no real-client processing is enabled by this document.
+Keep the existing #26/#28 sequencing intact (PR #34 is merged); privacy planning can proceed alongside them. No auth vendor/database/key service is chosen and no real-client processing is enabled by this document.
 
 ## Evidence and primary guidance
 

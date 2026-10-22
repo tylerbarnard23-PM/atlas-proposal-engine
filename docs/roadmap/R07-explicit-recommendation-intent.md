@@ -3,7 +3,7 @@
 Accepted for planning: 22 October 2026. **Status: Planned; not implemented by this document.**
 Tracking issue: #42. Parent roadmap: #36. Original review recommendation: **7 of 25**.
 Phase: P1. Relative scope: M; no calendar estimate is committed.
-Canonical plan: [R07-explicit-recommendation-intent.md](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R07-explicit-recommendation-intent.md).
+Canonical plan: [R07-explicit-recommendation-intent.md](R07-explicit-recommendation-intent.md).
 
 ## Advisor problem
 A missing amount can imply a full sale or 50% reduction/paydown; service tasks share an oversized investment-action form.
@@ -64,4 +64,4 @@ Capture actual evidence in the issue/PR; no usability results are assumed.
 ## Out of scope / boundary
 Do not change recommendation currencies, resolve migration flags incidentally or execute any action.
 
-All work follows the shared implementation rules in [IMPLEMENTATION_GUIDE.md](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/IMPLEMENTATION_GUIDE.md). PR #34 stays a separate review checkpoint; no feature is closed by saving this plan.
+All work follows the shared implementation rules in [IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md). PR #34 stays a separate review checkpoint; no feature is closed by saving this plan.

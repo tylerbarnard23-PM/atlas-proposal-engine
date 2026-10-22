@@ -3,7 +3,7 @@
 Accepted for planning: 22 October 2026. **Status: Planned; not implemented by this document.**
 Tracking issue: #54. Parent roadmap: #36. Original review recommendation: **22 of 25**.
 Phase: P4. Relative scope: M; no calendar estimate is committed.
-Canonical plan: [R22-contextual-copilot.md](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R22-contextual-copilot.md).
+Canonical plan: [R22-contextual-copilot.md](R22-contextual-copilot.md).
 
 ## Advisor problem
 Separate chat loses the advisor's selected scope/scenario and initial wording can blur scripted demo versus live model.
@@ -42,10 +42,10 @@ Assistance explains or drafts a bounded change using the current context and det
 For implementation, also follow repository-required typecheck, full tests, extraction eval, production build and a relevant browser check. Do not claim these passed from this planning work.
 
 ## Dependencies and sequencing
-- [R03](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R03-allocation-workspace.md)
-- [R08](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R08-contextual-holding-preview.md)
-- [R13](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R13-personalized-insights-and-tasks.md)
-- [R19](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R19-approved-proposal-snapshots.md)
+- [R03](R03-allocation-workspace.md)
+- [R08](R08-contextual-holding-preview.md)
+- [R13](R13-personalized-insights-and-tasks.md)
+- [R19](R19-approved-proposal-snapshots.md)
 R23a means the export/restore slice of recommendation 23; R23b means its multi-engagement isolation slice. A dependency on another plan means its required contract/slice must exist, not that all later extensions must ship first.
 
 ## Likely touchpoints
@@ -66,7 +66,7 @@ Capture actual evidence in the issue/PR; no usability results are assumed.
 ## Out of scope / boundary
 No public live API key, autonomous approvals or prompt-only numeric safety claim.
 
-All work follows the shared implementation rules in [IMPLEMENTATION_GUIDE.md](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/IMPLEMENTATION_GUIDE.md). PR #34 stays a separate review checkpoint; no feature is closed by saving this plan.
+All work follows the shared implementation rules in [IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md). PR #34 stays a separate review checkpoint; no feature is closed by saving this plan.
 
 ## Client-data privacy prerequisite
 

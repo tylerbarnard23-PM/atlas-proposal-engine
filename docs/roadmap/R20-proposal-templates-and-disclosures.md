@@ -3,7 +3,7 @@
 Accepted for planning: 22 October 2026. **Status: Planned; not implemented by this document.**
 Tracking issue: #53. Parent roadmap: #36. Original review recommendation: **20 of 25**.
 Phase: P4. Relative scope: M; no calendar estimate is committed.
-Canonical plan: [R20-proposal-templates-and-disclosures.md](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R20-proposal-templates-and-disclosures.md).
+Canonical plan: [R20-proposal-templates-and-disclosures.md](R20-proposal-templates-and-disclosures.md).
 
 ## Advisor problem
 Many default-selected report sections and generic implementation text obscure the client's decision.
@@ -42,7 +42,7 @@ An advisor can create a clear decision brief or detailed review without repeated
 For implementation, also follow repository-required typecheck, full tests, extraction eval, production build and a relevant browser check. Do not claim these passed from this planning work.
 
 ## Dependencies and sequencing
-- [R19](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R19-approved-proposal-snapshots.md)
+- [R19](R19-approved-proposal-snapshots.md)
 R23a means the export/restore slice of recommendation 23; R23b means its multi-engagement isolation slice. A dependency on another plan means its required contract/slice must exist, not that all later extensions must ship first.
 
 ## Likely touchpoints
@@ -63,4 +63,4 @@ Capture actual evidence in the issue/PR; no usability results are assumed.
 ## Out of scope / boundary
 No claim that automatic disclosure selection constitutes legal/compliance approval.
 
-All work follows the shared implementation rules in [IMPLEMENTATION_GUIDE.md](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/IMPLEMENTATION_GUIDE.md). PR #34 stays a separate review checkpoint; no feature is closed by saving this plan.
+All work follows the shared implementation rules in [IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md). PR #34 stays a separate review checkpoint; no feature is closed by saving this plan.

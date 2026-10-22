@@ -22,7 +22,7 @@ Recommended positioning: an advisor workspace that turns messy, multi-account cl
 ### Atlas inspected
 
 - Current main: `1d6f0c0a67dac79c2a6a3bbe498fba79793a452c`.
-- Open PR #34: `b95f6ce30be0ebfe290dea6f687e0fc54b352580`. It remains unmerged.
+- Open PR #34: `b95f6ce30be0ebfe290dea6f687e0fc54b352580`, unmerged at the time of this review. (Later status, 22 October 2026: reviewed, fixed at `c632b13` and merged as `4e6da18`. The rest of this document records the review as it was.)
 - All 14 navigation destinations were inspected on the public sample: Dashboard, Client Profile, Import Center, Statement Workbench, Accounts & Assets, Market Data, Insights, Recommendations, Proposal Copilot, Proposal Builder, PDF Preview, Assumptions & Disclosures, Firm & Branding, and Settings.
 - The rendered proposal template was inspected directly, including its current/proposed allocation, headline estimates, source tables and implementation text.
 - Relevant source was checked for proposal calculations, recommendation forms, imports, store behavior, data-quality checks, insight rules, PDF output and PR #34 preview logic.

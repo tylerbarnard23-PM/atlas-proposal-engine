@@ -11,8 +11,8 @@ An advisor can reconcile messy client data, choose the assets in scope, construc
 
 ## Current checkpoint
 
-- Main observed before this documentation save: `1d6f0c0a67dac79c2a6a3bbe498fba79793a452c`.
-- PR #34 remains open at `b95f6ce30be0ebfe290dea6f687e0fc54b352580`; review it first. R08 is a separate follow-up, not a duplicate preview or a request to widen #34.
+- Main observed before this documentation save: `1d6f0c0a67dac79c2a6a3bbe498fba79793a452c`. Since then PR #34 was reviewed, fixed and merged: main `4e6da186a62e92b76d886e6e32e67af23410a688`, live in production.
+- PR #34 (the precise live preview) is complete. R08 is a separate follow-up that reuses it, not a duplicate preview.
 - Existing #26 FX work then #28 date rendering remain separate near-term changes.
 - Naming #35 is a separate pre-LinkedIn task; no name has been selected. Preserve browser storage and working links during that transition.
 - This roadmap does not merge, deploy, change hosting, run a new live model, purchase data or authorize external trading.
@@ -31,7 +31,7 @@ Phases indicate dependency order, not dates or fixed-duration sprints. Some plan
 
 | Phase | Bounded delivery | Exit evidence |
 |---|---|---|
-| P0 — secure the checkpoint | Review PR #34; existing #26 then #28; R23a backup/restore; R25 study protocol/baseline | Review findings recorded; saved workspace recoverable; FX/date cases pass; study protocol exists and results remain empty until observed |
+| P0 — secure the checkpoint | ~~Review PR #34~~ (merged `4e6da18`); existing #26 then #28; R23a backup/restore; R25 study protocol/baseline | Review findings recorded; saved workspace recoverable; FX/date cases pass; study protocol exists and results remain empty until observed |
 | P1 — trustworthy inputs | R07 explicit intent; R11 accurate exceptions; R12 client constraints; R02 scope; R09 matched import then R10 source repair; R14 truthful classification; R18 candidate refresh; R23b client isolation | No duplicate parent/position value, no implicit 50% action, scope/unknowns visible, import/valuation/currency gates preserved |
 | P2 — portfolio construction | R05 scenarios; R04 new investments/replacements; R06 explicit funding; R03 targets/workspace; R08 contextual preview; R01 navigation shell | A synthetic account can be reallocated with a reserve, real sell/buy legs, alternative drafts and a reconciled funding ledger, without changing current holdings |
 | P3 — explain and approve | R13 relevant insights; R14 optional exposure enrichment; R15 bounded risk review; R16 costs/income; R17 tax context; R19 snapshots; R12 IPS summary | Every numerical statement is supported or explicitly unavailable; the approved economic package has reproducible versioned inputs |
@@ -110,6 +110,6 @@ For every implementation: identify the exact issue/slice, preserve saved data, r
 
 ## Start next time
 
-Read [CLAUDE_HANDOFF.md](docs/CLAUDE_HANDOFF.md), this roadmap and [IMPLEMENTATION_GUIDE.md](docs/roadmap/IMPLEMENTATION_GUIDE.md). Review PR #34 first, then implement the already accepted #26 direction as its own change, with #28 separate. Use R23a before the larger stored-schema migrations. New construction work starts from R07/R12/R02 contracts and progresses through R05/R04/R06 to R03.
+Read [CLAUDE_HANDOFF.md](docs/CLAUDE_HANDOFF.md), this roadmap and [IMPLEMENTATION_GUIDE.md](docs/roadmap/IMPLEMENTATION_GUIDE.md). PR #34 is merged; implement the already accepted #26 direction as its own change next, with #28 separate. Use R23a before the larger stored-schema migrations. New construction work starts from R07/R12/R02 contracts and progresses through R05/R04/R06 to R03.
 
 Keep work in bounded PRs. Record real commit heads, checks and preview/deployment evidence; do not assume a delayed Vercel preview belongs to a newer commit.

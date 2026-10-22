@@ -3,7 +3,7 @@
 Accepted for planning: 22 October 2026. **Status: Planned; not implemented by this document.**
 Tracking issue: #52. Parent roadmap: #36. Original review recommendation: **19 of 25**.
 Phase: P3 foundation; P4 delivery. Relative scope: L; no calendar estimate is committed.
-Canonical plan: [R19-approved-proposal-snapshots.md](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R19-approved-proposal-snapshots.md).
+Canonical plan: [R19-approved-proposal-snapshots.md](R19-approved-proposal-snapshots.md).
 
 ## Advisor problem
 Current calculations follow changing workspace inputs and approval/prose controls can leave the final economic package unclear.
@@ -42,11 +42,11 @@ Each approved proposal has one reproducible set of inputs, changes, explanations
 For implementation, also follow repository-required typecheck, full tests, extraction eval, production build and a relevant browser check. Do not claim these passed from this planning work.
 
 ## Dependencies and sequencing
-- [R02](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R02-proposal-scope.md)
-- [R05](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R05-draft-scenarios.md)
-- [R06](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R06-funding-and-cash-controls.md)
-- [R07](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R07-explicit-recommendation-intent.md)
-- [R18](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R18-valuation-and-fx-review.md)
+- [R02](R02-proposal-scope.md)
+- [R05](R05-draft-scenarios.md)
+- [R06](R06-funding-and-cash-controls.md)
+- [R07](R07-explicit-recommendation-intent.md)
+- [R18](R18-valuation-and-fx-review.md)
 R23a means the export/restore slice of recommendation 23; R23b means its multi-engagement isolation slice. A dependency on another plan means its required contract/slice must exist, not that all later extensions must ship first.
 
 ## Likely touchpoints
@@ -68,7 +68,7 @@ Capture actual evidence in the issue/PR; no usability results are assumed.
 ## Out of scope / boundary
 No claim of cryptographic immutability, identity assurance or regulatory retention from browser storage alone.
 
-All work follows the shared implementation rules in [IMPLEMENTATION_GUIDE.md](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/IMPLEMENTATION_GUIDE.md). PR #34 stays a separate review checkpoint; no feature is closed by saving this plan.
+All work follows the shared implementation rules in [IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md). PR #34 stays a separate review checkpoint; no feature is closed by saving this plan.
 
 ## Client-data privacy prerequisite
 

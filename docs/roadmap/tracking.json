@@ -6,8 +6,9 @@
   "baselineMain": "1d6f0c0a67dac79c2a6a3bbe498fba79793a452c",
   "checkpoint": {
     "pr": 34,
-    "head": "b95f6ce30be0ebfe290dea6f687e0fc54b352580",
-    "state": "open-for-review"
+    "head": "c632b13ee46199448c473b05d3af8b3d21bc016e",
+    "mergeCommit": "4e6da186a62e92b76d886e6e32e67af23410a688",
+    "state": "merged"
   },
   "recommendations": [
     {

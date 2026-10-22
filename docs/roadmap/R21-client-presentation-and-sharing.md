@@ -3,7 +3,7 @@
 Accepted for planning: 22 October 2026. **Status: Planned; not implemented by this document.**
 Tracking issue: #16. Parent roadmap: #36. Original review recommendation: **21 of 25**.
 Phase: P4 local presentation; P5 protected sharing. Relative scope: L; no calendar estimate is committed.
-Canonical plan: [R21-client-presentation-and-sharing.md](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R21-client-presentation-and-sharing.md).
+Canonical plan: [R21-client-presentation-and-sharing.md](R21-client-presentation-and-sharing.md).
 
 ## Advisor problem
 PDF is the primary deliverable and there is no version-bound interactive client view.
@@ -42,9 +42,9 @@ The advisor can present a concise approved proposal and later share that exact v
 For implementation, also follow repository-required typecheck, full tests, extraction eval, production build and a relevant browser check. Do not claim these passed from this planning work.
 
 ## Dependencies and sequencing
-- [R19](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R19-approved-proposal-snapshots.md)
-- [R20](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R20-proposal-templates-and-disclosures.md)
-- [R23b](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R23-engagement-backup-and-switching.md) — required slice only
+- [R19](R19-approved-proposal-snapshots.md)
+- [R20](R20-proposal-templates-and-disclosures.md)
+- [R23b](R23-engagement-backup-and-switching.md) — required slice only
 R23a means the export/restore slice of recommendation 23; R23b means its multi-engagement isolation slice. A dependency on another plan means its required contract/slice must exist, not that all later extensions must ship first.
 
 ## Likely touchpoints
@@ -64,7 +64,7 @@ Capture actual evidence in the issue/PR; no usability results are assumed.
 ## Out of scope / boundary
 No public raw snapshot URLs, implied e-signature equivalence or automatic trading permission.
 
-All work follows the shared implementation rules in [IMPLEMENTATION_GUIDE.md](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/IMPLEMENTATION_GUIDE.md). PR #34 stays a separate review checkpoint; no feature is closed by saving this plan.
+All work follows the shared implementation rules in [IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md). PR #34 stays a separate review checkpoint; no feature is closed by saving this plan.
 
 ## Client-data privacy prerequisite
 

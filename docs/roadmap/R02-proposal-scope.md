@@ -3,7 +3,7 @@
 Accepted for planning: 22 October 2026. **Status: Planned; not implemented by this document.**
 Tracking issue: #38. Parent roadmap: #36. Original review recommendation: **2 of 25**.
 Phase: P1. Relative scope: L; no calendar estimate is committed.
-Canonical plan: [R02-proposal-scope.md](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R02-proposal-scope.md).
+Canonical plan: [R02-proposal-scope.md](R02-proposal-scope.md).
 
 ## Advisor problem
 Whole-wealth assets, a home and business interest currently enter an investment denominator without an explicit scope decision.
@@ -63,4 +63,4 @@ Capture actual evidence in the issue/PR; no usability results are assumed.
 ## Out of scope / boundary
 No automatic assumption that every household account is managed or tradable.
 
-All work follows the shared implementation rules in [IMPLEMENTATION_GUIDE.md](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/IMPLEMENTATION_GUIDE.md). PR #34 stays a separate review checkpoint; no feature is closed by saving this plan.
+All work follows the shared implementation rules in [IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md). PR #34 stays a separate review checkpoint; no feature is closed by saving this plan.

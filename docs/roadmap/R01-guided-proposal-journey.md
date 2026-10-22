@@ -3,7 +3,7 @@
 Accepted for planning: 22 October 2026. **Status: Planned; not implemented by this document.**
 Tracking issue: #37. Parent roadmap: #36. Original review recommendation: **1 of 25**.
 Phase: P2 shell; P4 complete journey. Relative scope: M; no calendar estimate is committed.
-Canonical plan: [R01-guided-proposal-journey.md](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R01-guided-proposal-journey.md).
+Canonical plan: [R01-guided-proposal-journey.md](R01-guided-proposal-journey.md).
 
 ## Advisor problem
 Fourteen navigation destinations require the advisor to assemble a single client task across modules.
@@ -39,13 +39,13 @@ The advisor can resume and complete Prepare → Set scope & goals → Design →
 For implementation, also follow repository-required typecheck, full tests, extraction eval, production build and a relevant browser check. Do not claim these passed from this planning work.
 
 ## Dependencies and sequencing
-- [R02](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R02-proposal-scope.md)
-- [R03](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R03-allocation-workspace.md)
-- [R08](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R08-contextual-holding-preview.md)
-- [R09](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R09-matched-import-updates.md)
-- [R11](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R11-data-quality-exception-queue.md)
-- [R19](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R19-approved-proposal-snapshots.md)
-- [R20](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R20-proposal-templates-and-disclosures.md)
+- [R02](R02-proposal-scope.md)
+- [R03](R03-allocation-workspace.md)
+- [R08](R08-contextual-holding-preview.md)
+- [R09](R09-matched-import-updates.md)
+- [R11](R11-data-quality-exception-queue.md)
+- [R19](R19-approved-proposal-snapshots.md)
+- [R20](R20-proposal-templates-and-disclosures.md)
 R23a means the export/restore slice of recommendation 23; R23b means its multi-engagement isolation slice. A dependency on another plan means its required contract/slice must exist, not that all later extensions must ship first.
 
 ## Likely touchpoints
@@ -65,4 +65,4 @@ Capture actual evidence in the issue/PR; no usability results are assumed.
 ## Out of scope / boundary
 No wholesale visual redesign, new readiness bypass or removal of expert access.
 
-All work follows the shared implementation rules in [IMPLEMENTATION_GUIDE.md](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/IMPLEMENTATION_GUIDE.md). PR #34 stays a separate review checkpoint; no feature is closed by saving this plan.
+All work follows the shared implementation rules in [IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md). PR #34 stays a separate review checkpoint; no feature is closed by saving this plan.

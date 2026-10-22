@@ -3,7 +3,7 @@
 Accepted for planning: 22 October 2026. **Status: Planned; not implemented by this document.**
 Tracking issue: #40. Parent roadmap: #36. Original review recommendation: **5 of 25**.
 Phase: P2 foundation. Relative scope: L; no calendar estimate is committed.
-Canonical plan: [R05-draft-scenarios.md](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R05-draft-scenarios.md).
+Canonical plan: [R05-draft-scenarios.md](R05-draft-scenarios.md).
 
 ## Advisor problem
 The combined proposed view is coupled to individual approvals, making exploration and comparison awkward.
@@ -42,9 +42,9 @@ Advisors can compare alternatives with a fixed baseline before selecting one for
 For implementation, also follow repository-required typecheck, full tests, extraction eval, production build and a relevant browser check. Do not claim these passed from this planning work.
 
 ## Dependencies and sequencing
-- [R02](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R02-proposal-scope.md)
-- [R07](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R07-explicit-recommendation-intent.md)
-- [R23a](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R23-engagement-backup-and-switching.md) — required slice only
+- [R02](R02-proposal-scope.md)
+- [R07](R07-explicit-recommendation-intent.md)
+- [R23a](R23-engagement-backup-and-switching.md) — required slice only
 R23a means the export/restore slice of recommendation 23; R23b means its multi-engagement isolation slice. A dependency on another plan means its required contract/slice must exist, not that all later extensions must ship first.
 
 ## Likely touchpoints
@@ -65,4 +65,4 @@ Capture actual evidence in the issue/PR; no usability results are assumed.
 ## Out of scope / boundary
 Approved immutable records are R19; this issue owns editable scenarios.
 
-All work follows the shared implementation rules in [IMPLEMENTATION_GUIDE.md](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/IMPLEMENTATION_GUIDE.md). PR #34 stays a separate review checkpoint; no feature is closed by saving this plan.
+All work follows the shared implementation rules in [IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md). PR #34 stays a separate review checkpoint; no feature is closed by saving this plan.

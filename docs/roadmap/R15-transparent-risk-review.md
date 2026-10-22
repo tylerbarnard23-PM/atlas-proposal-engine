@@ -3,7 +3,7 @@
 Accepted for planning: 22 October 2026. **Status: Planned; not implemented by this document.**
 Tracking issue: #12. Parent roadmap: #36. Original review recommendation: **15 of 25**.
 Phase: P3 bounded risk; later quantified analytics. Relative scope: L; no calendar estimate is committed.
-Canonical plan: [R15-transparent-risk-review.md](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R15-transparent-risk-review.md).
+Canonical plan: [R15-transparent-risk-review.md](R15-transparent-risk-review.md).
 
 ## Advisor problem
 A proprietary-looking score can suggest precision or suitability unsupported by Atlas's inputs and methodology.
@@ -42,9 +42,9 @@ Advisors can explain the recorded client preference, portfolio evidence, limits 
 For implementation, also follow repository-required typecheck, full tests, extraction eval, production build and a relevant browser check. Do not claim these passed from this planning work.
 
 ## Dependencies and sequencing
-- [R02](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R02-proposal-scope.md)
-- [R12](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R12-client-objectives-and-constraints.md)
-- [R14](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/R14-classification-and-exposure-coverage.md)
+- [R02](R02-proposal-scope.md)
+- [R12](R12-client-objectives-and-constraints.md)
+- [R14](R14-classification-and-exposure-coverage.md)
 R23a means the export/restore slice of recommendation 23; R23b means its multi-engagement isolation slice. A dependency on another plan means its required contract/slice must exist, not that all later extensions must ship first.
 
 ## Likely touchpoints
@@ -65,4 +65,4 @@ Capture actual evidence in the issue/PR; no usability results are assumed.
 ## Out of scope / boundary
 No imitation of Nitrogen's proprietary Risk Number, invented predictive precision or automatic suitability determination.
 
-All work follows the shared implementation rules in [IMPLEMENTATION_GUIDE.md](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/blob/docs/advisor-roadmap-2026-10-22/docs/roadmap/IMPLEMENTATION_GUIDE.md). PR #34 stays a separate review checkpoint; no feature is closed by saving this plan.
+All work follows the shared implementation rules in [IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md). PR #34 stays a separate review checkpoint; no feature is closed by saving this plan.
