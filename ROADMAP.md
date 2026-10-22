@@ -17,6 +17,14 @@ An advisor can reconcile messy client data, choose the assets in scope, construc
 - Naming #35 is a separate pre-LinkedIn task; no name has been selected. Preserve browser storage and working links during that transition.
 - This roadmap does not merge, deploy, change hosting, run a new live model, purchase data or authorize external trading.
 
+## Client-data privacy prerequisite
+
+[PII protection plan](docs/roadmap/PII_PROTECTION.md), tracking [#59](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/59), is a cross-cutting prerequisite for the accepted roadmap. R01–R25 numbering remains unchanged.
+
+The public demo stays synthetic/sample-only. Current local PDF reading does not mean the whole workflow stays on-device: other ingestion, Copilot and PDF rendering use server requests, and workspace data persists in the browser. Complete the minimum-data projections and threat-model work early. Before a real-client pilot, require reviewed identity/per-client authorization, encrypted persistence/key management, AI/vendor policy, logging/export/retention controls and synthetic-canary/end-to-end evidence. Masking alone does not meet this gate.
+
+R09/R10 intake, R12 discovery, R19 snapshots, R21 sharing, R22 Copilot and R23 backup/client isolation inherit the relevant controls. Real-client exports require protected handling; a sample-only backup feature is not an authorization to export real PII. No new provider or production configuration is selected by this plan.
+
 ## Delivery phases and exit evidence
 
 Phases indicate dependency order, not dates or fixed-duration sprints. Some plans are intentionally split across phases. Shared dependencies refer to the minimum required contract/slice, not all later extensions of a feature.

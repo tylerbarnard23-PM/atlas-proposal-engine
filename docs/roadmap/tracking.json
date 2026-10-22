@@ -405,5 +405,23 @@
     28,
     33,
     35
+  ],
+  "securityPrerequisites": [
+    {
+      "id": "PII-protection",
+      "issue": 59,
+      "plan": "PII_PROTECTION.md",
+      "status": "planned",
+      "appliesTo": [
+        "R09",
+        "R10",
+        "R12",
+        "R19",
+        "R21",
+        "R22",
+        "R23"
+      ],
+      "gate": "Required controls and evidence before any real-client pilot; public demo remains synthetic-only."
+    }
   ]
 }

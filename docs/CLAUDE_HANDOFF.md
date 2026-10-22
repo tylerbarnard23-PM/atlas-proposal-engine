@@ -1,5 +1,9 @@
 # Handoff
 
+## PII planning addition — 22 October 2026
+
+The owner asked how to secure client data. Issue #59 and [PII_PROTECTION.md](roadmap/PII_PROTECTION.md) now define a prerequisite across the roadmap. Keep all 25 original IDs intact. Start with data inventory, minimal/pseudonymous payloads and retention boundaries; require working identity/authorization, encrypted persistence/key management, safe logs/exports and verified egress/isolation tests before real client use. Public demo remains synthetic-only. These controls are planned, not implemented, and no production configuration changed.
+
 ## Current roadmap checkpoint — 22 October 2026
 
 Tyler accepted **all 25** recommendations for the advisor workflow roadmap. Detailed plans and tracking are in [ROADMAP.md](../ROADMAP.md), [IMPLEMENTATION_GUIDE.md](roadmap/IMPLEMENTATION_GUIDE.md) and epic [#36](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/36). All feature statuses remain **Planned** until implementation evidence is recorded.

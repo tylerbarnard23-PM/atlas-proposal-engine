@@ -22,6 +22,14 @@ The current task saved plans only. PR #34 remains open for review at b95f6ce30be
 10. Update plan/issue status and handoff with actual evidence. An accepted plan is Planned, not Implemented. No blanket rewrite, merge, deployment or new external integration is implied by roadmap acceptance.
 
 
+## PII protection gate
+
+Read [PII_PROTECTION.md](PII_PROTECTION.md), issue #59, before changing a data serializer, raw-source retention, backup, snapshot, Copilot payload or share-link behavior. Keep real client data out of the public demo. Use explicit allowlist projections and pseudonymous client/account IDs; sensitive financial records remain confidential after pseudonymization.
+
+Authentication/authorization, encrypted persistence with managed keys, safe logs/exports, approved vendor retention and demonstrated boundary tests are required before a real-client pilot. Database encryption alone does not stop an authorized but compromised application session from reading data. Browser encryption with an automatically available same-origin key does not solve XSS. Preserve data intentionally during migrations and do not silently erase existing saved work.
+
+Direct uploads into Claude Desktop/Code are outside Atlas's redaction boundary and follow the actual Claude account/organization policy. No-training defaults must not be described as zero retention. No API/provider setting is changed by this documentation update.
+
 ## Coordinate the domain contracts
 
 | Contract | Owning plans | Required decisions |
