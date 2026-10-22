@@ -13,20 +13,27 @@ Branch `fix/fx-refresh-staleness` from main `618e670`. Implements #26's accepted
 - **Resolution** (`resolveFxRate`): the newest quote wins in either orientation, and the stored legs used are recorded, including both legs of a cross rate via USD. "In use" means legs that value a holding, convert an approved recommendation, or write proposal cash/native moves (`fxRatesInUse`). Stored but unused rates don't count.
 - **Freshness**: UTC calendar-day age with an injected clock (`fxAge.ts`). `STALE_FX_DAYS = 7` is an initial product policy, not an institutional or regulatory standard: current through day 7, stale from day 8. Mock data is never current.
 - **Readiness**: the shared check "Exchange rates current" is enforced in the UI, Copilot readiness and the final-PDF route; the route uses the server clock and recomputes the fingerprint.
-- **Confirmation**: records the covered pairs, oldest rate date, time, the reporting currency and a fingerprint of the stale legs and their uses. It expires exactly 7 days (168 h) after it was given, and lapses as soon as those rates or their uses change. It doesn't bypass missing rates, incomplete imports or any other gate.
-- **Status shown**: Market Data (age, source, in use / stale / manual / unverified / not-in-last-refresh, refresh summary, confirm and withdraw); dashboard and Accounts notice; a "Data to complete" stale-rate task linking to Market Data; stale age on recommendation conversions; the PDF Assumptions page lists the rates actually used, cross rates and the confirmation; Copilot `fx_freshness` (drafting isn't blocked by staleness).
+- **Confirmation**: records the covered pairs (the stale or unverified ones), oldest rate date, time, the reporting currency and a fingerprint of **every leg in use** (current legs too, since a cross rate depends on both), their uses and which legs needed confirming. It lapses as soon as any of those change, including a current leg turning stale; unused rates don't affect it. It expires exactly 7 days (168 h) after `confirmedAt`. A record with unreadable times, a `confirmedAt` more than 2 minutes (`CLOCK_SKEW_MS`) ahead of the evaluating clock, or an `expiresAt` other than `confirmedAt` + 7 days is **invalid**. It doesn't bypass missing rates, incomplete imports or any other gate.
+- **Time in the browser**: one shared clock (`src/engines/fxClock.ts`, `src/hooks/useFxNow.ts`) ticks at the next UTC midnight or confirmation deadline, and when the user returns to the page (focus / visibility); it keeps no timer without subscribers. Readiness, notices, data tasks, conversions, the Market Data panel and the PDF preview all evaluate at it.
+- **Status shown**: Market Data (age, source, in use / stale / manual / unverified / not-in-last-refresh, refresh summary, confirm and withdraw); dashboard and Accounts notice; a "Data to complete" stale-rate task linking to Market Data; stale age on recommendation conversions; the PDF names the sources of the rates actually used (e.g. "ECB reference rates and advisor-entered (manual) rates", or "No currency conversion was needed") and its Assumptions page lists those rates, cross rates and the confirmation; Copilot `fx_freshness` (drafting isn't blocked by staleness).
 - **Store v6**: drops only the obsolete `isStale` flag. Rates, dates, sources and all other data are kept.
-- **Sample**: monetary values, proposed values and the rest of the PDF match the stored baseline. Three differences are intentional and asserted, not recaptured: the sample's 2026-04-30 rates make "Exchange rates current" fail, add one stale-rate task, and add the rates-used block to the PDF.
+- **Sample**: monetary values, proposed values and the rest of the PDF match the stored baseline. Four differences are intentional and asserted, not recaptured: the sample's 2026-04-30 rates make "Exchange rates current" fail, add one stale-rate task, add the rates-used block to the PDF, and the Assumptions bullet now reads "Exchange rates used: ECB reference rates, each listed with its date below."
+
+**Review fixes (commit `c11ce20`)**, tests first in `tests/fxReview.test.ts` (16):
+- Finding 1 reproduced on `ad3ea98` (EUR reporting, CHF 1,000, stale CHF/USD 1.2, current USD/EUR 0.9 changed to 0.8: EUR 1,080 → 960 and the confirmation stayed valid). Now `changed`, also for direct and inverse current legs and a new use; an unused rate changing leaves it valid.
+- Finding 2: the clock's boundary, expiry without workspace edits (server readiness agrees at the same instant), the day-7/day-8 midnight and return-to-page refresh, with no timer left after unsubscribing.
+- Finding 3 reproduced on `ad3ea98` (invalid `expiresAt`, a 2099 `expiresAt` and a future `confirmedAt` were all valid). Now invalid, at the policy and the final-PDF route (422), with the exact 7-day boundary and the missing-rate gate kept.
+- Also found and fixed: a current leg turning stale after confirmation isn't covered by it; a stored `USD/USD` identity rate is no longer reported as "not returned" by a refresh.
 
 **Validation (run on the branch):**
 
 | Check | Result |
 |---|---|
 | typecheck | pass |
-| tests | 304 of 304 passed with the private UBS PDF; without it, as in CI, 302 passed and 2 were skipped |
-| eval | unchanged: recall 100%, 0 spurious |
+| tests | 320 of 320 passed with the private UBS PDF (18 files); without it, as in CI, 2 are skipped |
+| eval | unchanged: recall 100%, label 100%, currency 87.5%, 0 wrong, 0 spurious |
 | build | pass |
-| new tests | 24 in `tests/fxPolicy.test.ts`, written first (they failed to load before `fxPolicy` existed) |
+| new tests | 24 in `tests/fxPolicy.test.ts` and 16 in `tests/fxReview.test.ts`, written first |
 
 **Browser** (local `next start`, synthetic workspace; the browser's own workspace was restored afterwards):
 - A v5 save with `isStale: true` migrated to v6 without it, keeping all rates.
@@ -39,13 +46,19 @@ Branch `fix/fx-refresh-staleness` from main `618e670`. Implements #26's accepted
   - ARS was not returned and was labelled;
   - readiness went to 16/16 and the notice cleared.
 - A draft PDF generated by the local server route (Chromium) was inspected visually: the Assumptions page lists CHF/USD (stale, 175 days) and USD/EUR (current), not the unused JPY rate, with the cross-rate note, the policy wording and the confirmation with its expiry.
+- Review fixes (`c11ce20`, synthetic EUR workspace):
+  - **Changed cross rate:** after confirming CHF/USD, USD/EUR was changed 0.9 → 0.8. The dashboard showed EUR 960 and "no longer applies"; the server route then failed "Exchange rates current" (before the change it passed).
+  - **Expiry by time alone:** only the page's `Date.now` was shifted to 3 s before expiry. The panel read "Confirmed…" and, 4.5 s later with no event or edit, "The earlier confirmation expired 2026-10-29 16:03 UTC"; the dashboard notice and readiness item agreed. Stored data was byte-identical.
+  - **Midnight:** at 2026-10-29 23:59:57Z USD/EUR (dated 2026-10-22) was 7 days old and current; after midnight, 8 days and stale, and listed for attention. Triggered by `visibilitychange` then the midnight timer, no edits.
+  - **PDF:** with an ECB and a Manual rate in use, the Assumptions page read "Exchange rates used: ECB reference rates and advisor-entered (manual) rates, each listed with its date below." and listed the Manual GBP/USD rate.
 
 **Limitations:**
-- **Provider redirect.** The provider host redirects (`api.frankfurter.app` → `api.frankfurter.dev`), and `fetch` follows it. The real route was not exercised end-to-end locally (TLS); see the PR for the Vercel preview check.
+- **Provider redirect.** The provider host redirects (`api.frankfurter.app` → `api.frankfurter.dev`), and `fetch` follows it.
+- **Real route and TLS.** This machine's AVG Web/Mail Shield intercepts HTTPS: the provider's certificate is issued locally by "AVG Web/Mail Shield Root", trusted only through `NODE_EXTRA_CA_CERTS` in the shell (hence the preview server's `UNABLE_TO_VERIFY_LEAF_SIGNATURE`). The actual route handler, run in-process from that shell, returned 200 with five ECB rates dated 2026-10-22 and omitted VND, but over the intercepted connection, not normal TLS verification. **On the Vercel preview** for `c11ce20` (opened in the in-app browser, which has a Vercel sign-in; the Vercel MCP access tools returned 403), the deployed route made the provider request with normal TLS: `GET /api/market-data/fx` returned 200 with five ECB rates dated 2026-10-22 (VND omitted), and Market Data → Refresh FX updated all 9 sample pairs and cleared the stale-rate notice. The preview origin's workspace was restored afterwards.
 - **Sample rates.** They are illustrative, labelled ECB and dated 2026-04-30, so the public sample fails "Exchange rates current" until FX is refreshed or the rates are confirmed. This is intentional.
 - **Manual rates.** No UI to enter or remove manual rates (pre-existing). A manual rate is only replaced by editing stored data.
 - **Confirmation trust.** The confirmation lives in browser storage with the rest of the workspace. The server checks its fingerprint and expiry, but the state is client-supplied, not a tamper-proof record (#59, R19).
-- **Assumptions wording.** The page's first bullet still describes FX generally as ECB reference rates (pre-existing); the new table shows each rate's actual source.
+- **Clock skew.** The server and browser evaluate at their own clocks; a confirmation up to 2 minutes ahead of the server's clock is accepted.
 - **Out of scope.** Rate dates use UTC date labels here; general date display is #28. Candidate refresh with review before applying is R18 (#51).
 - **Migration order.** R23a export/restore was planned before persisted-schema changes. The v6 step only removes an unused optional flag and was explicitly requested.
 
