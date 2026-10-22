@@ -17,7 +17,8 @@ import {
   withApprovalRule,
 } from "@/engines/recommendationAmounts";
 import { recommendationFromInsight } from "@/engines/recommendationEngine";
-import { describeFormEffect, describeRecEffect } from "@/components/recommendations/recEffect";
+import { summarizePreview } from "@/components/recommendations/recEffect";
+import { previewRecommendation } from "@/engines/recommendationPreview";
 import { evaluateWorkspaceReadiness } from "@/engines/complianceEngine";
 import { CopilotContext, executeTool } from "@/copilot/tools";
 import { ProposalPdfTemplate } from "@/pdf/templates/ProposalPdfTemplate";
@@ -144,16 +145,15 @@ describe("conversion: entered currency into the reporting currency, exactly once
     expect(proposedNative([rec({ currency: "GBP", actionAmount: 10, actionAmountUnit: "percent", proposedValue: 500_000 })]).unresolved).toHaveLength(1);
   });
 
-  it("the recommendation card and the edit form show the converted effect once, in the reporting currency", () => {
-    const linked = normalizeHoldings(HOLDINGS, RATES, "EUR")[0];
-    const card = describeRecEffect(rec(), linked, fx("EUR"));
-    expect(card.label).toContain("€800.0K → €720.0K (−€80.0K)");
-    expect(card.amounts).toBe(describeAmounts(rec(), fx("EUR")));
-    const form = describeFormEffect(rec(), linked, fx("EUR"));
-    expect(form.currentValue).toBe("€800,000.00");
-    expect(form.hint).toContain("€800.0K → €720.0K");
+  it("the recommendation card and the edit form (one shared preview) show the converted effect once, in the reporting currency", () => {
+    const preview = (r: Recommendation) =>
+      previewRecommendation({ rec: r, holdings: normalizeHoldings(HOLDINGS, RATES, "EUR"), recommendations: [r], accounts: [ACCOUNT], fx: fx("EUR"), sourceDocuments: [] });
+    const p = preview(rec());
+    expect(summarizePreview(p).position).toBe("Example Equity: €800,000.00 → €720,000.00 (−€80,000.00, −10.00%)");
+    expect(summarizePreview(p).cash).toBe("Cash: Cash (Brokerage) €80,000.00 → €160,000.00 (+€80,000.00)");
+    expect(p.amounts).toBe(describeAmounts(rec(), fx("EUR")));
     // A missing rate is said, not guessed.
-    expect(describeRecEffect(rec({ currency: "GBP" }), linked, fx("EUR")).label).toMatch(/no GBP\/EUR rate/);
+    expect(summarizePreview(preview(rec({ currency: "GBP" }))).headline).toMatch(/No GBP\/EUR exchange rate/);
   });
 
   it("the Copilot simulates in the reporting currency and sees each recommendation's own currency and converted amount", () => {

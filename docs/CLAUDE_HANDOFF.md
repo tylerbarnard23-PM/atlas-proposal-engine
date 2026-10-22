@@ -22,7 +22,9 @@ The text below is retained historical context from the existing handoff. Its old
 
 The state of the project for the next working session: what's done, how it was checked, what's known to be missing, and what comes next. Update it at the end of each piece of work.
 
-_Last updated: 2026-10-21, on branch `fix/recommendation-currency` (issue #24, PR #31, not merged; review fix for percentage edits included)._
+_Last updated: 2026-10-22, on branch `feat/recommendation-preview` (#33, PR #34 open, not merged), after the review fixes below. Order: #34, then #26, then #28._
+
+> **Roadmap checkpoint lives in PR #58** (`docs/advisor-roadmap-2026-10-22`): the accepted 25-item roadmap (epic #36), `ROADMAP.md`, and the PII protection prerequisite #59. When #34 and #58 are both merged, keep #58's roadmap checkpoint and PII section at the top of this file *and* the #33 section below; neither replaces the other. This branch doesn't change the roadmap or #59.
 
 ## Working agreements
 - Every bug, idea or parked item gets a GitHub issue; a PR closes its issue.
@@ -33,7 +35,13 @@ _Last updated: 2026-10-21, on branch `fix/recommendation-currency` (issue #24, P
 - Don't commit third-party PDFs. The UBS holdings-report sample goes in `tests/fixtures/private/`, which is git-ignored; its tests skip when it's absent.
 
 ## Production
-`main` at `60f43bf` (merge of #30) is live, deployment `dpl_3xARP7M9…`. It was smoke-tested on 2026-10-21. On the live site: linked recommendation effects, and the final-PDF route refusing an incomplete import. On a local production build of the same commit: the UBS import (68 positions, $10,648,193.74, matched), LifeView (21 lines, matched), and the incomplete-import gate.
+`main` at **`9d44d9f`** (merge of PR #31, pinned to head `3a1482f`, CI green on that commit) is live: deployment `dpl_4V9aw12vvUreEQq3xYLKdFJaUzEz`, READY, aliased to https://atlas-proposal-engine.vercel.app. Smoke-tested on the live site, 2026-10-21:
+- **Existing USD workspace** (a real v4 save in the browser): migrated to v5 with 25 holdings, 6 recommendations and no flags. The proposal's currency and country fields were dropped and effects were unchanged.
+- **EUR reporting with USD-labelled amounts** (the same save set to EUR, plus a mixed recommendation): both money recommendations migrated to EUR with the "USD" label kept as an open review. Maritime's target is still calculated as EUR 181,760, as before the update.
+- **Percentage-only edit** (10% → 20%) on the approved, included mixed recommendation: the approval cleared and the review stayed open. Re-approving left it open.
+- **Final-PDF gate.** With every holding confirmed, the route returned 422 with exactly "Recommendation currencies confirmed". After "Keep EUR amounts" it returned 200, rendering a final PDF. The test workspace was then restored to the migrated sample.
+
+The previous release, `60f43bf` (merge of #30), was smoke-tested the same day. On the live site: linked recommendation effects, and the import gate. On a local build of that commit: the UBS import (68 positions, $10,648,193.74, matched), LifeView (21 lines, matched), and the incomplete-import gate.
 
 ## Completed recently
 | Issue / PR | What |
@@ -41,9 +49,48 @@ _Last updated: 2026-10-21, on branch `fix/recommendation-currency` (issue #24, P
 | #21 / #25 | Currency contract for the proposed portfolio: explicit FX, no 1:1 fallback, unresolved conversions reported. |
 | #23 / #27 | Unvalued holdings stay unvalued through the proposal; totals say what they exclude; the final PDF is blocked. |
 | #29 / #30 | PDF statements: values read correctly; account totals reconciled with their currency; positioned holdings reports (UBS sample) read by column geometry; import completeness persisted and enforced. |
-| #24 / #31 (open) | Recommendation amounts keep their own currency (see below). |
+| #24 / #31 (merged `9d44d9f`) | Recommendation amounts keep their own currency (see below). |
+| #33 (this branch, open) | Live recommendation preview from the complete engine (see below). |
 
-## #24: recommendation currency (this branch)
+## #33: live recommendation preview (this branch)
+- **Engine simulation.** `previewRecommendation` (`src/engines/recommendationPreview.ts`) runs the complete proposal engine in isolation on the current holdings and compares before and after. It covers actual cash offsets, household funding of debt paydowns, new cash lines, missing rates, unvalued holdings and shortfalls. Nothing is inferred by negating the position change: a cash position's own change moves no other cash.
+- **Standalone and combined.** The standalone result is this recommendation alone. The combined result is the full proposal engine's own output with every other approved recommendation, separately labelled "in proposal order".
+  - **Order.** The edited recommendation replaces its saved version *in place* by id (never applied twice, saved order kept); a new draft is appended, where saving would put it. Order matters: [A target 80,000, B sell 10%] on 100,000 ends at 72,000, and both cards, the editor and the proposal now agree.
+  - **Relevance by effect.** The combined result appears when other approved recommendations change this position, its account's cash, or the cash this recommendation itself draws on (a paydown's household sources), alone or together with this one. This catches household funding of a mortgage paydown across accounts, in both directions. "This recommendation changes it by" is its marginal effect in proposal order.
+  - **Shortfalls.** Combined shortfalls are shown and get a "With the other approved recommendations, …" warning that blocks the final PDF. Shortfall wording covers purchases and debt paydowns.
+  - The preview never saves, approves or mutates anything.
+- **Editor.** A prominent live preview shows the position, account, value date and reporting currency, with current value, proposed value, signed change and percentage change at full precision ("N/A" when the current value is zero). It also shows the cash lines that move, shortfalls, the entered amount with its conversion and rate, and warnings: missing rate, unvalued, incomplete import and currency review, each marked if it blocks the final PDF. A target value disables the action amount and marks it ignored.
+- **Cards** show the same simulation (standalone, plus combined where relevant) at full precision.
+- **Copilot.** `simulate_recommendation` uses the same simulation and returns `cash_movements` and `shortfalls` (it used to return an inferred `cash_effect_in_account`).
+- **Engine fix.** Cash offsets under $1 were dropped as noise, so a 50-cent sale moved the position but not the cash. Now only floating-point noise under half a cent is ignored.
+- **Validation:**
+
+  | Check | Result |
+  |---|---|
+  | typecheck | pass |
+  | tests | 280 passed in 16 files (278 + 2 skipped without the private PDF) |
+  | eval | unchanged |
+  | build | pass |
+  | sample baseline | unchanged |
+
+- **Browser** (local production build), using the UBS screenshot case at USD 3:
+  - "reduce" on the cash account gave $179,478.88 → $179,475.88, −$3.00 (−0.0017%), "No other cash moves".
+  - A security sale credited the same account's cash.
+  - A purchase above the account's cash showed the shortfall and that it blocks the final PDF, plus the combined result with another approved recommendation.
+  - A paydown drew from the household account with the most cash.
+  - A target disabled the action amount and marked it ignored.
+  - A EUR conversion was applied once (EUR 20,240.55 ≈ USD 21,961.00).
+  - Holdings and recommendations were unchanged while previewing; closing without saving saved nothing.
+  - Editing an approved 10,000 sale to 20,000 previewed $101,961.00 (no double counting). After save and reload the card matched the preview, the approval was cleared, and the live holding was unchanged.
+  - Migration-review and incomplete-import warnings showed in the preview and on the card.
+
+- **Review fixes (2026-10-22, at `b95f6ce`).** Two defects were found: the combined result appended the previewed recommendation last instead of keeping saved order, and it missed household funding across accounts. Also, the shortfall wording called every shortfall an unfunded purchase.
+  - **Tests first.** 8 regression tests were added; 7 failed against `b95f6ce` (6 new plus the updated combined label), while the no-false-combined and rendered screenshot-case guards passed. Every combined test compares with `applyRecommendationsToProposed`'s full output. The editor panel (`RecPreview`) is now rendered in tests.
+  - **Browser** (local production build, synthetic workspaces, browser's own workspace restored afterwards):
+    - Order case: both cards showed $72,000.00. Editing A's target to 85,000 previewed $76,500.00. After save and reload A stayed first, its approval was cleared, then it was re-approved. The proposal page showed Equity $76.5K and Cash $33.5K, matching.
+    - Funding case (brokerage cash 600,000, bank 50,000, approved 550,000 mortgage paydown, purchase 150,000): the purchase card and editor showed the combined result with brokerage and bank → $0.00 and a $50,000.00 Mortgage shortfall. Edited to 100,000, saved and reloaded: no shortfall, and the paydown's own card also showed the combined funding. The proposal page showed Cash $0.0 and Equity $200.0K, matching.
+
+## #24: recommendation currency (merged in PR #31)
 - **Amount currency.** `Recommendation.currency` is the denomination of `proposedValue` (always monetary) and of `actionAmount` when its unit is `amount`. A `percent` amount stays a percentage.
 - **One conversion.** `amountsInReporting` (in `src/engines/recommendationAmounts.ts`) converts once, at the workspace's current rates, and reports the rate, source, as-of date and path (direct, inverse, or cross via USD). `applyRecToValue` accepts only its output, a distinct type, so the engine, cards, form, Copilot and PDF can't skip the conversion or do it twice.
 - **Missing rate.** The recommendation is left unapplied and reported as unresolved (the `fx_available` check, and the PDF's "not applied" block).
@@ -98,9 +145,26 @@ _Last updated: 2026-10-21, on branch `fix/recommendation-currency` (issue #24, P
 - **Incomplete imports have no acknowledge path** (from #30). Resolve by re-importing a complete copy or removing that import's holdings.
 - **PDF support is verified** on the issue #29 statement layouts, the UBS holdings-report layout and LifeView plans only.
 - **Live-site import checks need a manual upload.** The automated browser couldn't put local files into the live page.
+- **Preview (#33).**
+  - The simulation reflects the engine's existing model. Unbundled cash slices from a holdings report count as account cash, and a paydown or purchase debit lands on the account's first cash line.
+  - Relevance is judged at this position, its account's cash and the cash lines this recommendation moves. An approved recommendation that only changes some other account (with no effect on any of those) doesn't produce a combined result, by design.
+  - "Changes it by" is the marginal effect in proposal order, not a standalone attribution; with order-dependent actions it differs from the standalone change (A: −20,000 alone, −18,000 marginal in the example).
+  - Each card runs a few engine simulations (standalone, with and without others, and one per other approved recommendation to name them). Fine at sample sizes; not measured for very large workspaces.
 
 ## Next step
-1. Review PR #31 (#24); merge only on approval, then confirm the production deploy.
-2. Then #26 (FX refresh: merge and stale-rate policy), now more visible because recommendation conversions use current rates.
-3. Then #28 (dates shown a day early west of UTC).
+1. **#33 / PR #34:** review the fixes; merge only on approval, then confirm the production deploy. PR #32 is superseded by #34 (it carries #32's commit); close it only on the owner's instruction.
+2. **#26 (FX refresh, retained rates, stale-rate policy):** planning only. The direction is accepted and recorded on #26 (comment 6325161797). Refinements:
+   - **Seven calendar days** is an initial product policy, not an institutional standard. Use a named constant, and don't present it as a rule.
+   - **A stale-rate confirmation expires** after a defined period (proposed: seven days from the confirmation) as well as when the rates in use change.
+   - **Currencies in use** include approved valuation currencies (`proposalApprovedValue.currency`).
+   - **Provenance.** Manual rates keep their provenance; mock or fallback data must never appear freshly provider-verified.
+
+   Findings:
+   - **Refresh replaces everything.** The Market Data refresh replaces the whole rate set, so a partial response drops pairs.
+   - **Opposite orientations can coexist.** The provider returns USD→X pairs while the sample stores X→USD. The resolver prefers a direct pair, so a stale stored pair could beat a fresh inverse one.
+   - **Fixed currency list.** The refresh asks for a fixed list and ignores currencies brought in by imports.
+   - **Silent failure.** A failed refresh says nothing.
+   - **Staleness isn't used.** `isStale` exists but nothing sets or uses it. The sample's rates are dated 2026-04-30.
+   - **PDF.** The PDF names the rate source but not the rates or their dates.
+3. Then #28 (dates shown a day early west of UTC). Keep it separate from #26.
 4. Backlog enhancements (#11–#19) stay parked until chosen.

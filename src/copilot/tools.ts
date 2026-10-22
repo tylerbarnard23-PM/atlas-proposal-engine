@@ -4,6 +4,7 @@ import type { Recommendation, RecommendationType } from "@/domain/types";
 import { normalizeHoldings, type NormalizedHolding } from "@/engines/normalizationEngine";
 import { generateInsights, summarizeAllocation } from "@/engines/insightEngine";
 import { applyRecToValue } from "@/engines/proposalEngine";
+import { previewRecommendation } from "@/engines/recommendationPreview";
 import { amountsInReporting, describeConversion } from "@/engines/recommendationAmounts";
 import { missingPairs, reportingValue, valuationSummary, valuationTotal, type ValuedTotal } from "@/engines/valuationTotals";
 import { evaluateWorkspaceReadiness, readinessOk } from "@/engines/complianceEngine";
@@ -269,45 +270,85 @@ function toolAmounts(ctx: CopilotContext, input: { type: Recommendation["type"];
 function simulate(ctx: CopilotContext, input: z.infer<typeof SimulateInput>) {
   const h = ctx.holding(input.holding_id);
   if (!h) throw new ToolInputError(`No holding with id ${input.holding_id}`);
-  // Tool amounts are in the reporting currency, so the conversion is a no-op;
-  // it still goes through the same function as everything else.
-  const rec = toolAmounts(ctx, input);
-  const before = reportingValue(h);
-  if (before == null) {
+  // The same isolated engine simulation as the editor's live preview: actual
+  // cash offsets, household funding, missing rates and shortfalls. Tool
+  // amounts are in the reporting currency. Nothing is saved.
+  const preview = previewRecommendation({
+    rec: {
+      id: "copilot_simulation",
+      title: "Simulation",
+      type: input.type,
+      relatedHoldingId: h.id,
+      relatedAccountId: h.accountId,
+      actionAmount: input.action_amount,
+      actionAmountUnit: input.action_amount_unit,
+      proposedValue: input.proposed_value,
+      currency: ctx.reportingCurrency,
+      rationale: "",
+      priority: "medium",
+      status: "draft",
+      includeInPdf: false,
+      approvedByAdvisor: false,
+      createdAt: "",
+      updatedAt: "",
+    },
+    holdings: ctx.holdings,
+    recommendations: ctx.snapshot.recommendations,
+    accounts: ctx.snapshot.accounts,
+    fx: { reportingCurrency: ctx.reportingCurrency, rates: ctx.snapshot.fxRates },
+    sourceDocuments: ctx.snapshot.sourceDocuments ?? [],
+  });
+  const position = preview.standalone?.applied ? preview.standalone.position : null;
+  if (!position) {
     return {
       holding: h.assetName,
       currency: ctx.reportingCurrency,
-      before: null,
+      before: reportingValue(h) == null ? null : cents(reportingValue(h)!),
       after: null,
       delta: null,
+      pct_change: null,
       pct_of_investible_before: null,
       pct_of_investible_after: null,
-      cash_effect_in_account: null,
-      note: `This holding has no ${h.valuation.currency}/${ctx.reportingCurrency} exchange rate, so it can't be valued or simulated.`,
+      cash_movements: [],
+      shortfalls: [],
+      note: preview.warnings.find((w) => w.kind === "missing_rate" || w.kind === "unvalued")?.message ?? "This recommendation can't be simulated.",
     };
   }
-  const after = applyRecToValue(before, rec, !!h.isLiability);
-  const delta = after - before;
-  // Sales credit cash in the same account and purchases debit it, so the
-  // investible total is unchanged; only the position's weight moves. Weights
-  // are null while valuation is incomplete: the denominator is unknown.
+  const { before, after, change } = position;
+  // Weights are null while valuation is incomplete: the denominator is unknown.
   return {
     holding: h.assetName,
     currency: ctx.reportingCurrency,
-    before: round(before),
-    after: round(after),
-    delta: round(delta),
+    before: cents(before),
+    after: cents(after),
+    delta: cents(change),
+    pct_change: position.pctChange == null ? null : Math.round(position.pctChange * 10_000) / 10_000,
     pct_of_investible_before: h.isLiability ? null : weight(ctx, before),
     pct_of_investible_after: h.isLiability ? null : weight(ctx, after),
-    cash_effect_in_account: h.assetClass === "cash" ? 0 : round(-delta),
+    // Cash lines the engine actually moved (offsets, household funding of a
+    // paydown, new cash lines); empty for a cash position's own change.
+    cash_movements: preview.standalone!.cash.map((c) => ({
+      holding: c.name,
+      account: c.accountName,
+      before: cents(c.before),
+      after: cents(c.after),
+      change: cents(c.change),
+      new_line: c.synthetic,
+    })),
+    shortfalls: preview.standalone!.shortfalls.map((s) => ({ account: s.accountName, shortfall: cents(s.shortfall) })),
+    combined_with_other_approved: preview.combined
+      ? { others: preview.combined.others.map((o) => o.title), position_after: preview.combined.position ? cents(preview.combined.position.after) : null }
+      : null,
     note:
-      Math.abs(delta) < 1 && input.proposed_value == null
+      preview.state === "no_change"
         ? "No allocation change: this type is allocation-neutral or needs an action_amount / proposed_value."
         : ctx.valuationComplete
         ? undefined
         : "Valuation is incomplete, so weights are not shown.",
   };
 }
+
+const cents = (n: number) => Math.round(n * 100) / 100;
 
 function checkReadiness(ctx: CopilotContext) {
   const s = ctx.snapshot;
@@ -464,7 +505,7 @@ const TOOLS: Record<string, ToolSpec> = {
     definition: {
       name: "simulate_recommendation",
       description:
-        "Run a hypothetical recommendation through the same engine that builds the proposal's Before / After view and return the position's value and weight before and after. Changes nothing.",
+        "Run a hypothetical recommendation through the same engine that builds the proposal's Before / After view: the position's value and weight before and after, the cash lines it actually moves (including household cash used for a debt paydown), and any cash shortfall. Changes nothing.",
       input_schema: { type: "object", properties: recProperties, required: ["holding_id", "type"] },
     },
     run: (ctx, input) => simulate(ctx, SimulateInput.parse(input)),
