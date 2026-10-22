@@ -14,7 +14,7 @@ import type {
 import { ASSET_CLASS_LABELS } from "@/domain/assetTaxonomy";
 import { ACCOUNT_TYPE_LABELS } from "@/domain/accountTaxonomy";
 import { PDF_BASE_CSS } from "../styles/pdfStyles";
-import { formatCurrency, formatDate, formatPercent } from "@/utils/formatting";
+import { formatCalendarDate, formatCurrency, formatPercent, formatTimestampDate } from "@/utils/formatting";
 import { sumBy, groupBy } from "@/utils/numbers";
 import { applyRecommendationsToProposed, cashShortfallsOf } from "@/engines/proposalEngine";
 import { describeAmounts } from "@/engines/recommendationAmounts";
@@ -153,6 +153,8 @@ export interface ProposalPdfTemplateProps {
   fxConfirmation?: FxConfirmation | null;
   /** When the document is produced (ISO); the rate ages are computed against it. */
   now?: string;
+  /** The advisor's time zone, for timestamps such as the prepared date (#28). Calendar dates don't depend on it. Defaults to the runtime's. */
+  timeZone?: string;
 }
 
 function summarize(holdings: Holding[], group: (h: Holding) => string) {
@@ -183,7 +185,9 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
   // reporting value it arrived with, so the PDF route and the preview can't
   // render a cached figure for a holding that has lost its rate.
   const holdings = normalizeHoldings(props.holdings, fxRates, reportingCurrency);
-  const today = new Date().toLocaleDateString(client.locale ?? "en-US", { year: "numeric", month: "long", day: "numeric" });
+  // When it was prepared: a timestamp, shown in the advisor's time zone so the
+  // server-rendered PDF and the in-app preview agree (#28).
+  const today = formatTimestampDate(props.now ?? new Date().toISOString(), { timeZone: props.timeZone, month: "long", locale: client.locale ?? "en-US" });
   const isDraft = variant === "draft";
   // Branding is re-validated here so an invalid value can never reach the
   // document, whichever caller rendered it.
@@ -497,7 +501,7 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
             </div>
             <div className="meta">
               <span className="pdf-pill navy">{r.type.replace(/_/g, " ")}</span>
-              <span style={{ marginLeft: 8 }}>Approved by advisor on {new Date(r.updatedAt).toLocaleDateString()}</span>
+              <span style={{ marginLeft: 8 }}>Approved by advisor on {formatTimestampDate(r.updatedAt, { timeZone: props.timeZone, month: "numeric" })}</span>
             </div>
           </div>
         ))}
@@ -763,7 +767,7 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
                 <td>{h.assetName}</td>
                 <td>{h.valuationSource.kind.replace(/_/g, " ")}</td>
                 <td>{h.valuationSource.providerName ?? "—"}</td>
-                <td>{formatDate(h.valuationSource.asOf ?? h.valuationDate)}</td>
+                <td>{formatCalendarDate(h.valuationSource.asOf ?? h.valuationDate)}</td>
                 <td className="right" style={{ textTransform: "capitalize" }}>{h.valuationSource.confidence ?? "—"}</td>
               </tr>
             ))}

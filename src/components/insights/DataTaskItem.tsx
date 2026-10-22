@@ -14,7 +14,7 @@ import { fxAgeDays, utcDate } from "@/engines/fxAge";
 import { normalizeHoldings } from "@/engines/normalizationEngine";
 import { formatNative } from "@/engines/valuationTotals";
 import { resolveValuation } from "@/engines/valuationEngine";
-import { formatCurrency, formatDate, todayIso } from "@/utils/formatting";
+import { formatCalendarDate, formatCurrency, localCalendarDay } from "@/utils/formatting";
 
 // One "Data to complete" item: what's missing, why it matters, and the fix
 // for each affected holding right here, instead of a link to another page.
@@ -70,7 +70,7 @@ export function DataTaskItem({ insight, onDismiss }: { insight: Insight; onDismi
                     nativeMarketValue: value,
                     valuationDate: date,
                     proposalApprovedValue: undefined,
-                    valuationSource: { kind: "advisor_entered", asOf: date, confidence: "high", note: `Updated by advisor (was ${formatCurrency(h.nativeMarketValue, h.currency)} as of ${formatDate(h.valuationDate)})` },
+                    valuationSource: { kind: "advisor_entered", asOf: date, confidence: "high", note: `Updated by advisor (was ${formatCurrency(h.nativeMarketValue, h.currency)} as of ${formatCalendarDate(h.valuationDate)})` },
                     quoteType: "advisor_entered",
                     priceFreshness: "manual",
                     advisorVerification: "advisor_reviewed",
@@ -85,7 +85,7 @@ export function DataTaskItem({ insight, onDismiss }: { insight: Insight; onDismi
             <CheckCircle2 className="h-4 w-4 text-positive-500 shrink-0" />
             <span className="text-ink-700">{h.assetName}</span>
             <span className="text-[12px] text-positive-600">
-              {task.kind === "balance_only" ? "Kept as one balance" : `Keeping the value as of ${formatDate(h.valuationDate)}`}
+              {task.kind === "balance_only" ? "Kept as one balance" : `Keeping the value as of ${formatCalendarDate(h.valuationDate)}`}
             </span>
             <button
               className="ml-auto text-[12px] text-ink-500 hover:text-ink-800 hover:underline"
@@ -210,7 +210,7 @@ function IdentifierRow({ h, account, onSave }: { h: Holding; account?: string; o
 function StaleRow({ h, onAccept, onUpdate }: { h: Holding; onAccept: () => void; onUpdate: (value: number, date: string) => void }) {
   const [editing, setEditing] = React.useState(false);
   const [value, setValue] = React.useState(String(h.nativeMarketValue));
-  const [date, setDate] = React.useState(todayIso().slice(0, 10));
+  const [date, setDate] = React.useState(() => localCalendarDay());
   const months = Math.max(1, Math.round((Date.now() - new Date(h.valuationDate ?? 0).getTime()) / (30.4 * 86_400_000)));
   const limit = staleThresholdDays(h) > 35 ? "12 months" : "35 days";
   const n = Number(value.replace(/[$,\s]/g, ""));
@@ -223,7 +223,7 @@ function StaleRow({ h, onAccept, onUpdate }: { h: Holding; onAccept: () => void;
           h={h}
           sub={
             <>
-              <span className="tabular">{formatCurrency(h.nativeMarketValue, h.currency)}</span> as of {formatDate(h.valuationDate)} ·{" "}
+              <span className="tabular">{formatCurrency(h.nativeMarketValue, h.currency)}</span> as of {formatCalendarDate(h.valuationDate)} ·{" "}
               {h.valuationDate ? `${months} month${months === 1 ? "" : "s"} old` : "no date"} (limit {limit})
             </>
           }
@@ -267,7 +267,7 @@ function StaleRow({ h, onAccept, onUpdate }: { h: Holding; onAccept: () => void;
             <input
               type="date"
               value={date}
-              max={todayIso().slice(0, 10)}
+              max={localCalendarDay()}
               onChange={(e) => setDate(e.target.value)}
               className="mt-0.5 block rounded border border-ink-200 bg-white px-2 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-navy-500/30"
             />

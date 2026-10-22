@@ -1,5 +1,36 @@
 # Handoff
 
+## #28 calendar dates — 22 October 2026 (PR #63, in review, not merged)
+
+Branch `fix/calendar-date-display` from main `04d4396` (the merge of release-checkpoint PR #62, pinned to `c1825d0`; CI passed on main). This is a presentation-only fix: no stored value changes and no migration. #61 and other roadmap work are not part of it.
+
+- **Two kinds of date, chosen by what a field means,** never by the shape of its string (`src/utils/formatting.ts`):
+  - **Calendar dates** (`Holding.valuationDate`, `ValuationSource.asOf`, `FxRate.asOf`, statement dates): `formatCalendarDate` shows the stored day in every time zone. A legacy value such as `2026-04-30T00:00:00Z` is read as its UTC date, which is how every writer encodes the day.
+  - **Timestamps** (`dismissedAt`, `rejectedAt`, `resolvedAt`, uploads, job times, quote times): `formatTimestampDate` and `formatDateTime`, in the viewer's zone or a given `timeZone`.
+  - **Removed:** `formatDate`, which handled both kinds.
+- **PDF.** Valuation as-of dates are calendar dates. The prepared date (from the document's `now`) and "Approved by advisor on" use the advisor's `timeZone`, which the PDF Preview page sends to the route. The route validates it and otherwise uses the server's zone. So a UTC server's PDF matches the in-app preview.
+- **Date inputs.** Defaults and the Data-to-complete maximum now use the viewer's day (`localCalendarDay`), not the UTC day.
+- **Unchanged:** FX ages and `utcDate`, confirmation fingerprints and exact expiry, financial values, and saved data.
+- **Tests:** 15 in `tests/calendarDates.test.ts`, written first (13 of 14 failed before the fix). They cover:
+  - UTC, New York, Los Angeles, Tokyo and Auckland;
+  - US and EU daylight-saving dates, and the year boundary;
+  - timestamps in the viewer's or a stated zone;
+  - date inputs, and FX ages unchanged;
+  - preview and PDF agreement;
+  - the whole sample proposal reading identically in New York, Tokyo and UTC (`main`'s code differed in 25 dates in New York);
+  - the route's time-zone handling and fallback.
+  - The UTC sample baseline is unchanged.
+- **Validation:**
+  - typecheck;
+  - 337 of 337 tests locally (19 files); in CI without the private UBS PDF, 2 are skipped;
+  - eval unchanged;
+  - build.
+- **Browser (America/New_York):**
+  - **Local `next start`:** Accounts & Assets shows "Valuation date Apr 30, 2026" and "Statement · Apr 30, 2026". The Assumptions FX table shows rates stored as UTC midnight as Apr 30. The in-app PDF template and a server draft PDF, inspected visually, show "Jun 30, 2026" and "Mar 6, 2014" with no day-early dates.
+  - **Vercel preview of `a3e4e14`:** this runs a UTC server, which covers the cross-zone case. The UTC-rendered draft PDF's Data Sources & Quality table (inspected visually: Apr 30 and Apr 15, 2026) matched the New York browser's preview row for row, and both read "Prepared October 22, 2026".
+  - Saved workspaces were read only and unchanged.
+- **Limitation.** A few writers store "now" as a UTC day or instant in calendar fields: an advisor override's `asOf`, the value-review confirmation, the proposal's synthetic cash line, and a new account's `asOf`. They show the UTC day of that moment, the same everywhere. Stored values aren't rewritten.
+
 ## Release checkpoint — 22 October 2026: PR #60 (#26) merged and live
 
 - **Merge.** PR #60 was merged pinned to its reviewed head `8002f0fff4983102e683d42330a16d88985b40a7` as merge commit `e54d56e3d381a65715bedcf686bf7d59935591bf` (parents `618e670` and `8002f0f`).
@@ -24,7 +55,7 @@
     - the PDF was inspected on the Assumptions page only.
   - **Observation:** the refresh summary names a manual pair by its sorted key ("USD/VND") while the table shows the stored orientation ("VND/USD"); logged as [#61](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/61). Cosmetic; no value is affected.
 - **R18 (#51)** stays Planned: #26 was its P0 slice. The reviewable candidate refresh remains.
-- **Next:** #28 (dates shown a day early west of UTC), separately, when the owner starts it. Not started.
+- **Next:** #28 (dates shown a day early west of UTC), separately. Now in review as PR #63 (see the top). This checkpoint was recorded by PR #62, merged as `04d4396`.
 
 ## #26 FX refresh and stale-rate policy — 22 October 2026 (PR #60, merged `e54d56e`, live)
 
@@ -179,7 +210,7 @@ The text below is retained historical context from the existing handoff. Its old
 
 The state of the project for the next working session: what's done, how it was checked, what's known to be missing, and what comes next. Update it at the end of each piece of work.
 
-_Section last updated: 2026-10-22, when PR #60 was merged (`e54d56e`). Next: #28._
+_Section last updated: 2026-10-22, when PR #60 was merged (`e54d56e`); #28 is in review as PR #63. Newer checkpoints at the top supersede older next-step notes._
 
 > The roadmap checkpoint and PII prerequisite (#59) at the top of this file and the #33 section below are both current; neither replaces the other.
 
@@ -324,5 +355,5 @@ The previous release, `60f43bf` (merge of #30), was smoke-tested the same day. O
    - **Silent failure.** A failed refresh says nothing.
    - **Staleness isn't used.** `isStale` exists but nothing sets or uses it. The sample's rates are dated 2026-04-30.
    - **PDF.** The PDF names the rate source but not the rates or their dates.
-3. **Next: #28** (dates shown a day early west of UTC). Keep it separate from #26; not started.
+3. **#28** (dates shown a day early west of UTC): in review as PR #63 (see the top); merge only on approval. Kept separate from #26.
 4. Backlog enhancements (#11–#19) stay parked until chosen.

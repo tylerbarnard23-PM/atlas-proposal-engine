@@ -24,7 +24,7 @@ The advisor sees exactly what refreshed, what stayed and how a candidate refresh
 - Date-only labels follow #28; source timestamps and confirmation times retain instant semantics.
 
 ## Implementation slices
-1. Deliver #26 and #28 separately (PR #34 is merged; #26 is done in PR #60).
+1. Deliver #26 and #28 separately (PR #34 is merged; #26 is done in PR #60; #28 is in review as PR #63).
 2. Add candidate refresh/status results and current-versus-candidate valuation comparison.
 3. Expose changed recommendation effects and approval/review consequences before commit.
 4. Use shared readiness in UI, Copilot and PDF route and list rates actually used in output.
