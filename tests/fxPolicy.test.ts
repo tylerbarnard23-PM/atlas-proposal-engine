@@ -279,7 +279,7 @@ describe("explicit confirmation", () => {
     expect(await post({ fxConfirmation: c })).not.toContain("Exchange rates current");
     // A confirmation the client claims is still valid, but whose fingerprint doesn't match, is refused.
     expect(await post({ fxConfirmation: { ...c, fingerprint: "0000000000000000" } })).toContain("Exchange rates current");
-  });
+  }, 30_000); // the route's first import can exceed the 5 s default on CI
 });
 
 describe("honest status in the outputs", () => {

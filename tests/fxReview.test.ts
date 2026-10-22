@@ -207,7 +207,7 @@ describe("confirmation time semantics", () => {
     expect(await post(confirmStaleRates({ ...input, now: after(1) })!)).toContain("Exchange rates current");
     // A valid confirmation clears only this check: an unvalued holding still blocks.
     expect(await post(c(), [...input.holdings, holding("aud", "AUD", 1)])).toContain("All holdings valued in the reporting currency");
-  });
+  }, 30_000); // the route's first import can exceed the 5 s default on CI
 });
 
 describe("refresh summary", () => {

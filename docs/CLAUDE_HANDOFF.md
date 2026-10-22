@@ -24,6 +24,7 @@ Branch `fix/fx-refresh-staleness` from main `618e670`. Implements #26's accepted
 - Finding 2: the clock's boundary, expiry without workspace edits (server readiness agrees at the same instant), the day-7/day-8 midnight and return-to-page refresh, with no timer left after unsubscribing.
 - Finding 3 reproduced on `ad3ea98` (invalid `expiresAt`, a 2099 `expiresAt` and a future `confirmedAt` were all valid). Now invalid, at the policy and the final-PDF route (422), with the exact 7-day boundary and the missing-rate gate kept.
 - Also found and fixed: a current leg turning stale after confirmation isn't covered by it; a stored `USD/USD` identity rate is no longer reported as "not returned" by a refresh.
+- CI: the final-PDF-route test in `fxPolicy.test.ts` timed out at 5 s on CI (`b976bf3`, `c11ce20`, `6dcdefd`; 2.3 s when it passed on `ad3ea98`) on the route's first import. The two FX route tests now have an explicit 30 s timeout; assertions unchanged.
 
 **Validation (run on the branch):**
 
