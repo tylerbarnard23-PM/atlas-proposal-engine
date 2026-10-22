@@ -293,7 +293,10 @@
         {
           "issue": 26,
           "pr": 60,
-          "state": "in-review",
+          "state": "merged",
+          "mergeCommit": "e54d56e3d381a65715bedcf686bf7d59935591bf",
+          "deployment": "dpl_4ZURnzB83QauhERhtkhihvQZNtRF",
+          "date": "2026-10-22",
           "scope": "P0: pair merge, retained provenance, rate age, stale-rate readiness and confirmation"
         }
       ]
