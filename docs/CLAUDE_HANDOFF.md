@@ -1,6 +1,32 @@
 # Handoff
 
-## #26 FX refresh and stale-rate policy — 22 October 2026 (PR #60, in review, not merged)
+## Release checkpoint — 22 October 2026: PR #60 (#26) merged and live
+
+- **Merge.** PR #60 was merged pinned to its reviewed head `8002f0fff4983102e683d42330a16d88985b40a7` as merge commit `e54d56e3d381a65715bedcf686bf7d59935591bf` (parents `618e670` and `8002f0f`).
+  - Before merging, the head was verified unchanged, the PR was mergeable and clean, and both checks passed on that exact commit: "Typecheck, test, build" (run 39819188922) and the Vercel preview. `main` has no branch protection, so those checks are the only gate.
+  - Issue #26 closed as completed at 2026-10-22 17:49 UTC.
+- **CI on `main`** for `e54d56e` (run 39825985206) passed: typecheck; 18 test files, **320 tests passed and 2 skipped** (322; the 2 need the private UBS PDF, which CI doesn't have); extraction eval 2 of 2 (recall 100%, label 100%, currency 87.5%, 0 wrong, 0 spurious); build.
+- **Production.** Deployment `dpl_4ZURnzB83QauhERhtkhihvQZNtRF`, built from `main` at `e54d56e`, is READY and aliased to https://atlas-proposal-engine.vercel.app.
+- **Live smoke test** in the in-app browser on production, with a synthetic workspace. This origin's existing saved workspace (store v6, 25 holdings, 6 recommendations, 10 rates) was backed up and restored byte-identical afterwards. Synthetic workspace: USD reporting; a USD holding with an approved recommendation; CHF 1,000 on a stale ECB CHF/USD rate (2026-04-30); VND on a Manual VND/USD rate; a stored ARS/USD pair.
+  - **Dashboard and Market Data loaded:** net worth $12.19K (10,000 + 1,000 × 1.2 + 25,000,000 × 0.0000395), readiness 15/16, the stale-rate notice, and the rates table with CHF/USD stale and in use, VND/USD Manual and current, ARS/USD not in use.
+  - **Direct final-PDF request** (otherwise-ready data, stale and unconfirmed): 422 with exactly "Exchange rates current".
+  - **Confirming after time on the page.** With the page clock 3 min 5 s ahead (beyond the 2-minute tolerance) and no event, Confirm was valid at once: the panel read "Confirmed…", readiness was 16/16 and the final PDF wasn't locked.
+  - **Withdraw:** 15/16, with "CHF/USD 175 days old (2026-04-30, ECB)… confirm them", final locked.
+  - **Expired** (VND holding removed first, so only CHF/USD was in use): at expiry − 3 s, 16/16; 4.5 s later, with no edit, 15/16 with "confirmation expired 2026-10-29 17:52 UTC", final locked.
+    - With the VND holding still in use, a 7-day jump correctly read "no longer applies", because the Manual VND/USD rate had turned 8 days old.
+  - **Draft PDF** (confirmation given at real time): 200 `application/pdf`, 253,205 bytes, `%PDF-1.4`, generated in memory (no file saved). The Assumptions page reads "Exchange rates used: ECB reference rates and advisor-entered (manual) rates, each listed with its date below." It lists CHF/USD 1.2000 (2026-04-30, ECB, 175 days, stale) and VND/USD 0.00003950 (2026-10-21, Manual, 1 day, current) but not the unused ARS/USD, plus the policy wording and the confirmation with its expiry.
+  - **FX refresh through the real production route** (the provider request was made by Vercel's server with normal TLS):
+    - "updated 9 pairs (AUD/USD, CAD/USD, CHF/USD, EUR/USD, GBP/USD, HKD/USD, JPY/USD, MXN/USD, SGD/USD). Not returned, kept with their own dates: ARS/USD. Manual rates kept: USD/VND."
+    - ARS/USD kept its own 2026-04-30 date and the "not in last refresh" label, and Manual VND/USD was unchanged.
+    - CHF/USD became 0.8220 dated 2026-10-22 and current; the notice cleared and readiness was 16/16.
+  - **Not performed:**
+    - a final PDF was not generated on production (not requested; the 422 gate was checked);
+    - the PDF was inspected on the Assumptions page only.
+  - **Observation:** the refresh summary names a manual pair by its sorted key ("USD/VND") while the table shows the stored orientation ("VND/USD"); logged as [#61](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/61). Cosmetic; no value is affected.
+- **R18 (#51)** stays Planned: #26 was its P0 slice. The reviewable candidate refresh remains.
+- **Next:** #28 (dates shown a day early west of UTC), separately, when the owner starts it. Not started.
+
+## #26 FX refresh and stale-rate policy — 22 October 2026 (PR #60, merged `e54d56e`, live)
 
 Branch `fix/fx-refresh-staleness` from main `618e670`. Implements #26's accepted policy (comment 6325161797) and the owner's refinements. R18's later candidate-refresh workflow and #28 are not part of it.
 
@@ -153,7 +179,7 @@ The text below is retained historical context from the existing handoff. Its old
 
 The state of the project for the next working session: what's done, how it was checked, what's known to be missing, and what comes next. Update it at the end of each piece of work.
 
-_Section last updated: 2026-10-22, when PR #34 was merged (`4e6da18`). Order: #26, then #28._
+_Section last updated: 2026-10-22, when PR #60 was merged (`e54d56e`). Next: #28._
 
 > The roadmap checkpoint and PII prerequisite (#59) at the top of this file and the #33 section below are both current; neither replaces the other.
 
@@ -166,7 +192,7 @@ _Section last updated: 2026-10-22, when PR #34 was merged (`4e6da18`). Order: #2
 - Don't commit third-party PDFs. The UBS holdings-report sample goes in `tests/fixtures/private/`, which is git-ignored; its tests skip when it's absent.
 
 ## Production
-Current production is `4e6da18` (PR #34); see the checkpoint update at the top. Earlier release: `9d44d9f` (merge of PR #31, pinned to head `3a1482f`, CI green on that commit), deployment `dpl_4V9aw12vvUreEQq3xYLKdFJaUzEz`. Smoke-tested on the live site, 2026-10-21:
+Current production is `e54d56e` (PR #60, #26); see the release checkpoint at the top. Before that: `4e6da18` (PR #34). Earlier release: `9d44d9f` (merge of PR #31, pinned to head `3a1482f`, CI green on that commit), deployment `dpl_4V9aw12vvUreEQq3xYLKdFJaUzEz`. Smoke-tested on the live site, 2026-10-21:
 - **Existing USD workspace** (a real v4 save in the browser): migrated to v5 with 25 holdings, 6 recommendations and no flags. The proposal's currency and country fields were dropped and effects were unchanged.
 - **EUR reporting with USD-labelled amounts** (the same save set to EUR, plus a mixed recommendation): both money recommendations migrated to EUR with the "USD" label kept as an open review. Maritime's target is still calculated as EUR 181,760, as before the update.
 - **Percentage-only edit** (10% → 20%) on the approved, included mixed recommendation: the approval cleared and the review stayed open. Re-approving left it open.
@@ -182,6 +208,7 @@ The previous release, `60f43bf` (merge of #30), was smoke-tested the same day. O
 | #29 / #30 | PDF statements: values read correctly; account totals reconciled with their currency; positioned holdings reports (UBS sample) read by column geometry; import completeness persisted and enforced. |
 | #24 / #31 (merged `9d44d9f`) | Recommendation amounts keep their own currency (see below). |
 | #33 / #34 (merged `4e6da18`) | Live recommendation preview from the complete engine (see below). |
+| #26 / #60 (merged `e54d56e`) | FX refresh merges by pair; rates aged from their dates; stale rates in use need a refresh or an expiring confirmation (see the top). |
 
 ## #33: live recommendation preview (merged in PR #34)
 - **Engine simulation.** `previewRecommendation` (`src/engines/recommendationPreview.ts`) runs the complete proposal engine in isolation on the current holdings and compares before and after. It covers actual cash offsets, household funding of debt paydowns, new cash lines, missing rates, unvalued holdings and shortfalls. Nothing is inferred by negating the position change: a cash position's own change moves no other cash.
@@ -284,7 +311,7 @@ The previous release, `60f43bf` (merge of #30), was smoke-tested the same day. O
 
 ## Next step
 1. ~~#33 / PR #34~~: merged as `4e6da18` and live (see the checkpoint update at the top). PR #32 closed as superseded.
-2. **#26 (FX refresh, retained rates, stale-rate policy):** implemented in PR #60 (see the section at the top), awaiting review; merge only on approval. The accepted direction is recorded on #26 (comment 6325161797). Refinements (all implemented):
+2. ~~**#26 (FX refresh, retained rates, stale-rate policy)**~~: merged in PR #60 as `e54d56e` and live (see the release checkpoint at the top). The accepted direction is recorded on #26 (comment 6325161797). Refinements (all implemented):
    - **Seven calendar days** is an initial product policy, not an institutional standard. Use a named constant, and don't present it as a rule.
    - **A stale-rate confirmation expires** after a defined period (proposed: seven days from the confirmation) as well as when the rates in use change.
    - **Currencies in use** include approved valuation currencies (`proposalApprovedValue.currency`).
@@ -297,5 +324,5 @@ The previous release, `60f43bf` (merge of #30), was smoke-tested the same day. O
    - **Silent failure.** A failed refresh says nothing.
    - **Staleness isn't used.** `isStale` exists but nothing sets or uses it. The sample's rates are dated 2026-04-30.
    - **PDF.** The PDF names the rate source but not the rates or their dates.
-3. Then #28 (dates shown a day early west of UTC). Keep it separate from #26.
+3. **Next: #28** (dates shown a day early west of UTC). Keep it separate from #26; not started.
 4. Backlog enhancements (#11–#19) stay parked until chosen.
