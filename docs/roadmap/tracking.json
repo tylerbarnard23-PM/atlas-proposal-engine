@@ -302,8 +302,12 @@
         {
           "issue": 28,
           "pr": 63,
-          "state": "in-review",
-          "scope": "Calendar dates show the same day in every time zone; timestamps keep instant semantics"
+          "state": "merged",
+          "scope": "Calendar dates show the same day in every time zone; timestamps keep instant semantics",
+          "mergeCommit": "23db797c58b2241e8b0c229818ebeecb06755d47",
+          "deployment": "dpl_4FLG7i5QibQQFV2ywyLob3R3V88Y",
+          "date": "2026-10-22",
+          "followUp": 64
         }
       ]
     },

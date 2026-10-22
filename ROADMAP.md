@@ -13,7 +13,7 @@ An advisor can reconcile messy client data, choose the assets in scope, construc
 
 - Main observed before this documentation save: `1d6f0c0a67dac79c2a6a3bbe498fba79793a452c`. Since then PR #34 was reviewed, fixed and merged: main `4e6da186a62e92b76d886e6e32e67af23410a688`, live in production.
 - PR #34 (the precise live preview) is complete. R08 is a separate follow-up that reuses it, not a duplicate preview.
-- #26 FX work is complete and live (PR #60, merge `e54d56e3d381a65715bedcf686bf7d59935591bf`). #28 date rendering is in review as its own change (PR #63).
+- #26 FX work is complete and live (PR #60, merge `e54d56e3d381a65715bedcf686bf7d59935591bf`). #28 date rendering is complete and live (PR #63, merge `23db797c58b2241e8b0c229818ebeecb06755d47`); follow-up #64 (UTC "today" writes) is logged.
 - Naming #35 is a separate pre-LinkedIn task; no name has been selected. Preserve browser storage and working links during that transition.
 - This roadmap does not merge, deploy, change hosting, run a new live model, purchase data or authorize external trading.
 
@@ -31,7 +31,7 @@ Phases indicate dependency order, not dates or fixed-duration sprints. Some plan
 
 | Phase | Bounded delivery | Exit evidence |
 |---|---|---|
-| P0 — secure the checkpoint | ~~Review PR #34~~ (merged `4e6da18`); ~~#26~~ (merged `e54d56e`) then #28 (in review: PR #63); R23a backup/restore; R25 study protocol/baseline | Review findings recorded; saved workspace recoverable; FX/date cases pass; study protocol exists and results remain empty until observed |
+| P0 — secure the checkpoint | ~~Review PR #34~~ (merged `4e6da18`); ~~#26~~ (merged `e54d56e`) then ~~#28~~ (merged `23db797`); R23a backup/restore; R25 study protocol/baseline | Review findings recorded; saved workspace recoverable; FX/date cases pass; study protocol exists and results remain empty until observed |
 | P1 — trustworthy inputs | R07 explicit intent; R11 accurate exceptions; R12 client constraints; R02 scope; R09 matched import then R10 source repair; R14 truthful classification; R18 candidate refresh; R23b client isolation | No duplicate parent/position value, no implicit 50% action, scope/unknowns visible, import/valuation/currency gates preserved |
 | P2 — portfolio construction | R05 scenarios; R04 new investments/replacements; R06 explicit funding; R03 targets/workspace; R08 contextual preview; R01 navigation shell | A synthetic account can be reallocated with a reserve, real sell/buy legs, alternative drafts and a reconciled funding ledger, without changing current holdings |
 | P3 — explain and approve | R13 relevant insights; R14 optional exposure enrichment; R15 bounded risk review; R16 costs/income; R17 tax context; R19 snapshots; R12 IPS summary | Every numerical statement is supported or explicitly unavailable; the approved economic package has reproducible versioned inputs |
@@ -63,7 +63,7 @@ The R01–R25 IDs preserve the original review numbering. GitHub issue numbers a
 | R15 (15) | [Connect client preferences to transparent portfolio risk review](docs/roadmap/R15-transparent-risk-review.md) | [#12](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/12) | P3 bounded risk; later quantified analytics | L | Planned |
 | R16 (16) | [Compare current/proposed fees and income with data coverage](docs/roadmap/R16-cost-and-income-comparison.md) | [#14](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/14) | P3 | L | Planned |
 | R17 (17) | [Review taxable transition effects and gain constraints](docs/roadmap/R17-tax-transition-review.md) | [#50](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/50) | P3 | L | Planned |
-| R18 (18) | [Review valuation and FX refresh changes before applying them](docs/roadmap/R18-valuation-and-fx-review.md) | [#51](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/51) | P0 fixes; P1 reviewable refresh | M | Planned (P0 slice #26 complete: PR #60, `e54d56e`; reviewable refresh remains) |
+| R18 (18) | [Review valuation and FX refresh changes before applying them](docs/roadmap/R18-valuation-and-fx-review.md) | [#51](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/51) | P0 fixes; P1 reviewable refresh | M | Planned (P0 slices complete: #26 PR #60 `e54d56e`, #28 PR #63 `23db797`; reviewable refresh remains) |
 | R19 (19) | [Freeze approved proposal snapshots and clarify approval](docs/roadmap/R19-approved-proposal-snapshots.md) | [#52](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/52) | P3 foundation; P4 delivery | L | Planned |
 | R20 (20) | [Create concise proposal templates and contextual disclosures](docs/roadmap/R20-proposal-templates-and-disclosures.md) | [#53](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/53) | P4 | M | Planned |
 | R21 (21) | [Present approved proposals digitally and share fixed versions](docs/roadmap/R21-client-presentation-and-sharing.md) | [#16](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/16) | P4 local presentation; P5 protected sharing | L | Planned |
@@ -94,7 +94,7 @@ These are coordinated contracts, not seven competing copies of portfolio state. 
 - #19 bulk date acceptance supports R11; old dates remain old after acknowledgement.
 - #13 fixed asset-class shocks are explicitly illustrative stress tests; genuine historical backtesting needs a separate method/data path.
 - #15 projections remain included as a later R15 extension, with documented data and assumptions first.
-- #26/#28 support R18. The existing accepted FX policy remains in force. #26 is complete (PR #60, merged `e54d56e`, live); R18's reviewable candidate refresh remains Planned; #28 is in review separately (PR #63).
+- #26/#28 support R18. The existing accepted FX policy remains in force. #26 is complete (PR #60, merged `e54d56e`, live); R18's reviewable candidate refresh remains Planned; #28 is complete (PR #63, merged `23db797`, live).
 - #33/#34 deliver the precise preview; R08 (#43) separately connects it to the working portfolio.
 - #35 naming remains separate before LinkedIn publication.
 
@@ -110,7 +110,7 @@ For every implementation: identify the exact issue/slice, preserve saved data, r
 
 ## Start next time
 
-Read [CLAUDE_HANDOFF.md](docs/CLAUDE_HANDOFF.md), this roadmap and [IMPLEMENTATION_GUIDE.md](docs/roadmap/IMPLEMENTATION_GUIDE.md). PRs #34 and #60 (#26) are merged; #28 is in review as PR #63. After it, follow the newest checkpoint in the handoff. Use R23a before the larger stored-schema migrations. New construction work starts from R07/R12/R02 contracts and progresses through R05/R04/R06 to R03.
+Read [CLAUDE_HANDOFF.md](docs/CLAUDE_HANDOFF.md), this roadmap and [IMPLEMENTATION_GUIDE.md](docs/roadmap/IMPLEMENTATION_GUIDE.md). PRs #34, #60 (#26) and #63 (#28) are merged; follow the newest checkpoint in the handoff. No next feature is selected. Use R23a before the larger stored-schema migrations. New construction work starts from R07/R12/R02 contracts and progresses through R05/R04/R06 to R03.
 
 Keep work in bounded PRs. Record real commit heads, checks and preview/deployment evidence; do not assume a delayed Vercel preview belongs to a newer commit.
 
