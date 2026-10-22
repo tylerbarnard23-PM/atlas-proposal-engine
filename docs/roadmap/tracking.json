@@ -1,0 +1,428 @@
+{
+  "schemaVersion": 1,
+  "acceptedAt": "2026-10-22",
+  "status": "planned",
+  "trackingIssue": 36,
+  "baselineMain": "1d6f0c0a67dac79c2a6a3bbe498fba79793a452c",
+  "checkpoint": {
+    "pr": 34,
+    "head": "c632b13ee46199448c473b05d3af8b3d21bc016e",
+    "mergeCommit": "4e6da186a62e92b76d886e6e32e67af23410a688",
+    "state": "merged"
+  },
+  "recommendations": [
+    {
+      "id": "R01",
+      "reviewNumber": 1,
+      "title": "Guide advisors through a complete proposal journey",
+      "issue": 37,
+      "plan": "R01-guided-proposal-journey.md",
+      "phase": "P2 shell; P4 complete journey",
+      "size": "M",
+      "status": "planned",
+      "dependencies": [
+        "R02",
+        "R03",
+        "R08",
+        "R09",
+        "R11",
+        "R19",
+        "R20"
+      ],
+      "existingIssueReused": false
+    },
+    {
+      "id": "R02",
+      "reviewNumber": 2,
+      "title": "Define proposal scope and allocation denominators",
+      "issue": 38,
+      "plan": "R02-proposal-scope.md",
+      "phase": "P1",
+      "size": "L",
+      "status": "planned",
+      "dependencies": [],
+      "existingIssueReused": false
+    },
+    {
+      "id": "R03",
+      "reviewNumber": 3,
+      "title": "Build current, proposed and target allocation workspace",
+      "issue": 17,
+      "plan": "R03-allocation-workspace.md",
+      "phase": "P2",
+      "size": "L",
+      "status": "planned",
+      "dependencies": [
+        "R02",
+        "R04",
+        "R05",
+        "R06",
+        "R07"
+      ],
+      "existingIssueReused": true
+    },
+    {
+      "id": "R04",
+      "reviewNumber": 4,
+      "title": "Add proposed-only investments and linked sell/buy replacements",
+      "issue": 39,
+      "plan": "R04-proposed-investments-and-replacements.md",
+      "phase": "P2",
+      "size": "L",
+      "status": "planned",
+      "dependencies": [
+        "R02",
+        "R05",
+        "R07"
+      ],
+      "existingIssueReused": false
+    },
+    {
+      "id": "R05",
+      "reviewNumber": 5,
+      "title": "Compare named draft portfolio scenarios before approval",
+      "issue": 40,
+      "plan": "R05-draft-scenarios.md",
+      "phase": "P2 foundation",
+      "size": "L",
+      "status": "planned",
+      "dependencies": [
+        "R02",
+        "R07",
+        "R23a"
+      ],
+      "existingIssueReused": false
+    },
+    {
+      "id": "R06",
+      "reviewNumber": 6,
+      "title": "Make cash reserves, funding sources and transfers explicit",
+      "issue": 41,
+      "plan": "R06-funding-and-cash-controls.md",
+      "phase": "P2",
+      "size": "L",
+      "status": "planned",
+      "dependencies": [
+        "R02",
+        "R05",
+        "R12"
+      ],
+      "existingIssueReused": false
+    },
+    {
+      "id": "R07",
+      "reviewNumber": 7,
+      "title": "Separate financial changes from tasks and require explicit intent",
+      "issue": 42,
+      "plan": "R07-explicit-recommendation-intent.md",
+      "phase": "P1",
+      "size": "M",
+      "status": "planned",
+      "dependencies": [],
+      "existingIssueReused": false
+    },
+    {
+      "id": "R08",
+      "reviewNumber": 8,
+      "title": "Open contextual portfolio changes with complete scenario effects",
+      "issue": 43,
+      "plan": "R08-contextual-holding-preview.md",
+      "phase": "P2",
+      "size": "M",
+      "status": "planned",
+      "dependencies": [
+        "PR #34",
+        "R03",
+        "R04",
+        "R05",
+        "R06"
+      ],
+      "existingIssueReused": false
+    },
+    {
+      "id": "R09",
+      "reviewNumber": 9,
+      "title": "Match imports to accounts and reconcile statement updates",
+      "issue": 44,
+      "plan": "R09-matched-import-updates.md",
+      "phase": "P1",
+      "size": "L",
+      "status": "planned",
+      "dependencies": [
+        "R23a"
+      ],
+      "existingIssueReused": false
+    },
+    {
+      "id": "R10",
+      "reviewNumber": 10,
+      "title": "Repair extraction exceptions beside source evidence",
+      "issue": 45,
+      "plan": "R10-source-repair-workbench.md",
+      "phase": "P1",
+      "size": "L",
+      "status": "planned",
+      "dependencies": [
+        "R09",
+        "R11"
+      ],
+      "existingIssueReused": false
+    },
+    {
+      "id": "R11",
+      "reviewNumber": 11,
+      "title": "Make data-quality review actionable and correct bond checks",
+      "issue": 46,
+      "plan": "R11-data-quality-exception-queue.md",
+      "phase": "P1",
+      "size": "M",
+      "status": "planned",
+      "dependencies": [],
+      "existingIssueReused": false
+    },
+    {
+      "id": "R12",
+      "reviewNumber": 12,
+      "title": "Capture client goals, cash needs, restrictions and IPS inputs",
+      "issue": 47,
+      "plan": "R12-client-objectives-and-constraints.md",
+      "phase": "P1 inputs; P3 IPS",
+      "size": "M",
+      "status": "planned",
+      "dependencies": [
+        "R23a"
+      ],
+      "existingIssueReused": false
+    },
+    {
+      "id": "R13",
+      "reviewNumber": 13,
+      "title": "Prioritize insights and track advisory follow-up tasks",
+      "issue": 48,
+      "plan": "R13-personalized-insights-and-tasks.md",
+      "phase": "P3",
+      "size": "M",
+      "status": "planned",
+      "dependencies": [
+        "R02",
+        "R07",
+        "R11",
+        "R12"
+      ],
+      "existingIssueReused": false
+    },
+    {
+      "id": "R14",
+      "reviewNumber": 14,
+      "title": "Distinguish classification, underlying exposure and estimated mixes",
+      "issue": 49,
+      "plan": "R14-classification-and-exposure-coverage.md",
+      "phase": "P1 truthful labels; P3 enrichment",
+      "size": "L",
+      "status": "planned",
+      "dependencies": [
+        "R02",
+        "R09"
+      ],
+      "existingIssueReused": false
+    },
+    {
+      "id": "R15",
+      "reviewNumber": 15,
+      "title": "Connect client preferences to transparent portfolio risk review",
+      "issue": 12,
+      "plan": "R15-transparent-risk-review.md",
+      "phase": "P3 bounded risk; later quantified analytics",
+      "size": "L",
+      "status": "planned",
+      "dependencies": [
+        "R02",
+        "R12",
+        "R14"
+      ],
+      "existingIssueReused": true
+    },
+    {
+      "id": "R16",
+      "reviewNumber": 16,
+      "title": "Compare current/proposed fees and income with data coverage",
+      "issue": 14,
+      "plan": "R16-cost-and-income-comparison.md",
+      "phase": "P3",
+      "size": "L",
+      "status": "planned",
+      "dependencies": [
+        "R04",
+        "R05",
+        "R14"
+      ],
+      "existingIssueReused": true
+    },
+    {
+      "id": "R17",
+      "reviewNumber": 17,
+      "title": "Review taxable transition effects and gain constraints",
+      "issue": 50,
+      "plan": "R17-tax-transition-review.md",
+      "phase": "P3",
+      "size": "L",
+      "status": "planned",
+      "dependencies": [
+        "R04",
+        "R06",
+        "R12"
+      ],
+      "existingIssueReused": false
+    },
+    {
+      "id": "R18",
+      "reviewNumber": 18,
+      "title": "Review valuation and FX refresh changes before applying them",
+      "issue": 51,
+      "plan": "R18-valuation-and-fx-review.md",
+      "phase": "P0 fixes; P1 reviewable refresh",
+      "size": "M",
+      "status": "planned",
+      "dependencies": [
+        "PR #34",
+        "#26",
+        "#28"
+      ],
+      "existingIssueReused": false
+    },
+    {
+      "id": "R19",
+      "reviewNumber": 19,
+      "title": "Freeze approved proposal snapshots and clarify approval",
+      "issue": 52,
+      "plan": "R19-approved-proposal-snapshots.md",
+      "phase": "P3 foundation; P4 delivery",
+      "size": "L",
+      "status": "planned",
+      "dependencies": [
+        "R02",
+        "R05",
+        "R06",
+        "R07",
+        "R18"
+      ],
+      "existingIssueReused": false
+    },
+    {
+      "id": "R20",
+      "reviewNumber": 20,
+      "title": "Create concise proposal templates and contextual disclosures",
+      "issue": 53,
+      "plan": "R20-proposal-templates-and-disclosures.md",
+      "phase": "P4",
+      "size": "M",
+      "status": "planned",
+      "dependencies": [
+        "R19"
+      ],
+      "existingIssueReused": false
+    },
+    {
+      "id": "R21",
+      "reviewNumber": 21,
+      "title": "Present approved proposals digitally and share fixed versions",
+      "issue": 16,
+      "plan": "R21-client-presentation-and-sharing.md",
+      "phase": "P4 local presentation; P5 protected sharing",
+      "size": "L",
+      "status": "planned",
+      "dependencies": [
+        "R19",
+        "R20",
+        "R23b"
+      ],
+      "existingIssueReused": true
+    },
+    {
+      "id": "R22",
+      "reviewNumber": 22,
+      "title": "Embed contextual Copilot with clear demo/live mode",
+      "issue": 54,
+      "plan": "R22-contextual-copilot.md",
+      "phase": "P4",
+      "size": "M",
+      "status": "planned",
+      "dependencies": [
+        "R03",
+        "R08",
+        "R13",
+        "R19"
+      ],
+      "existingIssueReused": false
+    },
+    {
+      "id": "R23",
+      "reviewNumber": 23,
+      "title": "Back up engagements and preserve multiple clients safely",
+      "issue": 55,
+      "plan": "R23-engagement-backup-and-switching.md",
+      "phase": "P0 backup; P1/P2 client isolation",
+      "size": "L staged",
+      "status": "planned",
+      "dependencies": [],
+      "existingIssueReused": false
+    },
+    {
+      "id": "R24",
+      "reviewNumber": 24,
+      "title": "Export an account-level implementation handoff and track follow-up",
+      "issue": 56,
+      "plan": "R24-implementation-handoff.md",
+      "phase": "P5",
+      "size": "M-L",
+      "status": "planned",
+      "dependencies": [
+        "R06",
+        "R17",
+        "R19"
+      ],
+      "existingIssueReused": false
+    },
+    {
+      "id": "R25",
+      "reviewNumber": 25,
+      "title": "Measure advisor usability and verify accessible workflows",
+      "issue": 57,
+      "plan": "R25-advisor-usability-and-accessibility.md",
+      "phase": "P0 baseline; repeat at each milestone",
+      "size": "M",
+      "status": "planned",
+      "dependencies": [],
+      "existingIssueReused": false
+    }
+  ],
+  "supportingIssues": [
+    11,
+    13,
+    15,
+    18,
+    19,
+    26,
+    28,
+    33,
+    35
+  ],
+  "securityPrerequisites": [
+    {
+      "id": "PII-protection",
+      "issue": 59,
+      "plan": "PII_PROTECTION.md",
+      "status": "planned",
+      "appliesTo": [
+        "R09",
+        "R10",
+        "R12",
+        "R19",
+        "R21",
+        "R22",
+        "R23"
+      ],
+      "gate": "Required controls and evidence before any real-client pilot; public demo remains synthetic-only."
+    }
+  ]
+}

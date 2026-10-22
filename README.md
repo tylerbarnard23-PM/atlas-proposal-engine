@@ -108,7 +108,7 @@ tests/            unit tests + extraction eval
 ## Tests and evals
 
 ```bash
-npm test        # 280 tests in 16 files: proposal math and currency handling, recommendation currencies and previews, cash flows, readiness, insights, CSV/Excel/PDF import, import completeness, Copilot tools (demo mode) + the extraction eval
+npm test        # 280 tests in 16 files (2 need the private UBS PDF and are skipped without it, as in CI): proposal math and currency handling, recommendation currencies and previews, cash flows, readiness, insights, CSV/Excel/PDF import, import completeness, Copilot tools (demo mode) + the extraction eval
 npm run eval    # statement-extraction accuracy scorecard
 ```
 
@@ -171,6 +171,8 @@ Every PDF Atlas generates is marked as a sample: a SAMPLE watermark on final PDF
 If you adapt it for real client work, removing the sample markings is your decision, and so is everything that comes with it: compliance review, books-and-records retention, supervision, data security and vendor due diligence are the responsibility of whoever deploys it.
 
 ## Limitations and roadmap
+
+The **[accepted 25-item advisor roadmap](ROADMAP.md)** has detailed plans, dependencies, phases and linked issues. Planned features are separate from the capabilities above. Start implementation with **[the roadmap guide](docs/roadmap/IMPLEMENTATION_GUIDE.md)** and the current handoff.
 
 - State lives in the browser. There are no accounts, no database and no audit trail, all of which a real advisory platform needs.
 - Market data, FX and the insight thresholds are illustrative, not calibrated.
