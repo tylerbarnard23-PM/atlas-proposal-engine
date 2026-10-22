@@ -492,6 +492,11 @@ describe("the sample workspace is unchanged when every rate is present", () => {
     const block =
       " Exchange rates used in this proposal Rate Value As of Source Age Status CAD/USD 0.7320 2026-04-30 ECB 174 days stale CHF/USD 1.1180 2026-04-30 ECB 174 days stale EUR/USD 1.0850 2026-04-30 ECB 174 days stale GBP/USD 1.2620 2026-04-30 ECB 174 days stale JPY/USD 0.006380 2026-04-30 ECB 174 days stale Reference rates, not transaction rates. A rate is treated as current for 7 days after its date, an initial product policy rather than an industry or regulatory standard. Not confirmed: CAD/USD, CHF/USD, EUR/USD, GBP/USD, JPY/USD are older than 7 days or unverified, and the advisor hasn&#x27;t confirmed them.";
     expect(text.split(block)).toHaveLength(2);
-    expect(text.replace(block, "")).toBe(baseline.pdfText);
+    // The PR #60 review: the Assumptions bullet names the sources of the rates
+    // actually used (all ECB in the sample) instead of a blanket claim.
+    const before = " Reporting currency: USD . FX rates are ECB reference rates (sourced via Frankfurter where applicable).";
+    const after = " Reporting currency: USD . Exchange rates used: ECB reference rates, each listed with its date below.";
+    expect(text.split(after)).toHaveLength(2);
+    expect(text.replace(block, "").replace(after, before)).toBe(baseline.pdfText);
   });
 });

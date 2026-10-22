@@ -58,7 +58,7 @@ export function RecCurrencyField({
           </div>
           {preview.ok ? (
             <div>
-              <strong>Convert:</strong> {amountsText(preview.rec)}, at {describeConversion(preview.conversion!)}.
+              <strong>Convert:</strong> {amountsText(preview.rec)}, at {describeConversion(preview.conversion!, fx.now)}.
             </div>
           ) : (
             <div className="text-warning-600">{preview.reason}</div>

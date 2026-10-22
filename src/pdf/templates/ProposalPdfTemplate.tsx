@@ -19,7 +19,7 @@ import { sumBy, groupBy } from "@/utils/numbers";
 import { applyRecommendationsToProposed, cashShortfallsOf } from "@/engines/proposalEngine";
 import { describeAmounts } from "@/engines/recommendationAmounts";
 import { resolveFxRate } from "@/engines/currencyEngine";
-import { STALE_FX_DAYS, fxFreshness, utcDate, utcMinute, type FxFreshness } from "@/engines/fxPolicy";
+import { STALE_FX_DAYS, describeFxSources, fxFreshness, utcDate, utcMinute, type FxFreshness } from "@/engines/fxPolicy";
 import { normalizeHoldings } from "@/engines/normalizationEngine";
 import { coverageLabel, describeUnvalued, formatTotal, reportingValue, valuationSummary, valuationTotal } from "@/engines/valuationTotals";
 import { dataQualityScore } from "@/engines/dataQualityEngine";
@@ -221,11 +221,14 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
   const fx = { reportingCurrency, rates: fxRates, now };
   // The rates the calculations below actually use, with their age (#26).
   const fxStatus = fxFreshness({ holdings: props.holdings, accounts, recommendations, fxRates, reportingCurrency, confirmation: props.fxConfirmation ?? null, now });
+  // Each rate's own source, not a blanket "ECB" (sources can be mixed).
+  const fxSources = describeFxSources(fxStatus.inUse);
   const proposed = applyRecommendationsToProposed(holdings, proposedRecs, accounts, fx);
   const proposedHoldings = proposed.holdings;
   const cashShortfalls = cashShortfallsOf(proposedHoldings, accounts, fx);
   // Approved recommendations left out of the proposed view for lack of an FX rate.
   const unconverted = proposed.unresolved;
+  const noConversion = !fxSources && nw.complete && unconverted.length === 0;
   const allocProposedClass = summarize(proposedHoldings, (h) => ASSET_CLASS_LABELS[h.assetClass] ?? "Other");
 
   // Align legend ordering with the current allocation so colors stay stable
@@ -355,7 +358,10 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
 
         <h3 style={{ fontFamily: "Georgia, serif", fontSize: "13pt", margin: "22pt 0 8pt" }}>Key Findings</h3>
         <ul style={{ paddingLeft: 18, fontSize: "10pt", lineHeight: 1.6 }}>
-          <li>Reporting currency for this proposal is <strong>{reportingCurrency}</strong>; FX conversion uses ECB reference rates.</li>
+          <li>
+            Reporting currency for this proposal is <strong>{reportingCurrency}</strong>;{" "}
+            {fxSources ? `FX conversion uses ${fxSources}.` : noConversion ? "no currency conversion was needed." : "no usable exchange rate is stored for the conversion needed."}
+          </li>
           <li>{enrichedCount} of {holdings.length} holdings have public market data references; {manualCount} are manually valued.</li>
           {stale > 0 && <li>{stale} holding(s) have stale price labels and should be refreshed before finalization.</li>}
           {mockCount > 0 && <li>{mockCount} holding(s) currently use mock/fallback values — review before final delivery.</li>}
@@ -639,7 +645,13 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
           <AllocationList rows={allocCurrency} currency={reportingCurrency} />
         </div>
         <p className="pdf-text" style={{ marginTop: 14 }}>
-          Currency exposure is computed from native-denominated holdings, converted to {reportingCurrency} using ECB reference rates. Hedging positions, if any, are presented separately in the appendix.
+          Currency exposure is computed from native-denominated holdings,{" "}
+          {fxSources
+            ? `converted to ${reportingCurrency} using ${fxSources}.`
+            : noConversion
+            ? `all already in ${reportingCurrency}, so no currency conversion was needed.`
+            : `but no usable exchange rate is stored to convert them to ${reportingCurrency}.`}{" "}
+          Hedging positions, if any, are presented separately in the appendix.
         </p>
       </PageWrap>
     );
@@ -799,7 +811,14 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
     pages.push(
       <PageWrap key="assumptions" title="Assumptions" eyebrow="13">
         <ul style={{ paddingLeft: 18, fontSize: "10pt", lineHeight: 1.7 }}>
-          <li>Reporting currency: <strong>{reportingCurrency}</strong>. FX rates are ECB reference rates (sourced via Frankfurter where applicable).</li>
+          <li>
+            Reporting currency: <strong>{reportingCurrency}</strong>.{" "}
+            {fxSources
+              ? `Exchange rates used: ${fxSources}, each listed with its date below.`
+              : noConversion
+              ? "No currency conversion was needed."
+              : "No usable exchange rate is stored for the conversion needed; the holdings affected are not valued."}
+          </li>
           <li>Public market values reflect end-of-day or delayed quotes from configured providers; quote type is disclosed per holding.</li>
           <li>Manually valued or sponsor-reported values are advisor estimates and may not represent realizable values.</li>
           <li>Income and expense ratio figures are estimates derived from advisor-entered fields where available.</li>
@@ -1080,12 +1099,13 @@ function FxRatesUsed({
         (c.state === "valid" ? (
           <p className="pdf-text" style={{ marginTop: 4 }}>
             Rates older than {STALE_FX_DAYS} days ({c.record!.pairs.join(", ")}, oldest {c.record!.oldestRateDate}) were confirmed by the advisor on{" "}
-            {utcMinute(c.record!.confirmedAt)}; the confirmation expires {utcMinute(c.record!.expiresAt)}.
+            {utcMinute(c.record!.confirmedAt)}; the confirmation expires {utcMinute(c.expiresAt!)}.
           </p>
         ) : (
           <p className="pdf-text" style={{ marginTop: 4 }}>
             Not confirmed: {status.attention.map((l) => `${l.base}/${l.quote}`).join(", ")} {status.attention.length === 1 ? "is" : "are"} older than {STALE_FX_DAYS} days
-            or unverified, and the advisor hasn&apos;t confirmed {status.attention.length === 1 ? "it" : "them"}.
+            or unverified, and the advisor hasn&apos;t confirmed {status.attention.length === 1 ? "it" : "them"}
+            {c.state === "expired" ? " (an earlier confirmation expired)" : c.state === "changed" ? " (an earlier confirmation no longer applies: the rates or their use changed)" : c.state === "invalid" ? " (the stored confirmation isn't valid)" : ""}.
           </p>
         ))}
     </div>

@@ -21,8 +21,10 @@ import { STALE_FX_DAYS, fxAgeDays, utcDate } from "./fxAge";
 //   approved recommendation's amount, or move cash in the proposal. Mock
 //   (fallback) data is never current, whatever its date.
 // - Stale or unverified rates in use need a refresh or an explicit
-//   confirmation. A confirmation is bound to a fingerprint of those rates and
-//   their uses and lapses FX_CONFIRMATION_DAYS after it was given.
+//   confirmation. A confirmation is bound to a fingerprint of every rate in
+//   use (current legs too: a cross rate depends on both) and their uses, and
+//   lapses FX_CONFIRMATION_DAYS after its confirmedAt. Unreadable, future or
+//   inconsistent times make it invalid.
 
 export { STALE_FX_DAYS, fxAgeDays, utcDate } from "./fxAge";
 /** A confirmation of stale rates lapses exactly this many days (×24 hours) after it was given. */
@@ -61,7 +63,7 @@ export function mergeFxRefresh(existing: FxRate[], response: FxRefreshResponse, 
   const retained = new Set<string>();
   for (const r of existing) {
     const key = fxPairKey(r.base, r.quote);
-    if (r.source === "Manual") kept.push(r);
+    if (r.source === "Manual" || r.base === r.quote) kept.push(r); // an identity rate needs no provider
     else if (updated.includes(key)) continue; // replaced, in either orientation
     else {
       kept.push({ ...r, notInLastRefresh: true });
@@ -184,7 +186,11 @@ export function fxLegStatus(leg: FxRate, now: Date, uses: FxUse["uses"] = []): F
   };
 }
 
-export type FxConfirmationState = "none" | "valid" | "expired" | "changed";
+/** "invalid": the stored times are unreadable, in the future, or don't match the policy lifetime. */
+export type FxConfirmationState = "none" | "valid" | "expired" | "changed" | "invalid";
+
+/** How far ahead of this clock a confirmation time may be (another device's clock) and still count. */
+export const CLOCK_SKEW_MS = 2 * 60_000;
 
 export interface FxFreshness {
   policyDays: number;
@@ -192,9 +198,10 @@ export interface FxFreshness {
   inUse: FxLegStatus[];
   /** Those that are stale or unverified. */
   attention: FxLegStatus[];
-  /** Fingerprint of the attention set and its uses; null when nothing needs attention. */
+  /** Fingerprint of every rate in use and its uses; null when nothing needs attention. */
   fingerprint: string | null;
-  confirmation: { state: FxConfirmationState; record: FxConfirmation | null };
+  /** `expiresAt` is the policy expiry, confirmedAt + FX_CONFIRMATION_DAYS (null when the record is unreadable). */
+  confirmation: { state: FxConfirmationState; record: FxConfirmation | null; expiresAt: string | null };
   /** Nothing needs attention, or a valid confirmation covers exactly what does. */
   current: boolean;
 }
@@ -209,26 +216,53 @@ function fnv(s: string, seed: number): string {
   return h.toString(16).padStart(8, "0");
 }
 
-function fingerprintOf(attention: FxLegStatus[], reportingCurrency: CurrencyCode): string {
+// The whole calculation the advisor confirmed: every leg in use (current ones
+// too, since a cross rate's value depends on both legs) with its uses, and
+// which legs needed confirming (so a leg turning stale later isn't covered).
+function fingerprintOf(inUse: FxLegStatus[], reportingCurrency: CurrencyCode): string {
   const text = [
     reportingCurrency,
-    ...attention.map((l) => [l.key, l.base, l.quote, l.rate, l.asOf, l.source, l.uses.map((u) => u.id).sort().join(";")].join("|")),
+    ...inUse
+      .map((l) => [l.key, l.base, l.quote, l.rate, l.asOf, l.source, l.stale || l.unverified ? "attention" : "current", l.uses.map((u) => u.id).sort().join(";")].join("|"))
+      .sort(),
   ].join("\n");
   return fnv(text, 0x811c9dc5) + fnv(text, 0x01000193);
+}
+
+/** The policy expiry of a confirmation, or null when its times can't be trusted at `now`. */
+function confirmationExpiry(record: FxConfirmation, now: Date): number | null {
+  const confirmed = Date.parse(record.confirmedAt);
+  const expires = Date.parse(record.expiresAt);
+  if (!Number.isFinite(confirmed) || !Number.isFinite(expires)) return null;
+  if (confirmed - now.getTime() > CLOCK_SKEW_MS) return null; // given in the future
+  const policy = confirmed + FX_CONFIRMATION_DAYS * DAY;
+  return expires === policy ? policy : null; // the lifetime runs from confirmedAt, whatever expiresAt says
 }
 
 export function fxFreshness(input: FxWorkspace & { now: Date; confirmation?: FxConfirmation | null }): FxFreshness {
   const inUse = fxRatesInUse(input).map((u) => fxLegStatus(u.leg, input.now, u.uses));
   const attention = inUse.filter((l) => l.stale || l.unverified);
-  const fingerprint = attention.length > 0 ? fingerprintOf(attention, input.reportingCurrency) : null;
+  const fingerprint = attention.length > 0 ? fingerprintOf(inUse, input.reportingCurrency) : null;
   const record = input.confirmation ?? null;
   let state: FxConfirmationState = "none";
+  let expiresAt: string | null = null;
   if (record && fingerprint) {
-    if (record.fingerprint !== fingerprint || record.reportingCurrency !== input.reportingCurrency) state = "changed";
-    else if (input.now.getTime() >= Date.parse(record.expiresAt)) state = "expired";
-    else state = "valid";
+    const expiry = confirmationExpiry(record, input.now);
+    if (expiry === null) state = "invalid";
+    else {
+      expiresAt = new Date(expiry).toISOString();
+      if (record.fingerprint !== fingerprint || record.reportingCurrency !== input.reportingCurrency) state = "changed";
+      else if (input.now.getTime() >= expiry) state = "expired";
+      else state = "valid";
+    }
   }
-  return { policyDays: STALE_FX_DAYS, inUse, attention, fingerprint, confirmation: { state, record }, current: attention.length === 0 || state === "valid" };
+  return { policyDays: STALE_FX_DAYS, inUse, attention, fingerprint, confirmation: { state, record, expiresAt }, current: attention.length === 0 || state === "valid" };
+}
+
+/** The next instant freshness can change by time alone: the next UTC midnight, or an earlier future deadline. */
+export function nextFxBoundary(nowMs: number, deadlines: number[]): number {
+  const midnight = Math.floor(nowMs / DAY) * DAY + DAY;
+  return Math.min(midnight, ...deadlines.filter((d) => Number.isFinite(d) && d > nowMs));
 }
 
 /** The advisor's confirmation of the stale or unverified rates in use now, or null when none need it. */
@@ -246,6 +280,20 @@ export function confirmStaleRates(input: FxWorkspace & { now: Date }): FxConfirm
   };
 }
 
+const SOURCE_LABELS: Record<FxRate["source"], string> = {
+  ECB: "ECB reference rates",
+  Frankfurter: "ECB reference rates (via Frankfurter)",
+  Manual: "advisor-entered (manual) rates",
+  Mock: "unverified fallback (mock) rates",
+};
+
+/** The sources of the rates in use, as a phrase: "ECB reference rates and advisor-entered (manual) rates"; null when none are used. */
+export function describeFxSources(inUse: FxLegStatus[]): string | null {
+  const labels = (Object.keys(SOURCE_LABELS) as FxRate["source"][]).filter((s) => inUse.some((l) => l.source === s)).map((s) => SOURCE_LABELS[s]);
+  if (labels.length === 0) return null;
+  return labels.length === 1 ? labels[0] : `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
+}
+
 /** "2026-10-29 12:00 UTC" */
 export const utcMinute = (iso: string) => new Date(Date.parse(iso)).toISOString().slice(0, 16).replace("T", " ") + " UTC";
 
@@ -260,12 +308,14 @@ export function describeFreshness(f: FxFreshness): string | undefined {
   if (f.attention.length === 0) return undefined;
   const legs = f.attention.map(describeLeg).join("; ");
   const c = f.confirmation;
-  if (c.state === "valid") return `Older or unverified rates confirmed until ${utcMinute(c.record!.expiresAt)}: ${legs}`;
+  if (c.state === "valid") return `Older or unverified rates confirmed until ${utcMinute(c.expiresAt!)}: ${legs}`;
   const why =
     c.state === "expired"
-      ? `; confirmation expired ${utcMinute(c.record!.expiresAt)}`
+      ? `; confirmation expired ${utcMinute(c.expiresAt!)}`
       : c.state === "changed"
       ? "; the earlier confirmation no longer applies (rates or their use changed)"
+      : c.state === "invalid"
+      ? "; the stored confirmation isn't valid (its times are unreadable, in the future or inconsistent)"
       : "";
   return `${legs}${why}. Refresh in Market Data or confirm them (policy: ${f.policyDays} days).`;
 }

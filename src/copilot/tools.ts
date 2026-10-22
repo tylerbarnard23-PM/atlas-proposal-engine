@@ -141,7 +141,7 @@ function fxNote(ctx: CopilotContext) {
       unverified: l.unverified,
       used_by: l.uses.length,
     })),
-    confirmation: f.confirmation.state === "none" ? null : { state: f.confirmation.state, expires_at: f.confirmation.record ? utcMinute(f.confirmation.record.expiresAt) : null },
+    confirmation: f.confirmation.state === "none" ? null : { state: f.confirmation.state, expires_at: f.confirmation.expiresAt ? utcMinute(f.confirmation.expiresAt) : null },
     note:
       f.attention.length === 0
         ? undefined
@@ -224,7 +224,7 @@ function getPortfolioOverview(ctx: CopilotContext) {
         proposed_value: r.proposedValue ?? null,
         action_amount_in_reporting: converted.ok && !percent ? converted.amounts.actionAmount ?? null : null,
         proposed_value_in_reporting: converted.ok ? converted.amounts.proposedValue ?? null : null,
-        rate_used: converted.ok && converted.conversion ? { ...converted.conversion, description: describeConversion(converted.conversion) } : null,
+        rate_used: converted.ok && converted.conversion ? { ...converted.conversion, description: describeConversion(converted.conversion, ctx.now) } : null,
         not_applied_reason: converted.ok ? null : converted.reason,
         currency_review_open: r.currencyReview?.status === "open",
       };

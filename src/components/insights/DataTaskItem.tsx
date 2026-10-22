@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { CheckCircle2, RefreshCw, Upload } from "lucide-react";
 import { useAtlasStore } from "@/store/useStore";
+import { useFxNow } from "@/hooks/useFxNow";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import type { Holding, Insight } from "@/domain/types";
@@ -141,7 +142,7 @@ function MissingRateRow({ h, reportingCurrency }: { h: Holding; reportingCurrenc
 function StaleRateRow({ h }: { h: Holding }) {
   const fxRates = useAtlasStore((s) => s.fxRates);
   const reportingCurrency = useAtlasStore((s) => s.client.proposalOutputCurrency);
-  const now = new Date();
+  const now = useFxNow();
   const leg = staleRateLeg(normalizeHoldings([h], fxRates, reportingCurrency)[0], now);
   return (
     <div className="flex flex-wrap items-center justify-between gap-2">

@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input, Label, Textarea } from "@/components/ui/Input";
 import { useNormalizedHoldings } from "@/hooks/useNormalizedHoldings";
+import { useFxNow } from "@/hooks/useFxNow";
 import { evaluateWorkspaceReadiness } from "@/engines/complianceEngine";
 import { ReadinessChecklist } from "@/components/proposal/ReadinessChecklist";
 import { ReadinessBanner } from "@/components/proposal/ReadinessBanner";
@@ -36,9 +37,10 @@ function Inner() {
   const fxRates = useAtlasStore((s) => s.fxRates);
   const sourceDocuments = useAtlasStore((s) => s.sourceDocuments);
   const fxConfirmation = useAtlasStore((s) => s.fxConfirmation);
+  const now = useFxNow();
   const { holdings } = useNormalizedHoldings();
 
-  const readiness = evaluateWorkspaceReadiness({ client, advisor, accounts, holdings, recommendations: recs, disclosures, fxRates, sourceDocuments, fxConfirmation });
+  const readiness = evaluateWorkspaceReadiness({ client, advisor, accounts, holdings, recommendations: recs, disclosures, fxRates, sourceDocuments, fxConfirmation, now });
 
   return (
     <>

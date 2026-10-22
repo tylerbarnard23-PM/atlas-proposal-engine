@@ -5,6 +5,7 @@ import { FxNotice } from "@/components/market-data/FxNotice";
 import { ImportNotice } from "@/components/import/ImportNotice";
 import { useAtlasStore } from "@/store/useStore";
 import { useNormalizedHoldings } from "@/hooks/useNormalizedHoldings";
+import { useFxNow } from "@/hooks/useFxNow";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { KpiCard } from "@/components/ui/KpiCard";
 import { PageHeader, SectionDivider } from "@/components/ui/Section";
@@ -42,6 +43,7 @@ function DashboardInner() {
   const fxRates = useAtlasStore((s) => s.fxRates);
   const sourceDocuments = useAtlasStore((s) => s.sourceDocuments);
   const fxConfirmation = useAtlasStore((s) => s.fxConfirmation);
+  const now = useFxNow();
   const { holdings, insights, reportingCurrency } = useNormalizedHoldings();
 
   const nw = valuationSummary(holdings);
@@ -60,7 +62,7 @@ function DashboardInner() {
   const countries = new Set(holdings.map((h) => h.country).filter(Boolean)).size;
   const classes = new Set(holdings.map((h) => h.assetClass)).size;
 
-  const readiness = evaluateWorkspaceReadiness({ client, advisor, accounts, holdings, recommendations, disclosures, fxRates, sourceDocuments, fxConfirmation });
+  const readiness = evaluateWorkspaceReadiness({ client, advisor, accounts, holdings, recommendations, disclosures, fxRates, sourceDocuments, fxConfirmation, now });
   const readyCount = readiness.filter((r) => r.passed).length;
 
   return (

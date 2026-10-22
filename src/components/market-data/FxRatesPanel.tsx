@@ -7,6 +7,7 @@ import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { useFxFreshness } from "@/hooks/useFxFreshness";
+import { useFxNow } from "@/hooks/useFxNow";
 import {
   DEFAULT_FX_QUOTES,
   FX_CONFIRMATION_DAYS,
@@ -38,7 +39,7 @@ export function FxRatesPanel() {
   const [busy, setBusy] = React.useState(false);
 
   const inUse = new Map(fresh.inUse.map((l) => [l.key, l]));
-  const now = new Date();
+  const now = useFxNow();
   const rows = [...fxRates]
     .filter((r) => r.base !== r.quote)
     .map((r) => ({ r, status: fxLegStatus(r, now), use: inUse.get(fxPairKey(r.base, r.quote)) }))
@@ -111,7 +112,7 @@ export function FxRatesPanel() {
               <div className="pl-6 flex flex-wrap items-center gap-2">
                 <CheckCircle2 className="h-4 w-4 text-positive-500" />
                 <span>
-                  Confirmed {utcMinute(c.record!.confirmedAt)}; expires {utcMinute(c.record!.expiresAt)}, or sooner if these rates or their use change.
+                  Confirmed {utcMinute(c.record!.confirmedAt)}; expires {utcMinute(c.expiresAt!)}, or sooner if the rates in use or their use change.
                 </span>
                 <Button size="sm" variant="ghost" onClick={() => setFxConfirmation(null)}>
                   Withdraw confirmation
@@ -119,8 +120,11 @@ export function FxRatesPanel() {
               </div>
             ) : (
               <div className="pl-6 flex flex-wrap items-center gap-2">
-                {c.state === "expired" && <span className="text-warning-600">The earlier confirmation expired {utcMinute(c.record!.expiresAt)}.</span>}
-                {c.state === "changed" && <span className="text-warning-600">The earlier confirmation no longer applies: these rates or their use changed.</span>}
+                {c.state === "expired" && <span className="text-warning-600">The earlier confirmation expired {utcMinute(c.expiresAt!)}.</span>}
+                {c.state === "changed" && <span className="text-warning-600">The earlier confirmation no longer applies: the rates in use or their use changed.</span>}
+                {c.state === "invalid" && (
+                  <span className="text-warning-600">The stored confirmation isn&apos;t valid: its times are unreadable, in the future or inconsistent.</span>
+                )}
                 <Button
                   size="sm"
                   onClick={() => setFxConfirmation(confirmStaleRates({ holdings, accounts, recommendations, fxRates, reportingCurrency, now: new Date() }))}

@@ -26,7 +26,8 @@ export function FxNotice({ className }: { className?: string }) {
       <div className="min-w-0 flex-1">
         <span className="font-semibold text-warning-600">Exchange rates older than {f.policyDays} days in use:</span> {f.attention.map(describeLeg).join("; ")}.
         Values use them as stored.
-        {c.state === "expired" && <> The confirmation expired {utcMinute(c.record!.expiresAt)}.</>}
+        {c.state === "expired" && <> The confirmation expired {utcMinute(c.expiresAt!)}.</>}
+        {c.state === "invalid" && <> The stored confirmation isn&apos;t valid (its times are unreadable, in the future or inconsistent).</>}
         {c.state === "changed" && <> The earlier confirmation no longer applies (rates or their use changed).</>} The final PDF waits for a refresh or your
         confirmation.
       </div>
