@@ -4,6 +4,7 @@ import type {
   AdvisorProfile,
   ClientProfile,
   Disclosure,
+  FxConfirmation,
   FxRate,
   Holding,
   Recommendation,
@@ -23,6 +24,8 @@ export interface CopilotSnapshot {
   disclosures: Disclosure[];
   /** Imports' completeness (see forReadiness); absent from older clients. */
   sourceDocuments?: SourceDocument[];
+  /** The advisor's confirmation of stale rates in use (#26); absent from older clients. */
+  fxConfirmation?: FxConfirmation | null;
 }
 
 // Structural guard only: the engines are defensive about optional fields, so
@@ -39,6 +42,7 @@ export const CopilotRequestSchema = z.object({
     recommendations: z.array(record).max(200),
     disclosures: z.array(record).max(200),
     sourceDocuments: z.array(record.and(z.object({ id: z.string(), fileName: z.string() }))).max(500).optional(),
+    fxConfirmation: record.nullable().optional(),
   }),
 });
 

@@ -63,7 +63,7 @@ The R01–R25 IDs preserve the original review numbering. GitHub issue numbers a
 | R15 (15) | [Connect client preferences to transparent portfolio risk review](docs/roadmap/R15-transparent-risk-review.md) | [#12](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/12) | P3 bounded risk; later quantified analytics | L | Planned |
 | R16 (16) | [Compare current/proposed fees and income with data coverage](docs/roadmap/R16-cost-and-income-comparison.md) | [#14](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/14) | P3 | L | Planned |
 | R17 (17) | [Review taxable transition effects and gain constraints](docs/roadmap/R17-tax-transition-review.md) | [#50](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/50) | P3 | L | Planned |
-| R18 (18) | [Review valuation and FX refresh changes before applying them](docs/roadmap/R18-valuation-and-fx-review.md) | [#51](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/51) | P0 fixes; P1 reviewable refresh | M | Planned |
+| R18 (18) | [Review valuation and FX refresh changes before applying them](docs/roadmap/R18-valuation-and-fx-review.md) | [#51](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/51) | P0 fixes; P1 reviewable refresh | M | Planned (P0 slice #26 in review: PR #60) |
 | R19 (19) | [Freeze approved proposal snapshots and clarify approval](docs/roadmap/R19-approved-proposal-snapshots.md) | [#52](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/52) | P3 foundation; P4 delivery | L | Planned |
 | R20 (20) | [Create concise proposal templates and contextual disclosures](docs/roadmap/R20-proposal-templates-and-disclosures.md) | [#53](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/53) | P4 | M | Planned |
 | R21 (21) | [Present approved proposals digitally and share fixed versions](docs/roadmap/R21-client-presentation-and-sharing.md) | [#16](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/16) | P4 local presentation; P5 protected sharing | L | Planned |
@@ -94,7 +94,7 @@ These are coordinated contracts, not seven competing copies of portfolio state. 
 - #19 bulk date acceptance supports R11; old dates remain old after acknowledgement.
 - #13 fixed asset-class shocks are explicitly illustrative stress tests; genuine historical backtesting needs a separate method/data path.
 - #15 projections remain included as a later R15 extension, with documented data and assumptions first.
-- #26/#28 support R18. The existing accepted FX policy remains in force.
+- #26/#28 support R18. The existing accepted FX policy remains in force. #26 is implemented in PR #60 (in review); #28 follows separately.
 - #33/#34 deliver the precise preview; R08 (#43) separately connects it to the working portfolio.
 - #35 naming remains separate before LinkedIn publication.
 

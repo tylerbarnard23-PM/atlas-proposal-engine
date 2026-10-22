@@ -13,6 +13,7 @@ import type {
   Holding,
   Proposal,
   ProposalSection,
+  FxConfirmation,
   Recommendation,
   SourceDocument,
 } from "@/domain/types";
@@ -37,6 +38,10 @@ interface RequestBody {
     fxRates?: FxRate[];
     // Each import's completeness (see forReadiness), for the readiness gate.
     sourceDocuments?: SourceDocument[];
+    // The advisor's confirmation of stale rates in use (#26). The server
+    // recomputes the rates in use and checks the fingerprint and expiry
+    // against its own clock; the client's view of validity isn't trusted.
+    fxConfirmation?: FxConfirmation | null;
   };
 }
 
@@ -61,6 +66,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: "Invalid accent color: use a six-digit hex value such as #1F3F6E." }, { status: 400 });
   }
 
+  const now = new Date();
+  const fxConfirmation = parseFxConfirmation(body.state.fxConfirmation);
+
   // The UI disables the final button until readiness passes; enforce the same
   // gate here so a direct API call can't skip it.
   if (variant === "final") {
@@ -74,6 +82,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       disclosures: disclosures ?? [],
       fxRates: Array.isArray(fxRates) ? fxRates : [],
       sourceDocuments: Array.isArray(sourceDocuments) ? sourceDocuments : [],
+      fxConfirmation,
+      now,
     });
     if (!readinessOk(checks)) {
       const failing = checks.filter((c) => !c.passed).map((c) => c.label);
@@ -84,7 +94,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
   }
 
-  const props = { ...body.state, fxRates: Array.isArray(body.state.fxRates) ? body.state.fxRates : [], variant };
+  const props = { ...body.state, fxRates: Array.isArray(body.state.fxRates) ? body.state.fxRates : [], fxConfirmation, now: now.toISOString(), variant };
   // Dynamically load react-dom/server inside the handler so the App Router
   // doesn't statically reject the import. (Next.js disallows static
   // `react-dom/server` imports in API routes; dynamic import is allowed.)
@@ -175,4 +185,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   } finally {
     await browser.close().catch(() => {});
   }
+}
+
+// Only a well-formed confirmation is considered; anything else counts as none.
+function parseFxConfirmation(v: unknown): FxConfirmation | null {
+  if (!v || typeof v !== "object") return null;
+  const c = v as Record<string, unknown>;
+  const str = (k: string) => typeof c[k] === "string";
+  if (!["confirmedAt", "expiresAt", "oldestRateDate", "fingerprint", "reportingCurrency"].every(str)) return null;
+  if (!Array.isArray(c.pairs) || !c.pairs.every((p) => typeof p === "string")) return null;
+  return c as unknown as FxConfirmation;
 }

@@ -227,9 +227,44 @@ export interface FxRate {
   base: CurrencyCode;
   quote: CurrencyCode;
   rate: number;
+  /** The provider's or entry's own date for the rate (not when it was fetched). */
   asOf: string;
+  /** Mock is fallback data, never provider-verified; Manual is advisor-entered. */
   source: "ECB" | "Frankfurter" | "Mock" | "Manual";
-  isStale?: boolean;
+  /** When a successful provider refresh returned this rate. */
+  refreshedAt?: string;
+  /** A refresh ran after this rate was stored and didn't return this pair. */
+  notInLastRefresh?: boolean;
+}
+
+// The outcome of the last FX refresh attempt (engines/fxPolicy). Pairs are
+// canonical keys such as "EUR/USD", whatever orientation the rate is stored in.
+export interface FxRefreshRecord {
+  at: string;
+  ok: boolean;
+  provider: string;
+  error?: string;
+  /** Currencies asked for, besides the base. */
+  requested: CurrencyCode[];
+  /** Pairs the provider returned and that replaced the stored rate. */
+  updated: string[];
+  /** Stored pairs the provider didn't return, kept with their own date and source. */
+  retained: string[];
+  /** Advisor-entered rates, never replaced by a refresh. */
+  manualKept: string[];
+}
+
+// The advisor's explicit acceptance of stale or unverified rates in use. It
+// covers exactly the rates and uses its fingerprint was computed from, and
+// lapses at expiresAt (engines/fxPolicy).
+export interface FxConfirmation {
+  confirmedAt: string;
+  expiresAt: string;
+  pairs: string[];
+  /** UTC calendar date (YYYY-MM-DD) of the oldest covered rate. */
+  oldestRateDate: string;
+  fingerprint: string;
+  reportingCurrency: CurrencyCode;
 }
 
 export interface MarketDataResult {
@@ -375,7 +410,7 @@ export interface Insight {
   generatedAt: string;
 }
 
-export type DataTaskKind = "balance_only" | "missing_identifier" | "stale_value" | "missing_fx_rate";
+export type DataTaskKind = "balance_only" | "missing_identifier" | "stale_value" | "missing_fx_rate" | "stale_fx_rate";
 
 export type RecommendationType =
   | "buy"

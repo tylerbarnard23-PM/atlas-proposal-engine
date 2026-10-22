@@ -1,5 +1,120 @@
 # Handoff
 
+## #26 FX refresh and stale-rate policy — 22 October 2026 (PR #60, in review, not merged)
+
+Branch `fix/fx-refresh-staleness` from main `618e670`. Implements #26's accepted policy (comment 6325161797) and the owner's refinements. R18's later candidate-refresh workflow and #28 are not part of it.
+
+- **Refresh merges by pair** (`src/engines/fxPolicy.ts` `mergeFxRefresh`):
+  - EUR/USD and USD/EUR are one pair, so a returned rate replaces both orientations.
+  - Pairs the provider didn't return keep their own date and source, labelled "not in last refresh".
+  - Manual rates are never replaced.
+  - A failed refresh changes nothing and is reported, with the cause.
+  - The route (`/api/market-data/fx`) returns explicit success or failure (502). It requests the workspace's currencies (holding, approved-valuation, account, recommendation, reporting), the defaults and every stored pair.
+- **Resolution** (`resolveFxRate`): the newest quote wins in either orientation, and the stored legs used are recorded, including both legs of a cross rate via USD. "In use" means legs that value a holding, convert an approved recommendation, or write proposal cash/native moves (`fxRatesInUse`). Stored but unused rates don't count.
+- **Freshness**: UTC calendar-day age with an injected clock (`fxAge.ts`). `STALE_FX_DAYS = 7` is an initial product policy, not an institutional or regulatory standard: current through day 7, stale from day 8. Mock data is never current.
+- **Readiness**: the shared check "Exchange rates current" is enforced in the UI, Copilot readiness and the final-PDF route; the route uses the server clock and recomputes the fingerprint.
+- **Confirmation**: records the covered pairs (the stale or unverified ones), oldest rate date, time, the reporting currency and a fingerprint of **every leg in use** (current legs too, since a cross rate depends on both), their uses and which legs needed confirming. It lapses as soon as any of those change, including a current leg turning stale; unused rates don't affect it. It expires exactly 7 days (168 h) after `confirmedAt`. A record with unreadable times, a `confirmedAt` more than 2 minutes (`CLOCK_SKEW_MS`) ahead of the evaluating clock, or an `expiresAt` other than `confirmedAt` + 7 days is **invalid**. It doesn't bypass missing rates, incomplete imports or any other gate.
+- **Time in the browser**: one shared clock (`src/engines/fxClock.ts`, `src/hooks/useFxNow.ts`) ticks at the next UTC midnight or confirmation deadline, and when the user returns to the page (focus / visibility); it keeps no timer without subscribers. Readiness, notices, data tasks, conversions, the Market Data panel and the PDF preview all evaluate at it.
+- **Status shown**: Market Data (age, source, in use / stale / manual / unverified / not-in-last-refresh, refresh summary, confirm and withdraw); dashboard and Accounts notice; a "Data to complete" stale-rate task linking to Market Data; stale age on recommendation conversions; the PDF names the sources of the rates actually used (e.g. "ECB reference rates and advisor-entered (manual) rates", or "No currency conversion was needed") and its Assumptions page lists those rates, cross rates and the confirmation; Copilot `fx_freshness` (drafting isn't blocked by staleness).
+- **Store v6**: drops only the obsolete `isStale` flag. Rates, dates, sources and all other data are kept.
+- **Sample**: monetary values, proposed values and the rest of the PDF match the stored baseline. Four differences are intentional and asserted, not recaptured: the sample's 2026-04-30 rates make "Exchange rates current" fail, add one stale-rate task, add the rates-used block to the PDF, and the Assumptions bullet now reads "Exchange rates used: ECB reference rates, each listed with its date below."
+
+**Review fixes (commit `c11ce20`)**, tests first in `tests/fxReview.test.ts` (16):
+- Finding 1 reproduced on `ad3ea98` (EUR reporting, CHF 1,000, stale CHF/USD 1.2, current USD/EUR 0.9 changed to 0.8: EUR 1,080 → 960 and the confirmation stayed valid). Now `changed`, also for direct and inverse current legs and a new use; an unused rate changing leaves it valid.
+- Finding 2: the clock's boundary, expiry without workspace edits (server readiness agrees at the same instant), the day-7/day-8 midnight and return-to-page refresh, with no timer left after unsubscribing.
+- Finding 3 reproduced on `ad3ea98` (invalid `expiresAt`, a 2099 `expiresAt` and a future `confirmedAt` were all valid). Now invalid, at the policy and the final-PDF route (422), with the exact 7-day boundary and the missing-rate gate kept.
+- Also found and fixed: a current leg turning stale after confirmation isn't covered by it; a stored `USD/USD` identity rate is no longer reported as "not returned" by a refresh.
+- CI: see "CI timeout: cause and fix" below (the earlier "first import" explanation was wrong).
+
+**Shared-clock follow-up (on `7afdd86`):**
+- **Bug (reproduced first).** The page subscribes to the clock at 12:00 and the user confirms at 12:10, with no midnight, focus or edit in between.
+  - The confirm action recorded `confirmedAt` with `new Date()` (12:10), but the status was still evaluated at the clock's snapshot (12:00), so the confirmation read as future-dated (`invalid`).
+  - Its recovery deadline (12:08) had already passed in real time, so the next scheduled update was midnight.
+- **Fix:**
+  - Confirming goes through one store action, `confirmFxRates()`, which takes its time from `fxClock.now()`. That call catches the shared clock up and returns the current instant, so the record and the status share one instant. FxRatesPanel uses the action; a refresh also takes its time from `fxClock.now()`.
+  - The clock now schedules from the time on screen, so a deadline that has passed in real time but isn't shown yet ticks at once.
+  - The singleton `fxClock` moved to `src/engines/fxClock.ts`, and the deadline rule to `fxDeadline` in `fxPolicy`.
+  - The future-time validation and the 2-minute tolerance are unchanged.
+- **Tests (`tests/fxReview.test.ts`, written first; both failed).**
+  - The store's confirm action, called 10 minutes after the clock was subscribed, is valid at once in the panel, notice and readiness, with exactly one clock notification.
+  - Withdrawing and confirming again 15 minutes later works.
+  - The exact expiry still fires by time alone, and no timer is left afterwards.
+  - Separately, a deadline already passed in real time but not by the snapshot ticks at once.
+
+**CI timeout: cause and fix (after `790ab58`, run 39813520266).**
+- **What failed.** The fxPolicy test "the final-PDF route refuses stale rates without a valid confirmation" timed out:
+  - at 5 s on `b976bf3`, `c11ce20` and `6dcdefd`;
+  - at 30 s on `790ab58`;
+  - it passed in 2.3 s on `ad3ea98`.
+- **Where it stalled.** Its valid-confirmation request passed every readiness check, so the route went on to resolve the runner's Chrome, launch it and print a real PDF; it was the only route test that got that far. A temporary diagnostic commit (`df6028f`, run 39818495413, removed in the next commit) timed each stage on CI:
+  - route import: 91 ms;
+  - readiness and template render: ~0.2 s;
+  - **launching `/usr/bin/google-chrome`: 25.3 s.** Chrome printed nothing for 14 s, then D-Bus errors, and DevTools was listening at 19 s;
+  - page, content, PDF and close: ~3.4 s;
+  - total: 200 `application/pdf` at 28.9 s.
+  - The same route run straight afterwards took 0.5 s (launch 0.22 s).
+- **Conclusion.** The cost is Chrome's first, cold start on a busy CI runner, not the import (my earlier "cold import" explanation and its 30 s timeout were wrong).
+- **Fake `Date`.** `Date` stayed frozen at `NOW` through every stage and the PDF still completed, so fake time doesn't block this path. Chrome's 19 s start happens in its own process, before puppeteer connects. The probe always ran the fake-`Date` case first, so the order wasn't swapped.
+- **Fix.**
+  - The readiness-focused route tests in `fxPolicy.test.ts` and `fxReview.test.ts` replace only the Chromium boundary: `puppeteer-core` and the host-browser lookup, in `tests/support/fakeChromium.ts`. They keep the real route, request parsing, server-clock readiness and template rendering.
+  - The 30 s timeouts are removed; the route tests now take 60–110 ms.
+- **What the tests now assert.**
+  - Missing, malformed (not a record, or unreadable time), changed (forged fingerprint, or the covered rate itself) and expired (server clock) confirmations each return 422 with only "Exchange rates current" failing.
+  - A valid confirmation alongside another failure (an unvalued holding, or no approved recommendation) returns 422 for that check only.
+  - Nothing refused launches a browser.
+  - With every check passing, the route renders the proposal (including the rates-used block and the confirmation) and reaches the browser boundary, returning 200 `application/pdf` and closing the browser.
+- **Checks on the fix.**
+  - The focused files passed 10 runs in a row.
+  - With the route's readiness gate bypassed, both route tests fail.
+  - The store test restores the store, its clock subscription and its deadline even if an assertion fails.
+- **Real PDF generation** stays covered separately:
+  - the recorded local smoke (draft PDFs generated through the local route and inspected visually);
+  - the diagnostic CI run (real Chrome, 200 `application/pdf`);
+  - the same probe run locally on this code, under both fake and real `Date`.
+
+**Validation (run on the branch):**
+
+| Check | Result |
+|---|---|
+| typecheck | pass |
+| tests | 322 of 322 passed with the private UBS PDF (18 files); without it, as in CI, 2 are skipped |
+| eval | unchanged: recall 100%, label 100%, currency 87.5%, 0 wrong, 0 spurious |
+| build | pass |
+| new tests | 24 in `tests/fxPolicy.test.ts` and 18 in `tests/fxReview.test.ts`, written first |
+
+**Browser** (local `next start`, synthetic workspace; the browser's own workspace was restored afterwards):
+- A v5 save with `isStale: true` migrated to v6 without it, keeping all rates.
+- Market Data showed stale, in-use, unused and manual states. The dashboard notice, readiness (15/16) and the per-holding stale-rate tasks appeared, and the recommendation conversion showed "175 days old".
+- Confirmation was stored. The server route returned 200 with it and 422 ("Exchange rates current" only) without it or with an expired one. The expired and changed states displayed.
+- A real failed refresh: the preview server process couldn't verify the provider's TLS certificate (`UNABLE_TO_VERIFY_LEAF_SIGNATURE`; a local environment issue). Nothing changed and the failure was shown.
+- A successful refresh used a real provider response fetched from a shell (22 Oct 2026) and fed to the page:
+  - USD/EUR and USD/SEK replaced the stale reverse copies;
+  - manual VND was kept;
+  - ARS was not returned and was labelled;
+  - readiness went to 16/16 and the notice cleared.
+- A draft PDF generated by the local server route (Chromium) was inspected visually: the Assumptions page lists CHF/USD (stale, 175 days) and USD/EUR (current), not the unused JPY rate, with the cross-rate note, the policy wording and the confirmation with its expiry.
+- Review fixes (`c11ce20`, synthetic EUR workspace):
+  - **Changed cross rate:** after confirming CHF/USD, USD/EUR was changed 0.9 → 0.8. The dashboard showed EUR 960 and "no longer applies"; the server route then failed "Exchange rates current" (before the change it passed).
+  - **Expiry by time alone:** only the page's `Date.now` was shifted to 3 s before expiry. The panel read "Confirmed…" and, 4.5 s later with no event or edit, "The earlier confirmation expired 2026-10-29 16:03 UTC"; the dashboard notice and readiness item agreed. Stored data was byte-identical.
+  - **Midnight:** at 2026-10-29 23:59:57Z USD/EUR (dated 2026-10-22) was 7 days old and current; after midnight, 8 days and stale, and listed for attention. Triggered by `visibilitychange` then the midnight timer, no edits.
+  - **Shared-clock follow-up (local `next start`, page time advanced with no event or timer; the 102-holding workspace was restored byte-identical afterwards).**
+    - **Confirm after 10 minutes on the page.** Clicking Confirm 10 minutes after mount was valid at once. The panel read "Confirmed 2026-10-22 16:30 UTC…", the dashboard had no notice, readiness was 15/16 (the failing check was the synthetic workspace's missing recommendation), and the PDF preview listed "Exchange rates current" without a warning. The DOM made 0 mutations in 3 s idle, so there was no render loop.
+    - **Withdraw and confirm again.** After 5 more minutes on the page, this was also valid at once.
+    - **Expiry.** A confirmation made 3 minutes after mount expired exactly at its deadline by time alone ("Confirmed…" at −3 s, "expired" after it).
+    - **Midnight and return from the background.** A `visibilitychange` to 2026-10-28 23:59:57Z showed USD/EUR (dated 2026-10-21) at 7 days, current and still confirmed. After midnight it was 8 days, stale, and the confirmation no longer applied. Stored data was unchanged.
+    - **Listeners.** Window `focus` and document `visibilitychange` listeners netted to 0 over five page changes.
+  - **PDF:** with an ECB and a Manual rate in use, the Assumptions page read "Exchange rates used: ECB reference rates and advisor-entered (manual) rates, each listed with its date below." and listed the Manual GBP/USD rate.
+
+**Limitations:**
+- **Provider redirect.** The provider host redirects (`api.frankfurter.app` → `api.frankfurter.dev`), and `fetch` follows it.
+- **Real route and TLS.** This machine's AVG Web/Mail Shield intercepts HTTPS: the provider's certificate is issued locally by "AVG Web/Mail Shield Root", trusted only through `NODE_EXTRA_CA_CERTS` in the shell (hence the preview server's `UNABLE_TO_VERIFY_LEAF_SIGNATURE`). The actual route handler, run in-process from that shell, returned 200 with five ECB rates dated 2026-10-22 and omitted VND, but over the intercepted connection, not normal TLS verification. **On the Vercel preview** for `c11ce20` (opened in the in-app browser, which has a Vercel sign-in; the Vercel MCP access tools returned 403), the deployed route made the provider request with normal TLS (this evidence is for `c11ce20`; later commits change the clock, tests and docs, not the route or provider): `GET /api/market-data/fx` returned 200 with five ECB rates dated 2026-10-22 (VND omitted), and Market Data → Refresh FX updated all 9 sample pairs and cleared the stale-rate notice. The preview origin's workspace was restored afterwards.
+- **Sample rates.** They are illustrative, labelled ECB and dated 2026-04-30, so the public sample fails "Exchange rates current" until FX is refreshed or the rates are confirmed. This is intentional.
+- **Manual rates.** No UI to enter or remove manual rates (pre-existing). A manual rate is only replaced by editing stored data.
+- **Confirmation trust.** The confirmation lives in browser storage with the rest of the workspace. The server checks its fingerprint and expiry, but the state is client-supplied, not a tamper-proof record (#59, R19).
+- **Clock skew.** The server and browser evaluate at their own clocks; a confirmation up to 2 minutes ahead of the server's clock is accepted.
+- **Out of scope.** Rate dates use UTC date labels here; general date display is #28. Candidate refresh with review before applying is R18 (#51).
+- **Migration order.** R23a export/restore was planned before persisted-schema changes. The v6 step only removes an unused optional flag and was explicitly requested.
+
 ## Agent planning addition — 22 October 2026
 
 R22 / issue #54 now includes [AGENT_EVALUATION.md](roadmap/AGENT_EVALUATION.md): Claude-first provider adapter/configuration, optional separately evaluated providers, offline orchestration tests, paid opt-in synthetic live evaluations and browser acceptance. Atlas users do not need Claude Desktop/Code; the current no-key demo remains scripted and the live implementation remains Anthropic-specific until changed. Evaluate cheaper models before changing the default. No paid calls, runtime changes or additional provider approval occur in this save. Preserve #59 and #26 then #28 sequencing; foundational agent tests may precede later contextual features. Do not substitute parser/demo/tool tests for proof of live-agent behavior.
@@ -169,7 +284,7 @@ The previous release, `60f43bf` (merge of #30), was smoke-tested the same day. O
 
 ## Next step
 1. ~~#33 / PR #34~~: merged as `4e6da18` and live (see the checkpoint update at the top). PR #32 closed as superseded.
-2. **#26 (FX refresh, retained rates, stale-rate policy):** planning only. The direction is accepted and recorded on #26 (comment 6325161797). Refinements:
+2. **#26 (FX refresh, retained rates, stale-rate policy):** implemented in PR #60 (see the section at the top), awaiting review; merge only on approval. The accepted direction is recorded on #26 (comment 6325161797). Refinements (all implemented):
    - **Seven calendar days** is an initial product policy, not an institutional standard. Use a named constant, and don't present it as a rule.
    - **A stale-rate confirmation expires** after a defined period (proposed: seven days from the confirmation) as well as when the rates in use change.
    - **Currencies in use** include approved valuation currencies (`proposalApprovedValue.currency`).

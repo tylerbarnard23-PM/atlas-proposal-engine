@@ -18,6 +18,7 @@ import { ReasonPicker } from "@/components/ui/ReasonPicker";
 import type { Holding, Recommendation, RecommendationStatus, RecommendationType } from "@/domain/types";
 import { proposedCashShortfalls } from "@/engines/proposalEngine";
 import { useNormalizedHoldings } from "@/hooks/useNormalizedHoldings";
+import { useFxNow } from "@/hooks/useFxNow";
 import { hasMoneyAmounts, newRecommendation } from "@/engines/recommendationAmounts";
 import { summarizePreview } from "@/components/recommendations/recEffect";
 import { RecPreview } from "@/components/recommendations/RecPreview";
@@ -55,7 +56,8 @@ function Inner() {
   const upsert = useAtlasStore((s) => s.upsertRecommendation);
   const fxRates = useAtlasStore((s) => s.fxRates);
   const { holdings: normalized, reportingCurrency } = useNormalizedHoldings();
-  const fx = React.useMemo(() => ({ reportingCurrency, rates: fxRates }), [reportingCurrency, fxRates]);
+  const now = useFxNow();
+  const fx = React.useMemo(() => ({ reportingCurrency, rates: fxRates, now }), [reportingCurrency, fxRates, now]);
   const shortfalls = React.useMemo(
     () => proposedCashShortfalls(normalized, recs.filter((r) => r.approvedByAdvisor), accounts, fx),
     [normalized, recs, accounts, fx]
@@ -359,7 +361,8 @@ function RecForm({
 }) {
   const { holdings, reportingCurrency } = useNormalizedHoldings();
   const fxRates = useAtlasStore((s) => s.fxRates);
-  const fx = React.useMemo(() => ({ reportingCurrency, rates: fxRates }), [reportingCurrency, fxRates]);
+  const now = useFxNow();
+  const fx = React.useMemo(() => ({ reportingCurrency, rates: fxRates, now }), [reportingCurrency, fxRates, now]);
   const accounts = useAtlasStore((s) => s.accounts);
   const accountById = React.useMemo(
     () => Object.fromEntries(accounts.map((a) => [a.id, a])),

@@ -8,7 +8,9 @@ import type {
   ClientProfile,
   DismissedInsight,
   Disclosure,
+  FxConfirmation,
   FxRate,
+  FxRefreshRecord,
   Holding,
   Insight,
   MarketDataResult,
@@ -27,6 +29,8 @@ import { SEED_MARKET_QUOTES } from "@/data/seedMarketData";
 import { DISCLOSURE_LIBRARY } from "@/domain/disclosureLibrary";
 import { todayIso } from "@/utils/formatting";
 import { DEFAULT_PROPOSAL_SECTIONS } from "@/engines/proposalEngine";
+import { confirmStaleRates } from "@/engines/fxPolicy";
+import { fxClock } from "@/engines/fxClock";
 import { migrateRecommendationCurrency, withApprovalRule } from "@/engines/recommendationAmounts";
 import { LEGACY_SAMPLE_FIRM_NAME } from "@/domain/branding";
 import type { ImportedWorkspace } from "@/ingestion/documents/toWorkspace";
@@ -46,6 +50,10 @@ export interface AtlasState {
   proposal: Proposal;
   disclosures: Disclosure[];
   pdfHistory: PdfGenerationJob[];
+  /** Outcome of the last FX refresh attempt (#26). */
+  fxRefresh: FxRefreshRecord | null;
+  /** The advisor's confirmation of stale rates in use; checked against its fingerprint and expiry (#26). */
+  fxConfirmation: FxConfirmation | null;
   hasHydrated: boolean;
 }
 
@@ -77,6 +85,11 @@ export interface AtlasActions {
   setMarketData: (identifierKey: string, result: MarketDataResult) => void;
   applyMarketDataResults: (results: { holdingId: string; result: MarketDataResult }[]) => void;
   setFxRates: (rates: FxRate[]) => void;
+  /** Stores a merged refresh (engines/fxPolicy mergeFxRefresh): its rates and its outcome. */
+  applyFxRefresh: (result: { rates: FxRate[]; record: FxRefreshRecord }) => void;
+  setFxConfirmation: (confirmation: FxConfirmation | null) => void;
+  /** Confirms the stale or unverified rates in use now, at the shared FX clock's current instant (so it's valid at once). */
+  confirmFxRates: () => void;
   toggleSection: (key: string) => void;
   setProposalNotes: (notes: string) => void;
   // Optional disclosures only; required ones always stay in the proposal.
@@ -128,6 +141,8 @@ const seedState = (): AtlasState => ({
   proposal: initialProposal(),
   disclosures: DISCLOSURE_LIBRARY,
   pdfHistory: [],
+  fxRefresh: null,
+  fxConfirmation: null,
   hasHydrated: false,
 });
 
@@ -177,6 +192,8 @@ const blankState = (): AtlasState => {
     },
     disclosures: DISCLOSURE_LIBRARY,
     pdfHistory: [],
+    fxRefresh: null,
+    fxConfirmation: null,
     hasHydrated: true,
   };
 };
@@ -232,6 +249,16 @@ export function migrateAtlasState(persisted: unknown, version: number): AtlasSta
       void _k;
       state.proposal = proposal;
     }
+  }
+  // v6 (#26): rate age is computed from each rate's date, so the stored
+  // isStale flag (never set by the app) is dropped. Every rate, date and
+  // source is kept; nothing else changes.
+  if (version < 6 && state && Array.isArray(state.fxRates)) {
+    state.fxRates = state.fxRates.map((r) => {
+      const { isStale: _drop, ...rate } = r as FxRate & { isStale?: boolean };
+      void _drop;
+      return rate;
+    });
   }
   return state;
 }
@@ -334,6 +361,15 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
           return { marketDataByIdentifier: md };
         }),
       setFxRates: (rates) => set({ fxRates: rates }),
+      applyFxRefresh: ({ rates, record }) => set({ fxRates: rates, fxRefresh: record }),
+      setFxConfirmation: (confirmation) => set({ fxConfirmation: confirmation }),
+      confirmFxRates: () => {
+        const s = get();
+        // fxClock.now() catches the on-screen time up first: a confirmation
+        // timed after a stale snapshot would read as future-dated (invalid).
+        const now = new Date(fxClock.now());
+        set({ fxConfirmation: confirmStaleRates({ holdings: s.holdings, accounts: s.accounts, recommendations: s.recommendations, fxRates: s.fxRates, reportingCurrency: s.client.proposalOutputCurrency, now }) });
+      },
       toggleSection: (key) =>
         set((s) => ({
           proposalSections: s.proposalSections.map((p) =>
@@ -412,7 +448,7 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);
       },
-      version: 5,
+      version: 6,
       // v2: the seeded fictional advisor no longer carries real credential
       // marks (CFA, CFP®); strip them from workspaces saved before the change,
       // and drop "running" PDF jobs orphaned by the old append-only history.

@@ -4,6 +4,7 @@ import { reportingValue, valuationTotal } from "./valuationTotals";
 import { groupBy, sumBy } from "@/utils/numbers";
 import { safeId, todayIso } from "@/utils/formatting";
 import { CODES_COVERED_BY_TASKS, dataTasks, isBalanceOnly, MARKET_STALE_DAYS } from "./dataTasks";
+import { STALE_FX_DAYS } from "./fxAge";
 import type { DataTaskKind } from "@/domain/types";
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
@@ -13,6 +14,7 @@ const TASK_TITLE: Record<DataTaskKind, (n: number) => string> = {
   stale_value: (n) => `${plural(n, "value is", "values are")} out of date`,
   // The reporting currency is filled in by generateInsights.
   missing_fx_rate: (n) => `${plural(n, "holding can't", "holdings can't")} be valued in {ccy}`,
+  stale_fx_rate: (n) => `${plural(n, "holding is", "holdings are")} valued with exchange rates older than ${STALE_FX_DAYS} days`,
 };
 const TASK_WHY: Record<DataTaskKind, string> = {
   balance_only:
@@ -20,6 +22,7 @@ const TASK_WHY: Record<DataTaskKind, string> = {
   missing_identifier:
     "Without a ticker or CUSIP the price can't be refreshed from market data. Add one, or dismiss if the holding has none.",
   stale_value: `Market-priced values older than ${MARKET_STALE_DAYS} days, and property, business, insurance or private assets older than 12 months, may no longer be accurate. Update the value, refresh the price, or keep the date: the proposal shows each value's as-of date.`,
+  stale_fx_rate: `The rates are older than ${STALE_FX_DAYS} days (an initial product policy, not a regulatory standard) or are unverified fallback data. The values still use them. Refresh FX in Market Data, or confirm the rates there; the final PDF waits for one or the other.`,
   missing_fx_rate:
     "There's no exchange rate from their currency to {ccy}, so they're left out of every total and chart. Until they're valued, portfolio-wide checks (concentration, currency, country, liquidity and cash) are paused. Add the rate in Market Data.",
 };
@@ -27,6 +30,8 @@ const TASK_WHY: Record<DataTaskKind, string> = {
 export interface InsightInputs {
   holdings: NormalizedHolding[];
   reportingCurrency: string;
+  /** For the stale-rate task: the clock, and whether a valid confirmation covers the stale rates in use. */
+  fx?: { now?: Date; confirmed?: boolean };
 }
 
 const CONCENTRATION_PCT = 8; // single-issuer warning
@@ -36,7 +41,7 @@ const ILLIQUID_PCT = 25;
 const HIGH_FEE_BPS = 80;
 const CASH_DRAG_PCT = 12;
 
-export function generateInsights({ holdings, reportingCurrency }: InsightInputs): Insight[] {
+export function generateInsights({ holdings, reportingCurrency, fx }: InsightInputs): Insight[] {
   const out: Insight[] = [];
   const investible = holdings.filter((h) => !h.isLiability);
   const now = todayIso();
@@ -187,7 +192,7 @@ export function generateInsights({ holdings, reportingCurrency }: InsightInputs)
 
   // Data to complete: gaps the advisor can fix in place (see dataTasks).
   // Every holding: a liability with no rate is as much a gap as an asset.
-  for (const t of dataTasks(holdings)) {
+  for (const t of dataTasks(holdings, fx)) {
     const n = t.openIds.length;
     out.push({
       id: safeId("insight"),

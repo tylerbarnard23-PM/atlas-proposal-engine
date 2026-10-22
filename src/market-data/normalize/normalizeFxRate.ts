@@ -7,6 +7,5 @@ export function normalizeFxRate(partial: Partial<FxRate> & { base: FxRate["base"
     rate: partial.rate,
     asOf: partial.asOf ?? new Date().toISOString(),
     source: partial.source ?? "Frankfurter",
-    isStale: partial.isStale,
   };
 }

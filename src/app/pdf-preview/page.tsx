@@ -8,6 +8,7 @@ import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { useNormalizedHoldings } from "@/hooks/useNormalizedHoldings";
+import { useFxNow } from "@/hooks/useFxNow";
 import { forReadiness } from "@/engines/importCompleteness";
 import { evaluateWorkspaceReadiness, readinessOk } from "@/engines/complianceEngine";
 import { ReadinessChecklist } from "@/components/proposal/ReadinessChecklist";
@@ -35,11 +36,13 @@ function Inner() {
   const disclosures = useAtlasStore((s) => s.disclosures);
   const fxRates = useAtlasStore((s) => s.fxRates);
   const sourceDocuments = useAtlasStore((s) => s.sourceDocuments);
+  const fxConfirmation = useAtlasStore((s) => s.fxConfirmation);
+  const now = useFxNow();
   const pdfHistory = useAtlasStore((s) => s.pdfHistory);
   const recordPdfJob = useAtlasStore((s) => s.recordPdfJob);
   const { holdings } = useNormalizedHoldings();
 
-  const checks = evaluateWorkspaceReadiness({ client, advisor, accounts, holdings, recommendations: recs, disclosures, fxRates, sourceDocuments });
+  const checks = evaluateWorkspaceReadiness({ client, advisor, accounts, holdings, recommendations: recs, disclosures, fxRates, sourceDocuments, fxConfirmation, now });
   const ready = readinessOk(checks);
   const failing = checks.filter((c) => !c.passed);
 
@@ -72,6 +75,8 @@ function Inner() {
             fxRates,
             // What the server's readiness gate needs from each import, not the full extraction.
             sourceDocuments: sourceDocuments.map(forReadiness),
+            // Checked again on the server against its own clock (#26).
+            fxConfirmation,
           },
         }),
       });

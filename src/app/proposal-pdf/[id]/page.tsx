@@ -4,6 +4,7 @@ import * as React from "react";
 import { useSearchParams } from "next/navigation";
 import { useAtlasStore } from "@/store/useStore";
 import { useNormalizedHoldings } from "@/hooks/useNormalizedHoldings";
+import { useFxNow } from "@/hooks/useFxNow";
 import { ProposalPdfTemplate } from "@/pdf/templates/ProposalPdfTemplate";
 import { ClientOnly } from "@/components/layout/ClientOnly";
 
@@ -29,6 +30,8 @@ function Inner() {
   const sections = useAtlasStore((s) => s.proposalSections);
   const disclosures = useAtlasStore((s) => s.disclosures);
   const fxRates = useAtlasStore((s) => s.fxRates);
+  const fxConfirmation = useAtlasStore((s) => s.fxConfirmation);
+  const now = useFxNow();
   const { holdings } = useNormalizedHoldings();
 
   return (
@@ -42,6 +45,8 @@ function Inner() {
       sections={sections}
       disclosures={disclosures.filter((d) => proposal.disclosureIds.includes(d.id) || d.required)}
       fxRates={fxRates}
+      fxConfirmation={fxConfirmation}
+      now={now.toISOString()}
       variant={variant}
     />
   );

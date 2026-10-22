@@ -288,7 +288,15 @@
         "#26",
         "#28"
       ],
-      "existingIssueReused": false
+      "existingIssueReused": false,
+      "progress": [
+        {
+          "issue": 26,
+          "pr": 60,
+          "state": "in-review",
+          "scope": "P0: pair merge, retained provenance, rate age, stale-rate readiness and confirmation"
+        }
+      ]
     },
     {
       "id": "R19",

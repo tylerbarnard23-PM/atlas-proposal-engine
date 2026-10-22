@@ -5,6 +5,7 @@ import { normalizeHoldings, type NormalizedHolding } from "@/engines/normalizati
 import { generateInsights, summarizeAllocation } from "@/engines/insightEngine";
 import { applyRecToValue } from "@/engines/proposalEngine";
 import { previewRecommendation } from "@/engines/recommendationPreview";
+import { describeLeg, fxFreshness, utcDate, utcMinute, type FxFreshness } from "@/engines/fxPolicy";
 import { amountsInReporting, describeConversion } from "@/engines/recommendationAmounts";
 import { missingPairs, reportingValue, valuationSummary, valuationTotal, type ValuedTotal } from "@/engines/valuationTotals";
 import { evaluateWorkspaceReadiness, readinessOk } from "@/engines/complianceEngine";
@@ -34,9 +35,17 @@ export class CopilotContext {
   readonly reportingCurrency: string;
   readonly drafts: Recommendation[] = [];
 
+  readonly now = new Date();
+
   constructor(readonly snapshot: CopilotSnapshot) {
     this.reportingCurrency = snapshot.client.proposalOutputCurrency || "USD";
     this.holdings = normalizeHoldings(snapshot.holdings, snapshot.fxRates, this.reportingCurrency);
+  }
+
+  /** Age and confirmation of the rates in use (#26). Reported, never a reason to refuse a draft. */
+  get fx(): FxFreshness {
+    const s = this.snapshot;
+    return fxFreshness({ holdings: s.holdings, accounts: s.accounts, recommendations: s.recommendations, fxRates: s.fxRates, reportingCurrency: this.reportingCurrency, confirmation: s.fxConfirmation ?? null, now: this.now });
   }
 
   // Investible assets, valued in the reporting currency. Its value is only a
@@ -115,6 +124,31 @@ function completenessNote(ctx: CopilotContext) {
   };
 }
 
+// What the model is told about the rates in use: their age against the
+// policy and any confirmation. Staleness is disclosed, not a reason to refuse.
+function fxNote(ctx: CopilotContext) {
+  const f = ctx.fx;
+  return {
+    policy_days: f.policyDays,
+    current: f.current,
+    stale_in_use: f.attention.map((l) => ({
+      pair: l.key,
+      stored_as: `${l.base}/${l.quote}`,
+      rate: l.rate,
+      as_of: utcDate(l.asOf),
+      age_days: l.ageDays,
+      source: l.source,
+      unverified: l.unverified,
+      used_by: l.uses.length,
+    })),
+    confirmation: f.confirmation.state === "none" ? null : { state: f.confirmation.state, expires_at: f.confirmation.expiresAt ? utcMinute(f.confirmation.expiresAt) : null },
+    note:
+      f.attention.length === 0
+        ? undefined
+        : `Some rates in use are older than ${f.policyDays} days or unverified (${f.attention.map(describeLeg).join("; ")}). Values still use them; mention their age when citing converted figures. The final PDF needs a refresh or the advisor's confirmation.`,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Tool implementations
 // ---------------------------------------------------------------------------
@@ -158,6 +192,7 @@ function getPortfolioOverview(ctx: CopilotContext) {
       net: round(nw.net.value),
     },
     valuation: valuationNote(ctx),
+    fx_freshness: fxNote(ctx),
     // Both must be true before the portfolio is presented as complete.
     completeness: completenessNote(ctx),
     counts: { accounts: ctx.snapshot.accounts.length, holdings: ctx.holdings.length },
@@ -189,7 +224,7 @@ function getPortfolioOverview(ctx: CopilotContext) {
         proposed_value: r.proposedValue ?? null,
         action_amount_in_reporting: converted.ok && !percent ? converted.amounts.actionAmount ?? null : null,
         proposed_value_in_reporting: converted.ok ? converted.amounts.proposedValue ?? null : null,
-        rate_used: converted.ok && converted.conversion ? { ...converted.conversion, description: describeConversion(converted.conversion) } : null,
+        rate_used: converted.ok && converted.conversion ? { ...converted.conversion, description: describeConversion(converted.conversion, ctx.now) } : null,
         not_applied_reason: converted.ok ? null : converted.reason,
         currency_review_open: r.currencyReview?.status === "open",
       };
@@ -205,7 +240,7 @@ const ListInsightsInput = z.object({
 function listInsights(ctx: CopilotContext, input: z.infer<typeof ListInsightsInput>) {
   const rank = { info: 0, warning: 1, critical: 2 } as const;
   const min = rank[input.min_severity ?? "info"];
-  const insights = generateInsights({ holdings: ctx.holdings, reportingCurrency: ctx.reportingCurrency })
+  const insights = generateInsights({ holdings: ctx.holdings, reportingCurrency: ctx.reportingCurrency, fx: { now: ctx.now, confirmed: ctx.fx.confirmation.state === "valid" } })
     .filter((i) => (input.category ? i.category === input.category : true))
     .filter((i) => rank[i.severity] >= min);
   return {
@@ -362,6 +397,8 @@ function checkReadiness(ctx: CopilotContext) {
     disclosures: s.disclosures,
     fxRates: s.fxRates,
     sourceDocuments: s.sourceDocuments ?? [],
+    fxConfirmation: s.fxConfirmation ?? null,
+    now: ctx.now,
   });
   return {
     ready: readinessOk(checks),

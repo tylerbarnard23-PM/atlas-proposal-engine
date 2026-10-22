@@ -55,7 +55,7 @@ export function CurrencyReviewPanel({
         <div className="mt-2 pl-6 space-y-2">
           <div>
             Amount changes from <strong>{legacy.effect.from}</strong> to <strong>{legacy.effect.to}</strong>
-            {legacy.conversion ? <> at {describeConversion(legacy.conversion)}</> : null}. This changes what the recommendation does,
+            {legacy.conversion ? <> at {describeConversion(legacy.conversion, fx.now)}</> : null}. This changes what the recommendation does,
             so its approval is cleared.
           </div>
           <div className="flex flex-wrap gap-2">

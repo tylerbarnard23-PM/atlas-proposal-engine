@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { FxNotice } from "@/components/market-data/FxNotice";
 import { ImportNotice } from "@/components/import/ImportNotice";
 import Link from "next/link";
 import { Plus, FilePlus2, Wallet, CheckCircle2, ArrowRight } from "lucide-react";
@@ -130,6 +131,7 @@ function Inner() {
         <>
           <ValuationNotice summary={valuationSummary(holdings)} reportingCurrency={reportingCurrency} className="mb-4" />
           <ImportNotice className="mb-4" />
+          <FxNotice className="mb-4" />
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
             {accounts.map((a) => {
               const acctTotal = valuationTotal(holdings.filter((h) => h.accountId === a.id));

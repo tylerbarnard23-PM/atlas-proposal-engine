@@ -1,6 +1,7 @@
 import type { DataTaskKind, Holding } from "@/domain/types";
 import type { HoldingValuation } from "./normalizationEngine";
 import { isStale } from "@/utils/dates";
+import { STALE_FX_DAYS, fxAgeDays } from "./fxAge";
 
 // "Data to complete": the gaps in imported data an advisor can act on,
 // worked out from each holding's own fields (not its stored data-quality
@@ -37,18 +38,31 @@ export interface DataTask {
   doneIds: string[];
 }
 
-export function dataTasks(holdings: (Holding & { valuation?: HoldingValuation })[]): DataTask[] {
+/** A holding valued with a rate older than the FX policy, or with unverified (mock) rate data. */
+export function staleRateLeg(h: { valuation?: HoldingValuation }, now: Date) {
+  if (h.valuation?.status !== "valued") return undefined;
+  return h.valuation.rateLegs.find((l) => l.source === "Mock" || fxAgeDays(l.asOf, now) > STALE_FX_DAYS);
+}
+
+export function dataTasks(
+  holdings: (Holding & { valuation?: HoldingValuation })[],
+  // The clock for rate age, and whether a valid confirmation covers the stale rates in use (#26).
+  fx: { now?: Date; confirmed?: boolean } = {}
+): DataTask[] {
+  const now = fx.now ?? new Date();
   const tasks: Record<DataTaskKind, DataTask> = {
     // First: an unvalued holding is left out of every total.
     missing_fx_rate: { kind: "missing_fx_rate", openIds: [], doneIds: [] },
     balance_only: { kind: "balance_only", openIds: [], doneIds: [] },
     missing_identifier: { kind: "missing_identifier", openIds: [], doneIds: [] },
     stale_value: { kind: "stale_value", openIds: [], doneIds: [] },
+    stale_fx_rate: { kind: "stale_fx_rate", openIds: [], doneIds: [] },
   };
   for (const h of holdings) {
     if (h.valuation?.status === "unvalued") tasks.missing_fx_rate.openIds.push(h.id);
     if (isBalanceOnly(h)) (h.dataAcks?.keepAsBalance ? tasks.balance_only.doneIds : tasks.balance_only.openIds).push(h.id);
     if (needsIdentifier(h)) tasks.missing_identifier.openIds.push(h.id);
+    if (staleRateLeg(h, now)) (fx.confirmed ? tasks.stale_fx_rate.doneIds : tasks.stale_fx_rate.openIds).push(h.id);
     if (isStaleValue(h)) {
       const accepted = h.dataAcks?.acceptedValuationDate && h.dataAcks.acceptedValuationDate === h.valuationDate;
       (accepted ? tasks.stale_value.doneIds : tasks.stale_value.openIds).push(h.id);

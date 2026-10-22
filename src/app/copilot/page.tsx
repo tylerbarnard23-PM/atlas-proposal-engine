@@ -77,6 +77,7 @@ function Inner() {
             recommendations: state.recommendations,
             disclosures: state.disclosures,
             sourceDocuments: state.sourceDocuments.map(forReadiness),
+            fxConfirmation: state.fxConfirmation,
           },
         }),
       });

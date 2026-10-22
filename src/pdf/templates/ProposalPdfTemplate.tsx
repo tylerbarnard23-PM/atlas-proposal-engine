@@ -1,5 +1,6 @@
 import * as React from "react";
 import type {
+  FxConfirmation,
   Account,
   AdvisorProfile,
   ClientProfile,
@@ -17,6 +18,8 @@ import { formatCurrency, formatDate, formatPercent } from "@/utils/formatting";
 import { sumBy, groupBy } from "@/utils/numbers";
 import { applyRecommendationsToProposed, cashShortfallsOf } from "@/engines/proposalEngine";
 import { describeAmounts } from "@/engines/recommendationAmounts";
+import { resolveFxRate } from "@/engines/currencyEngine";
+import { STALE_FX_DAYS, describeFxSources, fxFreshness, utcDate, utcMinute, type FxFreshness } from "@/engines/fxPolicy";
 import { normalizeHoldings } from "@/engines/normalizationEngine";
 import { coverageLabel, describeUnvalued, formatTotal, reportingValue, valuationSummary, valuationTotal } from "@/engines/valuationTotals";
 import { dataQualityScore } from "@/engines/dataQualityEngine";
@@ -146,6 +149,10 @@ export interface ProposalPdfTemplateProps {
   /** Rates for expressing proposed trades in each holding's own currency. */
   fxRates: FxRate[];
   variant: "draft" | "final";
+  /** The advisor's confirmation of stale rates in use (#26). */
+  fxConfirmation?: FxConfirmation | null;
+  /** When the document is produced (ISO); the rate ages are computed against it. */
+  now?: string;
 }
 
 function summarize(holdings: Holding[], group: (h: Holding) => string) {
@@ -210,12 +217,18 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
   // independent of whether it's included in the PDF prose. Each rec's
   // intent is interpreted by applyRecommendationsToProposed (sell zeroes,
   // reduce subtracts, increase/buy adds, with offsetting cash flow).
-  const fx = { reportingCurrency, rates: fxRates };
+  const now = props.now ? new Date(props.now) : new Date();
+  const fx = { reportingCurrency, rates: fxRates, now };
+  // The rates the calculations below actually use, with their age (#26).
+  const fxStatus = fxFreshness({ holdings: props.holdings, accounts, recommendations, fxRates, reportingCurrency, confirmation: props.fxConfirmation ?? null, now });
+  // Each rate's own source, not a blanket "ECB" (sources can be mixed).
+  const fxSources = describeFxSources(fxStatus.inUse);
   const proposed = applyRecommendationsToProposed(holdings, proposedRecs, accounts, fx);
   const proposedHoldings = proposed.holdings;
   const cashShortfalls = cashShortfallsOf(proposedHoldings, accounts, fx);
   // Approved recommendations left out of the proposed view for lack of an FX rate.
   const unconverted = proposed.unresolved;
+  const noConversion = !fxSources && nw.complete && unconverted.length === 0;
   const allocProposedClass = summarize(proposedHoldings, (h) => ASSET_CLASS_LABELS[h.assetClass] ?? "Other");
 
   // Align legend ordering with the current allocation so colors stay stable
@@ -345,7 +358,10 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
 
         <h3 style={{ fontFamily: "Georgia, serif", fontSize: "13pt", margin: "22pt 0 8pt" }}>Key Findings</h3>
         <ul style={{ paddingLeft: 18, fontSize: "10pt", lineHeight: 1.6 }}>
-          <li>Reporting currency for this proposal is <strong>{reportingCurrency}</strong>; FX conversion uses ECB reference rates.</li>
+          <li>
+            Reporting currency for this proposal is <strong>{reportingCurrency}</strong>;{" "}
+            {fxSources ? `FX conversion uses ${fxSources}.` : noConversion ? "no currency conversion was needed." : "no usable exchange rate is stored for the conversion needed."}
+          </li>
           <li>{enrichedCount} of {holdings.length} holdings have public market data references; {manualCount} are manually valued.</li>
           {stale > 0 && <li>{stale} holding(s) have stale price labels and should be refreshed before finalization.</li>}
           {mockCount > 0 && <li>{mockCount} holding(s) currently use mock/fallback values — review before final delivery.</li>}
@@ -629,7 +645,13 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
           <AllocationList rows={allocCurrency} currency={reportingCurrency} />
         </div>
         <p className="pdf-text" style={{ marginTop: 14 }}>
-          Currency exposure is computed from native-denominated holdings, converted to {reportingCurrency} using ECB reference rates. Hedging positions, if any, are presented separately in the appendix.
+          Currency exposure is computed from native-denominated holdings,{" "}
+          {fxSources
+            ? `converted to ${reportingCurrency} using ${fxSources}.`
+            : noConversion
+            ? `all already in ${reportingCurrency}, so no currency conversion was needed.`
+            : `but no usable exchange rate is stored to convert them to ${reportingCurrency}.`}{" "}
+          Hedging positions, if any, are presented separately in the appendix.
         </p>
       </PageWrap>
     );
@@ -789,12 +811,20 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
     pages.push(
       <PageWrap key="assumptions" title="Assumptions" eyebrow="13">
         <ul style={{ paddingLeft: 18, fontSize: "10pt", lineHeight: 1.7 }}>
-          <li>Reporting currency: <strong>{reportingCurrency}</strong>. FX rates are ECB reference rates (sourced via Frankfurter where applicable).</li>
+          <li>
+            Reporting currency: <strong>{reportingCurrency}</strong>.{" "}
+            {fxSources
+              ? `Exchange rates used: ${fxSources}, each listed with its date below.`
+              : noConversion
+              ? "No currency conversion was needed."
+              : "No usable exchange rate is stored for the conversion needed; the holdings affected are not valued."}
+          </li>
           <li>Public market values reflect end-of-day or delayed quotes from configured providers; quote type is disclosed per holding.</li>
           <li>Manually valued or sponsor-reported values are advisor estimates and may not represent realizable values.</li>
           <li>Income and expense ratio figures are estimates derived from advisor-entered fields where available.</li>
           <li>The proposal does not model trading costs, custodian fees, market impact, taxes, or after-tax outcomes unless explicitly stated.</li>
         </ul>
+        <FxRatesUsed status={fxStatus} reportingCurrency={reportingCurrency} rates={fxRates} holdings={props.holdings} recommendations={recommendations} />
       </PageWrap>
     );
   }
@@ -993,6 +1023,91 @@ function AllocationList({ rows, currency }: { rows: { label: string; value: numb
           <div className="val">{formatCurrency(r.value, currency, { compact: true })}</div>
         </div>
       ))}
+    </div>
+  );
+}
+
+// The exchange rates the proposal's figures actually use: each stored rate
+// (in the orientation it's stored), its own date, source and age, any cross
+// rates through USD, and the advisor's confirmation of rates older than the
+// policy (#26). Rates that are stored but unused aren't listed.
+function FxRatesUsed({
+  status,
+  reportingCurrency,
+  rates,
+  holdings,
+  recommendations,
+}: {
+  status: FxFreshness;
+  reportingCurrency: string;
+  rates: FxRate[];
+  holdings: Holding[];
+  recommendations: Recommendation[];
+}) {
+  const rateText = (r: number) => (r >= 0.1 ? r.toFixed(4) : r.toPrecision(4));
+  const crosses = [
+    ...new Set([...holdings.map((h) => h.proposalApprovedValue?.currency ?? h.currency), ...recommendations.filter((r) => r.approvedByAdvisor).map((r) => r.currency)]),
+  ]
+    .filter((c) => c !== reportingCurrency)
+    .map((c) => ({ from: c, r: resolveFxRate(rates, c, reportingCurrency) }))
+    .filter((x) => x.r?.path === "cross");
+  const c = status.confirmation;
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div className="pdf-stat-label">Exchange rates used in this proposal</div>
+      {status.inUse.length === 0 ? (
+        <p className="pdf-text" style={{ marginTop: 6 }}>No currency conversion was needed: every value is already in {reportingCurrency}.</p>
+      ) : (
+        <table className="pdf-table" style={{ marginTop: 6 }}>
+          <thead>
+            <tr>
+              <th>Rate</th>
+              <th style={{ textAlign: "right" }}>Value</th>
+              <th>As of</th>
+              <th>Source</th>
+              <th>Age</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {status.inUse.map((l) => (
+              <tr key={l.key}>
+                <td>{l.base}/{l.quote}</td>
+                <td style={{ textAlign: "right" }}>{rateText(l.rate)}</td>
+                <td>{utcDate(l.asOf)}</td>
+                <td>{l.source}</td>
+                <td>{l.ageDays} day{l.ageDays === 1 ? "" : "s"}</td>
+                <td>
+                  {l.unverified ? "unverified (fallback data)" : l.stale ? "stale" : "current"}
+                  {l.notInLastRefresh ? "; not in last refresh" : ""}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {crosses.map(({ from, r }) => (
+        <p key={from} className="pdf-text" style={{ marginTop: 4 }}>
+          {from} → {reportingCurrency} is a cross rate through USD ({r!.legs.map((leg) => `${leg.base}/${leg.quote}`).join(" and ")}).
+        </p>
+      ))}
+      <p className="pdf-text" style={{ marginTop: 4 }}>
+        Reference rates, not transaction rates. A rate is treated as current for {STALE_FX_DAYS} days after its date, an initial product policy rather than
+        an industry or regulatory standard.
+      </p>
+      {status.attention.length > 0 &&
+        (c.state === "valid" ? (
+          <p className="pdf-text" style={{ marginTop: 4 }}>
+            Rates older than {STALE_FX_DAYS} days ({c.record!.pairs.join(", ")}, oldest {c.record!.oldestRateDate}) were confirmed by the advisor on{" "}
+            {utcMinute(c.record!.confirmedAt)}; the confirmation expires {utcMinute(c.expiresAt!)}.
+          </p>
+        ) : (
+          <p className="pdf-text" style={{ marginTop: 4 }}>
+            Not confirmed: {status.attention.map((l) => `${l.base}/${l.quote}`).join(", ")} {status.attention.length === 1 ? "is" : "are"} older than {STALE_FX_DAYS} days
+            or unverified, and the advisor hasn&apos;t confirmed {status.attention.length === 1 ? "it" : "them"}
+            {c.state === "expired" ? " (an earlier confirmation expired)" : c.state === "changed" ? " (an earlier confirmation no longer applies: the rates or their use changed)" : c.state === "invalid" ? " (the stored confirmation isn't valid)" : ""}.
+          </p>
+        ))}
     </div>
   );
 }
