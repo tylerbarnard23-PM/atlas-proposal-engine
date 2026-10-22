@@ -34,6 +34,11 @@ import { fxClock } from "@/engines/fxClock";
 import { migrateRecommendationCurrency, withApprovalRule } from "@/engines/recommendationAmounts";
 import { LEGACY_SAMPLE_FIRM_NAME } from "@/domain/branding";
 import type { ImportedWorkspace } from "@/ingestion/documents/toWorkspace";
+import type { RestoredWorkspace } from "@/engines/workspaceBackup";
+
+/** The browser storage key every saved workspace lives under; never renamed. */
+export const STORAGE_KEY = "atlas-proposal-engine";
+export const STORE_VERSION = 6;
 
 export interface AtlasState {
   client: ClientProfile;
@@ -107,6 +112,12 @@ export interface AtlasActions {
   addImportedToEngagement: (imported: ImportedWorkspace) => void;
   clearAll: () => void;
   setHasHydrated: (b: boolean) => void;
+  /**
+   * Replaces the workspace with a validated backup (engines/workspaceBackup),
+   * all or nothing: the browser save is checked before anything changes, and
+   * if it fails the current workspace stays exactly as it was (R23a).
+   */
+  restoreWorkspace: (next: RestoredWorkspace) => { ok: true } | { ok: false; error: string };
 }
 
 function initialProposal(): Proposal {
@@ -442,13 +453,44 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
         })),
       clearAll: () => set(blankState()),
       setHasHydrated: (b) => set({ hasHydrated: b }),
+      restoreWorkspace: (next) => {
+        const storage = typeof window !== "undefined" ? window.localStorage : undefined;
+        const before = get();
+        const savedBefore = storage?.getItem(STORAGE_KEY) ?? null;
+        const after = { ...before, ...next, hasHydrated: true };
+        // Check the save first, with exactly what persist will write: if the
+        // browser refuses it (e.g. storage full), nothing has changed yet.
+        try {
+          storage?.setItem(STORAGE_KEY, JSON.stringify({ state: after, version: STORE_VERSION }));
+        } catch (err) {
+          return { ok: false, error: `The browser couldn't save the restored workspace (${(err as Error).message}). Nothing was changed.` };
+        }
+        try {
+          set({ ...next, hasHydrated: true });
+          return { ok: true };
+        } catch (err) {
+          // Undo both: the in-memory workspace and the saved copy.
+          try {
+            set(before);
+          } catch {
+            // the saved copy is put back below
+          }
+          try {
+            if (savedBefore === null) storage?.removeItem(STORAGE_KEY);
+            else storage?.setItem(STORAGE_KEY, savedBefore);
+          } catch {
+            // nothing more can be done; the in-memory workspace is intact
+          }
+          return { ok: false, error: `The browser couldn't save the restored workspace (${(err as Error).message}). Nothing was changed.` };
+        }
+      },
     }),
     {
-      name: "atlas-proposal-engine",
+      name: STORAGE_KEY,
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);
       },
-      version: 6,
+      version: STORE_VERSION,
       // v2: the seeded fictional advisor no longer carries real credential
       // marks (CFA, CFP®); strip them from workspaces saved before the change,
       // and drop "running" PDF jobs orphaned by the old append-only history.
