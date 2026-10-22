@@ -1,5 +1,21 @@
 # Handoff
 
+## Current roadmap checkpoint — 22 October 2026
+
+Tyler accepted **all 25** recommendations for the advisor workflow roadmap. Detailed plans and tracking are in [ROADMAP.md](../ROADMAP.md), [IMPLEMENTATION_GUIDE.md](roadmap/IMPLEMENTATION_GUIDE.md) and epic [#36](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/36). All feature statuses remain **Planned** until implementation evidence is recorded.
+
+- This save is documentation/issue planning only, on `docs/advisor-roadmap-2026-10-22`, based on main `1d6f0c0a67dac79c2a6a3bbe498fba79793a452c`.
+- PR #31 is merged; PR #34 is the current open review checkpoint at `b95f6ce30be0ebfe290dea6f687e0fc54b352580`. Its precise preview is already implemented on that branch, not recreated by R08.
+- Review #34 first, then existing #26, then #28 separately. Preserve #26's accepted policy and refinements. R23a backup/restore precedes the larger migrations.
+- Naming #35 remains separate before LinkedIn publication and must preserve saved data and working links. No name change is made by this save.
+- Four existing issues are expanded; 21 follow-up issues plus the parent roadmap issue track the selected work. #18 coordinates separate policy/tax/version tasks.
+- The accepted roadmap supersedes the older instruction below to park #11–#19 until selected. The owner has now selected the complete roadmap.
+- Routine choices within these accepted plans do not require asking again whether the scope was selected. Existing merge/deployment approval requirements remain.
+- Do not replace this roadmap checkpoint with the older #31/#32 handoff when integrating PR #34; preserve both the #34 validation/limitations and the accepted roadmap.
+- No application behavior, PR #34 head, merge or deployment was changed. No new production smoke test is claimed.
+
+The text below is retained historical context from the existing handoff. Its older branch/production/next-step statements are superseded by this checkpoint; consult current GitHub refs before work.
+
 The state of the project for the next working session: what's done, how it was checked, what's known to be missing, and what comes next. Update it at the end of each piece of work.
 
 _Last updated: 2026-10-21, on branch `fix/recommendation-currency` (issue #24, PR #31, not merged; review fix for percentage edits included)._

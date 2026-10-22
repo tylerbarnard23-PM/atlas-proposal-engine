@@ -172,6 +172,8 @@ If you adapt it for real client work, removing the sample markings is your decis
 
 ## Limitations and roadmap
 
+The **[accepted 25-item advisor roadmap](ROADMAP.md)** has detailed plans, dependencies, phases and linked issues. Planned features are separate from the capabilities above. Start implementation with **[the roadmap guide](docs/roadmap/IMPLEMENTATION_GUIDE.md)** and the current handoff.
+
 - State lives in the browser. There are no accounts, no database and no audit trail, all of which a real advisory platform needs.
 - Market data, FX and the insight thresholds are illustrative, not calibrated.
 - The Copilot doesn't yet read raw statements; the next step is a Claude extraction pass over low-confidence rows, measured with the same eval.
