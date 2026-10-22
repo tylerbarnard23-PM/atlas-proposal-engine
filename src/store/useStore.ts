@@ -29,6 +29,8 @@ import { SEED_MARKET_QUOTES } from "@/data/seedMarketData";
 import { DISCLOSURE_LIBRARY } from "@/domain/disclosureLibrary";
 import { todayIso } from "@/utils/formatting";
 import { DEFAULT_PROPOSAL_SECTIONS } from "@/engines/proposalEngine";
+import { confirmStaleRates } from "@/engines/fxPolicy";
+import { fxClock } from "@/engines/fxClock";
 import { migrateRecommendationCurrency, withApprovalRule } from "@/engines/recommendationAmounts";
 import { LEGACY_SAMPLE_FIRM_NAME } from "@/domain/branding";
 import type { ImportedWorkspace } from "@/ingestion/documents/toWorkspace";
@@ -86,6 +88,8 @@ export interface AtlasActions {
   /** Stores a merged refresh (engines/fxPolicy mergeFxRefresh): its rates and its outcome. */
   applyFxRefresh: (result: { rates: FxRate[]; record: FxRefreshRecord }) => void;
   setFxConfirmation: (confirmation: FxConfirmation | null) => void;
+  /** Confirms the stale or unverified rates in use now, at the shared FX clock's current instant (so it's valid at once). */
+  confirmFxRates: () => void;
   toggleSection: (key: string) => void;
   setProposalNotes: (notes: string) => void;
   // Optional disclosures only; required ones always stay in the proposal.
@@ -359,6 +363,13 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
       setFxRates: (rates) => set({ fxRates: rates }),
       applyFxRefresh: ({ rates, record }) => set({ fxRates: rates, fxRefresh: record }),
       setFxConfirmation: (confirmation) => set({ fxConfirmation: confirmation }),
+      confirmFxRates: () => {
+        const s = get();
+        // fxClock.now() catches the on-screen time up first: a confirmation
+        // timed after a stale snapshot would read as future-dated (invalid).
+        const now = new Date(fxClock.now());
+        set({ fxConfirmation: confirmStaleRates({ holdings: s.holdings, accounts: s.accounts, recommendations: s.recommendations, fxRates: s.fxRates, reportingCurrency: s.client.proposalOutputCurrency, now }) });
+      },
       toggleSection: (key) =>
         set((s) => ({
           proposalSections: s.proposalSections.map((p) =>

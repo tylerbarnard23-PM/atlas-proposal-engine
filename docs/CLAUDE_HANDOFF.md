@@ -26,15 +26,30 @@ Branch `fix/fx-refresh-staleness` from main `618e670`. Implements #26's accepted
 - Also found and fixed: a current leg turning stale after confirmation isn't covered by it; a stored `USD/USD` identity rate is no longer reported as "not returned" by a refresh.
 - CI: the final-PDF-route test in `fxPolicy.test.ts` timed out at 5 s on CI (`b976bf3`, `c11ce20`, `6dcdefd`; 2.3 s when it passed on `ad3ea98`) on the route's first import. The two FX route tests now have an explicit 30 s timeout; assertions unchanged.
 
+**Shared-clock follow-up (on `7afdd86`):**
+- **Bug (reproduced first).** The page subscribes to the clock at 12:00 and the user confirms at 12:10, with no midnight, focus or edit in between.
+  - The confirm action recorded `confirmedAt` with `new Date()` (12:10), but the status was still evaluated at the clock's snapshot (12:00), so the confirmation read as future-dated (`invalid`).
+  - Its recovery deadline (12:08) had already passed in real time, so the next scheduled update was midnight.
+- **Fix:**
+  - Confirming goes through one store action, `confirmFxRates()`, which takes its time from `fxClock.now()`. That call catches the shared clock up and returns the current instant, so the record and the status share one instant. FxRatesPanel uses the action; a refresh also takes its time from `fxClock.now()`.
+  - The clock now schedules from the time on screen, so a deadline that has passed in real time but isn't shown yet ticks at once.
+  - The singleton `fxClock` moved to `src/engines/fxClock.ts`, and the deadline rule to `fxDeadline` in `fxPolicy`.
+  - The future-time validation and the 2-minute tolerance are unchanged.
+- **Tests (`tests/fxReview.test.ts`, written first; both failed).**
+  - The store's confirm action, called 10 minutes after the clock was subscribed, is valid at once in the panel, notice and readiness, with exactly one clock notification.
+  - Withdrawing and confirming again 15 minutes later works.
+  - The exact expiry still fires by time alone, and no timer is left afterwards.
+  - Separately, a deadline already passed in real time but not by the snapshot ticks at once.
+
 **Validation (run on the branch):**
 
 | Check | Result |
 |---|---|
 | typecheck | pass |
-| tests | 320 of 320 passed with the private UBS PDF (18 files); without it, as in CI, 2 are skipped |
+| tests | 322 of 322 passed with the private UBS PDF (18 files); without it, as in CI, 2 are skipped |
 | eval | unchanged: recall 100%, label 100%, currency 87.5%, 0 wrong, 0 spurious |
 | build | pass |
-| new tests | 24 in `tests/fxPolicy.test.ts` and 16 in `tests/fxReview.test.ts`, written first |
+| new tests | 24 in `tests/fxPolicy.test.ts` and 18 in `tests/fxReview.test.ts`, written first |
 
 **Browser** (local `next start`, synthetic workspace; the browser's own workspace was restored afterwards):
 - A v5 save with `isStale: true` migrated to v6 without it, keeping all rates.
@@ -51,11 +66,17 @@ Branch `fix/fx-refresh-staleness` from main `618e670`. Implements #26's accepted
   - **Changed cross rate:** after confirming CHF/USD, USD/EUR was changed 0.9 → 0.8. The dashboard showed EUR 960 and "no longer applies"; the server route then failed "Exchange rates current" (before the change it passed).
   - **Expiry by time alone:** only the page's `Date.now` was shifted to 3 s before expiry. The panel read "Confirmed…" and, 4.5 s later with no event or edit, "The earlier confirmation expired 2026-10-29 16:03 UTC"; the dashboard notice and readiness item agreed. Stored data was byte-identical.
   - **Midnight:** at 2026-10-29 23:59:57Z USD/EUR (dated 2026-10-22) was 7 days old and current; after midnight, 8 days and stale, and listed for attention. Triggered by `visibilitychange` then the midnight timer, no edits.
+  - **Shared-clock follow-up (local `next start`, page time advanced with no event or timer; the 102-holding workspace was restored byte-identical afterwards).**
+    - **Confirm after 10 minutes on the page.** Clicking Confirm 10 minutes after mount was valid at once. The panel read "Confirmed 2026-10-22 16:30 UTC…", the dashboard had no notice, readiness was 15/16 (the failing check was the synthetic workspace's missing recommendation), and the PDF preview listed "Exchange rates current" without a warning. The DOM made 0 mutations in 3 s idle, so there was no render loop.
+    - **Withdraw and confirm again.** After 5 more minutes on the page, this was also valid at once.
+    - **Expiry.** A confirmation made 3 minutes after mount expired exactly at its deadline by time alone ("Confirmed…" at −3 s, "expired" after it).
+    - **Midnight and return from the background.** A `visibilitychange` to 2026-10-28 23:59:57Z showed USD/EUR (dated 2026-10-21) at 7 days, current and still confirmed. After midnight it was 8 days, stale, and the confirmation no longer applied. Stored data was unchanged.
+    - **Listeners.** Window `focus` and document `visibilitychange` listeners netted to 0 over five page changes.
   - **PDF:** with an ECB and a Manual rate in use, the Assumptions page read "Exchange rates used: ECB reference rates and advisor-entered (manual) rates, each listed with its date below." and listed the Manual GBP/USD rate.
 
 **Limitations:**
 - **Provider redirect.** The provider host redirects (`api.frankfurter.app` → `api.frankfurter.dev`), and `fetch` follows it.
-- **Real route and TLS.** This machine's AVG Web/Mail Shield intercepts HTTPS: the provider's certificate is issued locally by "AVG Web/Mail Shield Root", trusted only through `NODE_EXTRA_CA_CERTS` in the shell (hence the preview server's `UNABLE_TO_VERIFY_LEAF_SIGNATURE`). The actual route handler, run in-process from that shell, returned 200 with five ECB rates dated 2026-10-22 and omitted VND, but over the intercepted connection, not normal TLS verification. **On the Vercel preview** for `c11ce20` (opened in the in-app browser, which has a Vercel sign-in; the Vercel MCP access tools returned 403), the deployed route made the provider request with normal TLS: `GET /api/market-data/fx` returned 200 with five ECB rates dated 2026-10-22 (VND omitted), and Market Data → Refresh FX updated all 9 sample pairs and cleared the stale-rate notice. The preview origin's workspace was restored afterwards.
+- **Real route and TLS.** This machine's AVG Web/Mail Shield intercepts HTTPS: the provider's certificate is issued locally by "AVG Web/Mail Shield Root", trusted only through `NODE_EXTRA_CA_CERTS` in the shell (hence the preview server's `UNABLE_TO_VERIFY_LEAF_SIGNATURE`). The actual route handler, run in-process from that shell, returned 200 with five ECB rates dated 2026-10-22 and omitted VND, but over the intercepted connection, not normal TLS verification. **On the Vercel preview** for `c11ce20` (opened in the in-app browser, which has a Vercel sign-in; the Vercel MCP access tools returned 403), the deployed route made the provider request with normal TLS (this evidence is for `c11ce20`; later commits change the clock, tests and docs, not the route or provider): `GET /api/market-data/fx` returned 200 with five ECB rates dated 2026-10-22 (VND omitted), and Market Data → Refresh FX updated all 9 sample pairs and cleared the stale-rate notice. The preview origin's workspace was restored afterwards.
 - **Sample rates.** They are illustrative, labelled ECB and dated 2026-04-30, so the public sample fails "Exchange rates current" until FX is refreshed or the rates are confirmed. This is intentional.
 - **Manual rates.** No UI to enter or remove manual rates (pre-existing). A manual rate is only replaced by editing stored data.
 - **Confirmation trust.** The confirmation lives in browser storage with the rest of the workspace. The server checks its fingerprint and expiry, but the state is client-supplied, not a tamper-proof record (#59, R19).

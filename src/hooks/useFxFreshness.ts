@@ -2,8 +2,9 @@
 
 import { useEffect, useId, useMemo } from "react";
 import { useAtlasStore } from "@/store/useStore";
-import { CLOCK_SKEW_MS, fxFreshness, type FxFreshness } from "@/engines/fxPolicy";
-import { fxClock, useFxNow } from "@/hooks/useFxNow";
+import { fxDeadline, fxFreshness, type FxFreshness } from "@/engines/fxPolicy";
+import { fxClock } from "@/engines/fxClock";
+import { useFxNow } from "@/hooks/useFxNow";
 
 // Age and confirmation of the exchange rates the workspace's calculations use
 // (#26), shared by Market Data, notices, data tasks and readiness so every
@@ -24,9 +25,7 @@ export function useFxFreshness(): FxFreshness {
   );
 
   const key = `confirmation:${useId()}`;
-  const c = f.confirmation;
-  const confirmedAt = c.record ? Date.parse(c.record.confirmedAt) : NaN;
-  const deadline = c.state === "valid" ? Date.parse(c.expiresAt!) : c.state === "invalid" && Number.isFinite(confirmedAt) ? confirmedAt - CLOCK_SKEW_MS : null;
+  const deadline = fxDeadline(f);
   useEffect(() => {
     fxClock.setDeadline(key, deadline);
     return () => fxClock.setDeadline(key, null);

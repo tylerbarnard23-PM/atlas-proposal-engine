@@ -1,14 +1,13 @@
 "use client";
 
 import { useMemo, useSyncExternalStore } from "react";
-import { createFxClock } from "@/engines/fxClock";
+import { fxClock } from "@/engines/fxClock";
 
 // The one clock every browser surface evaluates FX freshness and readiness at
 // (#26 review), so a rate turning stale at UTC midnight or a confirmation
 // expiring updates the notices, readiness and controls together, without any
 // workspace change. Returning to the page (focus, or the tab becoming
 // visible) catches up at once, since background timers can be delayed.
-export const fxClock = createFxClock();
 
 let watchers = 0;
 const onReturn = () => {

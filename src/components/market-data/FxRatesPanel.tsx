@@ -8,11 +8,11 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { useFxFreshness } from "@/hooks/useFxFreshness";
 import { useFxNow } from "@/hooks/useFxNow";
+import { fxClock } from "@/engines/fxClock";
 import {
   DEFAULT_FX_QUOTES,
   FX_CONFIRMATION_DAYS,
   STALE_FX_DAYS,
-  confirmStaleRates,
   currenciesToRequest,
   describeLeg,
   fxLegStatus,
@@ -35,6 +35,7 @@ export function FxRatesPanel() {
   const lastRefresh = useAtlasStore((s) => s.fxRefresh);
   const applyFxRefresh = useAtlasStore((s) => s.applyFxRefresh);
   const setFxConfirmation = useAtlasStore((s) => s.setFxConfirmation);
+  const confirmFxRates = useAtlasStore((s) => s.confirmFxRates);
   const fresh = useFxFreshness();
   const [busy, setBusy] = React.useState(false);
 
@@ -61,7 +62,7 @@ export function FxRatesPanel() {
       response = { ok: false, provider: "Rate provider", base: "USD", requested, error: (err as Error).message || "Network error" };
     }
     // Merged by pair; a failure leaves every rate as it was.
-    applyFxRefresh(mergeFxRefresh(fxRates, response, new Date()));
+    applyFxRefresh(mergeFxRefresh(fxRates, response, new Date(fxClock.now())));
     setBusy(false);
   }
 
@@ -125,10 +126,7 @@ export function FxRatesPanel() {
                 {c.state === "invalid" && (
                   <span className="text-warning-600">The stored confirmation isn&apos;t valid: its times are unreadable, in the future or inconsistent.</span>
                 )}
-                <Button
-                  size="sm"
-                  onClick={() => setFxConfirmation(confirmStaleRates({ holdings, accounts, recommendations, fxRates, reportingCurrency, now: new Date() }))}
-                >
+                <Button size="sm" onClick={confirmFxRates}>
                   Confirm these rates for {FX_CONFIRMATION_DAYS} days
                 </Button>
                 <span className="text-2xs text-ink-500">Doesn&apos;t replace missing rates or any other check.</span>

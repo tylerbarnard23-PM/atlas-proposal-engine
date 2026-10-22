@@ -4,8 +4,10 @@ import { nextFxBoundary } from "./fxPolicy";
 // with time alone at UTC midnight (a rate's age) and at deadlines such as a
 // confirmation's expiry, so the clock ticks exactly at the next of those and
 // notifies its subscribers; refresh() catches up at once, e.g. when the user
-// returns to the page after the machine slept. With no subscribers it keeps
-// no timer.
+// returns to the page after the machine slept. An action that records a time
+// (confirming rates) takes it from now(), which catches the clock up first, so
+// the record and the status it is evaluated at share one instant. With no
+// subscribers it keeps no timer.
 
 export interface FxClockEnv {
   now(): number;
@@ -20,6 +22,8 @@ export interface FxClock {
   /** Tick at `at` (epoch ms) as well; null removes the deadline. */
   setDeadline(key: string, at: number | null): void;
   refresh(): void;
+  /** Catch up to the current time and return it: the instant for an action to record. */
+  now(): number;
 }
 
 const browserEnv: FxClockEnv = {
@@ -38,9 +42,10 @@ export function createFxClock(env: FxClockEnv = browserEnv): FxClock {
     if (timer !== null) env.clearTimeout(timer);
     timer = null;
     if (listeners.size === 0) return;
-    const now = env.now();
-    // 1 ms past the boundary, so the tick lands on its far side.
-    timer = env.setTimeout(tick, Math.max(0, nextFxBoundary(now, [...deadlines.values()]) - now) + 1);
+    // The next boundary after the time on screen (not after the current time),
+    // so one already passed in real time but not yet shown ticks at once;
+    // 1 ms past it, so the tick lands on its far side.
+    timer = env.setTimeout(tick, Math.max(0, nextFxBoundary(snapshot, [...deadlines.values()]) - env.now()) + 1);
   }
   function tick() {
     timer = null;
@@ -71,5 +76,12 @@ export function createFxClock(env: FxClockEnv = browserEnv): FxClock {
       schedule();
     },
     refresh,
+    now() {
+      refresh();
+      return snapshot;
+    },
   };
 }
+
+/** The browser's one FX clock, shared by every status surface and action. */
+export const fxClock = createFxClock();

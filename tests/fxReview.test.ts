@@ -163,6 +163,76 @@ describe("browser status follows the clock", () => {
     expect(calls).toBe(1);
     unsubscribe();
   });
+
+  it("a deadline already passed in real time, but not by the snapshot, ticks at once", () => {
+    const f = fakeEnv(NOW.getTime());
+    const clock = createFxClock(f.env);
+    const unsubscribe = clock.subscribe(() => undefined);
+    f.advanceTo(NOW.getTime() + 10 * 60_000); // 12:10, no boundary crossed
+    clock.setDeadline("d", NOW.getTime() + 5 * 60_000); // 12:05: behind real time, ahead of the snapshot
+    f.advanceTo(NOW.getTime() + 10 * 60_000 + 1);
+    expect(clock.getSnapshot()).toBe(NOW.getTime() + 10 * 60_000 + 1);
+    unsubscribe();
+    expect(f.pending()).toBeNull();
+  });
+});
+
+describe("confirming on a page that has been open a while (shared clock)", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("the panel's confirm action is valid at once in the panel, notices and readiness", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    vi.setSystemTime(NOW); // 12:00
+    const { useAtlasStore } = await import("@/store/useStore");
+    const { fxClock } = await import("@/engines/fxClock");
+    const { fxDeadline } = await import("@/engines/fxPolicy");
+    const input = ws([holding("eur", "EUR", 1_000)], [rate("EUR", "USD", 1.1, OLD)]);
+    useAtlasStore.setState({
+      holdings: input.holdings,
+      accounts: ACCOUNTS,
+      recommendations: [],
+      fxRates: input.fxRates,
+      fxConfirmation: null,
+      client: { ...useAtlasStore.getState().client, proposalOutputCurrency: "USD" },
+    });
+    // What useFxFreshness / FxNotice / useWorkspaceReadiness compute, at the shared clock.
+    const view = () => {
+      const s = useAtlasStore.getState();
+      const now = new Date(fxClock.getSnapshot());
+      const f = fxFreshness({ holdings: s.holdings, accounts: s.accounts, recommendations: s.recommendations, fxRates: s.fxRates, reportingCurrency: s.client.proposalOutputCurrency, confirmation: s.fxConfirmation, now });
+      const readiness = evaluateWorkspaceReadiness({ client: s.client, advisor: s.advisor, accounts: s.accounts, holdings: s.holdings, recommendations: s.recommendations, disclosures: s.disclosures, fxRates: s.fxRates, sourceDocuments: s.sourceDocuments, fxConfirmation: s.fxConfirmation, now });
+      return { f, panel: f.confirmation.state, notice: !f.current, ready: readiness.find((c) => c.code === "fx_current")!.passed };
+    };
+    let notified = 0;
+    const unsubscribe = fxClock.subscribe(() => notified++); // the page mounts at 12:00
+    expect(view()).toMatchObject({ panel: "none", notice: true, ready: false });
+
+    vi.setSystemTime(new Date(NOW.getTime() + 10 * 60_000)); // 12:10: no boundary, event or edit
+    useAtlasStore.getState().confirmFxRates();
+    expect(view()).toMatchObject({ panel: "valid", notice: false, ready: true });
+    expect(useAtlasStore.getState().fxConfirmation!.confirmedAt).toBe("2026-10-22T12:10:00.000Z");
+    expect(notified).toBe(1); // the clock caught up once; no loop
+
+    // Withdraw, and confirm again later.
+    useAtlasStore.getState().setFxConfirmation(null);
+    expect(view()).toMatchObject({ panel: "none", notice: true, ready: false });
+    vi.setSystemTime(new Date(NOW.getTime() + 25 * 60_000));
+    useAtlasStore.getState().confirmFxRates();
+    expect(view()).toMatchObject({ panel: "valid", notice: false, ready: true });
+
+    // It still expires exactly on time with no workspace change (the hook registers this deadline).
+    const deadline = fxDeadline(view().f)!;
+    expect(deadline).toBe(Date.parse("2026-10-29T12:25:00.000Z"));
+    fxClock.setDeadline("test", deadline);
+    vi.advanceTimersByTime(deadline - Date.now() - 1);
+    expect(view().panel).toBe("valid");
+    vi.advanceTimersByTime(2);
+    expect(view()).toMatchObject({ panel: "expired", notice: true, ready: false });
+
+    fxClock.setDeadline("test", null);
+    unsubscribe();
+    expect(vi.getTimerCount()).toBe(0); // no timer left behind
+  });
 });
 
 describe("confirmation time semantics", () => {

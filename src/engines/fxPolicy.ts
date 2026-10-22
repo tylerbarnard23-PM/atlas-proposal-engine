@@ -259,6 +259,14 @@ export function fxFreshness(input: FxWorkspace & { now: Date; confirmation?: FxC
   return { policyDays: STALE_FX_DAYS, inUse, attention, fingerprint, confirmation: { state, record, expiresAt }, current: attention.length === 0 || state === "valid" };
 }
 
+/** When this status next changes by time alone, besides UTC midnight: a valid confirmation's expiry, or when one given slightly ahead of this clock comes into range. */
+export function fxDeadline(f: FxFreshness): number | null {
+  const c = f.confirmation;
+  if (c.state === "valid") return Date.parse(c.expiresAt!);
+  const confirmedAt = c.record ? Date.parse(c.record.confirmedAt) : NaN;
+  return c.state === "invalid" && Number.isFinite(confirmedAt) ? confirmedAt - CLOCK_SKEW_MS : null;
+}
+
 /** The next instant freshness can change by time alone: the next UTC midnight, or an earlier future deadline. */
 export function nextFxBoundary(nowMs: number, deadlines: number[]): number {
   const midnight = Math.floor(nowMs / DAY) * DAY + DAY;
