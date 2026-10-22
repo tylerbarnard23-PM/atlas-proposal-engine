@@ -41,7 +41,7 @@ Branch `feat/r23a-backup-restore` from main `5bd1e7b` (the merge of release-chec
 - **Review fix (`5322afd`): one export/restore contract.**
   - **The gap:** exports from normal workflows could be downloaded and announced, then rejected by restore. Examples: a recommendation whose holding or account was deleted, or notes over the old 20,000-character field cap.
   - **Export contract:** `exportBackup` validates the exact serialized file (UTF-8 bytes) with `parseBackup` before downloading or announcing anything. Failures name the record and say what to change; nothing is truncated.
-  - **Limits:** they match what the app permits (no per-field text or list caps; strict ISO only for generated timestamps); the file limit is 20 MB.
+  - **Limits:** they match what the app permits (no per-field text or list caps; strict ISO only for generated timestamps). The application's backup limit is 20 MB.
   - **Removed links:** deleting a holding or account keeps linked recommendations, with content and link as evidence, but clears their approval and marks them `needs_review`. Rejected ones stay rejected.
   - **New readiness check:** "Recommendations linked to current holdings and accounts" blocks the final PDF until the advisor relinks, rejects or deletes them.
   - **In the backup:** `engagement.unresolvedLinks` records them; any other broken reference is rejected.
@@ -51,6 +51,18 @@ Branch `feat/r23a-backup-restore` from main `5bd1e7b` (the merge of release-chec
     - holding deletion, then export, restore and reload: restored deep-equal, the review mark and the readiness block kept;
     - a limit-rejected export (record named, no download, no success message);
     - an unreadable file (reported, no unhandled rejection).
+- **Review fix (`36f184b`): relinking repairs both links.**
+  - **The gap:** the editor's holding picker updated only `relatedHoldingId`. A recommendation relinked after its account was deleted kept the stale `relatedAccountId` and stayed blocked, and "None" kept a hidden link to the removed account.
+  - **The fix:** `linkToHolding` (`src/engines/recommendationLinks.ts`) is now the single rule.
+    - A holding carries its account.
+    - None clears a holding-derived or removed account link.
+    - An account-only recommendation keeps its link to an existing account.
+    - Re-picking the removed holding changes nothing.
+    - The editor shows a removed account as its own option.
+    - Approval is never restored by relinking; text, amounts and currency reviews are kept.
+  - **Tests:** 8 (`tests/recommendationRelink.test.ts`, written first), including relinking through export, restore and reload, and the final-PDF 422 while a link is unresolved.
+  - **Validation:** 378 of 378 tests locally (22 files); in CI, 2 are skipped.
+  - **Browser:** account deletion → relink in the real editor (preview and cancel saved nothing) → Save → reload → backup and restore, all deep-equal. Rejecting the sample's other affected recommendation cleared the check.
 - **Limitations:**
   - Not encrypted or access-controlled (#59).
   - Later store versions will need a backup migration step.
