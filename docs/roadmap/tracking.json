@@ -298,6 +298,12 @@
           "deployment": "dpl_4ZURnzB83QauhERhtkhihvQZNtRF",
           "date": "2026-10-22",
           "scope": "P0: pair merge, retained provenance, rate age, stale-rate readiness and confirmation"
+        },
+        {
+          "issue": 28,
+          "pr": 63,
+          "state": "in-review",
+          "scope": "Calendar dates show the same day in every time zone; timestamps keep instant semantics"
         }
       ]
     },
