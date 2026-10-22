@@ -15,7 +15,7 @@ Branch `feat/r23a-backup-restore` from main `5bd1e7b` (the merge of release-chec
   - **Firm** (the advisor profile and branding) is kept on restore unless the advisor chooses the backup's.
   - **Omitted and disclosed:** source-file bytes (never stored), extracted rows and raw text, the quote cache, generated insights, the disclosure library and credentials.
 - **Restore.**
-  - **Checks:** size ≤ 5 MB; format; versions (newer is rejected, nothing coerced); strict types and enums; finite values and positive rates; valid dates; unique IDs and every reference.
+  - **Checks:** size ≤ 20 MB (raised in the review fix; it was 5 MB); format; versions (newer is rejected, nothing coerced); strict types and enums; finite values and positive rates; valid dates; unique IDs and every reference.
   - **All or nothing** under the existing key: the save is checked before memory changes, and a failed save changes nothing.
   - A restored FX confirmation is re-evaluated, never renewed. Readiness gates are unchanged.
 - **Tests:** 12 in `tests/workspaceBackup.test.ts`, written first (all 11 failed before the module existed). They use the real store with an in-memory `localStorage` and cover:
@@ -38,6 +38,19 @@ Branch `feat/r23a-backup-restore` from main `5bd1e7b` (the merge of release-chec
   - **Synthetic cycle:** export → Start a new client → restore → reload. Restored exactly; readiness 16/16 with the confirmation re-checked.
   - **Rejected files** (a broken reference, a future version, an oversized file) and a **cancelled preview** left saved data byte-identical.
   - **Real workspace:** the browser's own 102-holding workspace exported (171 KB) and passed full validation in the preview, then was cancelled.
+- **Review fix (`5322afd`): one export/restore contract.**
+  - **The gap:** exports from normal workflows could be downloaded and announced, then rejected by restore. Examples: a recommendation whose holding or account was deleted, or notes over the old 20,000-character field cap.
+  - **Export contract:** `exportBackup` validates the exact serialized file (UTF-8 bytes) with `parseBackup` before downloading or announcing anything. Failures name the record and say what to change; nothing is truncated.
+  - **Limits:** they match what the app permits (no per-field text or list caps; strict ISO only for generated timestamps); the file limit is 20 MB.
+  - **Removed links:** deleting a holding or account keeps linked recommendations, with content and link as evidence, but clears their approval and marks them `needs_review`. Rejected ones stay rejected.
+  - **New readiness check:** "Recommendations linked to current holdings and accounts" blocks the final PDF until the advisor relinks, rejects or deletes them.
+  - **In the backup:** `engagement.unresolvedLinks` records them; any other broken reference is rejected.
+  - **Tests:** 21 more (`tests/backupConsistency.test.ts`), including every export from 12 supported workflows restoring with equal valuation, proposal and readiness.
+  - **Validation:** 370 of 370 tests locally (21 files); in CI, 2 are skipped.
+  - **Browser:**
+    - holding deletion, then export, restore and reload: restored deep-equal, the review mark and the readiness block kept;
+    - a limit-rejected export (record named, no download, no success message);
+    - an unreadable file (reported, no unhandled rejection).
 - **Limitations:**
   - Not encrypted or access-controlled (#59).
   - Later store versions will need a backup migration step.
