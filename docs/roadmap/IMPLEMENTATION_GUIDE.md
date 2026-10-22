@@ -111,7 +111,7 @@ All 25 numbered enhancements are accepted; the saved work is planning, not imple
 
 Confirm repository and working-tree state without discarding work. PR #34 is merged (4e6da18) and live; its checkpoint is resolved.
 
-#26 (PR #60) and #28 (PR #63) are complete; follow the newest checkpoint in the handoff for what comes next, and R18's sequencing. Use one bounded implementation branch/PR and the required validation. Before later schema migrations, deliver R23a backup/validated restore. Follow the selected plan's dependencies and preserve the existing engines, saved data, currencies, import safeguards and working links. Update the roadmap and handoff with actual evidence. Do not start all 25 at once or claim planned features are already delivered.
+#26 (PR #60) and #28 (PR #63) are complete; follow the newest checkpoint in the handoff for what comes next, and R18's sequencing. Use one bounded implementation branch/PR and the required validation. R23a backup/validated restore is in review (PR #66); land it before later schema migrations, and give each later store version a backup migration step. Follow the selected plan's dependencies and preserve the existing engines, saved data, currencies, import safeguards and working links. Update the roadmap and handoff with actual evidence. Do not start all 25 at once or claim planned features are already delivered.
 ```
 
 ## Agent changes require separate evidence

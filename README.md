@@ -108,7 +108,7 @@ tests/            unit tests + extraction eval
 ## Tests and evals
 
 ```bash
-npm test        # 337 tests in 19 files (2 need the private UBS PDF and are skipped without it, as in CI): proposal math and currency handling, calendar dates across time zones, recommendation currencies and previews, cash flows, readiness, insights, CSV/Excel/PDF import, import completeness, Copilot tools (demo mode) + the extraction eval
+npm test        # 349 tests in 20 files (2 need the private UBS PDF and are skipped without it, as in CI): proposal math and currency handling, calendar dates across time zones, workspace backup and restore, recommendation currencies and previews, cash flows, readiness, insights, CSV/Excel/PDF import, import completeness, Copilot tools (demo mode) + the extraction eval
 npm run eval    # statement-extraction accuracy scorecard
 ```
 
