@@ -25,7 +25,7 @@ export const BACKUP_FORMAT = "atlas-workspace-backup";
 export const BACKUP_SCHEMA_VERSION = 1;
 /** The saved-workspace schema (store version) the records follow. */
 export const BACKUP_WORKSPACE_VERSION = 6;
-/** Above what browser storage can hold, so any workspace the app can save fits; it bounds a file read before validation. */
+/** The application's backup limit (UTF-8 bytes of the file); it also bounds a file read before validation. */
 export const BACKUP_MAX_BYTES = 20 * 1024 * 1024;
 
 export const BACKUP_NOTICE =

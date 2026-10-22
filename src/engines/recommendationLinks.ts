@@ -48,6 +48,29 @@ export function describeLink(l: UnresolvedLink & { title: string }): string {
 }
 
 /**
+ * The link after the advisor picks a holding (or None) for a recommendation
+ * in the editor; the one place that decides it, so the two fields can't
+ * disagree. A holding link carries that holding's account. None clears a
+ * holding-derived account link and a link to a removed account; an
+ * account-only recommendation (no holding) keeps its link to an existing
+ * account. Re-picking a removed holding (shown so it isn't hidden) changes
+ * nothing.
+ */
+export function linkToHolding(
+  rec: Pick<Recommendation, "relatedHoldingId" | "relatedAccountId">,
+  holdingId: string | undefined,
+  ws: { holdings: Pick<Holding, "id" | "accountId">[]; accounts: Pick<Account, "id">[] }
+): Pick<Recommendation, "relatedHoldingId" | "relatedAccountId"> {
+  if (holdingId) {
+    const h = ws.holdings.find((x) => x.id === holdingId);
+    if (!h) return { relatedHoldingId: rec.relatedHoldingId, relatedAccountId: rec.relatedAccountId };
+    return { relatedHoldingId: h.id, relatedAccountId: h.accountId };
+  }
+  const accountOnly = !rec.relatedHoldingId && !!rec.relatedAccountId && ws.accounts.some((a) => a.id === rec.relatedAccountId);
+  return { relatedHoldingId: undefined, relatedAccountId: accountOnly ? rec.relatedAccountId : undefined };
+}
+
+/**
  * Recommendations after their linked holdings or accounts are removed: kept
  * as they are, with the link as evidence, but no longer approved and marked
  * for review. Rejected ones stay rejected.

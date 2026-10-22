@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { holdingsFromIncompleteImports } from "@/engines/importCompleteness";
-import { unresolvedRecommendationLinks } from "@/engines/recommendationLinks";
+import { linkToHolding, unresolvedRecommendationLinks } from "@/engines/recommendationLinks";
 import { ImportNotice, IncompleteImportTag } from "@/components/import/ImportNotice";
 import Link from "next/link";
 import { Ban, CheckCheck, CheckCircle2, Lightbulb, Plus, RotateCcw, Trash2 } from "lucide-react";
@@ -41,6 +41,8 @@ const TYPES: RecommendationType[] = [
 
 const REJECT_REASONS = ["Client declined", "Not suitable", "Tax impact too high", "Timing"];
 
+/** The holding picker's entry for a removed account link (never saved as a holding). */
+const REMOVED_ACCOUNT = "__removed_account__";
 const STATUSES: RecommendationStatus[] = ["draft", "needs_review", "approved", "excluded", "implemented"];
 
 export default function RecommendationsPage() {
@@ -388,6 +390,8 @@ function RecForm({
     [value, holdings, savedRecs, accounts, fx, sourceDocuments]
   );
   const targetSet = value.proposedValue != null;
+  // An account-only recommendation whose account was removed: shown, so None can clear it.
+  const removedAccountOnly = !value.relatedHoldingId && !!value.relatedAccountId && !accountById[value.relatedAccountId];
 
   return (
     <div className="space-y-3">
@@ -412,13 +416,18 @@ function RecForm({
       <div className="border-t border-ink-100 pt-3">
         <Label>Linked holding</Label>
         <Select
-          value={value.relatedHoldingId ?? ""}
-          onChange={(e) => onChange({ relatedHoldingId: e.target.value || undefined })}
+          value={value.relatedHoldingId ?? (removedAccountOnly ? REMOVED_ACCOUNT : "")}
+          onChange={(e) => {
+            if (e.target.value === REMOVED_ACCOUNT) return;
+            // Holding and account links change together (engines/recommendationLinks).
+            onChange(linkToHolding(value, e.target.value || undefined, { holdings, accounts }));
+          }}
         >
           <option value="">— None (advisory only) —</option>
           {value.relatedHoldingId && !holdings.some((h) => h.id === value.relatedHoldingId) && (
             <option value={value.relatedHoldingId}>Removed holding ({value.relatedHoldingId}): choose a current one or None</option>
           )}
+          {removedAccountOnly && <option value={REMOVED_ACCOUNT}>Removed account ({value.relatedAccountId}): choose a holding or None</option>}
           {holdings.map((h) => {
             const acct = accountById[h.accountId];
             return (
