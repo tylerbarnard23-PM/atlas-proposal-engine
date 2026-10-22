@@ -21,7 +21,7 @@ import { ASSET_CLASS_LABELS } from "@/domain/assetTaxonomy";
 import { COUNTRIES } from "@/domain/countryConfigs";
 import { CURRENCIES } from "@/domain/currencyConfigs";
 import type { Account, AccountType, AssetClass, Holding } from "@/domain/types";
-import { formatCurrency, formatDate, safeId, todayIso } from "@/utils/formatting";
+import { formatCalendarDate, formatCurrency, localCalendarDay, safeId, todayIso } from "@/utils/formatting";
 import { QuoteTypeBadge, ValuationSourceLine } from "@/components/ui/SourceTag";
 import { holdingsNeedingReview, type ReviewReason } from "@/engines/complianceEngine";
 import { formatTotal, valuationSummary, valuationTotal } from "@/engines/valuationTotals";
@@ -376,7 +376,7 @@ function HoldingDetail({
         />
         <Stat label="Cost basis" value={holding.costBasis != null ? formatCurrency(holding.costBasis, holding.currency) : "—"} />
         <Stat label="Liquidity" value={holding.liquidity ?? "—"} />
-        <Stat label="Valuation date" value={formatDate(holding.valuationDate)} />
+        <Stat label="Valuation date" value={formatCalendarDate(holding.valuationDate)} />
         <Stat label="Value status" value={status.label} />
       </div>
 
@@ -612,7 +612,7 @@ function AddHoldingForm({
   const [price, setPrice] = React.useState("");
   const [marketValue, setMarketValue] = React.useState("");
   const [costBasis, setCostBasis] = React.useState("");
-  const [valuationDate, setValuationDate] = React.useState(new Date().toISOString().slice(0, 10));
+  const [valuationDate, setValuationDate] = React.useState(() => localCalendarDay());
   const [notes, setNotes] = React.useState("");
 
   // When account changes, default currency/country to that account's defaults if user hasn't typed yet.

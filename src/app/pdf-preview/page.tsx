@@ -78,6 +78,8 @@ function Inner() {
             // Checked again on the server against its own clock (#26).
             fxConfirmation,
           },
+          // Timestamps in the PDF (the prepared date) in this browser's time zone, as in the preview (#28).
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         }),
       });
       if (!res.ok) {

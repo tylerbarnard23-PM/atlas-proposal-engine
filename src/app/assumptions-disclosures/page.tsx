@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useAtlasStore } from "@/store/useStore";
+import { formatCalendarDate } from "@/utils/formatting";
 import { ClientOnly } from "@/components/layout/ClientOnly";
 import { PageHeader, SectionDivider } from "@/components/ui/Section";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -52,7 +53,7 @@ function Inner() {
                   <tr key={i} className="border-t border-ink-100">
                     <td className="py-1">{f.base}/{f.quote}</td>
                     <td className="py-1 text-right tabular">{f.rate.toFixed(4)}</td>
-                    <td className="py-1">{new Date(f.asOf).toLocaleDateString()}</td>
+                    <td className="py-1">{formatCalendarDate(f.asOf)}</td>
                     <td className="py-1"><Badge tone="navy">{f.source}</Badge></td>
                   </tr>
                 ))}

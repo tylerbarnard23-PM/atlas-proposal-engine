@@ -11,7 +11,7 @@ import { ACCOUNT_TYPE_LABELS } from "@/domain/accountTaxonomy";
 import type { Account, Holding, SourceDocument } from "@/domain/types";
 import type { NormalizedHolding } from "@/engines/normalizationEngine";
 import { formatTotal, valuationTotal } from "@/engines/valuationTotals";
-import { formatCurrency, formatDate, todayIso } from "@/utils/formatting";
+import { formatCalendarDate, formatCurrency, todayIso } from "@/utils/formatting";
 import { cn } from "@/utils/cn";
 
 // Line-by-line value check. Every holding is shown with what's needed to
@@ -464,7 +464,7 @@ function ReviewRow({
 
       <div className="col-start-2 md:col-start-auto text-[12px] text-ink-600">
         <span className="md:hidden text-ink-400">As of </span>
-        {formatDate(h.valuationDate)}
+        {formatCalendarDate(h.valuationDate)}
       </div>
 
       <div className="col-start-2 md:col-start-auto flex items-center justify-start md:justify-end gap-2 md:w-[178px]">

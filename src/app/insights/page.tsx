@@ -15,7 +15,7 @@ import { DataTaskItem } from "@/components/insights/DataTaskItem";
 import { recommendationFromInsight } from "@/engines/recommendationEngine";
 import { insightKey } from "@/engines/insightEngine";
 import type { Insight } from "@/domain/types";
-import { formatDate } from "@/utils/formatting";
+import { formatTimestampDate } from "@/utils/formatting";
 
 const DISMISS_REASONS = ["Not relevant for this client", "Client preference", "Already addressed"];
 const CATEGORY_LABEL: Record<string, string> = { data_quality: "Data to complete" };
@@ -206,7 +206,7 @@ function Inner() {
                     <div className="min-w-0">
                       <div className="text-[13px] text-ink-700">{d.title}</div>
                       <div className="text-[12px] text-ink-500 mt-0.5">
-                        Dismissed {formatDate(d.dismissedAt)}
+                        Dismissed {formatTimestampDate(d.dismissedAt)}
                         {d.reason ? ` · ${d.reason}` : ""}
                       </div>
                     </div>

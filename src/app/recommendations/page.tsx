@@ -25,7 +25,7 @@ import { RecPreview } from "@/components/recommendations/RecPreview";
 import { previewRecommendation } from "@/engines/recommendationPreview";
 import { CurrencyReviewPanel } from "@/components/recommendations/CurrencyReviewPanel";
 import { RecCurrencyField } from "@/components/recommendations/RecCurrencyField";
-import { formatCurrency, formatDate, todayIso } from "@/utils/formatting";
+import { formatCurrency, formatTimestampDate, todayIso } from "@/utils/formatting";
 
 const TYPES: RecommendationType[] = [
   "buy", "sell", "hold", "reduce", "increase", "rebalance", "transfer",
@@ -223,7 +223,7 @@ function Inner() {
                       <h4 className={`font-serif text-lg mt-1.5 ${rejected ? "text-ink-500 line-through decoration-ink-300" : "text-ink-900"}`}>{r.title}</h4>
                       {rejected && (
                         <p className="mt-1 text-[13px] text-negative-600">
-                          Rejected{r.rejectedAt ? ` ${formatDate(r.rejectedAt)}` : ""}
+                          Rejected{r.rejectedAt ? ` ${formatTimestampDate(r.rejectedAt)}` : ""}
                           {r.rejectionReason ? `: ${r.rejectionReason}` : ""}. Not applied to the Before / After and left out of the PDF.
                         </p>
                       )}

@@ -6,7 +6,7 @@ import type { Recommendation } from "@/domain/types";
 import { Button } from "@/components/ui/Button";
 import type { FxContext } from "@/engines/proposalEngine";
 import { describeConversion, resolveCurrencyReview } from "@/engines/recommendationAmounts";
-import { formatDate, todayIso } from "@/utils/formatting";
+import { formatTimestampDate, todayIso } from "@/utils/formatting";
 
 // On a recommendation saved before amounts had their own currency (#24), when
 // its old label differs from the currency its amounts were calculated in. The
@@ -31,7 +31,7 @@ export function CurrencyReviewPanel({
   if (review.status !== "open") {
     return (
       <p className="mt-2 text-2xs text-ink-500">
-        Currency confirmed{review.resolvedAt ? ` ${formatDate(review.resolvedAt)}` : ""}:{" "}
+        Currency confirmed{review.resolvedAt ? ` ${formatTimestampDate(review.resolvedAt)}` : ""}:{" "}
         {review.status === "kept" ? `amounts kept in ${review.calculatedIn}` : `amounts changed (now ${rec.currency})`}. Saved label before the
         update: {review.legacyLabel}.
       </p>

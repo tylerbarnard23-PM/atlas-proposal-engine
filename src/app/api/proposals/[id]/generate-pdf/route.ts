@@ -19,6 +19,7 @@ import type {
 } from "@/domain/types";
 import { evaluateWorkspaceReadiness, readinessOk } from "@/engines/complianceEngine";
 import { checkLogoDataUrl, isValidAccentColor } from "@/domain/branding";
+import { isValidTimeZone } from "@/utils/formatting";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -43,6 +44,10 @@ interface RequestBody {
     // against its own clock; the client's view of validity isn't trusted.
     fxConfirmation?: FxConfirmation | null;
   };
+  // The advisor's time zone (e.g. "America/New_York"), so timestamps such as
+  // the prepared date read as in the in-app preview (#28). Calendar dates
+  // don't depend on it. Ignored when absent or unusable: the server's applies.
+  timeZone?: string;
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -94,7 +99,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
   }
 
-  const props = { ...body.state, fxRates: Array.isArray(body.state.fxRates) ? body.state.fxRates : [], fxConfirmation, now: now.toISOString(), variant };
+  const timeZone = isValidTimeZone(body.timeZone) ? body.timeZone : undefined;
+  const props = { ...body.state, fxRates: Array.isArray(body.state.fxRates) ? body.state.fxRates : [], fxConfirmation, now: now.toISOString(), timeZone, variant };
   // Dynamically load react-dom/server inside the handler so the App Router
   // doesn't statically reject the import. (Next.js disallows static
   // `react-dom/server` imports in API routes; dynamic import is allowed.)

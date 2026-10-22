@@ -19,7 +19,7 @@ import { SAMPLE_BROKERAGE_CSV } from "@/ingestion/sampleSources/sampleBrokerageS
 import { SAMPLE_MESSY_TEXT } from "@/ingestion/sampleSources/sampleMessyStatement";
 import { SAMPLE_CRYPTO_WALLET } from "@/ingestion/sampleSources/sampleCryptoWalletScreenshot";
 import { SAMPLE_RETIREMENT_CSV } from "@/ingestion/sampleSources/sampleRetirementStatement";
-import { formatCurrency, safeId, todayIso } from "@/utils/formatting";
+import { formatCurrency, localCalendarDay, safeId, todayIso } from "@/utils/formatting";
 import { PdfImport } from "@/components/import/PdfImport";
 import { extractionToWorkspace } from "@/ingestion/documents/toWorkspace";
 import { useImportTarget } from "@/components/import/importTarget";
@@ -384,7 +384,7 @@ function ManualEntry() {
   const [assetClass, setAssetClass] = React.useState("equity");
   const [marketValue, setMarketValue] = React.useState("");
   const [costBasis, setCostBasis] = React.useState("");
-  const [valuationDate, setValuationDate] = React.useState(new Date().toISOString().slice(0, 10));
+  const [valuationDate, setValuationDate] = React.useState(() => localCalendarDay());
   const [advisorNotes, setAdvisorNotes] = React.useState("");
 
   // Quick add account form

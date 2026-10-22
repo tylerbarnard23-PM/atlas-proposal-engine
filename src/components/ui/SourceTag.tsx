@@ -2,6 +2,7 @@ import * as React from "react";
 import { Badge } from "./Badge";
 import type { QuoteType, ValuationSource } from "@/domain/types";
 import { cn } from "@/utils/cn";
+import { formatCalendarDate } from "@/utils/formatting";
 
 const QUOTE_TONE: Record<QuoteType, "positive" | "navy" | "warning" | "neutral" | "info" | "negative"> = {
   real_time: "positive",
@@ -50,7 +51,7 @@ export function ValuationSourceLine({ source }: { source: ValuationSource }) {
     <span className="text-xs text-ink-500">
       {label}
       {source.providerName && source.kind !== "market_data" ? ` · ${source.providerName}` : ""}
-      {source.asOf ? ` · ${new Date(source.asOf).toLocaleDateString()}` : ""}
+      {source.asOf ? ` · ${formatCalendarDate(source.asOf)}` : ""}
     </span>
   );
 }
