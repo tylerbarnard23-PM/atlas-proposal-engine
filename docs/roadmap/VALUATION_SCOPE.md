@@ -49,6 +49,8 @@ R18 owns retirement and optional repricing, R19 owns the input-basis record and 
 
 ## Safe retirement and existing workspaces
 
+The consumer audit is recorded in [R18-provider-retirement-audit.md](R18-provider-retirement-audit.md) (23 October 2026): no quote reaches a stored value, approval or readiness check; the client PDF's provider wording is the first correction.
+
 - Audit all consumers of the registry, quote cache, quote/fundamentals/refresh endpoints, provider statuses, acceptance controls, quality rules, Copilot tools, PDF and startup documentation. Do not delete the market-data directory wholesale: FX and essential valuation code live alongside enrichment.
 - Preserve storage keys, holding/account/recommendation IDs, accepted amounts, currencies, approvals/review evidence and links. Preserve approved quote-derived values even when their originating adapter is retired. Do not automatically revert to a statement value: the original may not have been retained. Keep uncertain provenance labelled as legacy/unknown and require review when needed rather than inventing source history or changing money.
 - Finish reviewable UI disablement before removing unused routes, packages, environment examples and provider configuration. Keep established links working or provide a documented redirect/recovery path. No automatic network lookup or mock fallback may replace a saved accepted value.

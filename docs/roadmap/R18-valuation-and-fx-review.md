@@ -1,6 +1,6 @@
 # R18 — Use accepted valuations and review FX changes; defer security repricing
 
-Accepted for planning: 22 October 2026. **Status: Planned.** The P0 slices are complete: #26 (PR #60, merged `e54d56e`) and #28 (PR #63, merged `23db797`), 22 October 2026. The reviewable candidate refresh and the rest of this plan are not implemented.
+Accepted for planning: 22 October 2026. **Status: Planned.** The P0 slices are complete: #26 (PR #60, merged `e54d56e`) and #28 (PR #63, merged `23db797`), 22 October 2026. The slice 2 consumer audit is documented in [R18-provider-retirement-audit.md](R18-provider-retirement-audit.md) (23 October 2026; no code change). The reviewable candidate refresh and the rest of this plan are not implemented.
 Tracking issue: #51. Parent roadmap: #36. Original review recommendation: **18 of 25**.
 Phase: P0 fixes complete; P1 core valuation scope; later candidate FX review. Relative scope: M staged; no calendar estimate is committed.
 Canonical plan: [R18-valuation-and-fx-review.md](R18-valuation-and-fx-review.md).
@@ -28,7 +28,7 @@ The advisor completes a proposal from accepted source values without security-pr
 
 ## Implementation slices
 1. Preserve completed PR #34, #26/PR #60 and #28/PR #63 behavior; this scope adjustment does not undo those fixes.
-2. After R23a review/merge and before any schema migration, audit quote/cache/acceptance/Copilot/PDF consumers. Define accepted source values and review semantics with R11/R02; retain FX separately.
+2. After R23a review/merge and before any schema migration, audit quote/cache/acceptance/Copilot/PDF consumers (audit done 23 October 2026: [R18-provider-retirement-audit.md](R18-provider-retirement-audit.md), with the recommended slice order and acceptance cases). Define accepted source values and review semantics with R11/R02; retain FX separately.
 3. Remove quote/provider setup from the daily proposal path and disable optional enrichment first. Prove no-key/quote-services-unavailable flows and equivalent saved financial results. Then retire unused adapters/routes/dependencies/configuration with safe links and backups; never delete the FX layer wholesale.
 4. Coordinate with R19a's P1 input/FX-basis record. Core input contracts and construction must not wait for full snapshot UX or optional providers.
 5. Later, add candidate FX results and current-versus-candidate comparison, showing changed recommendation effects/approval consequences before atomic apply. Preserve concurrency/revision and confirmation rules.
