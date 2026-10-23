@@ -29,7 +29,8 @@
         "R19",
         "R20"
       ],
-      "existingIssueReused": false
+      "existingIssueReused": false,
+      "scopeDecision": "VALUATION_SCOPE.md"
     },
     {
       "id": "R02",
@@ -41,7 +42,8 @@
       "size": "L",
       "status": "planned",
       "dependencies": [],
-      "existingIssueReused": false
+      "existingIssueReused": false,
+      "scopeDecision": "VALUATION_SCOPE.md"
     },
     {
       "id": "R03",
@@ -75,7 +77,8 @@
         "R05",
         "R07"
       ],
-      "existingIssueReused": false
+      "existingIssueReused": false,
+      "scopeDecision": "VALUATION_SCOPE.md"
     },
     {
       "id": "R05",
@@ -178,7 +181,8 @@
       "size": "M",
       "status": "planned",
       "dependencies": [],
-      "existingIssueReused": false
+      "existingIssueReused": false,
+      "scopeDecision": "VALUATION_SCOPE.md"
     },
     {
       "id": "R12",
@@ -217,14 +221,15 @@
       "title": "Distinguish classification, underlying exposure and estimated mixes",
       "issue": 49,
       "plan": "R14-classification-and-exposure-coverage.md",
-      "phase": "P1 truthful labels; P3 enrichment",
+      "phase": "P1 labels/estimates; external enrichment deferred",
       "size": "L",
       "status": "planned",
       "dependencies": [
         "R02",
         "R09"
       ],
-      "existingIssueReused": false
+      "existingIssueReused": false,
+      "scopeDecision": "VALUATION_SCOPE.md"
     },
     {
       "id": "R15",
@@ -232,7 +237,7 @@
       "title": "Connect client preferences to transparent portfolio risk review",
       "issue": 12,
       "plan": "R15-transparent-risk-review.md",
-      "phase": "P3 bounded risk; later quantified analytics",
+      "phase": "P3 bounded risk; quantitative analytics deferred",
       "size": "L",
       "status": "planned",
       "dependencies": [
@@ -240,7 +245,8 @@
         "R12",
         "R14"
       ],
-      "existingIssueReused": true
+      "existingIssueReused": true,
+      "scopeDecision": "VALUATION_SCOPE.md"
     },
     {
       "id": "R16",
@@ -248,7 +254,7 @@
       "title": "Compare current/proposed fees and income with data coverage",
       "issue": 14,
       "plan": "R16-cost-and-income-comparison.md",
-      "phase": "P3",
+      "phase": "P3 known inputs; automatic enrichment deferred",
       "size": "L",
       "status": "planned",
       "dependencies": [
@@ -256,7 +262,8 @@
         "R05",
         "R14"
       ],
-      "existingIssueReused": true
+      "existingIssueReused": true,
+      "scopeDecision": "VALUATION_SCOPE.md"
     },
     {
       "id": "R17",
@@ -277,16 +284,17 @@
     {
       "id": "R18",
       "reviewNumber": 18,
-      "title": "Review valuation and FX refresh changes before applying them",
+      "title": "Use accepted valuations and review FX changes; defer security repricing",
       "issue": 51,
       "plan": "R18-valuation-and-fx-review.md",
-      "phase": "P0 fixes; P1 reviewable refresh",
-      "size": "M",
+      "phase": "P0 fixes complete; P1 core scope; later FX candidate review",
+      "size": "M staged",
       "status": "planned",
       "dependencies": [
         "PR #34",
         "#26",
-        "#28"
+        "#28",
+        "R23a"
       ],
       "existingIssueReused": false,
       "progress": [
@@ -309,7 +317,8 @@
           "date": "2026-10-22",
           "followUp": 64
         }
-      ]
+      ],
+      "scopeDecision": "VALUATION_SCOPE.md"
     },
     {
       "id": "R19",
@@ -317,7 +326,7 @@
       "title": "Freeze approved proposal snapshots and clarify approval",
       "issue": 52,
       "plan": "R19-approved-proposal-snapshots.md",
-      "phase": "P3 foundation; P4 delivery",
+      "phase": "P1 input basis (R19a); P3/P4 approved snapshots",
       "size": "L",
       "status": "planned",
       "dependencies": [
@@ -327,7 +336,37 @@
         "R07",
         "R18"
       ],
-      "existingIssueReused": false
+      "existingIssueReused": false,
+      "scopeDecision": "VALUATION_SCOPE.md",
+      "slices": [
+        {
+          "id": "R19a",
+          "status": "planned",
+          "phase": "P1",
+          "scope": "Accepted valuation/input/FX-basis record only; not proposal approval",
+          "dependencies": [
+            "R23a",
+            "R02",
+            "R18"
+          ],
+          "dependencyScope": "Minimum accepted-input contract only; no full R05/R06 or optional pricing dependency"
+        },
+        {
+          "id": "R19b",
+          "status": "planned",
+          "phase": "P3/P4",
+          "scope": "Complete approved economic package, version history and snapshot output",
+          "dependencies": [
+            "R19a",
+            "R02",
+            "R05",
+            "R06",
+            "R07",
+            "R18"
+          ],
+          "dependencyScope": "Core R18 valuation/FX contract; optional pricing and later candidate-FX UI are not prerequisites"
+        }
+      ]
     },
     {
       "id": "R20",
@@ -374,7 +413,8 @@
         "R13",
         "R19"
       ],
-      "existingIssueReused": false
+      "existingIssueReused": false,
+      "scopeDecision": "VALUATION_SCOPE.md"
     },
     {
       "id": "R23",
@@ -392,8 +432,12 @@
           "issue": 55,
           "pr": 66,
           "slice": "R23a",
-          "state": "in-review",
-          "scope": "Versioned browser-local export; validated, previewed, all-or-nothing restore; R23b not started"
+          "state": "merged",
+          "scope": "R23a: versioned browser-local export; validated, previewed, all-or-nothing restore. R23b not started",
+          "head": "d088dab657c802d18c8e34882f245603f31ab75e",
+          "mergeCommit": "e56335e5fdb4f2f343cdea605333b16cda9ad932",
+          "deployment": "dpl_DUsfyjnmjxaUaLNfBhrNfHixwqsy",
+          "date": "2026-10-23"
         }
       ]
     },
@@ -423,7 +467,8 @@
       "size": "M",
       "status": "planned",
       "dependencies": [],
-      "existingIssueReused": false
+      "existingIssueReused": false,
+      "scopeDecision": "VALUATION_SCOPE.md"
     }
   ],
   "supportingIssues": [
@@ -454,5 +499,35 @@
       ],
       "gate": "Required controls and evidence before any real-client pilot; public demo remains synthetic-only."
     }
-  ]
+  ],
+  "scopeDecision": {
+    "acceptedAt": "2026-10-22",
+    "status": "planned",
+    "plan": "VALUATION_SCOPE.md",
+    "trackingIssue": 51,
+    "core": "Accepted statement/imported account or advisor-approved values with currency, source/date, FX and financial safeguards",
+    "deferred": [
+      "Broad multi-provider security repricing",
+      "Filings/macro research",
+      "External look-through",
+      "History-dependent quantitative analytics",
+      "Automatic fee/yield enrichment"
+    ],
+    "preserved": [
+      "Existing accepted values and provenance",
+      "Storage keys and record links",
+      "FX/date fixes and readiness safeguards",
+      "PII prerequisite #59",
+      "Agent authority/evaluation requirements"
+    ],
+    "checkpoint": {
+      "pr": 66,
+      "head": "d088dab657c802d18c8e34882f245603f31ab75e",
+      "mergeCommit": "e56335e5fdb4f2f343cdea605333b16cda9ad932",
+      "deployment": "dpl_DUsfyjnmjxaUaLNfBhrNfHixwqsy",
+      "state": "merged",
+      "next": "Codex review of the updated documentation PR #67 before any owner-authorized merge"
+    },
+    "runtimeChanges": false
+  }
 }

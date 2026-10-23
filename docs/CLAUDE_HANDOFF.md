@@ -1,12 +1,34 @@
 # Handoff
 
-## R23a workspace backup and restore — 22 October 2026 (PR #66, in review, not merged)
+## Current checkpoint — 23 October 2026: R23a released; valuation-scope docs reconciled (PR #67 in review)
+
+- **Approved valuation scope (read first):** [VALUATION_SCOPE.md](roadmap/VALUATION_SCOPE.md), summarized in "[Approved valuation scope adjustment](#approved-valuation-scope-adjustment--22-october-2026)" below. Accepted statement/imported account or advisor-approved values are core. FX, reconciliation, missing-value, import, currency, link, funding and approval safeguards stay. Broad security pricing and research are optional and deferred. No provider was removed and no valuation behavior changed.
+- **PR #66 (R23a backup/restore) is merged and live.**
+  - Codex reviewed the head `d088dab657c802d18c8e34882f245603f31ab75e`. It was verified unchanged, mergeable and clean, with both checks passing on that commit (CI run 39841946917: 376 passed, 2 skipped, 378 total).
+  - It was merged pinned to that head as **`e56335e5fdb4f2f343cdea605333b16cda9ad932`** (parents `5bd1e7b` and `d088dab`), 23 October 2026 13:24 UTC.
+  - #55 stays open: only R23a is delivered; R23b is not started.
+- **CI on `main`** for `e56335e` (run 39960913865) passed: typecheck; 22 test files, **376 passed and 2 skipped (378 total;** the 2 need the private UBS PDF); extraction eval 2 of 2; build.
+- **Production.** Deployment `dpl_DUsfyjnmjxaUaLNfBhrNfHixwqsy`, built from `main` at `e56335e`, is READY and aliased to https://atlas-proposal-engine.vercel.app.
+- **Production smoke test** (in-app browser; this origin's saved workspace, 38,704 bytes, was kept privately in browser storage and restored byte-identical; no file was saved or committed):
+  - **Export:** Settings → Backup & restore exported `atlas-workspace-backup-2026-10-23.json` (45,402 bytes; schema 1, workspace 6), announced only after validation.
+  - **Preview and Cancel:** the preview showed the client, export time, counts and net worth; Cancel left saved data byte-identical.
+  - **Synthetic export → Start a new client → restore → reload:** the synthetic workspace had a source-document record, an approved recommendation and a recommendation whose holding was removed.
+    - The file recorded that unresolved link, and the preview said "1 recommendation marked for review".
+    - After Replace and a reload, the client, accounts, holdings, recommendations and FX rates were deep-equal. The document came back `complete`/`matched`, firm settings were kept, and the orphaned recommendation was still unapproved, with its link kept.
+  - Downloads were captured in memory; no task server was started for this test.
+- **PR #67 (this documentation branch)** now includes `main` at `e56335e`.
+  - **ROADMAP.md:** the only conflict, in two hunks, both false conflicts. It was resolved with #67's side, which already contained #66's lines.
+  - **Stale wording updated:** "R23a in review" and "review #66 before merge" in ROADMAP, the implementation guide, the R23 plan, VALUATION_SCOPE and `tracking.json`.
+  - **R23 status:** Planned overall, with R23a merged and R23b not started.
+- **Next step:** Codex reviews the updated PR #67. Merge only on the owner's approval. Not started: R23b, #61, #64, naming #35, provider removal, valuation changes and live AI.
+
+## R23a workspace backup and restore — 22 October 2026 (PR #66, merged `e56335e` on 23 October, live)
 
 **Saved state, end of 22 October 2026**
-- **PR #66 is open and unmerged.** Branch `feat/r23a-backup-restore` is pushed. Its last code commit is the relinking fix (`36f184b`), followed by docs (`1a6cb43`).
+- **PR #66 was open and unmerged at this point** (merged on 23 October; see the current checkpoint). Branch `feat/r23a-backup-restore` is pushed. Its last code commit is the relinking fix (`36f184b`), followed by docs (`1a6cb43`).
 - **CI on the relinking head** (run 39840998371): typecheck; 22 test files, **376 passed and 2 skipped (378 total)**; extraction eval; build. All passed.
 - **Clean-up:** the browser's saved workspace was restored byte-identical after every check (102 holdings, 200,907 bytes), and every task-started dev server was stopped. Nothing was merged or deployed.
-- **Next session:** Codex reviews the final relinking changes (`36f184b`: `linkToHolding`, the editor picker, `tests/recommendationRelink.test.ts`) before any merge of PR #66. Merge only on the owner's approval.
+- **Next session (done 23 October):** Codex reviews the final relinking changes (`36f184b`: `linkToHolding`, the editor picker, `tests/recommendationRelink.test.ts`) before any merge of PR #66. Merge only on the owner's approval.
 - **Untouched:** R23b (several engagements, switching and archiving) and the other roadmap items, including #61 and #64. #55 stays open.
 
 Branch `feat/r23a-backup-restore` from main `5bd1e7b` (the merge of release-checkpoint PR #65, pinned to `54b8182`). It's part of #55; **#55 stays open** for R23b (several engagements, switching and archiving), which is not implemented. The design was recorded on #55 before coding (comment 6348256683).
@@ -96,7 +118,7 @@ Branch `feat/r23a-backup-restore` from main `5bd1e7b` (the merge of release-chec
     - withdrawing gave 15/16 with "CHF/USD 175 days old (2026-04-30, ECB)…", locked.
   - **Not performed on production:** a final PDF, a real FX refresh, and the date-input defaults. The defaults and the full zone matrix (UTC, New York, Los Angeles, Tokyo, Auckland, daylight-saving and year boundaries) are covered by the automated tests in `tests/calendarDates.test.ts` (prior evidence, CI-verified), not by this smoke test.
 - **R18 (#51)** stays Planned. Its #26 and #28 slices are complete; the reviewable candidate refresh remains.
-- **Next:** no feature is started. The roadmap's remaining P0 items (R23a backup/restore, R25 study protocol/baseline) and the logged follow-ups (#61, #64) await the owner's selection. Since then: this checkpoint was merged as PR #65 (`5bd1e7b`), and R23a was selected and is in review as PR #66 (see the top).
+- **Next:** no feature is started. The roadmap's remaining P0 items (R23a backup/restore, R25 study protocol/baseline) and the logged follow-ups (#61, #64) await the owner's selection. Since then: this checkpoint was merged as PR #65 (`5bd1e7b`), and R23a was selected and is in review as PR #66, since merged as `e56335e` (see the top).
 
 ## #28 calendar dates — 22 October 2026 (PR #63, merged `23db797`, live)
 
@@ -311,6 +333,14 @@ The state of the project for the next working session: what's done, how it was c
 _Section last updated: 2026-10-22, when PR #63 (#28) was merged (`23db797`). Newer checkpoints at the top supersede older next-step notes._
 
 > The roadmap checkpoint and PII prerequisite (#59) at the top of this file and the #33 section below are both current; neither replaces the other.
+
+## Approved valuation scope adjustment — 22 October 2026
+
+Tyler approved [VALUATION_SCOPE.md](roadmap/VALUATION_SCOPE.md): verified statement/imported account or advisor-approved values are core; broad security repricing and research are optional future scope. Keep FX, reconciliation, missing-value/import/currency/link/approval/funding safeguards and existing calculation engines. No runtime behavior, data, API setting or provider is changed by this planning save.
+
+This supersedes older instructions that make broad quote enrichment/candidate security repricing a prerequisite. R18 owns core simplification and a safe audit → disable → prove equivalence → retire sequence; later candidate FX review remains planned. Bring R19a's accepted input/FX-basis record into P1 without claiming full snapshot approval. R14–R16 use supported inputs/unknown coverage first; R25 tests the complete task without quote setup; R22 keeps agent evidence/authority requirements.
+
+**Preserved next review (done 23 October):** PR #66 was open at `d088dab657c802d18c8e34882f245603f31ab75e`, branch `feat/r23a-backup-restore`; its final relinking code (`36f184b`) was Codex-reviewed and merged as `e56335e` (see the current checkpoint at the top). The text below is as written before that merge. The prior passing CI evidence is on `1a6cb43` (376 passed, 2 private-PDF tests skipped; 378 total); do not claim that old run verifies the newer handoff-only head. Its saved workspace/server/stash checkpoint remains authoritative on that branch. Land validated R23a before any stored-schema change or retirement that risks saved values. This update does not touch PR #66, start R23b, merge/deploy, or start #61/#64/naming #35. The next implementation after review is selected as a bounded plan slice, not all 25 at once.
 
 ## Working agreements
 - Every bug, idea or parked item gets a GitHub issue; a PR closes its issue.

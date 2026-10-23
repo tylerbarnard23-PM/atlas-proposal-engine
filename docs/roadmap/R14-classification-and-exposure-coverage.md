@@ -2,7 +2,7 @@
 
 Accepted for planning: 22 October 2026. **Status: Planned; not implemented by this document.**
 Tracking issue: #49. Parent roadmap: #36. Original review recommendation: **14 of 25**.
-Phase: P1 truthful labels; P3 enrichment. Relative scope: L; no calendar estimate is committed.
+Phase: P1 truthful labels/estimates; external enrichment deferred. Relative scope: L; no calendar estimate is committed.
 Canonical plan: [R14-classification-and-exposure-coverage.md](R14-classification-and-exposure-coverage.md).
 
 ## Advisor problem
@@ -26,7 +26,7 @@ Advisors understand what the allocation actually measures and where detail is un
 1. Relabel existing charts and mixed/unclassified holdings honestly.
 2. Extend #11 with an estimated-mix editor, basis, weights and provenance.
 3. Implement shared exposure aggregation and coverage with no double counting.
-4. Add optional provider enrichment only after a dataset/license decision; show unsupported cases.
+4. Defer provider enrichment until an observed advisor need, supported dataset/license, cost/privacy decision and separate bounded plan exist; show unsupported cases now.
 
 ## Acceptance criteria
 - [ ] A target-date fund is not asserted to be 100% equity without evidence.
@@ -40,6 +40,10 @@ Advisors understand what the allocation actually measures and where detail is un
 - Migration preserves original holding classification and amounts.
 - Browser/PDF: same coverage, labels and provenance.
 For implementation, also follow repository-required typecheck, full tests, extraction eval, production build and a relevant browser check. Do not claim these passed from this planning work.
+
+## Approved valuation scope adjustment — 22 October 2026
+
+Follow [VALUATION_SCOPE.md](VALUATION_SCOPE.md). Use evidenced imported/advisor-entered classifications and clearly labelled estimates before external look-through. Missing enrichment does not force a pricing-provider setup or stop the allocation workflow; disclose unknown exposure. Accepted market value and analytical exposure are separate concepts. No synthetic look-through weights or extra owned holdings may fill a gap.
 
 ## Dependencies and sequencing
 - [R02](R02-proposal-scope.md)

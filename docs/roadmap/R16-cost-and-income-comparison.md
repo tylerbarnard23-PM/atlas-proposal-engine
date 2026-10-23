@@ -2,7 +2,7 @@
 
 Accepted for planning: 22 October 2026. **Status: Planned; not implemented by this document.**
 Tracking issue: #14. Parent roadmap: #36. Original review recommendation: **16 of 25**.
-Phase: P3. Relative scope: L; no calendar estimate is committed.
+Phase: P3 known inputs; automatic enrichment deferred. Relative scope: L; no calendar estimate is committed.
 Canonical plan: [R16-cost-and-income-comparison.md](R16-cost-and-income-comparison.md).
 
 ## Advisor problem
@@ -19,7 +19,7 @@ Advisors can show reproducible recurring cost/income differences and distinguish
 ## Data and calculation contracts
 - Model unknown separately from explicit zero for fees/yields.
 - Normalize annual expense/yield units; distinguish percent from basis points and currency amounts.
-- Use the same scoped portfolio and valuation date for comparison; do not double-count embedded fund/advisory fees.
+- Use the same scoped accepted valuation basis for current/proposed comparison; disclose actual source dates and mixed-date limits rather than inventing one source date; do not double-count embedded fund/advisory fees.
 - Separate recurring expense reduction, transaction/FX cost and projected performance.
 
 ## Implementation slices
@@ -40,6 +40,10 @@ Advisors can show reproducible recurring cost/income differences and distinguish
 - Integration: actual replacement identity changes → cost comparison → PDF.
 - Browser: input provenance and comparison under changed scope/currency.
 For implementation, also follow repository-required typecheck, full tests, extraction eval, production build and a relevant browser check. Do not claim these passed from this planning work.
+
+## Approved valuation scope adjustment — 22 October 2026
+
+Follow [VALUATION_SCOPE.md](VALUATION_SCOPE.md). Start with evidenced statement/advisor-entered expenses, fee schedules and income/yield assumptions, preserving source/date and unknown coverage. Automatic fee/yield enrichment is deferred, not a dependency of constructing or approving a supported allocation proposal. An unavailable yield is not zero; no whole-portfolio income/savings claim follows from partial inputs. Compare alternatives on the same accepted basis without fetching fresh security prices.
 
 ## Dependencies and sequencing
 - [R04](R04-proposed-investments-and-replacements.md)

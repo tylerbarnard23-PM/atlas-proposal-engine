@@ -41,6 +41,12 @@ The advisor sees a short, accurate queue of blockers, material warnings and opti
 - Browser/PDF: same unresolved items and explanations.
 For implementation, also follow repository-required typecheck, full tests, extraction eval, production build and a relevant browser check. Do not claim these passed from this planning work.
 
+## Approved valuation scope adjustment — 22 October 2026
+
+Follow [VALUATION_SCOPE.md](VALUATION_SCOPE.md). Prioritize unreadable/non-finite values, incomplete reconciliation/imports, missing required FX, unresolved reviews and funding errors. Treat optional quote coverage/lookup failures separately from accepted input validity; they must not independently block a supported proposal. Dated inputs need explicit review and visible original dates, not compulsory repricing or re-dating. Keep security-date review distinct from the unchanged seven-day FX policy. Any changed readiness semantics must be tested through both UI/shared checks and the final-PDF route.
+
+Additional planned checks: accepted old statement + failed quote lookup can complete after applicable review; missing value/FX or an incomplete import cannot; no bulk date acknowledgement changes original dates, settles currency reviews or makes data provider-verified. Keep the instrument-aware bond checks; do not require quantity-times-price reconstruction for unsupported conventions.
+
 ## Dependencies and sequencing
 - No feature dependency; it can be the first bounded task after the current checkpoint.
 R23a means the export/restore slice of recommendation 23; R23b means its multi-engagement isolation slice. A dependency on another plan means its required contract/slice must exist, not that all later extensions must ship first.

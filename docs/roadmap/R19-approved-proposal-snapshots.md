@@ -2,7 +2,7 @@
 
 Accepted for planning: 22 October 2026. **Status: Planned; not implemented by this document.**
 Tracking issue: #52. Parent roadmap: #36. Original review recommendation: **19 of 25**.
-Phase: P3 foundation; P4 delivery. Relative scope: L; no calendar estimate is committed.
+Phase: P1 accepted input basis (R19a); P3/P4 full approved snapshots. Relative scope: L; no calendar estimate is committed.
 Canonical plan: [R19-approved-proposal-snapshots.md](R19-approved-proposal-snapshots.md).
 
 ## Advisor problem
@@ -23,10 +23,11 @@ Each approved proposal has one reproducible set of inputs, changes, explanations
 - Local append-only snapshots are reproducible application records, not tamper-proof institutional books-and-records compliance.
 
 ## Implementation slices
-1. Create the version-history child of #18 and define snapshot schema/serialization.
-2. Implement review-package comparison and snapshot creation only when shared checks pass.
-3. Make final PDF generation consume a selected snapshot; preserve existing server recomputation/gates.
-4. Add revision history, superseding/new-draft flow and visible version identity.
+1. P1 R19a: after R23a and minimum R02/R18 input contracts, define/store a versioned accepted valuation-basis record (values, identities, source dates/provenance and exact FX/input revision). Preserve mixed dates and legacy evidence; this record is not advisor approval. Do not wait for full scenarios/funding or optional security feeds.
+2. P3/P4: create the version-history child of #18 and define the complete approved snapshot schema/serialization after the existing scenario/funding/intent dependencies.
+3. Implement review-package comparison and snapshot creation only when shared checks pass.
+4. Make final PDF generation consume a selected snapshot; preserve existing server recomputation/gates.
+5. Add revision history, superseding/new-draft flow and visible version identity.
 
 ## Acceptance criteria
 - [ ] Refreshing prices/FX or editing a current holding cannot rewrite a saved approved version.
@@ -41,7 +42,15 @@ Each approved proposal has one reproducible set of inputs, changes, explanations
 - Browser: approve → output → edit → compare versions; current records remain separate.
 For implementation, also follow repository-required typecheck, full tests, extraction eval, production build and a relevant browser check. Do not claim these passed from this planning work.
 
+## Approved valuation scope adjustment — 22 October 2026
+
+Follow [VALUATION_SCOPE.md](VALUATION_SCOPE.md). R19a preserves the accepted valuation/input basis early; it must not be presented as a fully approved proposal, tamper-proof audit log or completed R19. Store the actual per-value source dates and FX revision, not a fake common statement date. An optional quote failure or retiring an adapter cannot change that record. A changed accepted input creates a new draft revision and follows material-change review.
+
+Full approved snapshots still require R02/R05/R06/R07 and the core R18 accepted-value/FX contract, not optional repricing or the later candidate-FX UI. Round-trip the basis record through storage/backup and prove its values stay reproducible after quote-cache or FX refreshes; distinguish historical reproduction from issuing a new final deliverable under current readiness checks.
+
 ## Dependencies and sequencing
+- **R19a only:** R23a recoverability and minimum R02/R18 accepted-input contracts; no full R05/R06 dependency.
+- **Full approved package:** the following existing dependencies remain; R18 means its core accepted-value/FX contract, not optional providers or every later refresh extension.
 - [R02](R02-proposal-scope.md)
 - [R05](R05-draft-scenarios.md)
 - [R06](R06-funding-and-cash-controls.md)

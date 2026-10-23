@@ -19,7 +19,7 @@ The advisor can replace a fund or buy a new security without pretending it is al
 ## Data and calculation contracts
 - Separate current holding IDs from proposed-only instrument/position IDs.
 - A replacement is a grouped action with source and destination legs and stable IDs.
-- Store instrument identity, price/as-of and classification provenance; missing data is explicit.
+- Store instrument identity, currency and classification/valuation provenance. A dollar allocation does not require a live price; share-quantity estimates require an evidenced unit price/date and instrument convention, with missing quantity explicit.
 - A partially unresolved replacement group cannot be represented as a completed swap; apply atomically or report both-leg status.
 
 ## Implementation slices
@@ -31,7 +31,7 @@ The advisor can replace a fund or buy a new security without pretending it is al
 ## Acceptance criteria
 - [ ] Replacing Maritime with VOO removes/reduces the source and adds the destination in proposed holdings only.
 - [ ] Both legs reconcile to cash, with one FX conversion per amount.
-- [ ] Missing price, rate, account or identity leaves the action visibly incomplete.
+- [ ] Missing required FX, account, identity or funding leaves the dollar action visibly incomplete. A missing optional unit price leaves share estimates unavailable, without blocking a supported dollar allocation.
 - [ ] Cancel, repeat save and reload do not create duplicate proposed positions.
 - [ ] Oversized sells cannot invent proceeds or conceal a clamped amount.
 
@@ -40,6 +40,10 @@ The advisor can replace a fund or buy a new security without pretending it is al
 - Integration: buy not currently owned, partial replacement, zero-value source and cross-currency cases.
 - Browser/PDF: current unchanged; proposed identity and cash match.
 For implementation, also follow repository-required typecheck, full tests, extraction eval, production build and a relevant browser check. Do not claim these passed from this planning work.
+
+## Approved valuation scope adjustment — 22 October 2026
+
+Follow [VALUATION_SCOPE.md](VALUATION_SCOPE.md). A catalog/custom destination needs explicit identity, currency, dollar amount and real funding; it does not need live security search or repricing. Keep sample catalog entries visibly synthetic. Price-dependent quantities are indicative and unavailable without supported evidence, not executable order instructions. Add no-key/unavailable-quote tests for buy-new and replacements while retaining both-leg, FX, cash and approval safeguards.
 
 ## Dependencies and sequencing
 - [R02](R02-proposal-scope.md)

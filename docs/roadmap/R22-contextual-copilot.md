@@ -55,6 +55,10 @@ Additional acceptance:
 - [ ] Browser tests cover evidence → simulation → review/save → advisor approval → matching proposal, cancellation/reload and stale context.
 - [ ] Every supported model/provider has its own recorded evaluation evidence; no production-grade claim follows from agent presence alone.
 
+## Approved valuation scope adjustment — 22 October 2026
+
+Follow [VALUATION_SCOPE.md](VALUATION_SCOPE.md) without changing provider/agent authority. Tools consume the accepted source-value/FX revision and explain its dates and gaps. The model cannot invent a price, select a fallback as verified, silently refresh/reprice the baseline or bypass incomplete inputs. Core simulations and supported dollar drafts work without security-quote keys. Add no-quote/quote-failure/mixed-date cases to the existing offline and opt-in synthetic live evaluation plans, preserving draft-only authority and #59.
+
 ## Dependencies and sequencing
 - [R03](R03-allocation-workspace.md)
 - [R08](R08-contextual-holding-preview.md)
