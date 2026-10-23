@@ -1,6 +1,16 @@
 # Handoff
 
-## Current checkpoint — 23 October 2026: R23a released; valuation-scope docs reconciled (PR #67 in review)
+## Current checkpoint — 23 October 2026: PR #67 released; R18 provider-retirement audit saved (documentation PR in review)
+
+- **PR #67 (valuation-scope docs) is merged and live.** Codex reviewed head `4b8892b` (no blocking findings); merged pinned as **`a63de4a8ff738ca24b83c29213e5e764b1a8918b`**. CI on `main` (run 39962702771) passed: typecheck; 22 test files, **376 passed and 2 skipped (378 total;** the 2 need the private UBS PDF); build. Production deployment `dpl_6CxmP5jGHwMcmY4X15vPwQwfbG6r` (from `a63de4a`) is READY at https://atlas-proposal-engine.vercel.app. A read-only Dashboard/Settings check passed (net worth $17.75M, readiness 13/17, saved data unchanged at 38,704 bytes). Recorded on PR #67 and #36; #36, #51, #55 and #59 stay open.
+- **R18 audit (documentation only):** [R18-provider-retirement-audit.md](roadmap/R18-provider-retirement-audit.md), on branch `docs/r18-provider-audit-2026-10-23`, linked to #51. No code, provider, stored data or schema changed; the full suite was not rerun (a 5-case read-only scratchpad probe passed).
+  - **Findings:** a quote refresh writes only the quote cache (persisted `marketDataByIdentifier` and the server cache) and the Market Data table. No holding value, approval, recommendation, readiness check, Copilot answer, PDF amount or backup changes. With no keys and services down, it caches mock quotes and shows them beside real holdings. No app code writes `marketDataSource` or a `market_data`/`mock` kind; the `marketDataSource` branch only relabels `nativeMarketValue`. Proposals and readiness are identical without quantity, price or identifier.
+  - **Highest-priority defect:** the client PDF's required "Market Data & Valuation Sources" and "Assumptions" pages, Key Findings and the default appendix describe values as third-party provider quotes, although every app-written value comes from a statement or the advisor.
+  - **Legacy data:** quote-derived accepted values, provider names, dates and approvals round-trip through backup unchanged; later slices must never narrow the enums or backup schema.
+- **Recommended slice 1 (UI and wording only):** remove Refresh quotes, the coverage table and provider cards (keep FX); correct the PDF/Dashboard wording to the accepted value basis; reword setup docs; tests A1–A6. Needs a proposal with the owner's decisions first (seven listed in the audit).
+- **Next step:** Codex reviews the audit PR. Merge only on the owner's approval; then propose slice 1. Not started: provider removal, valuation changes, schema migrations, live AI, R23b, #61, #64, naming #35.
+
+## Checkpoint — 23 October 2026: R23a released; valuation-scope docs reconciled (PR #67, since merged as `a63de4a`)
 
 - **Approved valuation scope (read first):** [VALUATION_SCOPE.md](roadmap/VALUATION_SCOPE.md), summarized in "[Approved valuation scope adjustment](#approved-valuation-scope-adjustment--22-october-2026)" below. Accepted statement/imported account or advisor-approved values are core. FX, reconciliation, missing-value, import, currency, link, funding and approval safeguards stay. Broad security pricing and research are optional and deferred. No provider was removed and no valuation behavior changed.
 - **PR #66 (R23a backup/restore) is merged and live.**
@@ -20,7 +30,7 @@
   - **ROADMAP.md:** the only conflict, in two hunks, both false conflicts. It was resolved with #67's side, which already contained #66's lines.
   - **Stale wording updated:** "R23a in review" and "review #66 before merge" in ROADMAP, the implementation guide, the R23 plan, VALUATION_SCOPE and `tracking.json`.
   - **R23 status:** Planned overall, with R23a merged and R23b not started.
-- **Next step:** Codex reviews the updated PR #67. Merge only on the owner's approval. Not started: R23b, #61, #64, naming #35, provider removal, valuation changes and live AI.
+- **Next step (done 23 October; see the top):** Codex reviews the updated PR #67. Merge only on the owner's approval. Not started: R23b, #61, #64, naming #35, provider removal, valuation changes and live AI.
 
 ## R23a workspace backup and restore — 22 October 2026 (PR #66, merged `e56335e` on 23 October, live)
 
