@@ -112,7 +112,7 @@ The other readiness checks and the statement-import reconciliation warnings stay
 
 ## Recommended slices
 
-**Slice 1 (smallest; UI and wording only, no schema, store or engine change): "Stop presenting security quotes."**
+**Slice 1 (smallest; UI and wording only, no schema, store or engine change): "Stop presenting security quotes."** In review as PR #69 (23 October 2026), with the owner's decisions: rename to Exchange rates at the same address; keep section keys and defaults, with titles resolved by key; keep legacy mock values labelled, with the existing review gate; crypto follows the accepted-value workflow.
 1. On Market Data, remove "Refresh quotes", the quote-coverage table and the security-provider cards, keeping the FX panel. In Settings, show only the FX source. The routes and adapters stay in place but nothing calls them.
 2. Correct the PDF and Dashboard text to describe the accepted value basis per holding. That covers source kind (statement / advisor-entered / override / approved), the recorded provider as historical evidence, and each holding's own as-of date. Limit the default appendix to the FX source actually used. Section keys stay unchanged.
 3. Reword `.env.example`/README: quote keys are optional and unused by the proposal journey.
