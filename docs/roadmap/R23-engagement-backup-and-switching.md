@@ -1,6 +1,6 @@
 # R23 — Back up engagements and preserve multiple clients safely
 
-Accepted for planning: 22 October 2026. **Status: Planned; not implemented by this document.**
+Accepted for planning: 22 October 2026. **Status: Planned.** Slice R23a (versioned export and validated, previewed, all-or-nothing restore) is in review as PR #66; R23b (multi-engagement storage and switching) is not started.
 Tracking issue: #55. Parent roadmap: #36. Original review recommendation: **23 of 25**.
 Phase: P0 backup; P1/P2 client isolation. Relative scope: L staged; no calendar estimate is committed.
 Canonical plan: [R23-engagement-backup-and-switching.md](R23-engagement-backup-and-switching.md).

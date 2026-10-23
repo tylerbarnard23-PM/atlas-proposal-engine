@@ -31,7 +31,7 @@ Phases indicate dependency order, not dates or fixed-duration sprints. Some plan
 
 | Phase | Bounded delivery | Exit evidence |
 |---|---|---|
-| P0 — secure the checkpoint | ~~Review PR #34~~ (merged `4e6da18`); ~~#26~~ (merged `e54d56e`) then ~~#28~~ (merged `23db797`); R23a backup/restore; R25 study protocol/baseline | Review findings recorded; saved workspace recoverable; FX/date cases pass; study protocol exists and results remain empty until observed |
+| P0 — secure the checkpoint | ~~Review PR #34~~ (merged `4e6da18`); ~~#26~~ (merged `e54d56e`) then ~~#28~~ (merged `23db797`); R23a backup/restore (in review: PR #66); R25 study protocol/baseline | Review findings recorded; saved workspace recoverable; FX/date cases pass; study protocol exists and results remain empty until observed |
 | P1 — trustworthy inputs | R07 explicit intent; R11 accurate exceptions; R12 client constraints; R02 scope; R09 matched import then R10 source repair; R14 truthful classification; R18 candidate refresh; R23b client isolation | No duplicate parent/position value, no implicit 50% action, scope/unknowns visible, import/valuation/currency gates preserved |
 | P2 — portfolio construction | R05 scenarios; R04 new investments/replacements; R06 explicit funding; R03 targets/workspace; R08 contextual preview; R01 navigation shell | A synthetic account can be reallocated with a reserve, real sell/buy legs, alternative drafts and a reconciled funding ledger, without changing current holdings |
 | P3 — explain and approve | R13 relevant insights; R14 optional exposure enrichment; R15 bounded risk review; R16 costs/income; R17 tax context; R19 snapshots; R12 IPS summary | Every numerical statement is supported or explicitly unavailable; the approved economic package has reproducible versioned inputs |
@@ -68,7 +68,7 @@ The R01–R25 IDs preserve the original review numbering. GitHub issue numbers a
 | R20 (20) | [Create concise proposal templates and contextual disclosures](docs/roadmap/R20-proposal-templates-and-disclosures.md) | [#53](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/53) | P4 | M | Planned |
 | R21 (21) | [Present approved proposals digitally and share fixed versions](docs/roadmap/R21-client-presentation-and-sharing.md) | [#16](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/16) | P4 local presentation; P5 protected sharing | L | Planned |
 | R22 (22) | [Embed contextual Copilot with clear demo/live mode](docs/roadmap/R22-contextual-copilot.md) | [#54](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/54) | P4 | M | Planned |
-| R23 (23) | [Back up engagements and preserve multiple clients safely](docs/roadmap/R23-engagement-backup-and-switching.md) | [#55](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/55) | P0 backup; P1/P2 client isolation | L staged | Planned |
+| R23 (23) | [Back up engagements and preserve multiple clients safely](docs/roadmap/R23-engagement-backup-and-switching.md) | [#55](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/55) | P0 backup; P1/P2 client isolation | L staged | Planned (R23a backup/restore in review: PR #66; R23b not started) |
 | R24 (24) | [Export an account-level implementation handoff and track follow-up](docs/roadmap/R24-implementation-handoff.md) | [#56](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/56) | P5 | M-L | Planned |
 | R25 (25) | [Measure advisor usability and verify accessible workflows](docs/roadmap/R25-advisor-usability-and-accessibility.md) | [#57](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/57) | P0 baseline; repeat at each milestone | M | Planned |
 
@@ -110,7 +110,7 @@ For every implementation: identify the exact issue/slice, preserve saved data, r
 
 ## Start next time
 
-Read [CLAUDE_HANDOFF.md](docs/CLAUDE_HANDOFF.md), this roadmap and [IMPLEMENTATION_GUIDE.md](docs/roadmap/IMPLEMENTATION_GUIDE.md). PRs #34, #60 (#26) and #63 (#28) are merged; follow the newest checkpoint in the handoff. No next feature is selected. Use R23a before the larger stored-schema migrations. New construction work starts from R07/R12/R02 contracts and progresses through R05/R04/R06 to R03.
+Read [CLAUDE_HANDOFF.md](docs/CLAUDE_HANDOFF.md), this roadmap and [IMPLEMENTATION_GUIDE.md](docs/roadmap/IMPLEMENTATION_GUIDE.md). PRs #34, #60 (#26) and #63 (#28) are merged; R23a is in review as PR #66. Follow the newest checkpoint in the handoff. Land R23a before the larger stored-schema migrations, and add a backup migration step with each later store version. New construction work starts from R07/R12/R02 contracts and progresses through R05/R04/R06 to R03.
 
 Keep work in bounded PRs. Record real commit heads, checks and preview/deployment evidence; do not assume a delayed Vercel preview belongs to a newer commit.
 

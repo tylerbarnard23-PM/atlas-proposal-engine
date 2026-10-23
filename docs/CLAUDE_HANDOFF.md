@@ -1,5 +1,80 @@
 # Handoff
 
+## R23a workspace backup and restore — 22 October 2026 (PR #66, in review, not merged)
+
+**Saved state, end of 22 October 2026**
+- **PR #66 is open and unmerged.** Branch `feat/r23a-backup-restore` is pushed. Its last code commit is the relinking fix (`36f184b`), followed by docs (`1a6cb43`).
+- **CI on the relinking head** (run 39840998371): typecheck; 22 test files, **376 passed and 2 skipped (378 total)**; extraction eval; build. All passed.
+- **Clean-up:** the browser's saved workspace was restored byte-identical after every check (102 holdings, 200,907 bytes), and every task-started dev server was stopped. Nothing was merged or deployed.
+- **Next session:** Codex reviews the final relinking changes (`36f184b`: `linkToHolding`, the editor picker, `tests/recommendationRelink.test.ts`) before any merge of PR #66. Merge only on the owner's approval.
+- **Untouched:** R23b (several engagements, switching and archiving) and the other roadmap items, including #61 and #64. #55 stays open.
+
+Branch `feat/r23a-backup-restore` from main `5bd1e7b` (the merge of release-checkpoint PR #65, pinned to `54b8182`). It's part of #55; **#55 stays open** for R23b (several engagements, switching and archiving), which is not implemented. The design was recorded on #55 before coding (comment 6348256683).
+
+- **What it does.**
+  - Settings → Backup & restore exports `atlas-workspace-backup-YYYY-MM-DD.json` (a generic name, browser-local, no upload).
+  - Restore checks the whole file, previews it, and replaces the workspace only after an explicit **Replace current workspace**, with **Export current workspace first** and **Cancel** offered. Cancel changes nothing.
+  - The UI and the file say it is **not encrypted** and is for synthetic data only. Real client data needs #59 first.
+- **Envelope** (`src/engines/workspaceBackup.ts`): `format` `atlas-workspace-backup`, `schemaVersion` 1, `workspaceVersion` 6 (the store version), `engagement` and `firm`.
+  - One set of zod schemas is used strictly to validate a restore and as the export allowlist.
+  - **Engagement:** client, accounts, holdings, recommendations (with `currencyReview`), FX rates, the refresh record and the confirmation record, source-document metadata, the proposal, sections, dismissed insights and finished PDF jobs.
+  - `importCompleteness` is frozen at export (a legacy document's incomplete import keeps blocking), and an extraction summary with its reconciliation is kept.
+  - **Firm** (the advisor profile and branding) is kept on restore unless the advisor chooses the backup's.
+  - **Omitted and disclosed:** source-file bytes (never stored), extracted rows and raw text, the quote cache, generated insights, the disclosure library and credentials.
+- **Restore.**
+  - **Checks:** size ≤ 20 MB (raised in the review fix; it was 5 MB); format; versions (newer is rejected, nothing coerced); strict types and enums; finite values and positive rates; valid dates; unique IDs and every reference.
+  - **All or nothing** under the existing key: the save is checked before memory changes, and a failed save changes nothing.
+  - A restored FX confirmation is re-evaluated, never renewed. Readiness gates are unchanged.
+- **Tests:** 12 in `tests/workspaceBackup.test.ts`, written first (all 11 failed before the module existed). They use the real store with an in-memory `localStorage` and cover:
+  - the export envelope and omissions;
+  - a round trip of a rich and legacy workspace, with identical valuation, proposal and readiness (gates still blocking, the confirmation not renewed);
+  - a round trip through the real import paths;
+  - firm ownership;
+  - reload;
+  - corrupt, foreign, oversized, future and unsupported files;
+  - types, enums and values;
+  - duplicates and broken references;
+  - rejection and cancellation changing nothing;
+  - a save failure leaving everything byte-identical.
+- **Validation:**
+  - typecheck;
+  - 349 of 349 tests locally (20 files); in CI without the private UBS PDF, 2 are skipped;
+  - eval unchanged;
+  - build.
+- **Browser** (local `next start` of `26092d6`; this browser's own workspace was restored byte-identical afterwards):
+  - **Synthetic cycle:** export → Start a new client → restore → reload. Restored exactly; readiness 16/16 with the confirmation re-checked.
+  - **Rejected files** (a broken reference, a future version, an oversized file) and a **cancelled preview** left saved data byte-identical.
+  - **Real workspace:** the browser's own 102-holding workspace exported (171 KB) and passed full validation in the preview, then was cancelled.
+- **Review fix (`5322afd`): one export/restore contract.**
+  - **The gap:** exports from normal workflows could be downloaded and announced, then rejected by restore. Examples: a recommendation whose holding or account was deleted, or notes over the old 20,000-character field cap.
+  - **Export contract:** `exportBackup` validates the exact serialized file (UTF-8 bytes) with `parseBackup` before downloading or announcing anything. Failures name the record and say what to change; nothing is truncated.
+  - **Limits:** they match what the app permits (no per-field text or list caps; strict ISO only for generated timestamps). The application's backup limit is 20 MB.
+  - **Removed links:** deleting a holding or account keeps linked recommendations, with content and link as evidence, but clears their approval and marks them `needs_review`. Rejected ones stay rejected.
+  - **New readiness check:** "Recommendations linked to current holdings and accounts" blocks the final PDF until the advisor relinks, rejects or deletes them.
+  - **In the backup:** `engagement.unresolvedLinks` records them; any other broken reference is rejected.
+  - **Tests:** 21 more (`tests/backupConsistency.test.ts`), including every export from 12 supported workflows restoring with equal valuation, proposal and readiness.
+  - **Validation:** 370 of 370 tests locally (21 files); in CI, 2 are skipped.
+  - **Browser:**
+    - holding deletion, then export, restore and reload: restored deep-equal, the review mark and the readiness block kept;
+    - a limit-rejected export (record named, no download, no success message);
+    - an unreadable file (reported, no unhandled rejection).
+- **Review fix (`36f184b`): relinking repairs both links.**
+  - **The gap:** the editor's holding picker updated only `relatedHoldingId`. A recommendation relinked after its account was deleted kept the stale `relatedAccountId` and stayed blocked, and "None" kept a hidden link to the removed account.
+  - **The fix:** `linkToHolding` (`src/engines/recommendationLinks.ts`) is now the single rule.
+    - A holding carries its account.
+    - None clears a holding-derived or removed account link.
+    - An account-only recommendation keeps its link to an existing account.
+    - Re-picking the removed holding changes nothing.
+    - The editor shows a removed account as its own option.
+    - Approval is never restored by relinking; text, amounts and currency reviews are kept.
+  - **Tests:** 8 (`tests/recommendationRelink.test.ts`, written first), including relinking through export, restore and reload, and the final-PDF 422 while a link is unresolved.
+  - **Validation:** 378 of 378 tests locally (22 files); in CI, 2 are skipped.
+  - **Browser:** account deletion → relink in the real editor (preview and cancel saved nothing) → Save → reload → backup and restore, all deep-equal. Rejecting the sample's other affected recommendation cleared the check.
+- **Limitations:**
+  - Not encrypted or access-controlled (#59).
+  - Later store versions will need a backup migration step.
+  - After a restore the Statement Workbench shows document metadata and reconciliation, but not extracted rows.
+
 ## Release checkpoint — 22 October 2026: PR #63 (#28) merged and live
 
 - **Merge.** PR #63 was merged pinned to its reviewed head `786cd8f10b2233070f0cdd32e3bf54cf2d11edfe` as merge commit `23db797c58b2241e8b0c229818ebeecb06755d47` (parents `04d4396` and `786cd8f`).
@@ -21,7 +96,7 @@
     - withdrawing gave 15/16 with "CHF/USD 175 days old (2026-04-30, ECB)…", locked.
   - **Not performed on production:** a final PDF, a real FX refresh, and the date-input defaults. The defaults and the full zone matrix (UTC, New York, Los Angeles, Tokyo, Auckland, daylight-saving and year boundaries) are covered by the automated tests in `tests/calendarDates.test.ts` (prior evidence, CI-verified), not by this smoke test.
 - **R18 (#51)** stays Planned. Its #26 and #28 slices are complete; the reviewable candidate refresh remains.
-- **Next:** no feature is started. The roadmap's remaining P0 items (R23a backup/restore, R25 study protocol/baseline) and the logged follow-ups (#61, #64) await the owner's selection.
+- **Next:** no feature is started. The roadmap's remaining P0 items (R23a backup/restore, R25 study protocol/baseline) and the logged follow-ups (#61, #64) await the owner's selection. Since then: this checkpoint was merged as PR #65 (`5bd1e7b`), and R23a was selected and is in review as PR #66 (see the top).
 
 ## #28 calendar dates — 22 October 2026 (PR #63, merged `23db797`, live)
 

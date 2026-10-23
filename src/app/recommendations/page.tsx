@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { holdingsFromIncompleteImports } from "@/engines/importCompleteness";
+import { linkToHolding, unresolvedRecommendationLinks } from "@/engines/recommendationLinks";
 import { ImportNotice, IncompleteImportTag } from "@/components/import/ImportNotice";
 import Link from "next/link";
 import { Ban, CheckCheck, CheckCircle2, Lightbulb, Plus, RotateCcw, Trash2 } from "lucide-react";
@@ -40,6 +41,8 @@ const TYPES: RecommendationType[] = [
 
 const REJECT_REASONS = ["Client declined", "Not suitable", "Tax impact too high", "Timing"];
 
+/** The holding picker's entry for a removed account link (never saved as a holding). */
+const REMOVED_ACCOUNT = "__removed_account__";
 const STATUSES: RecommendationStatus[] = ["draft", "needs_review", "approved", "excluded", "implemented"];
 
 export default function RecommendationsPage() {
@@ -93,6 +96,11 @@ function Inner() {
   // Recommendations on holdings from an import that isn't fully accounted for.
   const sourceDocuments = useAtlasStore((s) => s.sourceDocuments);
   const fromIncomplete = React.useMemo(() => holdingsFromIncompleteImports(sourceDocuments, normalized), [sourceDocuments, normalized]);
+  // Linked holding or account removed: kept for the advisor's review (engines/recommendationLinks).
+  const unresolved = React.useMemo(
+    () => new Map(unresolvedRecommendationLinks({ recommendations: recs, holdings: normalized, accounts }).map((l) => [l.recommendationId, l])),
+    [recs, normalized, accounts]
+  );
   // Each card's effect, simulated with the complete engine (the same
   // simulation as the editor's live preview), so cards, preview and proposal agree.
   const previews = React.useMemo(
@@ -219,6 +227,11 @@ function Inner() {
                         <Badge tone="neutral">{r.priority} priority</Badge>
                         {r.includeInPdf && <Badge tone="gold">In PDF prose</Badge>}
                         {r.relatedHoldingId && fromIncomplete.has(r.relatedHoldingId) && <IncompleteImportTag />}
+                        {unresolved.has(r.id) && (
+                          <Badge tone="warning" title="Relink it to a current holding or account, reject it or delete it. The final PDF waits for this review.">
+                            Linked {unresolved.get(r.id)!.holdingId ? `holding ${unresolved.get(r.id)!.holdingId}` : `account ${unresolved.get(r.id)!.accountId}`} removed: review
+                          </Badge>
+                        )}
                       </div>
                       <h4 className={`font-serif text-lg mt-1.5 ${rejected ? "text-ink-500 line-through decoration-ink-300" : "text-ink-900"}`}>{r.title}</h4>
                       {rejected && (
@@ -377,6 +390,8 @@ function RecForm({
     [value, holdings, savedRecs, accounts, fx, sourceDocuments]
   );
   const targetSet = value.proposedValue != null;
+  // An account-only recommendation whose account was removed: shown, so None can clear it.
+  const removedAccountOnly = !value.relatedHoldingId && !!value.relatedAccountId && !accountById[value.relatedAccountId];
 
   return (
     <div className="space-y-3">
@@ -401,10 +416,18 @@ function RecForm({
       <div className="border-t border-ink-100 pt-3">
         <Label>Linked holding</Label>
         <Select
-          value={value.relatedHoldingId ?? ""}
-          onChange={(e) => onChange({ relatedHoldingId: e.target.value || undefined })}
+          value={value.relatedHoldingId ?? (removedAccountOnly ? REMOVED_ACCOUNT : "")}
+          onChange={(e) => {
+            if (e.target.value === REMOVED_ACCOUNT) return;
+            // Holding and account links change together (engines/recommendationLinks).
+            onChange(linkToHolding(value, e.target.value || undefined, { holdings, accounts }));
+          }}
         >
           <option value="">— None (advisory only) —</option>
+          {value.relatedHoldingId && !holdings.some((h) => h.id === value.relatedHoldingId) && (
+            <option value={value.relatedHoldingId}>Removed holding ({value.relatedHoldingId}): choose a current one or None</option>
+          )}
+          {removedAccountOnly && <option value={REMOVED_ACCOUNT}>Removed account ({value.relatedAccountId}): choose a holding or None</option>}
           {holdings.map((h) => {
             const acct = accountById[h.accountId];
             return (

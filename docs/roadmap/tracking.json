@@ -386,7 +386,16 @@
       "size": "L staged",
       "status": "planned",
       "dependencies": [],
-      "existingIssueReused": false
+      "existingIssueReused": false,
+      "progress": [
+        {
+          "issue": 55,
+          "pr": 66,
+          "slice": "R23a",
+          "state": "in-review",
+          "scope": "Versioned browser-local export; validated, previewed, all-or-nothing restore; R23b not started"
+        }
+      ]
     },
     {
       "id": "R24",

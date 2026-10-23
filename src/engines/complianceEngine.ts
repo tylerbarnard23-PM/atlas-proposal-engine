@@ -10,6 +10,7 @@ import type {
   FxRate,
   SourceDocument,
 } from "@/domain/types";
+import { describeLink, linksNeedingReview } from "./recommendationLinks";
 import { applyRecommendationsToProposed, cashShortfallsOf, type CashShortfall, type UnresolvedConversion } from "./proposalEngine";
 import { normalizeHoldings } from "./normalizationEngine";
 import { missingPairs, valuationSummary, type ValuationSummary } from "./valuationTotals";
@@ -120,6 +121,16 @@ export function evaluateReadiness(inp: ReadinessInputs): ComplianceCheck[] {
       reviews.length > 0
         ? reviews.map((r) => `${r.title}: calculated in ${r.currencyReview!.calculatedIn}, saved label ${r.currencyReview!.legacyLabel}`).join("; ")
         : undefined,
+  });
+  // A recommendation whose holding or account was removed is kept for review
+  // (engines/recommendationLinks): what it would do can't be shown, so the
+  // final PDF waits until the advisor relinks, rejects or deletes it.
+  const orphaned = linksNeedingReview(inp);
+  checks.push({
+    code: "recommendation_links",
+    label: "Recommendations linked to current holdings and accounts",
+    passed: orphaned.length === 0,
+    detail: orphaned.length > 0 ? `${orphaned.map(describeLink).join("; ")}. Relink, reject or delete it in Recommendations.` : undefined,
   });
   const shortfalls = inp.cashShortfalls ?? [];
   checks.push({
