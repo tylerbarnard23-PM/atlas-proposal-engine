@@ -20,7 +20,7 @@ The approved [valuation scope and safe-retirement plan](docs/roadmap/VALUATION_S
 - Main observed before this documentation save: `1d6f0c0a67dac79c2a6a3bbe498fba79793a452c`. Since then PR #34 was reviewed, fixed and merged: main `4e6da186a62e92b76d886e6e32e67af23410a688`, live in production.
 - PR #34 (the precise live preview) is complete. R08 is a separate follow-up that reuses it, not a duplicate preview.
 - #26 FX work is complete and live (PR #60, merge `e54d56e3d381a65715bedcf686bf7d59935591bf`). #28 date rendering is complete and live (PR #63, merge `23db797c58b2241e8b0c229818ebeecb06755d47`); follow-up #64 (UTC "today" writes) is logged.
-- R23a is in review as PR #66 at `d088dab657c802d18c8e34882f245603f31ab75e`; review its relinking changes before any owner-authorized merge. Preserve that saved checkpoint and land validated backup/restore before persisted-schema migrations.
+- R23a is complete and live: PR #66 (Codex-reviewed head `d088dab657c802d18c8e34882f245603f31ab75e`) merged as `e56335e5fdb4f2f343cdea605333b16cda9ad932` on 23 October 2026 (production `dpl_DUsfyjnmjxaUaLNfBhrNfHixwqsy`). It precedes persisted-schema migrations: each later store version needs a matching backup migration step. R23b is not started; #55 stays open.
 - Naming #35 is a separate pre-LinkedIn task; no name has been selected. Preserve browser storage and working links during that transition.
 - This roadmap does not merge, deploy, change hosting, run a new live model, purchase data or authorize external trading.
 
@@ -38,7 +38,7 @@ Phases indicate dependency order, not dates or fixed-duration sprints. Some plan
 
 | Phase | Bounded delivery | Exit evidence |
 |---|---|---|
-| P0 — secure the checkpoint | ~~Review PR #34~~ (merged `4e6da18`); ~~#26~~ (merged `e54d56e`) then ~~#28~~ (merged `23db797`); R23a backup/restore (in review: PR #66); R25 study protocol/baseline | Review findings recorded; saved workspace recoverable; FX/date cases pass; study protocol exists and results remain empty until observed |
+| P0 — secure the checkpoint | ~~Review PR #34~~ (merged `4e6da18`); ~~#26~~ (merged `e54d56e`) then ~~#28~~ (merged `23db797`); ~~R23a backup/restore~~ (merged `e56335e`); R25 study protocol/baseline | Review findings recorded; saved workspace recoverable; FX/date cases pass; study protocol exists and results remain empty until observed |
 | P1 — trustworthy inputs | R07 explicit intent; R11 accurate exceptions; R12 client constraints; R02 scope; R09 matched import then R10 source repair; R14 truthful classification; R18 accepted-value contract and enrichment retirement audit; R19a input/FX-basis record; R23b client isolation | No duplicate parent/position value, no implicit 50% action, scope/unknowns and source dates visible; recoverable input basis; import/valuation/currency gates preserved; quote setup not required |
 | P2 — portfolio construction | R05 scenarios; R04 new investments/replacements; R06 explicit funding; R03 targets/workspace; R08 contextual preview; R01 navigation shell | A synthetic account can be reallocated with a reserve, real sell/buy legs, alternative drafts and a reconciled funding ledger, without changing current holdings or requiring security-price providers |
 | P3 — explain and approve | R13 relevant insights; R14 evidenced exposure/estimates; R15 bounded risk review; R16 known costs/income; R17 tax context; R19 snapshots; R12 IPS summary | Every numerical statement is supported or explicitly unavailable; the approved economic package has reproducible versioned inputs |
@@ -75,7 +75,7 @@ The R01–R25 IDs preserve the original review numbering. GitHub issue numbers a
 | R20 (20) | [Create concise proposal templates and contextual disclosures](docs/roadmap/R20-proposal-templates-and-disclosures.md) | [#53](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/53) | P4 | M | Planned |
 | R21 (21) | [Present approved proposals digitally and share fixed versions](docs/roadmap/R21-client-presentation-and-sharing.md) | [#16](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/16) | P4 local presentation; P5 protected sharing | L | Planned |
 | R22 (22) | [Embed contextual Copilot with clear demo/live mode](docs/roadmap/R22-contextual-copilot.md) | [#54](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/54) | P4 | M | Planned |
-| R23 (23) | [Back up engagements and preserve multiple clients safely](docs/roadmap/R23-engagement-backup-and-switching.md) | [#55](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/55) | P0 backup; P1/P2 client isolation | L staged | Planned (R23a backup/restore in review: PR #66; R23b not started) |
+| R23 (23) | [Back up engagements and preserve multiple clients safely](docs/roadmap/R23-engagement-backup-and-switching.md) | [#55](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/55) | P0 backup; P1/P2 client isolation | L staged | Planned (R23a backup/restore complete: PR #66, `e56335e`; R23b not started) |
 | R24 (24) | [Export an account-level implementation handoff and track follow-up](docs/roadmap/R24-implementation-handoff.md) | [#56](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/56) | P5 | M-L | Planned |
 | R25 (25) | [Measure advisor usability and verify accessible workflows](docs/roadmap/R25-advisor-usability-and-accessibility.md) | [#57](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/57) | P0 baseline; repeat at each milestone | M | Planned |
 
@@ -118,9 +118,9 @@ For every implementation: identify the exact issue/slice, preserve saved data, r
 
 ## Start next time
 
-Read [CLAUDE_HANDOFF.md](docs/CLAUDE_HANDOFF.md), this roadmap and [IMPLEMENTATION_GUIDE.md](docs/roadmap/IMPLEMENTATION_GUIDE.md). PRs #34, #60 (#26) and #63 (#28) are merged; R23a is in review as PR #66. Follow the newest checkpoint in the handoff. Land R23a before the larger stored-schema migrations, and add a backup migration step with each later store version. New construction work starts from R07/R12/R02 contracts and progresses through R05/R04/R06 to R03.
+Read [CLAUDE_HANDOFF.md](docs/CLAUDE_HANDOFF.md), this roadmap and [IMPLEMENTATION_GUIDE.md](docs/roadmap/IMPLEMENTATION_GUIDE.md). PRs #34, #60 (#26), #63 (#28) and #66 (R23a) are merged. Follow the newest checkpoint in the handoff. Add a backup migration step with each later store version (R23a precedes the larger stored-schema migrations). New construction work starts from R07/R12/R02 contracts and progresses through R05/R04/R06 to R03.
 
-Read the approved [valuation boundary](docs/roadmap/VALUATION_SCOPE.md) before selecting later work. Preserve PR #66's Codex-review step; after recoverability, implement the R18 core contract/retirement audit and R11 exception semantics alongside scope/intent foundations. Bring R19a forward without making full snapshots or optional feeds block construction. This save does not start those implementations.
+Read the approved [valuation boundary](docs/roadmap/VALUATION_SCOPE.md) before selecting later work. With R23a recoverability merged (PR #66), implement the R18 core contract/retirement audit and R11 exception semantics alongside scope/intent foundations. Bring R19a forward without making full snapshots or optional feeds block construction. This save does not start those implementations.
 
 Keep work in bounded PRs. Record real commit heads, checks and preview/deployment evidence; do not assume a delayed Vercel preview belongs to a newer commit.
 

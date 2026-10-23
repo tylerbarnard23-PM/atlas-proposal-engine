@@ -432,8 +432,12 @@
           "issue": 55,
           "pr": 66,
           "slice": "R23a",
-          "state": "in-review",
-          "scope": "Versioned browser-local export; validated, previewed, all-or-nothing restore; R23b not started"
+          "state": "merged",
+          "scope": "R23a: versioned browser-local export; validated, previewed, all-or-nothing restore. R23b not started",
+          "head": "d088dab657c802d18c8e34882f245603f31ab75e",
+          "mergeCommit": "e56335e5fdb4f2f343cdea605333b16cda9ad932",
+          "deployment": "dpl_DUsfyjnmjxaUaLNfBhrNfHixwqsy",
+          "date": "2026-10-23"
         }
       ]
     },
@@ -519,8 +523,10 @@
     "checkpoint": {
       "pr": 66,
       "head": "d088dab657c802d18c8e34882f245603f31ab75e",
-      "state": "in-review",
-      "next": "Codex review of final relinking changes before any owner-authorized merge"
+      "mergeCommit": "e56335e5fdb4f2f343cdea605333b16cda9ad932",
+      "deployment": "dpl_DUsfyjnmjxaUaLNfBhrNfHixwqsy",
+      "state": "merged",
+      "next": "Codex review of the updated documentation PR #67 before any owner-authorized merge"
     },
     "runtimeChanges": false
   }

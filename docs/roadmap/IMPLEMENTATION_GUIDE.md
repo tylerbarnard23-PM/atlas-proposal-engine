@@ -12,7 +12,7 @@ The roadmap save recorded plans only. PR #34 has since been reviewed, fixed and 
 
 Follow [VALUATION_SCOPE.md](VALUATION_SCOPE.md), approved on 22 October 2026. Core inputs are statement/imported account or explicit advisor-approved values with currency/date/provenance. Keep FX and all financial/import/review safeguards. Security pricing and research enrichment are optional future work; no quote key or successful quote lookup may be required for a supported dollar/percentage proposal. Removing optional providers must preserve accepted quote-derived values and legacy evidence, not silently revert or erase them.
 
-Review PR #66's final relinking changes before any owner-authorized merge. Land R23a before schema changes. R18's core input contract and retirement audit precede provider removal; R19a brings only the accepted input/FX-basis record into P1 after R02/R23a. Full R19 snapshots still follow scenario/funding/intent contracts. Candidate FX review is planned but must not become a dependency on optional security repricing or delay construction once required core contracts exist. R14–R16 expose supported/unknown coverage first. No application/provider setting changes in this planning save.
+R23a backup/restore is merged (PR #66, `e56335e`); every later stored-schema change needs a matching backup migration step. R18's core input contract and retirement audit precede provider removal; R19a brings only the accepted input/FX-basis record into P1 after R02/R23a. Full R19 snapshots still follow scenario/funding/intent contracts. Candidate FX review is planned but must not become a dependency on optional security repricing or delay construction once required core contracts exist. R14–R16 expose supported/unknown coverage first. No application/provider setting changes in this planning save.
 
 ## Shared implementation rules
 
@@ -117,11 +117,11 @@ Update ROADMAP.md, the issue and CLAUDE_HANDOFF.md at each stopping point. Repor
 ```text
 Read docs/CLAUDE_HANDOFF.md, ROADMAP.md and docs/roadmap/IMPLEMENTATION_GUIDE.md.
 All 25 numbered enhancements are accepted; the saved work is planning, not implementation.
-Read docs/roadmap/VALUATION_SCOPE.md: the approved core uses accepted client values and FX; optional security-pricing breadth is deferred. Review PR #66 before any merge, then use bounded R18/R11/R19a slices and the construction dependency chain. Do not start deleting providers or changing values from this prompt alone.
+Read docs/roadmap/VALUATION_SCOPE.md: the approved core uses accepted client values and FX; optional security-pricing breadth is deferred. PR #66 (R23a) is merged; use bounded R18/R11/R19a slices and the construction dependency chain. Do not start deleting providers or changing values from this prompt alone.
 
 Confirm repository and working-tree state without discarding work. PR #34 is merged (4e6da18) and live; its checkpoint is resolved.
 
-#26 (PR #60) and #28 (PR #63) are complete; follow the newest checkpoint in the handoff for what comes next, and R18's sequencing. Use one bounded implementation branch/PR and the required validation. R23a backup/validated restore is in review (PR #66); land it before later schema migrations, and give each later store version a backup migration step. Follow the selected plan's dependencies and preserve the existing engines, saved data, currencies, import safeguards and working links. Update the roadmap and handoff with actual evidence. Do not start all 25 at once or claim planned features are already delivered.
+#26 (PR #60) and #28 (PR #63) are complete; follow the newest checkpoint in the handoff for what comes next, and R18's sequencing. Use one bounded implementation branch/PR and the required validation. R23a backup/validated restore is merged (PR #66, `e56335e`); give each later store version a backup migration step. Follow the selected plan's dependencies and preserve the existing engines, saved data, currencies, import safeguards and working links. Update the roadmap and handoff with actual evidence. Do not start all 25 at once or claim planned features are already delivered.
 ```
 
 ## Agent changes require separate evidence

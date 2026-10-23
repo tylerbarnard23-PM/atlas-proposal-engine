@@ -7,6 +7,7 @@ import { PageHeader, SectionDivider } from "@/components/ui/Section";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { WorkspaceBackupPanel } from "@/components/settings/WorkspaceBackupPanel";
 
 export default function SettingsPage() {
   return (
@@ -78,6 +79,9 @@ function Inner() {
           </div>
         </CardBody>
       </Card>
+
+      <SectionDivider>Backup &amp; restore</SectionDivider>
+      <WorkspaceBackupPanel />
 
       <SectionDivider>Market Data Providers</SectionDivider>
       <Card>
