@@ -23,7 +23,18 @@
     - BRK.B: legacy market data, provider not recorded.
     - QQQM: mock, not recorded.
     - The page also carries the mixed-date note, the A3 sources appendix and the unchanged FX table.
-- **Next step:** Codex reviews PR #69. Merge only on the owner's approval. Later R18 slices, in order: review semantics with R11; retiring unused routes and adapters; dropping the quote-cache field only with another migration. Not started: R11, R19a, R23b, #61, #64 and naming #35.
+- **Saved for the day (23 October).** The tested head is `d08087d3a6d541943842851bc675b1be580e91cc`; PR #69 is open and unmerged.
+  - **CI on that head:** run 39968973024 passed: typecheck; **391 passed, 2 skipped (393)**; extraction eval 2 of 2; build. This is separate from the local results above.
+  - **Preview:** Vercel preview for `d08087d` is READY at https://atlas-proposal-engine-yjee5v03n-tylerbarnard23-pms-projects.vercel.app (protected; not production).
+  - **Browser workspace:** restored to the captured snapshot (taken after the first app load). The task server is stopped.
+  - **Disclosure texts:** the three corrected texts (Data Sources, Market Prices, Mock data) are included for Codex review.
+  - Any commit after this note is documentation only.
+- **Next step:** Codex reviews PR #69, especially:
+  - provenance and date selection in `engines/valuationProvenance`;
+  - disclosure and section rendering by key/id (`currentDisclosure`, `sectionLabel`);
+  - the sample-PDF baseline exclusions in `tests/valuationFx.test.ts`.
+
+  Merge only on the owner's approval. No provider retirement, schema change, R11 implementation or live-AI enablement. Later R18 slices, in order: review semantics with R11; retiring unused routes and adapters; dropping the quote-cache field only with another migration. Not started: R11, R19a, R23b, #61, #64 and naming #35.
 
 ## Checkpoint — 23 October 2026: PR #67 released; R18 provider-retirement audit saved (PR #68, since merged as `298b719`)
 
