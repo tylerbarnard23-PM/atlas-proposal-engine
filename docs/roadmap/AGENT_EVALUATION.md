@@ -11,6 +11,10 @@ Demonstrate bounded authority, engine evidence, observability and measured behav
 
 Introduce a small provider boundary, not a multi-provider platform or a rewrite. A second provider is optional and must not delay a validated first provider. DeepSeek is an experimental candidate, not an approved real-data vendor or a selected purchase.
 
+## Accepted valuation inputs — 22 October 2026
+
+Follow [VALUATION_SCOPE.md](VALUATION_SCOPE.md). Evaluation tools use the accepted input/FX revision and actual source dates, without a security-quote dependency. Include synthetic cases with no quote keys, quote outages, mixed source dates and missing required FX. The model must not invent prices or silently reprice/refresh the baseline; optional coverage failure differs from a missing required value/rate. Preserve all existing provider, cost/latency, authority and privacy evidence requirements.
+
 ## Provider and orchestration contracts
 
 - Separate provider-specific SDK calls, tool/message translation, response parsing, refusal/stop handling and feature flags from the agent loop and deterministic tools.

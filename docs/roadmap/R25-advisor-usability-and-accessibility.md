@@ -41,6 +41,12 @@ Product decisions and release claims are grounded in observed task performance a
 - Compare observed results consistently; retain failures and assistance, not only successful attempts.
 For implementation, also follow repository-required typecheck, full tests, extraction eval, production build and a relevant browser check. Do not claim these passed from this planning work.
 
+## Approved valuation scope adjustment — 22 October 2026
+
+Follow [VALUATION_SCOPE.md](VALUATION_SCOPE.md). Test import/reconcile → accept source values/dates and scope → set a target → replace/fund → review/approve → present with **no security-quote keys or provider setup**. Use documented synthetic values and explicit FX; record the source-date range and whether the advisor understands dated/mixed-date limits. A separate case makes quote services unavailable while usable accepted inputs remain; compare actual completion/errors, not an assumed improvement.
+
+Keep missing FX, incomplete import and shortfall cases so simplification cannot hide real blockers. Record commit, conditions, assistance, time and comprehension. Automated smoke tests are not a study with advisors; results stay empty until observations exist.
+
 ## Dependencies and sequencing
 - No feature dependency; it can be the first bounded task after the current checkpoint.
 R23a means the export/restore slice of recommendation 23; R23b means its multi-engagement isolation slice. A dependency on another plan means its required contract/slice must exist, not that all later extensions must ship first.

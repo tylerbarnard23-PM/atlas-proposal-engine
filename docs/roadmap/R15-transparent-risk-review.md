@@ -2,7 +2,7 @@
 
 Accepted for planning: 22 October 2026. **Status: Planned; not implemented by this document.**
 Tracking issue: #12. Parent roadmap: #36. Original review recommendation: **15 of 25**.
-Phase: P3 bounded risk; later quantified analytics. Relative scope: L; no calendar estimate is committed.
+Phase: P3 bounded risk; quantitative/history-dependent analytics deferred. Relative scope: L; no calendar estimate is committed.
 Canonical plan: [R15-transparent-risk-review.md](R15-transparent-risk-review.md).
 
 ## Advisor problem
@@ -40,6 +40,10 @@ Advisors can explain the recorded client preference, portfolio evidence, limits 
 - Analytical cases for unsupported assets, missing histories and methodology changes.
 - Browser: advisor can inspect assumptions and gaps without leaving the comparison.
 For implementation, also follow repository-required typecheck, full tests, extraction eval, production build and a relevant browser check. Do not claim these passed from this planning work.
+
+## Approved valuation scope adjustment — 22 October 2026
+
+Follow [VALUATION_SCOPE.md](VALUATION_SCOPE.md). The initial risk review uses accepted values, evidenced classifications, concentration and documented client constraints; no quote feed is required. Keep #13's fixed shocks illustrative and #15's quantitative projections/history-based analytics deferred until their data/methods are explicitly selected. A current spot quote is not a historical return series. Unknown coverage stays visible and may make a particular analysis unavailable without invalidating the supported allocation proposal.
 
 ## Dependencies and sequencing
 - [R02](R02-proposal-scope.md)

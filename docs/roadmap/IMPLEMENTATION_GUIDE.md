@@ -8,6 +8,12 @@ The owner selected the complete numbered roadmap. Do not ask again whether those
 
 The roadmap save recorded plans only. PR #34 has since been reviewed, fixed and merged (`4e6da18`); its follow-up (R08) builds on it. Existing merge/deployment approval requirements remain in effect. No new branding name, provider purchase, live-model enablement or trade execution is selected.
 
+## Accepted valuation boundary
+
+Follow [VALUATION_SCOPE.md](VALUATION_SCOPE.md), approved on 22 October 2026. Core inputs are statement/imported account or explicit advisor-approved values with currency/date/provenance. Keep FX and all financial/import/review safeguards. Security pricing and research enrichment are optional future work; no quote key or successful quote lookup may be required for a supported dollar/percentage proposal. Removing optional providers must preserve accepted quote-derived values and legacy evidence, not silently revert or erase them.
+
+Review PR #66's final relinking changes before any owner-authorized merge. Land R23a before schema changes. R18's core input contract and retirement audit precede provider removal; R19a brings only the accepted input/FX-basis record into P1 after R02/R23a. Full R19 snapshots still follow scenario/funding/intent contracts. Candidate FX review is planned but must not become a dependency on optional security repricing or delay construction once required core contracts exist. R14–R16 expose supported/unknown coverage first. No application/provider setting changes in this planning save.
+
 ## Shared implementation rules
 
 1. Current holdings are observed data; editable scenarios, proposed-only positions, target models and approved snapshots are separate records. Previewing never mutates current holdings.
@@ -41,7 +47,8 @@ Direct uploads into Claude Desktop/Code are outside Atlas's redaction boundary a
 | Proposed instruments and linked groups | R04 | Stable IDs, supported identity data, atomic replacement behavior and migration of advisory legacy swaps |
 | Funding ledger | R06 | Reserves, selected cash lines, ownership/transfer prerequisites, external flows and missing FX |
 | Exposure/cost/tax/risk evidence | R14–R17 | Supported methods, source date, unknown versus zero, estimated versus verified |
-| Refresh transaction | R18/#26 | Canonical pair/orientation, retained provenance, candidate dataset revision, stale confirmation fingerprint/expiry |
+| Accepted valuation / FX revision | R18, R19a | Statement/approved value, actual source date, preserved legacy evidence, mixed-date limitations, explicit input/rate revision; optional quote coverage never required |
+| Candidate FX transaction | R18/#26 | Canonical pair/orientation, retained provenance, candidate dataset revision, stale confirmation fingerprint/expiry; later security repricing separately deferred |
 | Approved snapshot | R19 | Reproducible inputs, output/version identity, explanation of all numerical changes, history semantics |
 | Presentation/sharing/handoff | R20/R21/R24 | Snapshot-only output, private-field exclusion, access/expiry/revocation and separate acknowledgement/completion |
 
@@ -53,7 +60,7 @@ Use the existing engines and clearly typed input/output contracts; the UI must n
 2. Preserve the current v5 workspace and its current currency/approval behavior as a migration fixture. Existing PR #34 tests (merged) remain a baseline.
 3. Add the minimum scope, objective and explicit-intent contracts; do not silently reinterpret legacy monetary instructions.
 4. Migrate recommendations into an editable legacy scenario with equivalent effects. Flag ambiguous intent for restatement, without rewriting the historical evidence.
-5. Add proposed positions, funding and model targets against that scenario.
+5. Capture the R19a accepted input/FX-basis record after the minimum R02/R18 contracts; this is not final approval. Add proposed positions, funding and model targets against the scenario without requiring security quotes.
 6. Introduce approved snapshots and multi-engagement boundaries with round-trip/reference tests.
 7. Treat every later schema change as an explicit version migration. A cosmetic project rename cannot change storage keys or reset data.
 
@@ -76,6 +83,8 @@ R21 Stage A is local presentation. Stage B remote sharing cannot be built as a r
 - Unknown costs, income, basis, risk coverage and ownership are not zero or permission.
 - A fixed asset-class shock is an illustrative stress, not a historical backtest. A questionnaire is not a proprietary calibrated portfolio risk model.
 - Projections require a documented dataset and methodology. Show uncertainty/unsupported coverage; do not fabricate probabilities.
+- Historical statement quantities repriced at today's prices are only an indicative estimate, not proof of today's account holdings. Never invent a common source date or let mock data fill real-client gaps.
+- A dollar allocation needs an accepted value and funding, not a live security price. Share estimates need evidenced unit-price conventions and stay unavailable when unsupported.
 - Only actual, applicable data support a savings or tax-impact claim. Preserve sample markings and explain estimates.
 
 ## Accepted FX policy to preserve
@@ -108,10 +117,11 @@ Update ROADMAP.md, the issue and CLAUDE_HANDOFF.md at each stopping point. Repor
 ```text
 Read docs/CLAUDE_HANDOFF.md, ROADMAP.md and docs/roadmap/IMPLEMENTATION_GUIDE.md.
 All 25 numbered enhancements are accepted; the saved work is planning, not implementation.
+Read docs/roadmap/VALUATION_SCOPE.md: the approved core uses accepted client values and FX; optional security-pricing breadth is deferred. Review PR #66 before any merge, then use bounded R18/R11/R19a slices and the construction dependency chain. Do not start deleting providers or changing values from this prompt alone.
 
 Confirm repository and working-tree state without discarding work. PR #34 is merged (4e6da18) and live; its checkpoint is resolved.
 
-#26 (PR #60) and #28 (PR #63) are complete; follow the newest checkpoint in the handoff for what comes next, and R18's sequencing. Use one bounded implementation branch/PR and the required validation. Before later schema migrations, deliver R23a backup/validated restore. Follow the selected plan's dependencies and preserve the existing engines, saved data, currencies, import safeguards and working links. Update the roadmap and handoff with actual evidence. Do not start all 25 at once or claim planned features are already delivered.
+#26 (PR #60) and #28 (PR #63) are complete; follow the newest checkpoint in the handoff for what comes next, and R18's sequencing. Use one bounded implementation branch/PR and the required validation. R23a backup/validated restore is in review (PR #66); land it before later schema migrations, and give each later store version a backup migration step. Follow the selected plan's dependencies and preserve the existing engines, saved data, currencies, import safeguards and working links. Update the roadmap and handoff with actual evidence. Do not start all 25 at once or claim planned features are already delivered.
 ```
 
 ## Agent changes require separate evidence

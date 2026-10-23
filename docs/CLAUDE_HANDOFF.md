@@ -237,6 +237,14 @@ _Section last updated: 2026-10-22, when PR #63 (#28) was merged (`23db797`). New
 
 > The roadmap checkpoint and PII prerequisite (#59) at the top of this file and the #33 section below are both current; neither replaces the other.
 
+## Approved valuation scope adjustment — 22 October 2026
+
+Tyler approved [VALUATION_SCOPE.md](roadmap/VALUATION_SCOPE.md): verified statement/imported account or advisor-approved values are core; broad security repricing and research are optional future scope. Keep FX, reconciliation, missing-value/import/currency/link/approval/funding safeguards and existing calculation engines. No runtime behavior, data, API setting or provider is changed by this planning save.
+
+This supersedes older instructions that make broad quote enrichment/candidate security repricing a prerequisite. R18 owns core simplification and a safe audit → disable → prove equivalence → retire sequence; later candidate FX review remains planned. Bring R19a's accepted input/FX-basis record into P1 without claiming full snapshot approval. R14–R16 use supported inputs/unknown coverage first; R25 tests the complete task without quote setup; R22 keeps agent evidence/authority requirements.
+
+**Preserved next review:** PR #66 is still open at `d088dab657c802d18c8e34882f245603f31ab75e`, branch `feat/r23a-backup-restore`. Its final relinking code (`36f184b`) needs Codex review before any owner-authorized merge. The prior passing CI evidence is on `1a6cb43` (376 passed, 2 private-PDF tests skipped; 378 total); do not claim that old run verifies the newer handoff-only head. Its saved workspace/server/stash checkpoint remains authoritative on that branch. Land validated R23a before any stored-schema change or retirement that risks saved values. This update does not touch PR #66, start R23b, merge/deploy, or start #61/#64/naming #35. The next implementation after review is selected as a bounded plan slice, not all 25 at once.
+
 ## Working agreements
 - Every bug, idea or parked item gets a GitHub issue; a PR closes its issue.
 - Design or UX changes: propose first, with numbered decisions, and build after they're answered.

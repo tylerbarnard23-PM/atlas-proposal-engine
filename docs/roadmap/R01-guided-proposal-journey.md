@@ -38,6 +38,10 @@ The advisor can resume and complete Prepare → Set scope & goals → Design →
 - Verify stage counts match shared readiness, including partial valuations.
 For implementation, also follow repository-required typecheck, full tests, extraction eval, production build and a relevant browser check. Do not claim these passed from this planning work.
 
+## Approved valuation scope adjustment — 22 October 2026
+
+Follow [VALUATION_SCOPE.md](VALUATION_SCOPE.md). The ordinary journey is import/reconcile → accept source values/dates and scope → design/fund → review/approve → present. Security-price provider configuration is outside that path; a supported dollar proposal works without quote keys. Keep necessary FX and actual blockers visible, with existing bookmarks preserved. R25 must test the complete flow and source-date comprehension without provider setup. This is planned navigation work, not a UI change in this save.
+
 ## Dependencies and sequencing
 - [R02](R02-proposal-scope.md)
 - [R03](R03-allocation-workspace.md)

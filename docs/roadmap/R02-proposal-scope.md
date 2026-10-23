@@ -41,6 +41,10 @@ The advisor can distinguish household wealth from the assets available for a sel
 - Browser/PDF: same named scope and denominator across outputs.
 For implementation, also follow repository-required typecheck, full tests, extraction eval, production build and a relevant browser check. Do not claim these passed from this planning work.
 
+## Approved valuation scope adjustment — 22 October 2026
+
+Follow [VALUATION_SCOPE.md](VALUATION_SCOPE.md). Scope uses accepted statement/imported account or advisor-approved values and their actual source dates. Retain mixed-date limits and explicit partial/unknown amounts; selection cannot make missing FX or incomplete imports disappear. No security-quote coverage prerequisite is introduced. R02's minimum stable scope/input revision is enough for R19a; optional provider enrichment and full snapshot UX do not block this contract.
+
 ## Dependencies and sequencing
 - No feature dependency; it can be the first bounded task after the current checkpoint.
 R23a means the export/restore slice of recommendation 23; R23b means its multi-engagement isolation slice. A dependency on another plan means its required contract/slice must exist, not that all later extensions must ship first.
