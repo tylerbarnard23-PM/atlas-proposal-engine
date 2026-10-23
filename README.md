@@ -26,7 +26,7 @@ Atlas is built for advisors at RIAs and wealth platforms, and for the people bui
 |---|---|---|
 | **Ingest** | CSV, Excel, PDF, OFX/QFX, pasted text and screenshots (OCR via Tesseract) are parsed into candidate holdings, each with a confidence level and a source trace back to the raw line. PDFs are read in the browser with pdf.js (nothing is uploaded) and rebuilt into layout-aware lines; financial plans with a Balance Sheet (LifeView-style) are recognized and loaded as a client with one account per asset or liability, **reconciled against the document's own totals**. | Import Center, Statement Workbench |
 | **Normalize** | Asset class, currency and identifier detection (ticker, CUSIP, ISIN, SEDOL); duplicate and data-quality checks; advisor verification status per holding. | Accounts & Assets |
-| **Value** | Multi-currency valuation into the proposal's reporting currency. Market data comes from a provider registry (Finnhub, Twelve Data, Alpha Vantage, CoinGecko, ECB/Frankfurter FX, FRED, SEC EDGAR) and falls back to mock data, so it works without any keys. A holding with no usable exchange rate is shown as *not valued* (never converted at 1:1 or counted as zero): totals say what they exclude, portfolio-wide conclusions pause, and the final PDF stays blocked until it's valued. An FX refresh merges by currency pair and keeps rates the provider didn't return with their own dates; rates in use older than 7 days (an initial product policy) are flagged and need a refresh or the advisor's expiring confirmation before the final PDF, which lists the rates it used. | Market Data |
+| **Value** | Multi-currency valuation into the proposal's reporting currency. Holding values come from statements, advisor entry and advisor-approved values, each shown with its own source and recorded date; Atlas doesn't reprice securities. Exchange rates come from Frankfurter (ECB reference rates) or rates added by hand, with no key needed. A holding with no usable exchange rate is shown as *not valued* (never converted at 1:1 or counted as zero): totals say what they exclude, portfolio-wide conclusions pause, and the final PDF stays blocked until it's valued. An FX refresh merges by currency pair and keeps rates the provider didn't return with their own dates; rates in use older than 7 days (an initial product policy) are flagged and need a refresh or the advisor's expiring confirmation before the final PDF, which lists the rates it used. | Exchange rates |
 | **Analyze** | A rules engine flags concentration, currency and country exposure, illiquidity, cash drag, high fees, manual valuations and data-quality problems. | Insights |
 | **Recommend** | The advisor writes or converts recommendations; approved ones reshape the Before/After allocation, with sale proceeds flowing to cash in the same account. Amounts keep the currency they were entered in and are converted into the reporting currency at the workspace's current rates, with the rate, source and date shown; changing a recommendation's currency means converting its amounts or entering new ones, and editing an approved recommendation's amounts clears the approval. The editor shows a live preview simulated with the full proposal engine: current and proposed value, signed and percentage change, the cash it actually moves (including household cash for debt paydowns) and any shortfall, without saving anything. | Recommendations |
 | **Ask the Copilot** | Claude investigates the portfolio through the engines and drafts recommendations for review. See below. | Proposal Copilot |
@@ -75,7 +75,7 @@ flowchart LR
   end
   subgraph Server["Next.js API routes (Vercel functions)"]
     Ingest["/api/ingest<br/>parser registry"]
-    MD["/api/market-data<br/>provider registry + mock fallback"]
+    MD["/api/market-data/fx<br/>FX reference rates"]
     PDF["/api/proposals/:id/generate-pdf<br/>headless Chromium"]
     Copilot["/api/copilot<br/>agent loop"]
   end
@@ -99,7 +99,7 @@ src/
   copilot/        agent loop, tool layer, demo planner, request validation
   engines/        normalization, valuation, currency, insight, proposal, compliance
   ingestion/      parsers, providers, normalizers, validation, sample statements
-  market-data/    provider registry, caching, freshness checks
+  market-data/    FX reference rates; legacy security-quote adapters (no page uses them; retirement planned)
   pdf/            proposal template + Chromium resolution
   store/          Zustand workspace store
 tests/            unit tests + extraction eval
@@ -108,7 +108,7 @@ tests/            unit tests + extraction eval
 ## Tests and evals
 
 ```bash
-npm test        # 378 tests in 22 files (2 need the private UBS PDF and are skipped without it, as in CI): proposal math and currency handling, calendar dates across time zones, workspace backup and restore, recommendation currencies and previews, cash flows, readiness, insights, CSV/Excel/PDF import, import completeness, Copilot tools (demo mode) + the extraction eval
+npm test        # 393 tests in 23 files (2 need the private UBS PDF and are skipped without it, as in CI): proposal math and currency handling, calendar dates across time zones, workspace backup and restore, recommendation currencies and previews, cash flows, readiness, insights, CSV/Excel/PDF import, import completeness, Copilot tools (demo mode) + the extraction eval
 npm run eval    # statement-extraction accuracy scorecard
 ```
 
@@ -158,7 +158,7 @@ To try the Copilot with Claude locally, copy `.env.example` to `.env.local` and 
 | Variable | Purpose |
 |---|---|
 | `ANTHROPIC_API_KEY` + `COPILOT_MODE=live` | Both required for the live Copilot. Otherwise, demo mode. |
-| `FINNHUB_API_KEY`, `TWELVE_DATA_API_KEY`, `ALPHA_VANTAGE_API_KEY`, `FRED_API_KEY` | Live market data. Without them, free providers and mock fallbacks. |
+| `FINNHUB_API_KEY`, `TWELVE_DATA_API_KEY`, `ALPHA_VANTAGE_API_KEY`, `FRED_API_KEY` | Optional legacy security-quote enrichment, not a proposal requirement: no page calls the quote routes, and proposals use statement, advisor-entered and approved values. Leave them unset; their retirement is planned (R18). |
 
 ## White-label and sample output
 
@@ -172,7 +172,7 @@ If you adapt it for real client work, removing the sample markings is your decis
 
 ## Limitations and roadmap
 
-**Approved scope adjustment (planning only, 22 October 2026):** the core proposal journey will use verified statement/imported account values or explicit advisor-approved valuations, retaining FX, dates, provenance and financial safeguards. Broad security pricing/research will become optional; safe retirement of unnecessary integrations is planned, not implemented. See the [valuation scope and migration plan](docs/roadmap/VALUATION_SCOPE.md). The current provider capabilities described above have not changed.
+**Approved scope adjustment (planning only, 22 October 2026):** the core proposal journey will use verified statement/imported account values or explicit advisor-approved valuations, retaining FX, dates, provenance and financial safeguards. Broad security pricing/research will become optional; safe retirement of unnecessary integrations is planned, not implemented. See the [valuation scope and migration plan](docs/roadmap/VALUATION_SCOPE.md). R18 slice 1 removed security quotes from the ordinary UI and corrected the value-source wording in the Dashboard and PDF; the quote adapters and routes remain in the codebase until their planned retirement.
 
 The **[accepted 25-item advisor roadmap](ROADMAP.md)** has detailed plans, dependencies, phases and linked issues. Planned features are separate from the capabilities above. Start implementation with **[the roadmap guide](docs/roadmap/IMPLEMENTATION_GUIDE.md)** and the current handoff.
 

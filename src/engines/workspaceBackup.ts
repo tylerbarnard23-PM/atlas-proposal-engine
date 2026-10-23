@@ -34,7 +34,7 @@ export const BACKUP_NOTICE =
 export const BACKUP_OMISSIONS = [
   "Original source files (PDF, CSV and other uploads) are not included: Atlas never stores them. Each document's name, dates, completeness and reconciliation are kept.",
   "Extracted rows and raw text of imported documents (Statement Workbench row review) are not included. The imported holdings, with their own source trace, are.",
-  "The market-data quote cache is not included; refresh it in Market Data. Holdings keep their own market-data source.",
+  "The legacy security-quote cache is not included; Atlas no longer uses it. Each holding keeps its own recorded value source and date.",
   "Generated insights are not included; they're recalculated.",
   "The disclosure library comes from the app, not the file; the proposal's selected disclosures are kept.",
   "Credentials and API keys are never part of a workspace or a backup.",

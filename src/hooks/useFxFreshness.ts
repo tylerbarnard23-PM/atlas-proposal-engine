@@ -7,7 +7,7 @@ import { fxClock } from "@/engines/fxClock";
 import { useFxNow } from "@/hooks/useFxNow";
 
 // Age and confirmation of the exchange rates the workspace's calculations use
-// (#26), shared by Market Data, notices, data tasks and readiness so every
+// (#26), shared by Exchange rates, notices, data tasks and readiness so every
 // surface reports the same status. It's evaluated at the shared FX clock,
 // which also ticks when this confirmation expires (or a confirmation given
 // slightly ahead of this clock comes into range).

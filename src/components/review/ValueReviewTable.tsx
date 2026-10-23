@@ -29,7 +29,7 @@ function flagsFor(h: Holding & { valuation?: NormalizedHolding["valuation"] }): 
   const out: Flag[] = [];
   // The native value can still be confirmed; it just can't be converted.
   if (h.valuation?.status === "unvalued")
-    out.push({ label: "No FX rate", blocksBulk: false, title: `No ${h.valuation.currency}/${h.valuation.reportingCurrency} exchange rate: left out of totals until one is added in Market Data.` });
+    out.push({ label: "No FX rate", blocksBulk: false, title: `No ${h.valuation.currency}/${h.valuation.reportingCurrency} exchange rate: left out of totals until one is added in Exchange rates.` });
   if (h.priceFreshness === "stale") out.push({ label: "Price out of date", blocksBulk: true });
   if (h.valuationSource.kind === "mock") out.push({ label: "Placeholder price", blocksBulk: true });
   if (!h.nativeMarketValue) out.push({ label: "No value", blocksBulk: true, title: "The source gave no value for this holding." });

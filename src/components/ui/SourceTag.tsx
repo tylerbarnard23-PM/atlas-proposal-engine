@@ -43,7 +43,7 @@ export function ValuationSourceLine({ source }: { source: ValuationSource }) {
       : source.kind === "advisor_override"
       ? "Advisor override"
       : source.kind === "market_data"
-      ? source.providerName ?? "Market data"
+      ? `Market data (recorded): ${source.providerName ?? "provider not recorded"}`
       : source.kind === "manual_valuation"
       ? "Manual valuation"
       : "Mock";

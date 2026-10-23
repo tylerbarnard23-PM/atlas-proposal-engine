@@ -114,7 +114,7 @@ function Name({ h, sub }: { h: Holding; sub?: React.ReactNode }) {
 }
 
 // No usable exchange rate: the native amount is known, the reporting value
-// isn't. The fix is the rate itself, in Market Data.
+// isn't. The fix is the rate itself, on the Exchange rates page.
 function MissingRateRow({ h, reportingCurrency }: { h: Holding; reportingCurrency: string }) {
   // The value that needs converting: a locked approved value in its own
   // currency, else the statement amount.
@@ -131,7 +131,7 @@ function MissingRateRow({ h, reportingCurrency }: { h: Holding; reportingCurrenc
         }
       />
       <Link href="/market-data">
-        <Button size="sm" iconLeft={<RefreshCw className="h-3.5 w-3.5" />}>Add the rate in Market Data</Button>
+        <Button size="sm" iconLeft={<RefreshCw className="h-3.5 w-3.5" />}>Add the rate in Exchange rates</Button>
       </Link>
     </div>
   );
@@ -161,7 +161,7 @@ function StaleRateRow({ h }: { h: Holding }) {
         }
       />
       <Link href="/market-data">
-        <Button size="sm" iconLeft={<RefreshCw className="h-3.5 w-3.5" />}>Refresh or confirm in Market Data</Button>
+        <Button size="sm" iconLeft={<RefreshCw className="h-3.5 w-3.5" />}>Refresh or confirm in Exchange rates</Button>
       </Link>
     </div>
   );
@@ -231,11 +231,6 @@ function StaleRow({ h, onAccept, onUpdate }: { h: Holding; onAccept: () => void;
         {!editing && (
           <div className="flex flex-wrap gap-2">
             <Button size="sm" onClick={() => setEditing(true)}>Update value</Button>
-            {h.identifier && (
-              <Link href="/market-data">
-                <Button size="sm" variant="secondary" iconLeft={<RefreshCw className="h-3.5 w-3.5" />}>Refresh price</Button>
-              </Link>
-            )}
             <Button size="sm" variant="secondary" onClick={onAccept} disabled={!h.valuationDate}>Use this date</Button>
           </div>
         )}

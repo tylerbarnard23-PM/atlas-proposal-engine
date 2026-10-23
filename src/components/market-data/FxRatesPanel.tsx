@@ -23,7 +23,7 @@ import {
   type FxRefreshResponse,
 } from "@/engines/fxPolicy";
 
-// Market Data → FX: refresh by merging (#26), every stored rate with its age,
+// Exchange rates: refresh by merging (#26), every stored rate with its age,
 // source and status, the outcome of the last refresh, and the confirmation of
 // stale rates in use.
 export function FxRatesPanel() {

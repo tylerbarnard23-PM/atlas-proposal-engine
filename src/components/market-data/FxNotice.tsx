@@ -32,7 +32,7 @@ export function FxNotice({ className }: { className?: string }) {
         confirmation.
       </div>
       <Link href="/market-data" className="font-medium text-navy-700 hover:underline">
-        Refresh or confirm in Market Data →
+        Refresh or confirm in Exchange rates →
       </Link>
     </div>
   );

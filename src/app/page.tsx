@@ -19,6 +19,7 @@ import { ASSET_CLASS_LABELS } from "@/domain/assetTaxonomy";
 import { coverageLabel, formatTotal, valuationSummary } from "@/engines/valuationTotals";
 import { ValuationNotice, ValuedOnlyTag } from "@/components/valuation/ValuationNotice";
 import { dataQualityScore } from "@/engines/dataQualityEngine";
+import { BASIS_LABEL, describeValueDates, provenanceCounts, valueDateSummary, type ValueBasis } from "@/engines/valuationProvenance";
 import { evaluateWorkspaceReadiness } from "@/engines/complianceEngine";
 import { ReadinessChecklist } from "@/components/proposal/ReadinessChecklist";
 import { ReadinessBanner } from "@/components/proposal/ReadinessBanner";
@@ -54,9 +55,9 @@ function DashboardInner() {
   const issues = holdings.flatMap((h) => h.dataQuality);
   const dq = dataQualityScore(issues);
   const stale = holdings.filter((h) => h.priceFreshness === "stale").length;
-  const mockCount = holdings.filter((h) => h.valuationSource.kind === "mock").length;
-  const manualCount = holdings.filter((h) => h.valuationSource.kind === "manual_valuation").length;
-  const enrichedCount = holdings.filter((h) => h.marketDataSource).length;
+  // What each value is based on: the valuation the resolver uses (R18).
+  const basisCounts = provenanceCounts(holdings);
+  const valueDates = describeValueDates(valueDateSummary(holdings));
   const unverifiedCount = holdings.filter((h) => h.advisorVerification === "unverified").length;
   const currencies = new Set(holdings.map((h) => h.currency)).size;
   const countries = new Set(holdings.map((h) => h.country).filter(Boolean)).size;
@@ -174,11 +175,12 @@ function DashboardInner() {
             <CardTitle>Valuation Sources</CardTitle>
           </CardHeader>
           <CardBody>
-            <SourceLine label="External market data" value={enrichedCount} count={holdings.length} />
-            <SourceLine label="Manual valuations" value={manualCount} count={holdings.length} />
-            <SourceLine label="Mock / fallback" value={mockCount} count={holdings.length} />
-            <SourceLine label="Stale prices" value={stale} count={holdings.length} tone={stale ? "warning" : "default"} />
+            {BASIS_SHOWN.filter((b) => ALWAYS_SHOWN.has(b) || basisCounts[b] > 0).map((b) => (
+              <SourceLine key={b} label={BASIS_LABEL[b]} value={basisCounts[b]} count={holdings.length} tone={b === "mock" && basisCounts[b] ? "warning" : "default"} />
+            ))}
+            <SourceLine label="Labelled out of date" value={stale} count={holdings.length} tone={stale ? "warning" : "default"} />
             <SourceLine label="Unverified by advisor" value={unverifiedCount} count={holdings.length} tone={unverifiedCount ? "warning" : "default"} />
+            {valueDates && <p className="text-2xs text-ink-500 mt-2 leading-relaxed">{valueDates}</p>}
           </CardBody>
         </Card>
 
@@ -286,6 +288,10 @@ function DashboardInner() {
     </>
   );
 }
+
+// Every basis in use; statement, manual and mock always, so a zero is visible too.
+const BASIS_SHOWN: ValueBasis[] = ["statement", "advisor_entered", "manual", "override", "approved", "legacy_market_data", "mock"];
+const ALWAYS_SHOWN = new Set<ValueBasis>(["statement", "manual", "mock"]);
 
 function SourceLine({
   label,

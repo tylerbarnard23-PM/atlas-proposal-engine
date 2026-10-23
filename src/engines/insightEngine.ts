@@ -21,10 +21,10 @@ const TASK_WHY: Record<DataTaskKind, string> = {
     "They show as \"Other / unclassified\" in the allocation charts, so the Before / After can't reflect what's inside them. Upload the account's positions, or keep it as one balance.",
   missing_identifier:
     "Without a ticker or CUSIP the price can't be refreshed from market data. Add one, or dismiss if the holding has none.",
-  stale_value: `Market-priced values older than ${MARKET_STALE_DAYS} days, and property, business, insurance or private assets older than 12 months, may no longer be accurate. Update the value, refresh the price, or keep the date: the proposal shows each value's as-of date.`,
-  stale_fx_rate: `The rates are older than ${STALE_FX_DAYS} days (an initial product policy, not a regulatory standard) or are unverified fallback data. The values still use them. Refresh FX in Market Data, or confirm the rates there; the final PDF waits for one or the other.`,
+  stale_value: `Market-priced values older than ${MARKET_STALE_DAYS} days, and property, business, insurance or private assets older than 12 months, may no longer be accurate. Update the value or keep the date: the proposal shows each value's as-of date.`,
+  stale_fx_rate: `The rates are older than ${STALE_FX_DAYS} days (an initial product policy, not a regulatory standard) or are unverified fallback data. The values still use them. Refresh the rates in Exchange rates, or confirm them there; the final PDF waits for one or the other.`,
   missing_fx_rate:
-    "There's no exchange rate from their currency to {ccy}, so they're left out of every total and chart. Until they're valued, portfolio-wide checks (concentration, currency, country, liquidity and cash) are paused. Add the rate in Market Data.",
+    "There's no exchange rate from their currency to {ccy}, so they're left out of every total and chart. Until they're valued, portfolio-wide checks (concentration, currency, country, liquidity and cash) are paused. Add the rate in Exchange rates.",
 };
 
 export interface InsightInputs {

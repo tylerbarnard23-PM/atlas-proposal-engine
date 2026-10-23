@@ -1,12 +1,11 @@
 "use client";
 
-import * as React from "react";
+import Link from "next/link";
 import { useAtlasStore } from "@/store/useStore";
 import { ClientOnly } from "@/components/layout/ClientOnly";
 import { PageHeader, SectionDivider } from "@/components/ui/Section";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
 import { WorkspaceBackupPanel } from "@/components/settings/WorkspaceBackupPanel";
 
 export default function SettingsPage() {
@@ -21,21 +20,13 @@ function Inner() {
   const reset = useAtlasStore((s) => s.resetSeed);
   const clearAll = useAtlasStore((s) => s.clearAll);
   const startNewClient = useAtlasStore((s) => s.startNewClient);
-  const [providers, setProviders] = React.useState<{ id: string; name: string; requiresApiKey: boolean; hasApiKey: boolean }[]>([]);
-
-  React.useEffect(() => {
-    fetch("/api/market-data/providers")
-      .then((r) => r.json())
-      .then((d) => setProviders(d.providers ?? []))
-      .catch(() => setProviders([]));
-  }, []);
 
   return (
     <>
       <PageHeader
         eyebrow="Workspace"
         title="Settings"
-        description="Local persistence, environment configuration, and provider keys are managed at the deployment level."
+        description="Local persistence, backups and the exchange-rate source. Environment configuration is managed at the deployment level."
       />
 
       <SectionDivider>Persistence</SectionDivider>
@@ -83,25 +74,16 @@ function Inner() {
       <SectionDivider>Backup &amp; restore</SectionDivider>
       <WorkspaceBackupPanel />
 
-      <SectionDivider>Market Data Providers</SectionDivider>
+      <SectionDivider>Exchange rates</SectionDivider>
       <Card>
-        <CardHeader><CardTitle>Configured providers</CardTitle></CardHeader>
-        <CardBody>
-          <ul className="divide-y divide-ink-100">
-            {providers.map((p) => (
-              <li key={p.id} className="py-3 flex items-center justify-between">
-                <div>
-                  <div className="text-[13px] text-ink-900">{p.name}</div>
-                  <div className="text-2xs text-ink-500 capitalize">{p.id.replace(/_/g, " ")}</div>
-                </div>
-                <Badge tone={p.requiresApiKey ? (p.hasApiKey ? "positive" : "warning") : "navy"}>
-                  {p.requiresApiKey ? (p.hasApiKey ? "Configured" : "Key required") : "No key needed"}
-                </Badge>
-              </li>
-            ))}
-          </ul>
-          <p className="text-2xs text-ink-500 mt-4 leading-relaxed">
-            API keys are read server-side from environment variables: <code>ALPHA_VANTAGE_API_KEY</code>, <code>FINNHUB_API_KEY</code>, <code>TWELVE_DATA_API_KEY</code>, <code>FRED_API_KEY</code>. Keys are never exposed to the browser.
+        <CardHeader><CardTitle>Exchange-rate source</CardTitle></CardHeader>
+        <CardBody className="space-y-2">
+          <p className="text-sm text-ink-700">
+            Exchange rates come from Frankfurter (ECB reference rates) when you refresh them on the{" "}
+            <Link href="/market-data" className="font-medium text-navy-700 hover:underline">Exchange rates</Link> page, or from rates you add there by hand. No key or account is needed.
+          </p>
+          <p className="text-2xs text-ink-500 leading-relaxed">
+            Proposals don&apos;t need a security-price feed: holding values come from statements, advisor entry and approved values, each with its own date.
           </p>
         </CardBody>
       </Card>

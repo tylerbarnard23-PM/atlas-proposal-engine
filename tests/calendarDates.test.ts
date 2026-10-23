@@ -174,8 +174,8 @@ describe("the app preview and the server-rendered PDF agree", () => {
     const browser = inZone(WEST, () => render(WEST));
     const server = inZone("UTC", () => render(WEST));
     for (const out of [browser, server]) {
-      expect(out).toContain("legacy statement — Apr 30, 2026");
-      expect(out).toContain("year_start statement — Jan 1, 2026");
+      expect(out).toContain("legacy Statement value — Apr 30, 2026");
+      expect(out).toContain("year_start Statement value — Jan 1, 2026");
       expect(out).not.toContain("Apr 29, 2026");
       expect(out).not.toContain("Dec 31, 2025");
     }
@@ -228,7 +228,7 @@ describe("the app preview and the server-rendered PDF agree", () => {
     };
     const advisor = await inZone("UTC", () => post(WEST));
     expect(advisor).toContain("Prepared October 22, 2026");
-    expect(advisor).toContain("legacy statement — Apr 30, 2026");
+    expect(advisor).toContain("legacy Statement value — Apr 30, 2026");
     expect(await inZone("UTC", () => post("Not/AZone"))).toContain("Prepared October 23, 2026");
     expect(await inZone("UTC", () => post(42))).toContain("Prepared October 23, 2026");
   });

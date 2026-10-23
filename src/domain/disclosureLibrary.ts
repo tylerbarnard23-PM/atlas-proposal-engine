@@ -30,7 +30,7 @@ export const DISCLOSURE_LIBRARY: Disclosure[] = [
     jurisdiction: "GLOBAL",
     category: "data_source",
     title: "Data Sources",
-    body: "Holdings information was sourced from client-provided statements, advisor entry, document extraction, optical character recognition, and free or free-tier market data providers where applicable. Source attribution for each value is recorded in the appendix. Information obtained from third-party sources is believed to be reliable, but its accuracy and completeness are not guaranteed.",
+    body: "Holdings information was sourced from client-provided statements, advisor entry, document extraction and optical character recognition. Each value's source and recorded date are listed in this proposal. Information obtained from third-party sources is believed to be reliable, but its accuracy and completeness are not guaranteed.",
     required: true,
   },
   {
@@ -45,8 +45,8 @@ export const DISCLOSURE_LIBRARY: Disclosure[] = [
     id: "market_data_disclaimer",
     jurisdiction: "GLOBAL",
     category: "market_data",
-    title: "Market Data",
-    body: "Public market prices were obtained from third-party providers and may be delayed, end-of-day, or reference rates rather than real-time. Each enriched value is labeled with its source, timestamp, and quote type.",
+    title: "Market Prices",
+    body: "Security values in this proposal come from statements, advisor entry or advisor-approved values; they are not live market prices, and they may differ from current prices. A value carried over from an earlier market-data record is shown with the provider and date recorded at the time.",
     required: true,
   },
   {
@@ -62,7 +62,7 @@ export const DISCLOSURE_LIBRARY: Disclosure[] = [
     jurisdiction: "GLOBAL",
     category: "mock_fallback",
     title: "Mock and Fallback Data",
-    body: "Where market data was unavailable from configured providers, fallback or seeded values may have been used. Such values are clearly labeled and should not be relied upon as live market prices.",
+    body: "Mock or placeholder values may appear in sample or legacy data. Such values are clearly labeled and should not be relied upon as market prices.",
     required: false,
   },
   {
@@ -178,3 +178,9 @@ export const DISCLOSURE_LIBRARY: Disclosure[] = [
 export function requiredDisclosures(): Disclosure[] {
   return DISCLOSURE_LIBRARY.filter((d) => d.required);
 }
+
+// The proposal shows the library's current wording for each disclosure, so a
+// copy saved by an earlier version (the library has no in-app editor) is never
+// rendered with outdated text. A disclosure the library doesn't have keeps its own.
+const BY_ID = new Map(DISCLOSURE_LIBRARY.map((d) => [d.id, d]));
+export const currentDisclosure = (d: Disclosure): Disclosure => BY_ID.get(d.id) ?? d;

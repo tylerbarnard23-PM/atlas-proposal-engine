@@ -8,6 +8,7 @@ import { PageHeader, SectionDivider } from "@/components/ui/Section";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { resolveFirmPlaceholder } from "@/domain/branding";
+import { currentDisclosure } from "@/domain/disclosureLibrary";
 
 export default function AssumptionsDisclosuresPage() {
   return (
@@ -68,10 +69,10 @@ function Inner() {
         <Card>
           <CardHeader><CardTitle>Valuation Assumptions</CardTitle></CardHeader>
           <CardBody className="space-y-2 text-[13px]">
-            <Row label="Public market quotes" value="EOD or delayed; labeled per holding" />
+            <Row label="Security values" value="Statement, advisor-entered or approved; not repriced" />
             <Row label="Manually valued assets" value="Sponsor or advisor estimates; periodic" />
             <Row label="FX conversion" value="Reference rates from ECB / Frankfurter" />
-            <Row label="Mock fallback" value="Used only when no provider returns data" />
+            <Row label="Mock values" value="Sample or legacy data only; labeled wherever shown" />
           </CardBody>
         </Card>
       </div>
@@ -86,7 +87,7 @@ function Inner() {
       </p>
 
       <div className="space-y-3">
-        {disclosures.map((d) => (
+        {disclosures.map(currentDisclosure).map((d) => (
           <Card key={d.id}>
             <CardBody>
               <div className="flex items-start justify-between gap-3">
