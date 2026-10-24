@@ -30,7 +30,7 @@ export const DISCLOSURE_LIBRARY: Disclosure[] = [
     jurisdiction: "GLOBAL",
     category: "data_source",
     title: "Data Sources",
-    body: "Holdings information was sourced from client-provided statements, advisor entry, document extraction and optical character recognition. Each value's source and recorded date are listed in this proposal. Information obtained from third-party sources is believed to be reliable, but its accuracy and completeness are not guaranteed.",
+    body: "Holdings information was sourced from client-provided statements, advisor entry, document extraction and optical character recognition, and some values may be carried over from earlier market-data records. Each value's source and recorded date are listed in this proposal. Information obtained from third-party sources is believed to be reliable, but its accuracy and completeness are not guaranteed.",
     required: true,
   },
   {
@@ -46,7 +46,7 @@ export const DISCLOSURE_LIBRARY: Disclosure[] = [
     jurisdiction: "GLOBAL",
     category: "market_data",
     title: "Market Prices",
-    body: "Security values in this proposal come from statements, advisor entry or advisor-approved values; they are not live market prices, and they may differ from current prices. A value carried over from an earlier market-data record is shown with the provider and date recorded at the time.",
+    body: "Security values in this proposal come from statements, advisor entry or advisor-approved values; they are not live market prices, and they may differ from current prices. A value carried over from an earlier market-data record is shown with the provider and date recorded at the time, and any mock or placeholder values are labeled as such.",
     required: true,
   },
   {

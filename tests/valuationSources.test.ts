@@ -177,6 +177,12 @@ describe("value sources and dates are represented honestly", () => {
     expect(p("h_aapl").detail).toMatch(/market data/i);
     // The holding's own (different) source stays visible.
     expect(p("h_aapl").holdingSource).toMatch(/^Statement value/);
+    // The holding's own source gets the same date rule: a mock or legacy
+    // market-data label without a date of its own doesn't borrow the statement date.
+    const lockedMock = { ...hs.find((h) => h.id === "h_qqqm")!, advisorVerification: "locked_for_proposal", proposalApprovedValue: { amount: 1, currency: "USD", source: { kind: "statement", asOf: "2026-04-30" } } } as Holding;
+    expect(m.valueProvenance(lockedMock).holdingSource).toBe("Mock / placeholder value, date not recorded");
+    const lockedLegacy = { ...lockedMock, valuationSource: { kind: "market_data", providerName: "Finnhub" } } as Holding;
+    expect(m.valueProvenance(lockedLegacy).holdingSource).toBe("Recorded market data (legacy), date not recorded");
 
     // No recorded date on the approved value: the statement date isn't borrowed.
     expect(p("h_msft")).toMatchObject({ basis: "approved", date: null });
@@ -262,6 +268,17 @@ describe("value sources and dates are represented honestly", () => {
     expect(pdfText(m, s)).toContain("Appendix — Valuation & Exchange-Rate Sources");
   });
 
+  it("the required source disclosures cover legacy market-data and mock values, which may be present", async () => {
+    const m = await load();
+    const body = (id: string) => m.DISCLOSURE_LIBRARY.find((d) => d.id === id)!;
+    expect(body("data_source").required && body("market_data_disclaimer").required).toBe(true);
+    // The optional mock disclosure isn't in the proposal by default, so the required ones must say it.
+    expect(body("mock_fallback").required).toBe(false);
+    expect(body("data_source").body).toMatch(/earlier market-data records/);
+    expect(body("market_data_disclaimer").body).toMatch(/mock or placeholder values/i);
+    expect(body("market_data_disclaimer").body).toMatch(/earlier market-data record/);
+  });
+
   it("a saved copy of an old disclosure is shown with the app's current text", async () => {
     const m = await load();
     const s = m.useAtlasStore.getState();
@@ -299,7 +316,7 @@ describe("blocking checks are unchanged", () => {
     } as SourceDocument;
     const imported = { ...s.holdings[0], id: "h_qa", sourceTrace: { sourceDocumentId: "sd_qa" } } as Holding;
     const check = readiness(m, s, { holdings: [...s.holdings, imported], sourceDocuments: [doc] }).find((c) => c.code === "imports_complete")!;
-    expect(check.passed).toBe(false);
+    expect(check).toMatchObject({ passed: false, detail: "qa.pdf: imported rows add up to USD 8,300,000.00 but the document states USD 9,000,000.00" });
   });
 
   it("a legacy mock value still needs review, and is labelled wherever it is shown", async () => {

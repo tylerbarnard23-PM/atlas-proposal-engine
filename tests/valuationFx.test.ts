@@ -544,5 +544,12 @@ describe("the sample workspace is unchanged when every rate is present", () => {
       expect(i, row).toBeGreaterThan(at - 1);
       at = i;
     }
+    // The page's currency and reporting-value columns are cut from the text
+    // comparison above with the rest of the page, so compare them here.
+    const pairs = (t: string) => [...t.matchAll(/ ([A-Z]{3}) (-?\$[\d.,]+[KM]?|Not valued in USD) /g)].map((x) => `${x[1]} ${x[2]}`);
+    const oldPage = baseline.pdfText.slice(baseline.pdfText.indexOf(" 12 Market Data & Valuation Sources"), baseline.pdfText.indexOf(" Harbor", baseline.pdfText.indexOf(" 12 Market Data & Valuation Sources")));
+    const newPage = page.slice(0, page.indexOf(" Harbor"));
+    expect(pairs(newPage)).toHaveLength(SEED_HOLDINGS.length);
+    expect(pairs(newPage)).toEqual(pairs(oldPage));
   });
 });

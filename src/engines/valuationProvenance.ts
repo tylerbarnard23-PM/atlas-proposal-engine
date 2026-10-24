@@ -60,13 +60,18 @@ function sourceDetail(s: ValuationSource): string | undefined {
   return s.note ?? s.providerName ?? undefined;
 }
 
+// A statement, advisor-entered or manual value is written together with the
+// holding's valuation date, so that date is its own; a mock or legacy
+// market-data label isn't, and without a date of its own it has none.
+const DATED_WITH_HOLDING = new Set<ValueBasis>(["statement", "advisor_entered", "manual"]);
+const ownDate = (h: Holding, source: ValuationSource) =>
+  calendarDay(source.asOf ?? (DATED_WITH_HOLDING.has(basisOfKind(source.kind)) ? h.valuationDate : undefined));
+
 /** "Statement value, as of Apr 30, 2026": the holding's own source, for when another value is used. */
 function describeHoldingSource(h: Holding): string {
-  const day = calendarDay(h.valuationSource.asOf ?? h.valuationDate);
-  return `${BASIS_LABEL[basisOfKind(h.valuationSource.kind)]}${day ? `, as of ${formatCalendarDate(day)}` : ""}`;
+  const day = ownDate(h, h.valuationSource);
+  return `${BASIS_LABEL[basisOfKind(h.valuationSource.kind)]}, ${day ? `as of ${formatCalendarDate(day)}` : "date not recorded"}`;
 }
-
-const DATED_WITH_HOLDING = new Set<ValueBasis>(["statement", "advisor_entered", "manual"]);
 
 export function valueProvenance(h: Holding): ValueProvenance {
   const used = resolveValuation(h);
@@ -101,11 +106,8 @@ export function valueProvenance(h: Holding): ValueProvenance {
     basis,
     label: BASIS_LABEL[basis],
     detail: sourceDetail(used.source),
-    // An override is dated when it was entered. A statement, advisor-entered or
-    // manual value is written together with the holding's valuation date, so
-    // that date is its own; a mock or legacy market-data label isn't, and
-    // without a date of its own it has none.
-    date: calendarDay(used.source.asOf ?? (DATED_WITH_HOLDING.has(basis) ? h.valuationDate : undefined)),
+    // An override is dated when it was entered; see ownDate for the rest.
+    date: ownDate(h, used.source),
     review,
   };
 }

@@ -1,6 +1,27 @@
 # Handoff
 
-## Current checkpoint — 23 October 2026: R18 audit merged; slice 1 in review (PR #69)
+## Current checkpoint — 24 October 2026: PR #69 self-review; three fixes (still open, unmerged)
+
+- **Verified first:** main is at `298b719`, the PR #69 head was `2ffdb57` (docs-only after the tested `d08087d`), and the tree was clean with the stash intact.
+  - CI on `2ffdb57` (run 39972460244) passed, and its Vercel preview was ready for that exact commit.
+  - The PR's only comment is Vercel's bot. No review was posted.
+- **Review findings (each reproduced in a scratchpad probe, test written first and seen failing, then fixed):**
+  1. **Holding-source date borrowing.** When an approved value is used, the "holding shows ..." text for a holding whose own source is mock or legacy market data borrowed the statement date ("as of Apr 30, 2026"). It now follows the same rule as the value used (`ownDate`) and says "date not recorded".
+  2. **Disclosure coverage.** The required Data Sources and Market Prices disclosures didn't account for legacy market-data or mock values, and the optional mock disclosure isn't included by default. Data Sources now says some values may be carried over from earlier market-data records. Market Prices now says mock or placeholder values are labeled as such. IDs, titles, required flags and FX text are unchanged.
+  3. **Baseline coverage gap.** Cutting the rewritten Valuation Sources page from the sample-PDF comparison also dropped its per-holding currency and reporting-value columns. The test now requires all 25 currency/value pairs to equal the baseline's.
+- **Checked and unchanged:**
+  - Approved values use only their own source date. Overrides are dated when entered. Missing providers and dates say so. The mixed-date note states that totals add values from different dates.
+  - Section keys, selections and defaults are unchanged, and titles resolve by key.
+  - The no-quote, legacy-value, missing-FX, incomplete-import (now asserting the qa.pdf mismatch detail) and backup round-trip tests use real engine and store paths.
+  - Calculations, approvals, readiness, quality score, schema, stored data, backup format and provider routes are unchanged.
+- **Local checks after the fixes:** typecheck passed; 23 files, **394 passed, 0 skipped**; extraction eval 2 of 2; build passed. No browser test was run (text and test changes only). No task server was started. The browser workspace was not touched.
+- **Remaining risks for Codex:**
+  - Override and lock dates are instants shown as their UTC calendar day, as before this PR (the same class as #64).
+  - The approval date is omitted rather than shown as "not recorded" when `lockedAt` is missing.
+  - The no-quote-request guard is a source scan plus the recorded browser evidence, not a live network test.
+- **Next step:** Codex reviews PR #69 at the new head. Merge only on the owner's approval. No provider retirement, schema change, R11 implementation or live AI.
+
+## Checkpoint — 23 October 2026: R18 audit merged; slice 1 in review (PR #69)
 
 - **PR #68 (R18 audit, docs only)** was verified unchanged at `4f9470e` (mergeable, clean, all checks passing) and merged pinned as **`298b7193d45b9f4d1e4faa095edca94344fa5060`**. #51 stays open.
 - **PR #69: R18 slice 1** on `feat/r18-slice1-valuation-sources`. The implementation commit is `ee745f5`; this documentation commit follows it (see the PR for the exact head). Not merged and not deployed to production.
