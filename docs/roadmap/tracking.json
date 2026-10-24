@@ -45,10 +45,11 @@
       "progress": [
         {
           "pr": 72,
-          "state": "open",
+          "state": "merged",
           "date": "2026-10-24",
           "milestone": "D1",
-          "scope": "D1 minimum slice only (allocation desk: scope, grid, working draft, explicit edits, input basis, store/backup v7); full feature not complete"
+          "scope": "D1 minimum slice only (allocation desk: scope, grid, working draft, explicit edits, input basis, store/backup v7); full feature not complete",
+          "mergeCommit": "0381db13a69b1b62d65019b89fc5d6da47e1b420"
         }
       ]
     },
@@ -76,10 +77,11 @@
       "progress": [
         {
           "pr": 72,
-          "state": "open",
+          "state": "merged",
           "date": "2026-10-24",
           "milestone": "D1",
-          "scope": "D1 minimum slice only (allocation desk: scope, grid, working draft, explicit edits, input basis, store/backup v7); full feature not complete"
+          "scope": "D1 minimum slice only (allocation desk: scope, grid, working draft, explicit edits, input basis, store/backup v7); full feature not complete",
+          "mergeCommit": "0381db13a69b1b62d65019b89fc5d6da47e1b420"
         }
       ]
     },
@@ -104,19 +106,21 @@
         "plan": "DEMO_DELIVERY_PLAN.md",
         "milestones": [
           "D1",
-          "D2"
+          "D2",
+          "D2a"
         ],
-        "minimumScope": "Current/proposed/target grid, drift and supported funded edits.",
-        "laterScope": "Saved model library and broader automatic action generation; no optimizer claim.",
+        "minimumScope": "Current/proposed/target grid, drift and supported funded edits. D2a: bounded versioned model/manager-sleeve proposal contracts from MODEL_AND_MANAGER_PROPOSALS.md.",
+        "laterScope": "Full model administration and broader automatic action generation; no optimizer claim.",
         "fullFeatureComplete": false
       },
       "progress": [
         {
           "pr": 72,
-          "state": "open",
+          "state": "merged",
           "date": "2026-10-24",
           "milestone": "D1",
-          "scope": "D1 minimum slice only (allocation desk: scope, grid, working draft, explicit edits, input basis, store/backup v7); full feature not complete"
+          "scope": "D1 minimum slice only (allocation desk: scope, grid, working draft, explicit edits, input basis, store/backup v7); full feature not complete",
+          "mergeCommit": "0381db13a69b1b62d65019b89fc5d6da47e1b420"
         }
       ]
     },
@@ -139,9 +143,10 @@
       "delivery": {
         "plan": "DEMO_DELIVERY_PLAN.md",
         "milestones": [
-          "D2"
+          "D2",
+          "D2a"
         ],
-        "minimumScope": "One supported custom/synthetic destination and an atomic linked sell/buy replacement.",
+        "minimumScope": "One supported custom/synthetic destination and an atomic linked sell/buy replacement. D2a: bounded versioned model/manager-sleeve proposal contracts from MODEL_AND_MANAGER_PROPOSALS.md.",
         "laterScope": "Broad security search/catalog, complex instrument and replacement variants.",
         "fullFeatureComplete": false
       }
@@ -165,19 +170,21 @@
         "plan": "DEMO_DELIVERY_PLAN.md",
         "milestones": [
           "D1",
-          "D2"
+          "D2",
+          "D2a"
         ],
-        "minimumScope": "One active working draft first, then duplicate and compare two named alternatives.",
+        "minimumScope": "One active working draft first, then duplicate and compare two named alternatives. D2a: bounded versioned model/manager-sleeve proposal contracts from MODEL_AND_MANAGER_PROPOSALS.md.",
         "laterScope": "Rich scenario history/undo and advanced comparison management.",
         "fullFeatureComplete": false
       },
       "progress": [
         {
           "pr": 72,
-          "state": "open",
+          "state": "merged",
           "date": "2026-10-24",
           "milestone": "D1",
-          "scope": "D1 minimum slice only (allocation desk: scope, grid, working draft, explicit edits, input basis, store/backup v7); full feature not complete"
+          "scope": "D1 minimum slice only (allocation desk: scope, grid, working draft, explicit edits, input basis, store/backup v7); full feature not complete",
+          "mergeCommit": "0381db13a69b1b62d65019b89fc5d6da47e1b420"
         }
       ]
     },
@@ -200,9 +207,10 @@
         "plan": "DEMO_DELIVERY_PLAN.md",
         "milestones": [
           "D1",
-          "D2"
+          "D2",
+          "D2a"
         ],
-        "minimumScope": "Visible account cash first; explicit eligible cash source and enforced reserve for supported replacements.",
+        "minimumScope": "Visible account cash first; explicit eligible cash source and enforced reserve for supported replacements. D2a: bounded versioned model/manager-sleeve proposal contracts from MODEL_AND_MANAGER_PROPOSALS.md.",
         "laterScope": "New cross-account/owner/currency transfer workflows and arbitrary external flows.",
         "fullFeatureComplete": false
       }
@@ -230,10 +238,11 @@
       "progress": [
         {
           "pr": 72,
-          "state": "open",
+          "state": "merged",
           "date": "2026-10-24",
           "milestone": "D1",
-          "scope": "D1 minimum slice only (allocation desk: scope, grid, working draft, explicit edits, input basis, store/backup v7); full feature not complete"
+          "scope": "D1 minimum slice only (allocation desk: scope, grid, working draft, explicit edits, input basis, store/backup v7); full feature not complete",
+          "mergeCommit": "0381db13a69b1b62d65019b89fc5d6da47e1b420"
         }
       ]
     },
@@ -267,10 +276,11 @@
       "progress": [
         {
           "pr": 72,
-          "state": "open",
+          "state": "merged",
           "date": "2026-10-24",
           "milestone": "D1",
-          "scope": "D1 minimum slice only (allocation desk: scope, grid, working draft, explicit edits, input basis, store/backup v7); full feature not complete"
+          "scope": "D1 minimum slice only (allocation desk: scope, grid, working draft, explicit edits, input basis, store/backup v7); full feature not complete",
+          "mergeCommit": "0381db13a69b1b62d65019b89fc5d6da47e1b420"
         }
       ]
     },
@@ -418,9 +428,10 @@
         "plan": "DEMO_DELIVERY_PLAN.md",
         "milestones": [
           "D1",
-          "D2"
+          "D2",
+          "D2a"
         ],
-        "minimumScope": "Honest existing/manual classifications and explicit unknown coverage.",
+        "minimumScope": "Honest existing/manual classifications and explicit unknown coverage. D2a: bounded versioned model/manager-sleeve proposal contracts from MODEL_AND_MANAGER_PROPOSALS.md.",
         "laterScope": "Estimated-mix editor, look-through and external exposure enrichment.",
         "fullFeatureComplete": false
       }
@@ -468,9 +479,10 @@
       "delivery": {
         "plan": "DEMO_DELIVERY_PLAN.md",
         "milestones": [
+          "D2a",
           "D3"
         ],
-        "minimumScope": "Show reproducible known-input fees/income and coverage, or explicitly unavailable; no enrichment prerequisite.",
+        "minimumScope": "Show reproducible known-input fees/income and coverage, or explicitly unavailable; no enrichment prerequisite. D2a: bounded versioned model/manager-sleeve proposal contracts from MODEL_AND_MANAGER_PROPOSALS.md.",
         "laterScope": "Full fee schedule modeling, transition cost modeling and automatic data enrichment.",
         "fullFeatureComplete": false
       }
@@ -623,19 +635,21 @@
         "plan": "DEMO_DELIVERY_PLAN.md",
         "milestones": [
           "D1",
+          "D2a",
           "D3"
         ],
-        "minimumScope": "Input/FX-basis record in D1; complete bounded approved economic snapshot and later-edit isolation in D3.",
+        "minimumScope": "Input/FX-basis record in D1; complete bounded approved economic snapshot and later-edit isolation in D3. D2a: bounded versioned model/manager-sleeve proposal contracts from MODEL_AND_MANAGER_PROPOSALS.md.",
         "laterScope": "Advanced version navigation/retention and institutional audit/records guarantees.",
         "fullFeatureComplete": false
       },
       "progress": [
         {
           "pr": 72,
-          "state": "open",
+          "state": "merged",
           "date": "2026-10-24",
           "milestone": "D1",
-          "scope": "D1 minimum slice only (allocation desk: scope, grid, working draft, explicit edits, input basis, store/backup v7); full feature not complete"
+          "scope": "D1 minimum slice only (allocation desk: scope, grid, working draft, explicit edits, input basis, store/backup v7); full feature not complete",
+          "mergeCommit": "0381db13a69b1b62d65019b89fc5d6da47e1b420"
         }
       ]
     },
@@ -859,9 +873,9 @@
     "status": "planned",
     "trackingIssue": 36,
     "mode": "synthetic-employer-demo-first",
-    "nextMilestone": "D1 review, then D2",
+    "nextMilestone": "D2, then D2a, then D3–D5",
     "supersedes": "Serial P0–P5 implementation and standalone R11-first cleanup command; original feature contracts retained",
-    "observedMain": "bc248e1ea2eb72a405167a3424422624aaa7de3c",
+    "observedMain": "0381db13a69b1b62d65019b89fc5d6da47e1b420",
     "developmentAssistant": {
       "application": "Claude Code Desktop",
       "model": "Opus 5.5",
@@ -881,7 +895,7 @@
       {
         "id": "D1",
         "title": "Working allocation desk",
-        "status": "in_review",
+        "status": "released",
         "dependencies": [],
         "recommendations": [
           "R01",
@@ -900,7 +914,8 @@
         ],
         "effort": "high",
         "defaultPrBoundary": "One coherent task; minimum contracts/backup and visible workspace may be two linked PRs",
-        "pr": 72
+        "pr": 72,
+        "mergeCommit": "0381db13a69b1b62d65019b89fc5d6da47e1b420"
       },
       {
         "id": "D2",
@@ -921,12 +936,33 @@
         "effort": "high"
       },
       {
+        "id": "D2a",
+        "title": "Model and manager proposals",
+        "status": "planned",
+        "dependencies": [
+          "D2"
+        ],
+        "recommendations": [
+          "R03",
+          "R04",
+          "R05",
+          "R06",
+          "R14",
+          "R16",
+          "R19"
+        ],
+        "trackingIssue": 73,
+        "plan": "MODEL_AND_MANAGER_PROPOSALS.md",
+        "effort": "high"
+      },
+      {
         "id": "D3",
         "title": "Review once, present consistently",
         "status": "planned",
         "dependencies": [
           "D1",
-          "D2"
+          "D2",
+          "D2a"
         ],
         "recommendations": [
           "R01",
@@ -999,11 +1035,8 @@
       "guidance": "Load latest checkpoint, selected package and relevant contracts only; keep active handoff roughly 100 lines or fewer"
     },
     "inflightWork": {
-      "pr": 70,
-      "head": "6449889bfbf9a07ff3a45c8446301e87693a8c4b",
-      "branch": "feat/r18-r11-review-wording",
-      "state": "open",
-      "next": "Codex review and owner-authorized release before D1; preserve/reuse, do not duplicate"
+      "state": "none_observed_on_main",
+      "next": "Verify actual work before D2; D2a is planned after D2, no reset of any active implementation"
     },
     "deliveredBeforeD1": {
       "pr": 70,

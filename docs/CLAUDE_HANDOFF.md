@@ -1,37 +1,13 @@
 # Handoff
 
-## Current checkpoint — 24 October 2026: D1 allocation desk in review (PR #72)
+## Current checkpoint — 24 October 2026
 
-- **Read next:** [DEMO_DELIVERY_PLAN.md](roadmap/DEMO_DELIVERY_PLAN.md) and [CLAUDE_COMMANDS.md](roadmap/CLAUDE_COMMANDS.md). D1 is implemented and awaits Codex review; D2 (funded alternatives) follows only after D1's owner-authorized release.
-- **PR #72** on `feat/d1-allocation-desk`, built from main `bc248e1ea2eb72a405167a3424422624aaa7de3c` (PRs #70 and #71 merged). The implementation commit is `ee55b96`; the docs commit follows (see the PR for the exact head). Not merged or deployed.
-  - **Delivered:** `/allocation-desk` with selected-account scope (context assets and liabilities out of the denominator), current/proposed/target grid with drift and actual cash, one working draft (members separate from approval and PDF prose; draft vs approved-subset preview), explicit position edits through `previewRecommendation`/`applyRecommendationsToProposed`, and a recorded input basis with change detection.
-  - **State:** store v7 and backup workspace v7 add `workingDraft`. The idempotent migration and the strict v6-backup upgrade make approved recommendations the members, so previews are unchanged. Legacy implicit sizes keep their effect, but a new approval needs an explicit amount.
-  - **Not in D1:** new destinations, automatic trades, scenario duplication and reserve enforcement (D2). Cash lines take no edit.
-- **Review (24 October 2026):** four defects were found. Each was reproduced first with a failing regression, then fixed on this PR:
-  1. **FX detection:** the input basis now records every rate the draft uses (fxPolicy's in-use rule applied to the draft's actions), so a change to an action-amount or cash-write-back rate shows as changed inputs.
-  2. **Approved view:** it applies exactly the PDF/readiness set (every `approvedByAdvisor`).
-  3. **Unvalued items outside the scope:** context assets and liabilities without a value are now listed, and the totals are labelled "valued only".
-  4. **Context list:** a liability account holding an asset now appears in it, so household = scope + context.
-  - **Also fixed:** the over-100% target wording.
-- **Codex review fixes (24 October 2026):**
-  1. **Draft preview:** the contextual editor previews the candidate in the working draft. `previewDraftEdit` runs the shared engine on the draft's actions without the candidate and with it added last, so a second sale shows 50,000 → 40,000 and the combined funding shortfall appears before saving. Approved actions outside the draft stay out. The Recommendations-page preview is unchanged.
-  2. **Legacy approved-and-rejected records:** they stay draft members through the store migration and the v6-backup upgrade, and are applied as the PDF applies them. Their approval and status are kept; ordinary rejection is unchanged.
-- **Heads:** implementation `ee55b96`, the self-review fixes `ebc68ba`, then the Codex review fixes; the latest commit is the tested head (see the PR). CI on `ebc68ba` passed.
-- **Validation (latest head, local):** typecheck passed; 25 files, **429 passed, 0 skipped**; eval 2 of 2; build passed. CI skips the 2 private-PDF tests. Earlier CI on `ff75094` passed: 418 passed, 2 skipped.
-- **Browser check:** the original v6 workspace still matched its saved hash before testing.
-  - **Earlier, on `ff75094`:** the real v6 → v7 migration, the acceptance story and the legacy Approve gate all passed.
-  - **Self-review:** the unvalued-outside notice and the over-100% target text rendered correctly.
-  - **Codex review fixes:** a second 10,000 sale previewed 50,000 → 40,000 with cash 20,000 → 30,000, and the desk matched after saving. A further purchase showed "short $5,000.00" before saving. Cancel changed nothing.
-  - **Cleanup:** the workspace was restored byte-identical each time, and the task server stopped.
-- **Limitations:**
-  - Seed `rec_reduce_aapl` and `rec_pay_mortgage` need explicit amounts before a new approval.
-  - Existing actions are edited on Recommendations.
-  - Liabilities show current values only (no proposed paydown column).
-  - At narrow widths the grid scrolls sideways.
-  - Reserves, new destinations, automatic trades and alternatives are D2.
-- **Next step:** Codex reviews PR #72 before any owner-authorized merge. D2 has not started.
-- **Preserved:** accepted values/FX/source dates, readiness and final-PDF gates (they still use approved actions), funding/import/approval protections, v6 compatibility, #59 and agent requirements. All 25 IDs remain Planned; D1 is a minimum slice.
-- **Before this:** PR #70 (`8b06b6a`, review wording/identifier score) and PR #71 (`bc248e1`, demo-first plan) merged on 24 October 2026; main CI passed 402/2 skipped (404). Older history: [CLAUDE_HANDOFF_HISTORY_2026-10-24.md](CLAUDE_HANDOFF_HISTORY_2026-10-24.md).
+- **D1 released:** PR #72 merged pinned to reviewed head `d6df4cf1ab69ea7d27a2c7156af4ea6c976a80f4` as `0381db13a69b1b62d65019b89fc5d6da47e1b420`. Main CI run 40136036212 passed: 427 passed, 2 private-PDF skips (429), eval 2/2 and build. Release evidence: [PR #72](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/72#issuecomment-6390031556), [#36](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/36#issuecomment-6390031724).
+- **Reported production evidence:** scope/targets, second-sale preview matching save, combined shortfall/cancel, reload and v7 Settings backup/restore passed. Restore field/grid checks passed; the harness lost its exact-draft comparison reference. Original browser workspace restored byte-identical. These are release records, not rerun by this docs change.
+- **Next:** D2 funded alternatives at Opus 5.5 High, preserving any work already started. Then **D2a model/manager proposals** (#73), then D3 review/presentation, D4 agent evidence, D5 publication. Read [delivery plan](roadmap/DEMO_DELIVERY_PLAN.md), [command playbook](roadmap/CLAUDE_COMMANDS.md) and only the relevant contracts.
+- **Approved addition:** [MODEL_AND_MANAGER_PROPOSALS.md](roadmap/MODEL_AND_MANAGER_PROPOSALS.md) defines versioned model targets and funded manager/strategy sleeves, known minimums/fees and explicit unknown exposures. This is proposal design, not UMA operations or execution. No runtime functionality is implemented by this planning change.
+- **State contract:** D1 store/backup v7 with supported strict v6 upgrade; preserve current IDs, order, approvals and contradictory legacy evidence. Draft membership, approval and PDF prose are distinct. Future migrations upgrade every currently supported backup version.
+- **D1 limitations:** existing actions edited on Recommendations; liabilities current-only; narrow grid scrolls; reserves/new destinations/alternatives await D2. Model/sleeve proposals await D2a. All 25 full R-plans remain Planned/partial; no scope issue closes here.
 
 ## Working agreements
 
@@ -46,4 +22,4 @@
 
 Keep this file to the latest checkpoint, rules and next command (roughly 100 lines or fewer). Move superseded notes to a same-directory history file when needed rather than appending every release forever. The complete previous handoff is preserved in [CLAUDE_HANDOFF_HISTORY_2026-10-24.md](CLAUDE_HANDOFF_HISTORY_2026-10-24.md); do not load it automatically.
 
-For the next package read [D1](roadmap/DEMO_DELIVERY_PLAN.md#d1-build-the-workbench-next), [the command playbook](roadmap/CLAUDE_COMMANDS.md#next-implementation-d1), the shared implementation rules and only the needed plan/code contracts. All 25 plans remain linked from [ROADMAP.md](../ROADMAP.md), not prerequisites to read in full each session.
+For the next package read D2 in [the delivery plan](roadmap/DEMO_DELIVERY_PLAN.md), [the command playbook](roadmap/CLAUDE_COMMANDS.md), the shared implementation rules and only the needed plan/code contracts. All 25 plans remain linked from [ROADMAP.md](../ROADMAP.md), not prerequisites to read in full each session.

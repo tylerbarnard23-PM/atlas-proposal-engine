@@ -20,7 +20,9 @@ Every future implementation prompt names the package/subslice, effort, expected 
 
 Inspect → make a short design/contract note in the issue/implementation PR → implement → focused regression tests → self-review/fix blocking findings together → final typecheck/full tests/eval/build/browser/PDF as applicable → include docs/checkpoint → open/update one PR → report exact evidence. Do not split off design-only or release-checkpoint PRs. A justified domain/migration split is allowed within a package; explain the dependency and keep it the same task, not 25 new prerequisites.
 
-## Next implementation: D1
+<a id="next-implementation-d1"></a>
+
+## Historical D1 command — delivered in PR #72
 
 **Status:** implemented in PR #72, awaiting Codex review. After its owner-authorized release, the next command is D2 (below). Kept for reference.
 
@@ -47,14 +49,19 @@ Include the handoff/roadmap progress update in this feature branch. Link the PR 
 Stop for Codex review with exact head, checks, preview association, remaining limitations and next command. Do not merge/deploy, add new investments/alternative duplication before D2, retire providers, enable live AI, implement remote sharing or process real client data.
 ```
 
+## Active sequencing: D2 → D2a → D3 → D4 → D5
+
+D1 released as `0381db1` (PR #72). The D1 command above is historical; do not rerun it. Next is D2, followed by the owner-approved [D2a model/manager proposal slice](MODEL_AND_MANAGER_PROPOSALS.md), tracked in #73. D2a is planned, not implemented.
+
 ## Subsequent package prompts
 
 - **D2 — Opus 5.5 High:** use D1's delivered contracts; implement supported new destination/atomic replacement, explicit eligible funding/reserve enforcement and two independent named alternatives. Avoid a broad catalog, optimizer and unsupported transfer workflows. Stop at one reviewed package/justified split.
-- **D3 — Opus 5.5 High:** capture the whole reviewed economic package and use it for local presentation/PDF. Preserve new-final-request server gates and old-version isolation. One template; known/unknown coverage, no remote sharing or financial forecast detour.
+- **D2a — Opus 5.5 High:** after D2, implement [MODEL_AND_MANAGER_PROPOSALS.md](MODEL_AND_MANAGER_PROPOSALS.md): a small versioned model library, funded manager/strategy sleeves, known minimums/fees and explicit unknown exposure. Keep sleeve grouping separate from asset-class exposure; no double-counting or implicit trades. Use D2 funding/reserves, independent alternatives, real migrations and supported backup upgrades. Follow the committed synthetic fixtures and stop for Codex review; no manager feeds, execution or UMA administration.
+- **D3 — Opus 5.5 High:** capture the whole reviewed economic package, including D2a model/strategy revisions and sleeve/exposure/fee coverage and use it for local presentation/PDF. Preserve new-final-request server gates and old-version isolation. One template; known/unknown coverage, no remote sharing or financial forecast detour.
 - **D4 — Opus 5.5 High:** contextual engine-backed draft agent, real offline orchestration tests and a prepared capped synthetic live runner. No spend without explicit budget, no second provider, no public live key. Report offline/fake/browser/live evidence separately.
 - **D5 — Opus 5.5 Medium:** run the complete supported story, critical keyboard/error checks, README/demo narrative and owner-selected screened branding. Preserve links/keys; no fabricated study or production-ready claim. Real advisor recruitment and final name choice are explicit owner activities.
 
-These summaries are expanded into one concrete command when that package becomes next. Do not execute all five from this file or invent evidence for later packages.
+These summaries are expanded into one concrete command when that package becomes next. Do not execute all packages from this file or invent evidence for later packages.
 
 ## Review-fix command template
 
