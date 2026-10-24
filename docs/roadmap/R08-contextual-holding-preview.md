@@ -5,6 +5,11 @@ Tracking issue: #43. Parent roadmap: #36. Original review recommendation: **8 of
 Phase: P2. Relative scope: M; no calendar estimate is committed.
 Canonical plan: [R08-contextual-holding-preview.md](R08-contextual-holding-preview.md).
 
+## Delivery routing — 24 October 2026
+
+**D1/D2 — minimum slices only.** Follow [DEMO_DELIVERY_PLAN.md](DEMO_DELIVERY_PLAN.md) and [CLAUDE_COMMANDS.md](CLAUDE_COMMANDS.md); their package order supersedes the original phase queue. Minimum scope: Open the existing shared-engine preview from a workspace position and preserve context. Later scope: Additional entry points and expert bulk-edit workflows. This does not implement or complete the full R-plan. Dependencies below mean the minimum required contract, not every advanced feature of the referenced plan. Preserve all financial, backup and privacy safeguards.
+
+
 ## Advisor problem
 PR #34 supplies precise previews, but advisors still start on a separate recommendation page and may miss cross-account interactions.
 

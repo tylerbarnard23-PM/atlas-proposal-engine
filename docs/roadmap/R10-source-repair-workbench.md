@@ -5,6 +5,11 @@ Tracking issue: #45. Parent roadmap: #36. Original review recommendation: **10 o
 Phase: P1. Relative scope: L; no calendar estimate is committed.
 Canonical plan: [R10-source-repair-workbench.md](R10-source-repair-workbench.md).
 
+## Delivery routing — 24 October 2026
+
+**After the demo milestone.** Follow [DEMO_DELIVERY_PLAN.md](DEMO_DELIVERY_PLAN.md) and [CLAUDE_COMMANDS.md](CLAUDE_COMMANDS.md); their package order supersedes the original phase queue. Minimum scope: Keep existing extraction review and blockers; do not fabricate repairs. Later scope: Side-by-side source repair workbench and advanced exception resolution. This does not implement or complete the full R-plan. Dependencies below mean the minimum required contract, not every advanced feature of the referenced plan. Preserve all financial, backup and privacy safeguards.
+
+
 ## Advisor problem
 The Workbench promises field mapping but mainly lists extracted rows and document-level Verify/Exclude controls.
 

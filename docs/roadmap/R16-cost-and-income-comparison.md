@@ -5,6 +5,11 @@ Tracking issue: #14. Parent roadmap: #36. Original review recommendation: **16 o
 Phase: P3 known inputs; automatic enrichment deferred. Relative scope: L; no calendar estimate is committed.
 Canonical plan: [R16-cost-and-income-comparison.md](R16-cost-and-income-comparison.md).
 
+## Delivery routing — 24 October 2026
+
+**D3 — minimum slices only.** Follow [DEMO_DELIVERY_PLAN.md](DEMO_DELIVERY_PLAN.md) and [CLAUDE_COMMANDS.md](CLAUDE_COMMANDS.md); their package order supersedes the original phase queue. Minimum scope: Show reproducible known-input fees/income and coverage, or explicitly unavailable; no enrichment prerequisite. Later scope: Full fee schedule modeling, transition cost modeling and automatic data enrichment. This does not implement or complete the full R-plan. Dependencies below mean the minimum required contract, not every advanced feature of the referenced plan. Preserve all financial, backup and privacy safeguards.
+
+
 ## Advisor problem
 Headline estimates from available expense/yield fields can appear more complete than the data, and do not explain replacement economics.
 

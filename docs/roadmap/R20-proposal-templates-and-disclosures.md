@@ -5,6 +5,11 @@ Tracking issue: #53. Parent roadmap: #36. Original review recommendation: **20 o
 Phase: P4. Relative scope: M; no calendar estimate is committed.
 Canonical plan: [R20-proposal-templates-and-disclosures.md](R20-proposal-templates-and-disclosures.md).
 
+## Delivery routing — 24 October 2026
+
+**D3 — minimum slices only.** Follow [DEMO_DELIVERY_PLAN.md](DEMO_DELIVERY_PLAN.md) and [CLAUDE_COMMANDS.md](CLAUDE_COMMANDS.md); their package order supersedes the original phase queue. Minimum scope: One concise presentation/PDF using the existing disclosure library and section keys. Later scope: Multiple templates, audience/locale variants and configurable disclosure administration. This does not implement or complete the full R-plan. Dependencies below mean the minimum required contract, not every advanced feature of the referenced plan. Preserve all financial, backup and privacy safeguards.
+
+
 ## Advisor problem
 Many default-selected report sections and generic implementation text obscure the client's decision.
 

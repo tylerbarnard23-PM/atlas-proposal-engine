@@ -3,6 +3,10 @@
 Audited: 23 October 2026, on `main` at `a63de4a` (after PRs #66 and #67). Tracking issue: #51. Parent roadmap: #36.
 **Status: R18 remains Planned.** This is implementation slice 2 of the [R18 plan](R18-valuation-and-fx-review.md): an audit of what exists, under the [approved valuation scope](VALUATION_SCOPE.md). It changes no code, providers, stored data or schema.
 
+## Delivery update — 24 October 2026
+
+The audit below is historical evidence, not the current implementation queue. Slice 1 is released in PR #69 (`7d5999f`). [DEMO_DELIVERY_PLAN.md](DEMO_DELIVERY_PLAN.md) now folds the small review/identifier cleanup into D1 and defers provider/route/cache retirement and candidate-refresh UI until after the demo milestone. Do not finish those maintenance slices before building the workbench. The accepted-value/FX and legacy-data safeguards remain unchanged.
+
 ## Method
 
 - Every reader and writer of the market-data layer was traced through `src/`: the provider registry, the quote resolver, routes, store actions, valuation resolution, readiness, data-quality rules, data tasks, Copilot tools, the PDF template and the startup docs.
@@ -118,7 +122,7 @@ The other readiness checks and the statement-import reconciliation warnings stay
 3. Reword `.env.example`/README: quote keys are optional and unused by the proposal journey.
 4. Add tests for acceptance cases A1–A6 below. This is a UX change, so a proposal with numbered decisions comes first.
 
-**Slice 2 (with R11 #46): review semantics.** In review as PR #70: the reworded checks, the identifier score rule and the identifier/stale wording. Date-based staleness is unchanged and still belongs to R11.
+**Slice 2 (with R11 #46): review semantics.** Delivered: PR #70, merged `8b06b6a` on 24 October 2026: the reworded checks, the identifier score rule and the identifier/stale wording. Date-based staleness is unchanged and still belongs to R11.
 - Reword `stale_valuations`/`market_data` to value review (same codes, same gating).
 - Take the identifier penalty out of the score.
 - Reword the identifier and stale tasks without repricing language.

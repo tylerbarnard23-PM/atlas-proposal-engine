@@ -5,6 +5,11 @@ Tracking issue: #17. Parent roadmap: #36. Original review recommendation: **3 of
 Phase: P2. Relative scope: L; no calendar estimate is committed.
 Canonical plan: [R03-allocation-workspace.md](R03-allocation-workspace.md).
 
+## Delivery routing — 24 October 2026
+
+**D1/D2 — minimum slices only.** Follow [DEMO_DELIVERY_PLAN.md](DEMO_DELIVERY_PLAN.md) and [CLAUDE_COMMANDS.md](CLAUDE_COMMANDS.md); their package order supersedes the original phase queue. Minimum scope: Current/proposed/target grid, drift and supported funded edits. Later scope: Saved model library and broader automatic action generation; no optimizer claim. This does not implement or complete the full R-plan. Dependencies below mean the minimum required contract, not every advanced feature of the referenced plan. Preserve all financial, backup and privacy safeguards.
+
+
 ## Advisor problem
 Advisors cannot set and reconcile an allocation target in one workspace; overall comparison is concentrated in document output.
 
@@ -43,6 +48,7 @@ The advisor can choose a model or custom target and inspect actual funded propos
 For implementation, also follow repository-required typecheck, full tests, extraction eval, production build and a relevant browser check. Do not claim these passed from this planning work.
 
 ## Dependencies and sequencing
+- **D1 early workspace:** minimum R02 scope, R05 active-draft, R07 explicit-intent and shared-evaluation contracts, implemented together. Full R04 new positions and R06 reserve/transfer UX are D2/later, not prerequisites to the D1 current/proposed/target view. Do not claim those unsupported actions work yet.
 - [R02](R02-proposal-scope.md)
 - [R04](R04-proposed-investments-and-replacements.md)
 - [R05](R05-draft-scenarios.md)

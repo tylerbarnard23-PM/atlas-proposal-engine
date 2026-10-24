@@ -5,6 +5,11 @@ Tracking issue: #55. Parent roadmap: #36. Original review recommendation: **23 o
 Phase: P0 backup; P1/P2 client isolation. Relative scope: L staged; no calendar estimate is committed.
 Canonical plan: [R23-engagement-backup-and-switching.md](R23-engagement-backup-and-switching.md).
 
+## Delivery routing — 24 October 2026
+
+**R23a already released; R23b after the demo.** Follow [DEMO_DELIVERY_PLAN.md](DEMO_DELIVERY_PLAN.md) and [CLAUDE_COMMANDS.md](CLAUDE_COMMANDS.md); their package order supersedes the original phase queue. Minimum scope: R23a backup/restore is already released and must support every later schema migration. Later scope: R23b multi-engagement storage, isolation, switching and archiving. This does not implement or complete the full R-plan. Dependencies below mean the minimum required contract, not every advanced feature of the referenced plan. Preserve all financial, backup and privacy safeguards.
+
+
 ## Advisor problem
 Reload persistence is useful, but starting another client clears the engagement and there is no backup/client list flow.
 

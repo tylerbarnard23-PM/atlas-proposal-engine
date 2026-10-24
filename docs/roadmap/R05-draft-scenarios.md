@@ -5,6 +5,11 @@ Tracking issue: #40. Parent roadmap: #36. Original review recommendation: **5 of
 Phase: P2 foundation. Relative scope: L; no calendar estimate is committed.
 Canonical plan: [R05-draft-scenarios.md](R05-draft-scenarios.md).
 
+## Delivery routing — 24 October 2026
+
+**D1/D2 — minimum slices only.** Follow [DEMO_DELIVERY_PLAN.md](DEMO_DELIVERY_PLAN.md) and [CLAUDE_COMMANDS.md](CLAUDE_COMMANDS.md); their package order supersedes the original phase queue. Minimum scope: One active working draft first, then duplicate and compare two named alternatives. Later scope: Rich scenario history/undo and advanced comparison management. This does not implement or complete the full R-plan. Dependencies below mean the minimum required contract, not every advanced feature of the referenced plan. Preserve all financial, backup and privacy safeguards.
+
+
 ## Advisor problem
 The combined proposed view is coupled to individual approvals, making exploration and comparison awkward.
 

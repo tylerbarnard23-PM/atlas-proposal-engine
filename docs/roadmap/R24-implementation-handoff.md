@@ -5,6 +5,11 @@ Tracking issue: #56. Parent roadmap: #36. Original review recommendation: **24 o
 Phase: P5. Relative scope: M-L; no calendar estimate is committed.
 Canonical plan: [R24-implementation-handoff.md](R24-implementation-handoff.md).
 
+## Delivery routing — 24 October 2026
+
+**After the demo milestone.** Follow [DEMO_DELIVERY_PLAN.md](DEMO_DELIVERY_PLAN.md) and [CLAUDE_COMMANDS.md](CLAUDE_COMMANDS.md); their package order supersedes the original phase queue. Minimum scope: State clearly that no orders or transfers have been executed. Later scope: Structured implementation export, custodian integration and follow-up status. This does not implement or complete the full R-plan. Dependencies below mean the minimum required contract, not every advanced feature of the referenced plan. Preserve all financial, backup and privacy safeguards.
+
+
 ## Advisor problem
 Generic implementation text does not identify the actual actions, sources, prerequisites or completion evidence.
 

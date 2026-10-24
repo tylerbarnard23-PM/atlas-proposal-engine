@@ -5,6 +5,11 @@ Tracking issue: #38. Parent roadmap: #36. Original review recommendation: **2 of
 Phase: P1. Relative scope: L; no calendar estimate is committed.
 Canonical plan: [R02-proposal-scope.md](R02-proposal-scope.md).
 
+## Delivery routing — 24 October 2026
+
+**D1 — minimum slices only.** Follow [DEMO_DELIVERY_PLAN.md](DEMO_DELIVERY_PLAN.md) and [CLAUDE_COMMANDS.md](CLAUDE_COMMANDS.md); their package order supersedes the original phase queue. Minimum scope: Explicit selected-account investment scope, exclusions and denominator. Later scope: Advanced custom/ownership scope variants beyond the supported demo. This does not implement or complete the full R-plan. Dependencies below mean the minimum required contract, not every advanced feature of the referenced plan. Preserve all financial, backup and privacy safeguards.
+
+
 ## Advisor problem
 Whole-wealth assets, a home and business interest currently enter an investment denominator without an explicit scope decision.
 

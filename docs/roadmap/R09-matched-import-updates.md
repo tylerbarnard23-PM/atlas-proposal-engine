@@ -5,6 +5,11 @@ Tracking issue: #44. Parent roadmap: #36. Original review recommendation: **9 of
 Phase: P1. Relative scope: L; no calendar estimate is committed.
 Canonical plan: [R09-matched-import-updates.md](R09-matched-import-updates.md).
 
+## Delivery routing — 24 October 2026
+
+**After the demo milestone.** Follow [DEMO_DELIVERY_PLAN.md](DEMO_DELIVERY_PLAN.md) and [CLAUDE_COMMANDS.md](CLAUDE_COMMANDS.md); their package order supersedes the original phase queue. Minimum scope: Use the existing initial import/reconciliation flow; do not claim matched-update support. Later scope: Matched/replacement import updates, duplicate detection and reconciliation across versions. This does not implement or complete the full R-plan. Dependencies below mean the minimum required contract, not every advanced feature of the referenced plan. Preserve all financial, backup and privacy safeguards.
+
+
 ## Advisor problem
 Appending incoming records does not distinguish repeat statements, newer snapshots and account-summary balances followed by positions.
 

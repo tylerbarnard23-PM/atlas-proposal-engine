@@ -2,6 +2,10 @@
 
 Approved by Tyler Barnard on **22 October 2026** after reconsidering the competitor evidence and the cost of the existing valuation scope. Tracking: parent [#36](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/36), core scope/retirement [R18 / #51](R18-valuation-and-fx-review.md). This is a roadmap decision, not an implemented change. R01–R25 IDs remain unchanged.
 
+## Delivery update — 24 October 2026
+
+[DEMO_DELIVERY_PLAN.md](DEMO_DELIVERY_PLAN.md) supersedes delivery sequencing only. PR #69 (`7d5999f`) has released removal of security-quote presentation and honest source/date wording. Build D1's workbench next, bundling small review/identifier cleanup. Further provider/cache retirement and candidate FX UI are later, not prerequisite work. R19a's minimum input-basis record ships with D1 and complete bounded approval/presentation with D3. Keep every valuation, FX, migration, source-date and real-client privacy contract below.
+
 ## Product boundary
 
 Atlas turns verified client holdings into a funded, explainable, advisor-reviewed proposal. Its core workflow accepts statement values, imported custodian/accounting-system values, or explicit advisor-approved valuations, with source, currency and date. It does not need a broad security-pricing or research platform to complete that workflow.

@@ -1,9 +1,14 @@
 # R18 — Use accepted valuations and review FX changes; defer security repricing
 
-Accepted for planning: 22 October 2026. **Status: Planned.** The P0 slices are complete: #26 (PR #60, merged `e54d56e`) and #28 (PR #63, merged `23db797`), 22 October 2026. The slice 2 consumer audit is documented in [R18-provider-retirement-audit.md](R18-provider-retirement-audit.md) (PR #68, merged `298b719`, 23 October 2026). Its first implementation slice (stop presenting security quotes; describe each value's real source and date) is complete: PR #69, merged `7d5999f` on 24 October 2026 and live. The review-wording slice shared with R11 is in review as PR #70. The reviewable candidate refresh and the rest of this plan are not implemented.
+Accepted for planning: 22 October 2026. **Status: Planned.** The P0 slices are complete: #26 (PR #60, merged `e54d56e`) and #28 (PR #63, merged `23db797`), 22 October 2026. The slice 2 consumer audit is documented in [R18-provider-retirement-audit.md](R18-provider-retirement-audit.md) (PR #68, merged `298b719`, 23 October 2026). Its first implementation slice (stop presenting security quotes; describe each value's real source and date) is released in PR #69 (merged `7d5999f`, 24 October 2026). The review-wording slice shared with R11 is released in PR #70 (merged `8b06b6a` on 24 October 2026). The reviewable candidate refresh and the rest of this plan are not implemented.
 Tracking issue: #51. Parent roadmap: #36. Original review recommendation: **18 of 25**.
 Phase: P0 fixes complete; P1 core valuation scope; later candidate FX review. Relative scope: M staged; no calendar estimate is committed.
 Canonical plan: [R18-valuation-and-fx-review.md](R18-valuation-and-fx-review.md).
+
+## Delivery routing — 24 October 2026
+
+**D1 — minimum slices only.** Follow [DEMO_DELIVERY_PLAN.md](DEMO_DELIVERY_PLAN.md) and [CLAUDE_COMMANDS.md](CLAUDE_COMMANDS.md); their package order supersedes the original phase queue. Minimum scope: Keep released accepted-value/FX behavior. The review-copy cleanup is already delivered (PR #70 (merged `8b06b6a`)); D1 must not repeat it. Later scope: Provider/route/cache retirement, candidate FX apply UI and any optional repricing. This does not implement or complete the full R-plan. Dependencies below mean the minimum required contract, not every advanced feature of the referenced plan. Preserve all financial, backup and privacy safeguards.
+
 
 ## Advisor problem
 The provider/enrichment surface is broader than the core advisor task needs. Optional pricing can distract from accepting source values and constructing a funded proposal; FX changes still need transparent review.

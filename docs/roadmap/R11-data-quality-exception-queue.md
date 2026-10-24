@@ -1,9 +1,14 @@
 # R11 — Make data-quality review actionable and correct bond checks
 
-Accepted for planning: 22 October 2026. **Status: Planned; not implemented by this document.** A first wording slice shared with R18 is in review as PR #70: value-review labels, no quality-score penalty for a missing identifier, and identifier/stale task text. The exception queue, bond checks and staleness rules are not started.
+Accepted for planning: 22 October 2026. **Status: Planned; not implemented by this document.** A first wording slice shared with R18 is delivered: PR #70, merged `8b06b6a` on 24 October 2026: value-review labels, no quality-score penalty for a missing identifier, and identifier/stale task text. The exception queue, bond checks and staleness rules are not started.
 Tracking issue: #46. Parent roadmap: #36. Original review recommendation: **11 of 25**.
 Phase: P1. Relative scope: M; no calendar estimate is committed.
 Canonical plan: [R11-data-quality-exception-queue.md](R11-data-quality-exception-queue.md).
+
+## Delivery routing — 24 October 2026
+
+**D1 — minimum slices only.** Follow [DEMO_DELIVERY_PLAN.md](DEMO_DELIVERY_PLAN.md) and [CLAUDE_COMMANDS.md](CLAUDE_COMMANDS.md); their package order supersedes the original phase queue. Minimum scope: review wording and non-penalizing optional identifiers are already delivered (PR #70 (merged `8b06b6a`)); D1 reuses them without repeating that cleanup and retains all real gates. Later scope: Bond basis validation, exception queue, score redesign and safe bulk/date actions. This does not implement or complete the full R-plan. Dependencies below mean the minimum required contract, not every advanced feature of the referenced plan. Preserve all financial, backup and privacy safeguards.
+
 
 ## Advisor problem
 An aggregate score of 0 hides priorities, and bonds quoted per 100 of face value receive misleading quantity-times-price warnings.

@@ -5,6 +5,11 @@ Tracking issue: #57. Parent roadmap: #36. Original review recommendation: **25 o
 Phase: P0 baseline; repeat at each milestone. Relative scope: M; no calendar estimate is committed.
 Canonical plan: [R25-advisor-usability-and-accessibility.md](R25-advisor-usability-and-accessibility.md).
 
+## Delivery routing — 24 October 2026
+
+**D1/D5 — minimum slices only.** Follow [DEMO_DELIVERY_PLAN.md](DEMO_DELIVERY_PLAN.md) and [CLAUDE_COMMANDS.md](CLAUDE_COMMANDS.md); their package order supersedes the original phase queue. Minimum scope: Repeatable synthetic tasks, keyboard checks and honest launch evidence. Later scope: Consented 3–5-advisor study and measured competitor usability comparisons; run earlier if participants exist. This does not implement or complete the full R-plan. Dependencies below mean the minimum required contract, not every advanced feature of the referenced plan. Preserve all financial, backup and privacy safeguards.
+
+
 ## Advisor problem
 Expert inspection cannot establish ease-of-use parity or reveal all advisor comprehension/accessibility failures.
 
