@@ -8,14 +8,19 @@
   - **Readiness:** new checks `funding_reserves` and `approved_alternative`. The final-PDF route receives the alternatives.
   - **State:** store/backup v8 add `alternatives`, account funding and the new action fields. The migration is idempotent, and v7/v6 backups are validated strictly as their own version, then upgraded.
   - **Desk:** duplicate, rename and switch alternatives (isolated, approvals cleared); funding rows; a replace-into-new-investment edit; units left out; and the alternatives comparison.
-- **Validation:** recorded in the PR (local typecheck, full tests, eval, build and a browser check on the final head). CI runs on every pushed head.
+- **Heads:** the implementation is `55b83e0`. The tested head `dc1be24c3007185cf0ce87d9bfbbda67be9718a3` adds the docs and the "In <alternative>" label fix. Any later commit is a docs-only checkpoint that won't have finished CI yet.
+- **Validation:**
+  - **Local (`dc1be24`):** typecheck passed; 26 files, **441 passed, 0 skipped**; eval 2 of 2; build passed.
+  - **CI (run 40139204916 on `dc1be24`):** passed; the 2 private-PDF tests are skipped there. The Vercel preview for `dc1be24` is ready.
+- **Browser check:** the synthetic story ran end to end: funding with a 10,000 reserve; 10,001 blocked whole; 50/40/10; duplicate B at 55/35/10 vs A at 50/40/10; the state survived a reload. The workspace was restored byte-identical (v6) and the task server stopped.
+- **Sequencing (approved):** D2 → **D2a** (model portfolios and manager sleeves) → D3 (presentation). The D2a plan is saved separately in PR #74 (tracking issue #73), unmerged. Before implementing D2a, reconcile that branch with D2's delivered contracts (store/backup v8, `Account.funding`, `Recommendation.destination`/`linked`, `alternatives`, `funding_reserves`/`approved_alternative`), preserving both branches' documentation.
 - **Limitations:**
   - Replacements stay within one account and its eligible-cash currency.
   - Alternatives can't be deleted yet.
   - There is no reserve currency other than the cash line's own.
   - The comparison has no history.
   - Approved snapshots and presentation are D3.
-- **Next step:** Codex reviews PR #75; merge only on the owner's approval. D3 has not started.
+- **Next step:** Codex reviews PR #75 before any owner-authorized merge. D2a and D3 have not started.
 - **Preserved:** accepted values/FX/source dates, all existing readiness and final-PDF gates, legacy recommendation effects, v6/v7 compatibility, #59 and agent requirements. All 25 IDs remain Planned.
 
 ## Working agreements
