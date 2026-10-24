@@ -231,7 +231,15 @@ function StaleRow({ h, onAccept, onUpdate }: { h: Holding; onAccept: () => void;
         {!editing && (
           <div className="flex flex-wrap gap-2">
             <Button size="sm" onClick={() => setEditing(true)}>Update value</Button>
-            <Button size="sm" variant="secondary" onClick={onAccept} disabled={!h.valuationDate}>Use this date</Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={onAccept}
+              disabled={!h.valuationDate}
+              title="Keeps the value and its recorded date as they are; it doesn't make the value current."
+            >
+              Keep recorded date
+            </Button>
           </div>
         )}
       </div>

@@ -345,7 +345,7 @@ describe("blocking checks are unchanged", () => {
     const s = m.useAtlasStore.getState();
     const hs = variety(m);
     const checks = readiness(m, s, { holdings: hs });
-    expect(checks.find((c) => c.code === "market_data")).toMatchObject({ passed: false, detail: "1 placeholder price(s)" });
+    expect(checks.find((c) => c.code === "market_data")).toMatchObject({ passed: false, detail: "1 placeholder value(s) not yet reviewed" });
     expect(gates(checks)).toEqual(gates(m.evaluateWorkspaceReadiness({ client: s.client, advisor: s.advisor, accounts: s.accounts, holdings: hs, recommendations: s.recommendations, disclosures: s.disclosures, fxRates: s.fxRates, sourceDocuments: s.sourceDocuments, fxConfirmation: s.fxConfirmation, now: NOW })));
   });
 });

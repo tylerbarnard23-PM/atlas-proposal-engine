@@ -15,8 +15,8 @@ export const READINESS_FIX: Record<string, { href: string; label: string; hint: 
   holdings_present: { href: "/import-center", label: "Import Center", hint: "Import holdings from a statement or add them by hand." },
   output_currency: { href: "/client-profile", label: "Client Profile", hint: "Choose the proposal's output currency." },
   unverified_holdings: { href: "/accounts-assets?review=1", label: "Accounts & Assets", hint: "Open each flagged holding, check its value, then click Confirm value." },
-  stale_valuations: { href: "/accounts-assets?review=1", label: "Accounts & Assets", hint: "Check out-of-date values: update the value or confirm it on the holding." },
-  market_data: { href: "/accounts-assets?review=1", label: "Accounts & Assets", hint: "Check holdings priced from placeholder data and confirm or correct their values." },
+  stale_valuations: { href: "/accounts-assets?review=1", label: "Accounts & Assets", hint: "Review each out-of-date value: update it from a newer statement or your own figure, or confirm it on the holding. Confirming doesn't change its date." },
+  market_data: { href: "/accounts-assets?review=1", label: "Accounts & Assets", hint: "Review holdings carrying placeholder values, then confirm or correct each value." },
   approved_recs: { href: "/recommendations", label: "Recommendations", hint: "Approve at least one recommendation and include it in the PDF." },
   trades_funded: { href: "/recommendations", label: "Recommendations", hint: "A proposed purchase is larger than the cash in its account. Reduce it or add a sale in the same account to fund it." },
   holdings_valued: { href: "/market-data", label: "Exchange rates", hint: "Some holdings are in a currency with no exchange rate to the reporting currency, so they're left out of every total. Add or refresh the rate in Exchange rates." },
@@ -50,8 +50,8 @@ export function readinessTodo(c: ComplianceCheck): string {
     case "holdings_present": return "Add or import holdings";
     case "output_currency": return "Choose the output currency";
     case "unverified_holdings": return n ? `Confirm values for ${n} holding${n === "1" ? "" : "s"}` : "Confirm holding values";
-    case "stale_valuations": return n ? `Check ${n} out-of-date price${n === "1" ? "" : "s"}` : "Check out-of-date prices";
-    case "market_data": return n ? `Check ${n} placeholder price${n === "1" ? "" : "s"}` : "Check placeholder prices";
+    case "stale_valuations": return n ? `Review ${n} out-of-date value${n === "1" ? "" : "s"}` : "Review out-of-date values";
+    case "market_data": return n ? `Review ${n} placeholder value${n === "1" ? "" : "s"}` : "Review placeholder values";
     case "approved_recs": return "Approve a recommendation and include it in the PDF";
     case "trades_funded": return c.detail ? `Fund proposed purchases (${c.detail})` : "Fund proposed purchases";
     case "holdings_valued": return c.detail ? `Value all holdings (${c.detail})` : "Value all holdings in the reporting currency";

@@ -478,7 +478,9 @@ describe("the sample workspace is unchanged when every rate is present", () => {
       detail:
         "CAD/USD 174 days old (2026-04-30, ECB); CHF/USD 174 days old (2026-04-30, ECB); EUR/USD 174 days old (2026-04-30, ECB); GBP/USD 174 days old (2026-04-30, ECB); JPY/USD 174 days old (2026-04-30, ECB). Refresh in Exchange rates or confirm them (policy: 7 days).",
     });
-    expect(readiness.filter((c) => ![...added, "fx_current"].includes(c.code)).map((c) => [c.code, c.passed, c.detail ?? null])).toEqual(baseline.readiness);
+    // R18 slice 2 / R11 (#51, #46) rewords this detail; its code and result are the baseline's.
+    const reworded = (r: (string | boolean | null)[]) => (r[2] === "1 out-of-date price(s)" ? [r[0], r[1], "1 out-of-date value(s) not yet reviewed"] : r);
+    expect(readiness.filter((c) => ![...added, "fx_current"].includes(c.code)).map((c) => [c.code, c.passed, c.detail ?? null])).toEqual(baseline.readiness.map(reworded));
     expect(Object.fromEntries(proposed.holdings.map((h) => [h.id, Math.round((h.reportingMarketValue ?? 0) * 100) / 100]))).toEqual(baseline.proposedReporting);
     const html = renderToStaticMarkup(
       React.createElement(ProposalPdfTemplate, {
