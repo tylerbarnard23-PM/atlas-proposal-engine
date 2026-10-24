@@ -373,7 +373,7 @@ function Desk() {
         <CardBody className="space-y-2">
           {live.length === 0 && <p className="text-[13px] text-ink-500">No recommendations yet. Edit a position above to add an explicit action to the draft.</p>}
           {live.map((r) => (
-            <ActionRow key={r.id} rec={r} member={members.has(r.id)} onToggle={(m) => setMember(r.id, m)} />
+            <ActionRow key={r.id} rec={r} member={members.has(r.id)} owner={alternatives.find((a) => a.memberIds.includes(r.id))?.name} onToggle={(m) => setMember(r.id, m)} />
           ))}
           <p className="text-2xs text-ink-500 leading-relaxed">
             &ldquo;In draft&rdquo; puts an action in this preview only. Approval and PDF prose are set on <Link href="/recommendations" className="text-navy-700 hover:underline">Recommendations</Link>; the final PDF uses approved actions.
@@ -458,7 +458,7 @@ function AddTargetRow({ existing, onAdd }: { existing: Set<AssetClass>; onAdd: (
   );
 }
 
-function ActionRow({ rec, member, onToggle }: { rec: Recommendation; member: boolean; onToggle: (m: boolean) => void }) {
+function ActionRow({ rec, member, owner, onToggle }: { rec: Recommendation; member: boolean; owner?: string; onToggle: (m: boolean) => void }) {
   const restate = restatementMessage(rec);
   return (
     <div className="flex flex-wrap items-start justify-between gap-2 border-b border-ink-100 pb-2 last:border-b-0">
@@ -473,10 +473,15 @@ function ActionRow({ rec, member, onToggle }: { rec: Recommendation; member: boo
         </div>
         {restate && <p className="text-2xs text-warning-600 mt-1 max-w-2xl">{restate}</p>}
       </div>
-      <label className="flex items-center gap-2 text-[12px] text-ink-700 shrink-0">
-        <input type="checkbox" checked={member} onChange={(e) => onToggle(e.target.checked)} />
-        In draft
-      </label>
+      {owner ? (
+        // Each alternative's actions are its own: switch to it to change them.
+        <Badge tone="neutral">In {owner}</Badge>
+      ) : (
+        <label className="flex items-center gap-2 text-[12px] text-ink-700 shrink-0">
+          <input type="checkbox" checked={member} onChange={(e) => onToggle(e.target.checked)} />
+          In draft
+        </label>
+      )}
     </div>
   );
 }

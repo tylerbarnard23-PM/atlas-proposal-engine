@@ -24,7 +24,8 @@ This is a smaller first milestone, not a promise that AI can implement the full 
 
 ## Current evidence and start point
 
-- **D1 in review:** PR #72 (`feat/d1-allocation-desk`, implementation `ee55b96`) built from main `bc248e1` (PR #71 merged). Contract notes are in the PR. D2 starts only after D1's review/release.
+- **D1 released:** PR #72 merged `0381db1` (24 October 2026); release and production evidence on PR #72 and #36.
+- **D2 in review:** PR #75 (`feat/d2-funded-alternatives`, implementation `55b83e0`) built from main `0381db1`. Contract notes are in the PR. D3 starts only after D2's review/release.
 - Observed main: `8b06b6a842d8b11adc1b96967c78aee9c0e12a6c` (PR #70, merged 24 October 2026; main CI run 40101245056: **402 passed, 2 skipped, 404 total**, eval 2/2, typecheck and build; GitHub Production deployment for that SHA). Before it: `7d5999fa01e15a1271bb81812cd8cabbbf58d095` (PR #69, R18 slice 1). PR #68's audit is merged as `298b719`; R23a is merged as `e56335e`.
 - PR #69 reviewed head: `7619327ca7093a3351760f826560e3c577a30faf`. Main CI run 40097812771 passed: **393 passed, 2 skipped, 395 total**, eval 2/2, typecheck and build. The two skips need the private UBS PDF; the reported local suite passed all 395.
 - Release evidence on [PR #69](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/69#issuecomment-6384766252) and [#51](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/51#issuecomment-6384766474) records production draft/final-control tests, 422 missing-FX/incomplete-import gates, New York/UTC approval-date parity and exact browser-workspace restoration. These are prior release observations, not tests performed by this plan.
