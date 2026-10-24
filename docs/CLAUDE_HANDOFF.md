@@ -13,11 +13,15 @@
   3. **Unvalued items outside the scope:** context assets and liabilities without a value are now listed, and the totals are labelled "valued only".
   4. **Context list:** a liability account holding an asset now appears in it, so household = scope + context.
   - **Also fixed:** the over-100% target wording.
-- **Heads:** implementation `ee55b96`, then the review fixes; the review commit is the tested head (see the PR). Any later docs-only commit won't have finished CI yet.
-- **Validation (review head, local):** typecheck passed; 25 files, **424 passed, 0 skipped**; eval 2 of 2; build passed. CI skips the 2 private-PDF tests. Earlier CI on `ff75094` (run 40103554615) passed: 418 passed, 2 skipped.
+- **Codex review fixes (24 October 2026):**
+  1. **Draft preview:** the contextual editor previews the candidate in the working draft. `previewDraftEdit` runs the shared engine on the draft's actions without the candidate and with it added last, so a second sale shows 50,000 → 40,000 and the combined funding shortfall appears before saving. Approved actions outside the draft stay out. The Recommendations-page preview is unchanged.
+  2. **Legacy approved-and-rejected records:** they stay draft members through the store migration and the v6-backup upgrade, and are applied as the PDF applies them. Their approval and status are kept; ordinary rejection is unchanged.
+- **Heads:** implementation `ee55b96`, the self-review fixes `ebc68ba`, then the Codex review fixes; the latest commit is the tested head (see the PR). CI on `ebc68ba` passed.
+- **Validation (latest head, local):** typecheck passed; 25 files, **429 passed, 0 skipped**; eval 2 of 2; build passed. CI skips the 2 private-PDF tests. Earlier CI on `ff75094` passed: 418 passed, 2 skipped.
 - **Browser check:** the original v6 workspace still matched its saved hash before testing.
   - **Earlier, on `ff75094`:** the real v6 → v7 migration, the acceptance story and the legacy Approve gate all passed.
-  - **This review:** the unvalued-outside notice and the over-100% target text rendered correctly.
+  - **Self-review:** the unvalued-outside notice and the over-100% target text rendered correctly.
+  - **Codex review fixes:** a second 10,000 sale previewed 50,000 → 40,000 with cash 20,000 → 30,000, and the desk matched after saving. A further purchase showed "short $5,000.00" before saving. Cancel changed nothing.
   - **Cleanup:** the workspace was restored byte-identical each time, and the task server stopped.
 - **Limitations:**
   - Seed `rec_reduce_aapl` and `rec_pay_mortgage` need explicit amounts before a new approval.

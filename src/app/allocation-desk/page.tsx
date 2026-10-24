@@ -18,13 +18,15 @@ import {
   inputsChanged,
   editablePosition,
   positionEditRecommendation,
+  previewDraftEdit,
   restatementMessage,
   scopeCandidates,
   type DeskPosition,
+  type DraftEditPreview,
   type DeskView,
   type PositionEditKind,
 } from "@/engines/allocationDesk";
-import { previewRecommendation } from "@/engines/recommendationPreview";
+import { previewRecommendation, type PreviewWarning } from "@/engines/recommendationPreview";
 import { formatCalendarDate, formatCurrency, formatTimestampDate, safeId } from "@/utils/formatting";
 
 // D1 — the working allocation desk. Every figure comes from engines/
@@ -66,7 +68,8 @@ function Desk() {
   const candidates = scopeCandidates(accounts);
   const inScope = new Set(d.scope.accountIds);
   const toggleScope = (id: string) => setScope(inScope.has(id) ? d.scope.accountIds.filter((x) => x !== id) : [...d.scope.accountIds, id]);
-  const live = recommendations.filter((r) => r.status !== "excluded");
+  // Rejected ones are left out, except a legacy record still approved: the PDF applies it.
+  const live = recommendations.filter((r) => r.status !== "excluded" || r.approvedByAdvisor);
   const members = new Set(draft.memberIds);
 
   return (
@@ -253,9 +256,11 @@ function Desk() {
                             addEdit(rec);
                             setEditing(null);
                           }}
-                          preview={(rec) =>
-                            previewRecommendation({ rec, holdings, recommendations, accounts, fx, sourceDocuments })
-                          }
+                          preview={(rec) => ({
+                            draft: previewDraftEdit({ holdings, accounts, recommendations, draft, candidate: rec, fx }),
+                            // Data warnings only (incomplete import, unvalued, currency review); funding comes from the draft above.
+                            warnings: previewRecommendation({ rec, holdings, recommendations, accounts, fx, sourceDocuments }).warnings.filter((w) => w.kind !== "shortfall" && w.kind !== "missing_rate"),
+                          })}
                         />
                       </td>
                     </tr>
@@ -367,6 +372,7 @@ function ActionRow({ rec, member, onToggle }: { rec: Recommendation; member: boo
           {member && <Badge tone="navy">In draft</Badge>}
           {rec.approvedByAdvisor ? <Badge tone="positive">Approved</Badge> : <Badge tone="neutral">Not approved</Badge>}
           {rec.includeInPdf && <Badge tone="gold">In PDF prose</Badge>}
+          {rec.status === "excluded" && rec.approvedByAdvisor && <Badge tone="warning">Marked rejected but still approved (legacy)</Badge>}
         </div>
         {restate && <p className="text-2xs text-warning-600 mt-1 max-w-2xl">{restate}</p>}
       </div>
@@ -389,7 +395,7 @@ function PositionEditor({
   reportingCurrency: string;
   onSave: (rec: Recommendation) => void;
   onCancel: () => void;
-  preview: (rec: Recommendation) => ReturnType<typeof previewRecommendation>;
+  preview: (rec: Recommendation) => { draft: DraftEditPreview; warnings: PreviewWarning[] };
 }) {
   const [kind, setKind] = React.useState<PositionEditKind>("reduce");
   const [amount, setAmount] = React.useState("");
@@ -426,16 +432,21 @@ function PositionEditor({
           </label>
         )}
       </div>
-      {p?.standalone?.position && (
+      {p && (
         <div className="text-[13px] text-ink-700 space-y-0.5">
-          <div>{position.name}: {money(p.standalone.position.before)} → {money(p.standalone.position.after)}</div>
-          {p.standalone.cash.map((c) => (
+          <div className="text-2xs uppercase tracking-wider text-ink-500">In the working draft, with this change</div>
+          <div>
+            {position.name}: {p.draft.position.before == null ? "Not valued" : money(p.draft.position.before)} → {p.draft.position.after == null ? "Not valued" : money(p.draft.position.after)}
+          </div>
+          {p.draft.cash.map((c) => (
             <div key={c.holdingId}>{c.name} ({c.accountName}): {money(c.before)} → {money(c.after)}</div>
           ))}
         </div>
       )}
+      {p && !p.draft.applied && <p className="text-2xs text-negative-600">This change can&apos;t be applied in the draft:</p>}
+      {p?.draft.unresolved.map((u) => <p key={u.recommendationId + u.holdingId} className="text-2xs text-negative-600">{u.reason}</p>)}
+      {p?.draft.shortfalls.map((s) => <p key={s.accountId} className="text-2xs text-negative-600">With the rest of the draft, {s.accountName} would be short {money(s.shortfall)}.</p>)}
       {p?.warnings.map((w, i) => <p key={i} className="text-2xs text-warning-600">{w.message}</p>)}
-      {p?.standalone?.shortfalls.map((s) => <p key={s.accountId} className="text-2xs text-negative-600">{s.accountName} would be short {money(s.shortfall)}.</p>)}
       <div className="flex items-center gap-2">
         <Button size="sm" disabled={!rec} onClick={() => rec && onSave(rec)}>Add to draft</Button>
         <Button size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>

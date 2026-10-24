@@ -21,12 +21,15 @@ export function newWorkingDraft(now: string, memberIds: string[] = []): WorkingD
 }
 
 /**
- * The draft an existing workspace starts with (store v7 and v6 backups): its
- * approved recommendations, in saved order, so previewing the draft gives the
- * same proposed portfolio as before. Rejected ones are never members.
+ * The draft an existing workspace starts with (store v7 and v6 backups):
+ * every approved recommendation, in saved order, exactly the set the final
+ * PDF applies, so previewing the draft gives the same proposed portfolio as
+ * before. That includes a contradictory legacy record that is both approved
+ * and marked rejected: the PDF still applies it, and its approval and status
+ * are kept as evidence, not rewritten (see deskActions).
  */
 export function legacyWorkingDraft(recommendations: Recommendation[], now: string): WorkingDraft {
-  return newWorkingDraft(now, recommendations.filter((r) => r.approvedByAdvisor && r.status !== "excluded").map((r) => r.id));
+  return newWorkingDraft(now, recommendations.filter((r) => r.approvedByAdvisor).map((r) => r.id));
 }
 
 // ---------------------------------------------------------------------------
@@ -80,13 +83,16 @@ export function scopeAccountIds(accounts: Account[], draft: WorkingDraft): strin
 
 /**
  * The actions a view applies, in the recommendations' saved order: the
- * draft's members (approved or not; a rejected one never applies), or
- * exactly the set the final PDF and readiness apply (every approved one).
+ * draft's members (approved or not), or exactly the set the final PDF and
+ * readiness apply (every approved one). A rejected member doesn't apply,
+ * unless it is still approved: that only happens with legacy data, where the
+ * final PDF applies it too (an ordinary rejection clears the approval and
+ * leaves the draft).
  */
 export function deskActions(recommendations: Recommendation[], draft: WorkingDraft, view: DeskView): Recommendation[] {
   if (view === "approved") return recommendations.filter((r) => r.approvedByAdvisor);
   const members = new Set(draft.memberIds);
-  return recommendations.filter((r) => r.status !== "excluded" && members.has(r.id));
+  return recommendations.filter((r) => members.has(r.id) && (r.status !== "excluded" || r.approvedByAdvisor));
 }
 
 export interface DeskRow {
@@ -330,6 +336,63 @@ export function positionEditRecommendation(input: {
   if (kind === "exit") return { ...base, title: `Sell all of ${holding.assetName}`, type: "sell", actionAmount: 100, actionAmountUnit: "percent" };
   if (kind === "reduce") return { ...base, title: `Reduce ${holding.assetName} by ${money(amount!)}`, type: "reduce", actionAmount: amount, actionAmountUnit: "amount" };
   return { ...base, title: `Increase ${holding.assetName} by ${money(amount!)}`, type: "increase", actionAmount: amount, actionAmountUnit: "amount" };
+}
+
+export interface DraftEditPreview {
+  /** The edited position in the working draft, before and after adding the candidate. */
+  position: { before: number | null; after: number | null };
+  /** Cash lines whose draft value the candidate changes (including one it would create). */
+  cash: { holdingId: string; name: string; accountName: string; before: number; after: number }[];
+  /** Shortfalls in the resulting draft. */
+  shortfalls: CashShortfall[];
+  /** Actions the resulting draft can't apply (missing rates). */
+  unresolved: UnresolvedConversion[];
+  /** Whether the candidate itself applies in the resulting draft. */
+  applied: boolean;
+}
+
+/**
+ * A candidate position edit evaluated in the working draft: the shared engine
+ * runs the draft's actions without it and with it (added last, where saving
+ * puts it), and this compares the two. Approved recommendations outside the
+ * draft don't enter it. Nothing is saved or changed.
+ */
+export function previewDraftEdit(input: {
+  holdings: NormalizedHolding[];
+  accounts: Account[];
+  recommendations: Recommendation[];
+  draft: WorkingDraft;
+  candidate: Recommendation;
+  fx: FxContext;
+}): DraftEditPreview {
+  const { holdings, accounts, recommendations, draft, candidate, fx } = input;
+  const names = new Map(accounts.map((a) => [a.id, a.name] as const));
+  const withCandidate = [...recommendations.filter((r) => r.id !== candidate.id), candidate];
+  const draftWith = { ...draft, memberIds: [...draft.memberIds.filter((x) => x !== candidate.id), candidate.id] };
+  const draftWithout = { ...draft, memberIds: draft.memberIds.filter((x) => x !== candidate.id) };
+  const before = applyRecommendationsToProposed(holdings, deskActions(recommendations, draftWithout, "draft"), accounts, fx);
+  const after = applyRecommendationsToProposed(holdings, deskActions(withCandidate, draftWith, "draft"), accounts, fx);
+  const at = (list: Holding[], id: string) => {
+    const h = list.find((x) => x.id === id) as MaybeValued | undefined;
+    return h ? valueOf(h) : null;
+  };
+  const cashIds = new Set([...before.holdings, ...after.holdings].filter((h) => h.assetClass === "cash" && !isLiabilityLine(h)).map((h) => h.id));
+  const cash: DraftEditPreview["cash"] = [];
+  for (const id of cashIds) {
+    const b = at(before.holdings, id) ?? 0;
+    const a = at(after.holdings, id) ?? 0;
+    if (Math.abs(a - b) < 0.005) continue;
+    const h = (after.holdings.find((x) => x.id === id) ?? before.holdings.find((x) => x.id === id))!;
+    cash.push({ holdingId: id, name: h.assetName, accountName: names.get(h.accountId) ?? h.accountId, before: b, after: a });
+  }
+  const hid = candidate.relatedHoldingId ?? "";
+  return {
+    position: { before: at(before.holdings, hid), after: at(after.holdings, hid) },
+    cash,
+    shortfalls: cashShortfallsOf(after.holdings, accounts, fx),
+    unresolved: after.unresolved,
+    applied: !after.unresolved.some((u) => u.recommendationId === candidate.id),
+  };
 }
 
 // ---------------------------------------------------------------------------

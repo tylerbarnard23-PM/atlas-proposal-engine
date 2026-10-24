@@ -280,6 +280,98 @@ describe("review fixes (PR #72)", () => {
   });
 });
 
+describe("the contextual preview evaluates the working draft (review fix)", () => {
+  const preview = (m: M, candidate: Recommendation) => {
+    const s = m.useAtlasStore.getState();
+    return m.previewDraftEdit({ holdings: m.normalizeHoldings(s.holdings, s.fxRates, "USD"), accounts: s.accounts, recommendations: s.recommendations, draft: s.workingDraft, candidate, fx: { reportingCurrency: "USD", rates: s.fxRates } });
+  };
+  const snapshot = (m: M) => JSON.parse(JSON.stringify({ h: m.useAtlasStore.getState().holdings, r: m.useAtlasStore.getState().recommendations, d: m.useAtlasStore.getState().workingDraft }));
+
+  it("a second sale previews from the draft (50,000 → 40,000), and the desk matches exactly after saving", async () => {
+    const m = await load();
+    story(m);
+    const st = m.useAtlasStore.getState();
+    st.setDraftScope(["acc_story_invest"]);
+    st.addDraftEdit(edit(m, "h_story_equity", "reduce", 10_000, "rec_first"));
+    const second = edit(m, "h_story_equity", "reduce", 10_000, "rec_second");
+    const before = snapshot(m);
+    const p = preview(m, second);
+    expect(snapshot(m)).toEqual(before); // previewing (or cancelling) changes nothing
+    expect(p.position).toEqual({ before: 50_000, after: 40_000 });
+    expect(p.cash).toEqual([{ holdingId: "h_story_cash", name: "Cash", accountName: "Story — Investment Account", before: 20_000, after: 30_000 }]);
+    expect(p.shortfalls).toEqual([]);
+    st.addDraftEdit(second);
+    const d = desk(m);
+    expect(row(d, "equity").proposed).toBe(p.position.after);
+    expect(d.cash[0].proposed).toBe(p.cash[0].after);
+  });
+
+  it("two purchases each affordable alone show the combined shortfall before the second is saved", async () => {
+    const m = await load();
+    story(m);
+    const st = m.useAtlasStore.getState();
+    st.addDraftEdit(edit(m, "h_story_equity", "increase", 6_000, "rec_buy1"));
+    const p = preview(m, edit(m, "h_story_bond", "increase", 6_000, "rec_buy2"));
+    expect(p.cash).toEqual([{ holdingId: "h_story_cash", name: "Cash", accountName: "Story — Investment Account", before: 4_000, after: -2_000 }]);
+    expect(p.shortfalls).toEqual([{ accountId: "acc_story_invest", accountName: "Story — Investment Account", shortfall: 2_000 }]);
+  });
+
+  it("approved recommendations outside the draft stay out of the draft preview; saved order is kept", async () => {
+    const m = await load();
+    story(m);
+    const st = m.useAtlasStore.getState();
+    st.upsertRecommendation({ ...edit(m, "h_story_equity", "reduce", 5_000, "rec_approved_out"), approvedByAdvisor: true, status: "approved" });
+    expect(preview(m, edit(m, "h_story_equity", "reduce", 10_000, "rec_x")).position).toEqual({ before: 60_000, after: 50_000 });
+    // An earlier member applies before the candidate: exit, then the candidate's purchase.
+    st.addDraftEdit(edit(m, "h_story_equity", "exit", undefined, "rec_exit"));
+    const add = edit(m, "h_story_equity", "increase", 1_000, "rec_add");
+    expect(preview(m, add).position).toEqual({ before: 0, after: 1_000 });
+    st.addDraftEdit(add);
+    expect(row(desk(m), "equity").proposed).toBe(1_000);
+  });
+
+  it("an action the draft can't apply is reported from the same resulting draft", async () => {
+    const m = await load();
+    story(m);
+    const nok = { ...edit(m, "h_story_equity", "reduce", 1_000, "rec_nok"), currency: "NOK" as Recommendation["currency"] };
+    const p = preview(m, nok);
+    expect(p.applied).toBe(false);
+    expect(p.unresolved.map((u) => u.recommendationId)).toEqual(["rec_nok"]);
+    expect(p.position).toEqual({ before: 60_000, after: 60_000 });
+  });
+});
+
+describe("legacy approved-and-rejected records (review fix)", () => {
+  it("store migration and v6-backup upgrade keep them in the draft, unchanged, with the approved result", async () => {
+    const m = await load();
+    story(m);
+    const odd = { ...edit(m, "h_story_equity", "reduce", 5_000, "rec_odd"), approvedByAdvisor: true, status: "excluded" as const };
+    const normal = { ...edit(m, "h_story_bond", "reduce", 1_000, "rec_rejected"), status: "excluded" as const };
+    m.useAtlasStore.setState({ recommendations: [odd, normal] });
+    const v6 = JSON.parse(JSON.stringify(m.useAtlasStore.getState()));
+    delete v6.workingDraft;
+    const migrated = m.migrateAtlasState(v6, 6);
+    expect(migrated.recommendations).toEqual([odd, normal]); // approval and status untouched
+    expect(migrated.workingDraft.memberIds).toEqual(["rec_odd"]);
+    m.useAtlasStore.setState(migrated);
+    m.useAtlasStore.getState().setDraftScope(["acc_story_invest"]);
+    expect(desk(m).actions.map((r) => r.id)).toEqual(["rec_odd"]);
+    expect(desk(m).rows).toEqual(desk(m, "approved").rows);
+    expect(row(desk(m), "equity").proposed).toBe(55_000);
+
+    const v7 = JSON.parse(m.serializeBackup(m.createBackup(m.useAtlasStore.getState(), NOW)));
+    const { workingDraft: _d, ...engagement } = v7.engagement;
+    void _d;
+    const parsed = m.parseBackup(JSON.stringify({ ...v7, workspaceVersion: 6, engagement }), { disclosureIds: m.DISCLOSURE_LIBRARY.map((d) => d.id) });
+    if (!parsed.ok) throw new Error(parsed.errors.join("; "));
+    expect(parsed.backup.engagement.workingDraft.memberIds).toEqual(["rec_odd"]);
+    expect(parsed.backup.engagement.recommendations).toEqual(v7.engagement.recommendations);
+    // Ordinary rejection is unchanged: rejecting clears approval and leaves the draft.
+    m.useAtlasStore.getState().rejectRecommendation("rec_odd");
+    expect(m.useAtlasStore.getState().workingDraft.memberIds).toEqual([]);
+  });
+});
+
 describe("membership, approval and PDF prose are separate", () => {
   it("joining the draft doesn't approve; approving doesn't join; prose inclusion moves neither", async () => {
     const m = await load();
