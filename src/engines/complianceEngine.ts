@@ -94,15 +94,15 @@ export function evaluateReadiness(inp: ReadinessInputs): ComplianceCheck[] {
   });
   checks.push({
     code: "stale_valuations",
-    label: "Out-of-date prices checked",
+    label: "Out-of-date values reviewed",
     passed: inp.staleValuationsCount === 0,
-    detail: inp.staleValuationsCount > 0 ? `${inp.staleValuationsCount} out-of-date price(s)` : undefined,
+    detail: inp.staleValuationsCount > 0 ? `${inp.staleValuationsCount} out-of-date value(s) not yet reviewed` : undefined,
   });
   checks.push({
     code: "market_data",
-    label: "Placeholder prices checked",
+    label: "Placeholder values reviewed",
     passed: inp.marketDataIssuesCount === 0,
-    detail: inp.marketDataIssuesCount > 0 ? `${inp.marketDataIssuesCount} placeholder price(s)` : undefined,
+    detail: inp.marketDataIssuesCount > 0 ? `${inp.marketDataIssuesCount} placeholder value(s) not yet reviewed` : undefined,
   });
   checks.push({
     code: "approved_recs",

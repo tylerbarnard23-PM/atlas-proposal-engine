@@ -47,10 +47,17 @@ export function evaluateHoldingQuality(h: Holding): DataQualityIssue[] {
   return issues;
 }
 
+// Reported, but not penalized: an identifier helps identify or match an
+// investment and isn't needed to value it or build a proposal (R18/R11).
+// Matching on the code covers saved warnings from earlier versions and
+// statement imports without rewriting them.
+const UNPENALIZED = new Set<DataQualityIssue["code"]>(["MISSING_IDENTIFIER"]);
+
 export function dataQualityScore(issues: DataQualityIssue[]): number {
   // 100 - weighted penalties
   let score = 100;
   for (const issue of issues) {
+    if (UNPENALIZED.has(issue.code)) continue;
     if (issue.severity === "critical") score -= 12;
     else if (issue.severity === "warning") score -= 6;
     else score -= 2;

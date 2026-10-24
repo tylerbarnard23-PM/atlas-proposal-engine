@@ -20,8 +20,8 @@ const TASK_WHY: Record<DataTaskKind, string> = {
   balance_only:
     "They show as \"Other / unclassified\" in the allocation charts, so the Before / After can't reflect what's inside them. Upload the account's positions, or keep it as one balance.",
   missing_identifier:
-    "Without a ticker or CUSIP the price can't be refreshed from market data. Add one, or dismiss if the holding has none.",
-  stale_value: `Market-priced values older than ${MARKET_STALE_DAYS} days, and property, business, insurance or private assets older than 12 months, may no longer be accurate. Update the value or keep the date: the proposal shows each value's as-of date.`,
+    "A ticker, CUSIP or ISIN can help identify the investment and match it to later statements. It isn't needed to value the holding or build the proposal. Add one if you have it, or dismiss if the holding has none.",
+  stale_value: `Market-priced values older than ${MARKET_STALE_DAYS} days, and property, business, insurance or private assets older than 12 months, may no longer be accurate. Update the value from a newer statement or your own figure, or keep the recorded date: keeping it doesn't make the value current, and the proposal shows each value's as-of date.`,
   stale_fx_rate: `The rates are older than ${STALE_FX_DAYS} days (an initial product policy, not a regulatory standard) or are unverified fallback data. The values still use them. Refresh the rates in Exchange rates, or confirm them there; the final PDF waits for one or the other.`,
   missing_fx_rate:
     "There's no exchange rate from their currency to {ccy}, so they're left out of every total and chart. Until they're valued, portfolio-wide checks (concentration, currency, country, liquidity and cash) are paused. Add the rate in Exchange rates.",
@@ -184,7 +184,7 @@ export function generateInsights({ holdings, reportingCurrency, fx }: InsightInp
       category: "valuation",
       severity: "info",
       title: `${h.assetName} is manually valued`,
-      detail: `Valuation date ${h.valuationDate ?? "n/a"} (${h.valuationSource.note ?? "advisor-entered"}). Refresh prior to client delivery.`,
+      detail: `Valuation date ${h.valuationDate ?? "n/a"} (${h.valuationSource.note ?? "advisor-entered"}). Review or update it before client delivery.`,
       relatedHoldingIds: [h.id],
       generatedAt: now,
     });

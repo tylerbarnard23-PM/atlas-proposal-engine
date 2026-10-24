@@ -280,17 +280,19 @@
         "milestones": [
           "D1"
         ],
-        "minimumScope": "Fold review wording and non-penalizing optional identifiers into the workbench; retain all real gates.",
+        "minimumScope": "Review wording and non-penalizing optional identifiers already delivered (PR #70, 8b06b6a); D1 reuses them without repeating the cleanup and retains all real gates.",
         "laterScope": "Bond basis validation, exception queue, score redesign and safe bulk/date actions.",
         "fullFeatureComplete": false
       },
       "progress": [
         {
           "pr": 70,
-          "state": "open",
+          "state": "merged",
           "date": "2026-10-24",
           "head": "6449889bfbf9a07ff3a45c8446301e87693a8c4b",
-          "scope": "In-flight shared R18 slice 2 / R11 review wording and optional-identifier score rule; preserve existing PR and count it toward D1 after review/release, no duplicate cleanup"
+          "scope": "Shared R18 slice 2 / R11: value-review readiness wording (same codes and results); no quality-score penalty for MISSING_IDENTIFIER, including legacy saved warnings; identifier/stale task wording. Counts toward D1; do not repeat",
+          "mergeCommit": "8b06b6a842d8b11adc1b96967c78aee9c0e12a6c",
+          "ciRun": 40101245056
         }
       ]
     },
@@ -492,14 +494,17 @@
           "scope": "R18 slice 1 released: quote presentation removed; accepted-source/date wording and approval timestamp corrected. Further R18 work remains planned.",
           "head": "7619327ca7093a3351760f826560e3c577a30faf",
           "mergeCommit": "7d5999fa01e15a1271bb81812cd8cabbbf58d095",
-          "ciRun": 40097812771
+          "ciRun": 40097812771,
+          "deployment": "GitHub Production deployment for 7d5999f (Vercel dpl_ ID not readable: connector 403)"
         },
         {
           "pr": 70,
-          "state": "open",
+          "state": "merged",
           "date": "2026-10-24",
           "head": "6449889bfbf9a07ff3a45c8446301e87693a8c4b",
-          "scope": "In-flight shared R18 slice 2 / R11 review wording and optional-identifier score rule; preserve existing PR and count it toward D1 after review/release, no duplicate cleanup"
+          "scope": "Shared R18 slice 2 / R11: value-review readiness wording (same codes and results); no quality-score penalty for MISSING_IDENTIFIER, including legacy saved warnings; identifier/stale task wording. Counts toward D1; do not repeat",
+          "mergeCommit": "8b06b6a842d8b11adc1b96967c78aee9c0e12a6c",
+          "ciRun": 40101245056
         }
       ],
       "scopeDecision": "VALUATION_SCOPE.md",
@@ -508,7 +513,7 @@
         "milestones": [
           "D1"
         ],
-        "minimumScope": "Keep released accepted-value/FX behavior; combine only remaining review-copy cleanup with D1.",
+        "minimumScope": "Keep released accepted-value/FX behavior; the review-copy cleanup is already delivered (PR #70, 8b06b6a) and must not be repeated in D1.",
         "laterScope": "Provider/route/cache retirement, candidate FX apply UI and any optional repricing.",
         "fullFeatureComplete": false
       }
@@ -793,7 +798,7 @@
     "mode": "synthetic-employer-demo-first",
     "nextMilestone": "D1",
     "supersedes": "Serial P0–P5 implementation and standalone R11-first cleanup command; original feature contracts retained",
-    "observedMain": "7d5999fa01e15a1271bb81812cd8cabbbf58d095",
+    "observedMain": "8b06b6a842d8b11adc1b96967c78aee9c0e12a6c",
     "developmentAssistant": {
       "application": "Claude Code Desktop",
       "model": "Opus 5.5",
@@ -935,6 +940,12 @@
       "branch": "feat/r18-r11-review-wording",
       "state": "open",
       "next": "Codex review and owner-authorized release before D1; preserve/reuse, do not duplicate"
+    },
+    "deliveredBeforeD1": {
+      "pr": 70,
+      "head": "6449889bfbf9a07ff3a45c8446301e87693a8c4b",
+      "mergeCommit": "8b06b6a842d8b11adc1b96967c78aee9c0e12a6c",
+      "scope": "R11/R18 review wording and non-penalizing optional identifiers; do not repeat in D1"
     }
   }
 }

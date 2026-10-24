@@ -27,7 +27,7 @@ Inspect → make a short design/contract note in the issue/implementation PR →
 ```text
 Build D1 — Working allocation desk from the approved demo-first delivery plan.
 
-Verify actual local/GitHub heads, working tree, stash and existing work. PR #70 already contains the small R11 cleanup (observed open at 6449889bfbf9a07ff3a45c8446301e87693a8c4b); preserve it, complete its review/release path only when owner-authorized and reuse it after it lands. Do not repeat or expand that cleanup in D1. The last verified release was main 7d5999fa01e15a1271bb81812cd8cabbbf58d095, PR #69 merged; it is a checkpoint, not permission to overwrite newer commits.
+Verify actual local/GitHub heads, working tree, stash and existing work. PR #70 already delivered the small R11 cleanup (reviewed at 6449889bfbf9a07ff3a45c8446301e87693a8c4b, merged as 8b06b6a842d8b11adc1b96967c78aee9c0e12a6c); build on it and do not repeat or expand that cleanup in D1. The last verified release was main 8b06b6a842d8b11adc1b96967c78aee9c0e12a6c, PR #70 merged; it is a checkpoint, not permission to overwrite newer commits.
 
 Read the latest handoff, docs/roadmap/DEMO_DELIVERY_PLAN.md (D1 and shared acceptance story), IMPLEMENTATION_GUIDE.md and the minimum relevant R02/R03/R05/R07/R19a contracts. Read other plans only for a touched contract. Do not spend another PR solely on the R11 text/identifier cleanup.
 

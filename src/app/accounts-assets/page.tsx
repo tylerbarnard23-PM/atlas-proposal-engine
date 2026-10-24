@@ -443,7 +443,7 @@ function HoldingDetail({
         <dl className="text-2xs text-ink-500 leading-relaxed space-y-0.5">
           <div><dt className="inline font-medium text-ink-700">Confirm value:</dt> <dd className="inline">you&apos;ve checked the current value and it&apos;s right for the proposal.</dd></div>
           <div><dt className="inline font-medium text-ink-700">Save advisor override:</dt> <dd className="inline">replaces the value with the one entered above.</dd></div>
-          <div><dt className="inline font-medium text-ink-700">Lock for proposal:</dt> <dd className="inline">freezes today&apos;s value so later price refreshes don&apos;t change the proposal.</dd></div>
+          <div><dt className="inline font-medium text-ink-700">Lock for proposal:</dt> <dd className="inline">records this value, with its source and date, as the one the proposal uses.</dd></div>
         </dl>
       </div>
 

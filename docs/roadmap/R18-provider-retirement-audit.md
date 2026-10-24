@@ -116,13 +116,13 @@ The other readiness checks and the statement-import reconciliation warnings stay
 
 ## Recommended slices
 
-**Slice 1 (smallest; UI and wording only, no schema, store or engine change): "Stop presenting security quotes."** In review as PR #69 (23 October 2026), with the owner's decisions: rename to Exchange rates at the same address; keep section keys and defaults, with titles resolved by key; keep legacy mock values labelled, with the existing review gate; crypto follows the accepted-value workflow.
+**Slice 1 (smallest; UI and wording only, no schema, store or engine change): "Stop presenting security quotes."** Complete: PR #69, merged `7d5999f` on 24 October 2026, with the owner's decisions: rename to Exchange rates at the same address; keep section keys and defaults, with titles resolved by key; keep legacy mock values labelled, with the existing review gate; crypto follows the accepted-value workflow.
 1. On Market Data, remove "Refresh quotes", the quote-coverage table and the security-provider cards, keeping the FX panel. In Settings, show only the FX source. The routes and adapters stay in place but nothing calls them.
 2. Correct the PDF and Dashboard text to describe the accepted value basis per holding. That covers source kind (statement / advisor-entered / override / approved), the recorded provider as historical evidence, and each holding's own as-of date. Limit the default appendix to the FX source actually used. Section keys stay unchanged.
 3. Reword `.env.example`/README: quote keys are optional and unused by the proposal journey.
 4. Add tests for acceptance cases A1–A6 below. This is a UX change, so a proposal with numbered decisions comes first.
 
-**Slice 2 (with R11 #46): review semantics.**
+**Slice 2 (with R11 #46): review semantics.** Delivered: PR #70, merged `8b06b6a` on 24 October 2026: the reworded checks, the identifier score rule and the identifier/stale wording. Date-based staleness is unchanged and still belongs to R11.
 - Reword `stale_valuations`/`market_data` to value review (same codes, same gating).
 - Take the identifier penalty out of the score.
 - Reword the identifier and stale tasks without repricing language.

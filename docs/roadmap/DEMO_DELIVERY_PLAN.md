@@ -12,7 +12,7 @@ The public demo stays scripted/synthetic; a separately enabled local live-agent 
 
 ## What changes about the way we work
 
-- Build five coherent delivery packages, not all 25 feature plans serially. Start the allocation workspace next. Fold the small R11 wording/identifier change into that work instead of spending another release on it alone.
+- Build five coherent delivery packages, not all 25 feature plans serially. Start the allocation workspace next. The small R11 wording/identifier change is already delivered (PR #70 (merged `8b06b6a`)); do not repeat it.
 - Implement the minimum required contracts alongside the first visible task that uses them. Do not finish every dependency's advanced UX before showing a useful workspace. An early grid is not permission to add separate UI arithmetic or bypass funding/approval rules.
 - Default to one reviewable PR per package. D1 may need two linked PRs (minimum persisted contracts/backup migration, then the visible workspace); split another package only for a concrete independently testable migration or financial contract, not for copy/docs separately. Do not put all five packages in one branch.
 - One Claude command owns inspect → implement → focused tests → self-review/fix → final validation → save/docs → open PR. One Codex review checkpoint follows a completed package or justified split. Fix all blocking findings together on the same PR.
@@ -24,10 +24,10 @@ This is a smaller first milestone, not a promise that AI can implement the full 
 
 ## Current evidence and start point
 
-- Observed main: `7d5999fa01e15a1271bb81812cd8cabbbf58d095` (PR #69, R18 slice 1, merged 24 October 2026). PR #68's audit is merged as `298b719`; R23a is merged as `e56335e`.
+- Observed main: `8b06b6a842d8b11adc1b96967c78aee9c0e12a6c` (PR #70, merged 24 October 2026; main CI run 40101245056: **402 passed, 2 skipped, 404 total**, eval 2/2, typecheck and build; GitHub Production deployment for that SHA). Before it: `7d5999fa01e15a1271bb81812cd8cabbbf58d095` (PR #69, R18 slice 1). PR #68's audit is merged as `298b719`; R23a is merged as `e56335e`.
 - PR #69 reviewed head: `7619327ca7093a3351760f826560e3c577a30faf`. Main CI run 40097812771 passed: **393 passed, 2 skipped, 395 total**, eval 2/2, typecheck and build. The two skips need the private UBS PDF; the reported local suite passed all 395.
 - Release evidence on [PR #69](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/69#issuecomment-6384766252) and [#51](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/51#issuecomment-6384766474) records production draft/final-control tests, 422 missing-FX/incomplete-import gates, New York/UTC approval-date parity and exact browser-workspace restoration. These are prior release observations, not tests performed by this plan.
-- No implementation PR was open at the initial read, but [PR #70](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/70) appeared before this plan was saved: `feat/r18-r11-review-wording`, observed head `6449889bfbf9a07ff3a45c8446301e87693a8c4b`, open and awaiting Codex review. Preserve and finish that bounded review/release path when owner-authorized; do not discard, duplicate or expand it. Its cleanup counts toward D1 once released. The prior standalone R11-first command is superseded for new work; **D1 remains the next substantial feature after the in-flight review**, not another cleanup PR. Recheck actual heads/status before starting.
+- [PR #70](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/70) (`feat/r18-r11-review-wording`) appeared while this plan was drafted. It was Codex-reviewed at `6449889bfbf9a07ff3a45c8446301e87693a8c4b` and merged pinned as `8b06b6a842d8b11adc1b96967c78aee9c0e12a6c`. Its cleanup counts toward D1 and must not be repeated. The prior standalone R11-first command is superseded for new work; **D1 is the next substantial feature**, not another cleanup PR. Recheck actual heads/status before starting.
 
 ## Five packages, in order
 
@@ -49,7 +49,7 @@ Packages are coordinated slices, not new feature IDs. D1's early R03 view does n
 - Support explicit edits to already-owned positions through the existing evaluator. No implicit 50% sell/default full exit. A target is a desired allocation; it does not create orders/holdings. Automatic action generation and new investments wait for D2; show unmet target drift honestly.
 - State whether the workspace is previewing selected draft actions or the approved subset. Preview must not approve actions or silently change the final-PDF inputs. Scope selection must not hide existing incomplete-import/missing-value/FX gates; liabilities remain separate from asset-weight denominators.
 - Capture only the objective/constraint fields actually needed. A reserve can be recorded, but label enforcement as unavailable until D2 implements it; do not present it as protected yet. Preserve unassessed/unknown states.
-- Bundle the remaining review wording and optional-identifier score penalty here. Existing readiness codes and gate results stay the same; old saved identifier warnings also become non-penalizing without rewriting holdings. Do not build the full R11 queue, bulk review or bond-price-basis schema first.
+- Already delivered by PR #70 (merged `8b06b6a`): review wording and non-penalizing optional identifiers (existing readiness codes and gate results unchanged; old saved identifier warnings non-penalizing without rewriting holdings). Reuse it; do not repeat it. Do not build the full R11 queue, bulk review or bond-price-basis schema first.
 - Choose the smallest persisted representation after tracing the current store. If a schema version changes, ship a real versioned/idempotent migration and supported old-backup upgrade in the same implementation. Do not add speculative fields for all later packages.
 - If too coupled for one PR, the only default D1 split is (a) scope/draft/input contracts plus backup compatibility and engine behavior, then (b) the visible workbench/context flow. Show the whole planned task and the reason for the split before coding; no separate design-only approval loop for routine choices.
 
