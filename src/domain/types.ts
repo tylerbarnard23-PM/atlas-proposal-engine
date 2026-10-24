@@ -483,8 +483,25 @@ export interface Recommendation {
   /** Why the advisor rejected it (status "excluded"). */
   rejectionReason?: string;
   rejectedAt?: string;
+  /** D2: a purchase of an investment not currently held (no relatedHoldingId). */
+  destination?: ProposedDestination;
+  /** D2: one leg of a linked replacement, applied all together or not at all. */
+  linked?: { groupId: string; legs: number };
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * A proposed-only investment (D2): stable identity, distinct from current
+ * holdings, bought in a supported account with that account's eligible cash.
+ * Dollar-based; no security search or quote is involved.
+ */
+export interface ProposedDestination {
+  id: string;
+  name: string;
+  assetClass: AssetClass;
+  accountId: string;
+  currency: CurrencyCode;
 }
 
 // Saved workspaces before v5 calculated recommendation amounts in whatever
@@ -735,6 +752,8 @@ export interface Holding {
   dataQuality: DataQualityIssue[];
   sourceTrace?: SourceTrace;
   advisorVerification: AdvisorVerificationStatus;
+  /** Only on a computed proposed portfolio: a proposed investment not currently held (never stored). */
+  proposedOnly?: boolean;
   /** Advisor decisions that settle a "Data to complete" item. */
   dataAcks?: {
     /** Keep a balance-only account as one balance (no positions to add). */
@@ -761,6 +780,12 @@ export interface Account {
   asOf?: string;
   notes?: string;
   isLiabilityAccount?: boolean;
+  /**
+   * D2: the account's explicitly eligible cash and the minimum it must keep.
+   * Only this cash line funds proposed investments and replacements here;
+   * the reserve is in that line's own currency.
+   */
+  funding?: { cashHoldingId: string; reserve: number };
   createdAt: string;
   updatedAt: string;
 }

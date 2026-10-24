@@ -125,6 +125,20 @@ export interface ProposedPortfolio {
   holdings: Holding[];
   /** Approved recommendations that couldn't be applied for lack of an FX rate. */
   unresolved: UnresolvedConversion[];
+  /**
+   * D2 units (a linked replacement, or a purchase of a proposed investment)
+   * left out whole because they can't be applied as a unit: incomplete,
+   * across accounts, no eligible cash, an unsupported currency change, a
+   * missing rate, or a reserve breach. Never half-applied.
+   */
+  blocked: BlockedUnit[];
+}
+
+export interface BlockedUnit {
+  unitId: string;
+  recommendationIds: string[];
+  accountId?: string;
+  reason: string;
 }
 
 // Rate to convert 1 unit of `ccy` into the reporting currency, or null.
@@ -175,12 +189,66 @@ export function applyRecommendationsToProposed(
   accounts: Account[],
   fx: FxContext
 ): ProposedPortfolio {
+  return applyAtomically(current, approvedRecommendations, accounts, fx);
+}
+
+// The core: legacy per-holding application, plus D2 proposed investments
+// (each a zero-valued line that exists only in the proposal) and an account's
+// designated eligible cash line receiving its offsets.
+function applyCore(
+  current0: Holding[],
+  approvedRecommendations: Recommendation[],
+  accounts: Account[],
+  fx: FxContext
+): { holdings: Holding[]; unresolved: UnresolvedConversion[]; blocked: BlockedUnit[] } {
   const accountById = new Map(accounts.map((a) => [a.id, a] as const));
   const unresolved: UnresolvedConversion[] = [];
+  const blockedCore: BlockedUnit[] = [];
+  // Proposed investments: validated, then added as zero-valued lines the
+  // purchase grows. They exist only in this result.
+  const destinations = new Map<string, MaybeNormalized>();
+  const recs: Recommendation[] = [];
+  for (const rec of approvedRecommendations) {
+    if (!rec.destination || rec.relatedHoldingId) {
+      recs.push(rec);
+      continue;
+    }
+    const d = rec.destination;
+    const problem = destinationProblem(rec, current0, accountById, fx);
+    if (problem) {
+      blockedCore.push({ unitId: unitIdOf(rec), recommendationIds: [rec.id], accountId: d.accountId, reason: problem });
+      continue;
+    }
+    if (!destinations.has(d.id)) {
+      const rate = rateToReporting(fx, d.currency)!;
+      const account = accountById.get(d.accountId)!;
+      destinations.set(d.id, {
+        id: d.id,
+        accountId: d.accountId,
+        assetName: d.name,
+        assetClass: d.assetClass,
+        currency: d.currency,
+        country: account.country,
+        nativeMarketValue: 0,
+        reportingMarketValue: 0,
+        valuation: { status: "valued", currency: d.currency, amount: 0, rate, rateAsOf: "", rateSource: "", rateLegs: [] },
+        valuationSource: { kind: "advisor_entered", note: "Proposed investment (not currently held)" },
+        quoteType: "advisor_entered",
+        priceFreshness: "manual",
+        advisorVerification: "advisor_reviewed",
+        dataQuality: [],
+        proposedOnly: true,
+        createdAt: "",
+        updatedAt: "",
+      } as MaybeNormalized);
+    }
+    recs.push({ ...rec, relatedHoldingId: d.id });
+  }
+  const current: Holding[] = [...current0, ...destinations.values()];
   // Each recommendation's amounts, converted into the reporting currency once.
   const amountsById = new Map<string, ReportingAmounts>();
   const byHolding = new Map<string, Recommendation[]>();
-  for (const rec of approvedRecommendations) {
+  for (const rec of recs) {
     if (!rec.relatedHoldingId) continue;
     const h = current.find((x) => x.id === rec.relatedHoldingId);
     const converted = amountsInReporting(rec, fx);
@@ -198,8 +266,12 @@ export function applyRecommendationsToProposed(
 
   // Where an account's cash offsets land: its first cash line, else a new
   // line in the account's base currency.
-  const cashLine = (accountId: string): MaybeNormalized | undefined =>
-    current.find((h) => h.accountId === accountId && h.assetClass === "cash" && !h.isLiability);
+  // An account's designated eligible cash line (D2), when it has one.
+  const cashLine = (accountId: string): MaybeNormalized | undefined => {
+    const designated = accountById.get(accountId)?.funding?.cashHoldingId;
+    const chosen = designated ? current.find((h) => h.id === designated && h.accountId === accountId) : undefined;
+    return chosen ?? current.find((h) => h.accountId === accountId && h.assetClass === "cash" && !h.isLiability);
+  };
   const cashCurrency = (accountId: string): CurrencyCode =>
     cashLine(accountId)?.currency ?? accountById.get(accountId)?.baseCurrency ?? fx.reportingCurrency;
   // Why an account can't take a cash credit or debit, as the currency that
@@ -369,9 +441,8 @@ export function applyRecommendationsToProposed(
     // 50-cent sale), moves cash like any other.
     if (Math.abs(delta) < 0.005) continue;
     const account = accountById.get(accountId);
-    const cashIdx = result.findIndex(
-      (h) => h.accountId === accountId && h.assetClass === "cash" && !h.isLiability
-    );
+    const line = cashLine(accountId);
+    const cashIdx = line ? result.findIndex((h) => h.id === line.id) : -1;
     if (cashIdx >= 0) {
       const existing: MaybeNormalized = result[cashIdx];
       // Every account with a delta passed offsetBlocker: its cash line is
@@ -439,8 +510,132 @@ export function applyRecommendationsToProposed(
     }
   }
 
-  return { holdings: result, unresolved };
+  // A proposed investment nothing was bought into isn't part of the proposal.
+  const kept = result.filter((h) => !(h.proposedOnly && !newValueById.has(h.id)));
+  return { holdings: kept, unresolved, blocked: blockedCore };
 }
+
+const unitIdOf = (r: Recommendation) => r.linked?.groupId ?? `unit:${r.id}`;
+const isUnit = (r: Recommendation) => !!r.linked || (!!r.destination && !r.relatedHoldingId);
+const PURCHASE = new Set<Recommendation["type"]>(["buy", "increase"]);
+
+/** Why a proposed-investment purchase can't be applied, or null (D2 rules). */
+function destinationProblem(rec: Recommendation, current: Holding[], accounts: Map<string, Account>, fx: FxContext): string | null {
+  const d = rec.destination!;
+  const account = accounts.get(d.accountId);
+  if (!account || account.isLiabilityAccount) return `The account for ${d.name} isn't a supported investment account.`;
+  if (!PURCHASE.has(rec.type)) return `${d.name} isn't held yet, so it can only be bought.`;
+  if (d.assetClass === "cash" || d.assetClass === "liability") return `${d.name} must be an investment, not cash or a liability.`;
+  const source = account.funding ? current.find((h) => h.id === account.funding!.cashHoldingId && h.accountId === account.id) : undefined;
+  if (!source) return `${account.name} has no eligible cash source chosen, so ${d.name} can't be funded. Choose its eligible cash first.`;
+  const sourceCurrency = (source as MaybeNormalized).valuation?.currency ?? source.proposalApprovedValue?.currency ?? source.currency;
+  if (sourceCurrency !== d.currency) return `${d.name} is in ${d.currency} but the eligible cash in ${account.name} is in ${sourceCurrency}; currency conversion inside the account isn't supported.`;
+  if (rateToReporting(fx, d.currency) == null) return `No ${d.currency}/${fx.reportingCurrency} exchange rate, so ${d.name} can't be valued.`;
+  return null;
+}
+
+/** An account's reserve against its designated eligible cash in a (proposed) portfolio. */
+export interface ReserveStatus {
+  accountId: string;
+  accountName: string;
+  cashHoldingId: string;
+  cashName: string | null;
+  currency: CurrencyCode | null;
+  reserve: number;
+  /** The eligible cash in its own currency, or null when unknown (missing or unvalued): unknown is never spendable. */
+  available: number | null;
+  headroom: number | null;
+  breached: boolean;
+}
+
+export function reserveStatus(holdings: Holding[], accounts: Account[]): ReserveStatus[] {
+  return accounts
+    .filter((a) => a.funding)
+    .map((a) => {
+      const h = holdings.find((x) => x.id === a.funding!.cashHoldingId && x.accountId === a.id) as MaybeNormalized | undefined;
+      const available = !h ? null : h.valuation ? (h.valuation.status === "valued" ? h.valuation.amount : null) : h.nativeMarketValue;
+      const reserve = a.funding!.reserve;
+      const headroom = available == null ? null : available - reserve;
+      return {
+        accountId: a.id,
+        accountName: a.name,
+        cashHoldingId: a.funding!.cashHoldingId,
+        cashName: h?.assetName ?? null,
+        currency: h ? h.valuation?.currency ?? h.currency : null,
+        reserve,
+        available,
+        headroom,
+        breached: headroom == null || headroom < -0.005,
+      };
+    });
+}
+
+const amountText = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+
+// D2 atomicity. A unit (a linked replacement, or a purchase of a proposed
+// investment) applies whole or not at all: it is left out, with its reason,
+// when it is incomplete, spans accounts, has a leg the core can't apply, or
+// leaves its account's eligible cash below the reserve. Units are dropped
+// one at a time (the latest in saved order first) and the rest re-evaluated.
+// Ordinary legacy actions are never dropped; a breach they cause is reported
+// by reserveStatus.
+function applyAtomically(current: Holding[], recs: Recommendation[], accounts: Account[], fx: FxContext): ProposedPortfolio {
+  const blocked: BlockedUnit[] = [];
+  const extraUnresolved: UnresolvedConversion[] = [];
+  const holdingAccount = new Map(current.map((h) => [h.id, h.accountId] as const));
+  const accountOf = (r: Recommendation) =>
+    r.destination && !r.relatedHoldingId ? r.destination.accountId : r.relatedHoldingId ? holdingAccount.get(r.relatedHoldingId) : r.relatedAccountId;
+  const units = new Map<string, Recommendation[]>();
+  for (const r of recs) if (isUnit(r)) units.set(unitIdOf(r), [...(units.get(unitIdOf(r)) ?? []), r]);
+  const drop = new Set<string>();
+  const block = (id: string, reason: string, accountId?: string) => {
+    drop.add(id);
+    blocked.push({ unitId: id, recommendationIds: units.get(id)!.map((r) => r.id), accountId, reason });
+  };
+  for (const [id, legs] of units) {
+    const expected = legs[0].linked?.legs ?? legs.length;
+    const accts = new Set(legs.map(accountOf));
+    if (legs.length !== expected) {
+      block(id, `Linked replacement incomplete: ${legs.length} of its ${expected} actions are included. All of its actions must be included (and approved) together.`, accountOf(legs[0]));
+    } else if (accts.size > 1 || accts.has(undefined)) {
+      block(id, "A linked replacement across accounts isn't supported: both sides must be in the same account.");
+    }
+  }
+  const order = [...units.keys()];
+  for (let pass = 0; pass <= units.size; pass++) {
+    const active = recs.filter((r) => !isUnit(r) || !drop.has(unitIdOf(r)));
+    const core = applyCore(current, active, accounts, fx);
+    const failed = new Map<string, string>();
+    for (const b of core.blocked) failed.set(b.unitId, b.reason);
+    for (const u of core.unresolved) {
+      const r = recs.find((x) => x.id === u.recommendationId);
+      if (r && isUnit(r) && !failed.has(unitIdOf(r))) failed.set(unitIdOf(r), u.reason);
+    }
+    if (failed.size > 0) {
+      for (const [id, reason] of failed) {
+        const legs = units.get(id)!;
+        block(id, legs.length > 1 ? `Linked replacement not applied: ${reason}` : reason, accountOf(legs[0]));
+        // Keep missing-rate legs visible to the FX checks.
+        for (const u of core.unresolved) if (legs.some((r) => r.id === u.recommendationId)) extraUnresolved.push(u);
+      }
+      continue;
+    }
+    const breaches = reserveStatus(core.holdings, accounts).filter((x) => x.breached);
+    const draws = (id: string) => units.get(id)!.some((r) => PURCHASE.has(r.type) && breaches.some((b) => b.accountId === accountOf(r)));
+    const offender = [...order].reverse().find((id) => !drop.has(id) && draws(id));
+    if (offender) {
+      const legs = units.get(offender)!;
+      const b = breaches.find((x) => legs.some((r) => accountOf(r) === x.accountId))!;
+      const left = b.available == null ? "an unknown amount" : `${b.currency} ${amountText(b.available)}`;
+      block(offender, `${legs.length > 1 ? "Linked replacement" : "Purchase"} not applied: it would leave the eligible cash in ${b.accountName} at ${left}, below its ${b.currency ?? ""} ${amountText(b.reserve)} reserve.`, b.accountId);
+      continue;
+    }
+    return { holdings: core.holdings, unresolved: [...core.unresolved, ...extraUnresolved], blocked };
+  }
+  const core = applyCore(current, recs.filter((r) => !isUnit(r)), accounts, fx);
+  return { holdings: core.holdings, unresolved: [...core.unresolved, ...extraUnresolved], blocked };
+}
+
 
 export interface CashShortfall {
   accountId: string;

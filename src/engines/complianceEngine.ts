@@ -9,9 +9,10 @@ import type {
   FxConfirmation,
   FxRate,
   SourceDocument,
+  WorkingDraft,
 } from "@/domain/types";
 import { describeLink, linksNeedingReview } from "./recommendationLinks";
-import { applyRecommendationsToProposed, cashShortfallsOf, type CashShortfall, type UnresolvedConversion } from "./proposalEngine";
+import { applyRecommendationsToProposed, cashShortfallsOf, reserveStatus, type BlockedUnit, type CashShortfall, type ReserveStatus, type UnresolvedConversion } from "./proposalEngine";
 import { normalizeHoldings } from "./normalizationEngine";
 import { missingPairs, valuationSummary, type ValuationSummary } from "./valuationTotals";
 import { describeImportIssue, importIssues, type ImportIssue } from "./importCompleteness";
@@ -40,6 +41,11 @@ export interface ReadinessInputs {
   importIssues?: ImportIssue[];
   // Age and confirmation of the exchange rates the calculations use (#26).
   fxFreshness?: FxFreshness;
+  /** D2: approved units left out whole, and reserve breaches, in the approved proposal. */
+  blockedUnits?: BlockedUnit[];
+  reserveBreaches?: ReserveStatus[];
+  /** D2: names of the alternatives that hold approved actions, when more than one. */
+  approvedAlternatives?: string[];
 }
 
 export function evaluateReadiness(inp: ReadinessInputs): ComplianceCheck[] {
@@ -142,6 +148,34 @@ export function evaluateReadiness(inp: ReadinessInputs): ComplianceCheck[] {
         ? shortfalls.map((s) => `${s.accountName} short ${Math.round(s.shortfall).toLocaleString()}`).join("; ")
         : undefined,
   });
+  // D2: a linked replacement or proposed-investment purchase is applied whole
+  // or not at all, and an account's eligible cash keeps its reserve.
+  const blockedUnits = inp.blockedUnits ?? [];
+  const breaches = inp.reserveBreaches ?? [];
+  const money = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  checks.push({
+    code: "funding_reserves",
+    label: "Linked replacements applied whole and cash reserves kept",
+    passed: blockedUnits.length === 0 && breaches.length === 0,
+    detail:
+      blockedUnits.length + breaches.length > 0
+        ? [
+            ...blockedUnits.map((b) => b.reason),
+            ...breaches.map((b) =>
+              b.available == null
+                ? `${b.accountName}: eligible cash unknown, so its ${money(b.reserve)} reserve can't be confirmed`
+                : `${b.accountName}: eligible cash ${b.currency} ${money(b.available)} is below its ${money(b.reserve)} reserve`
+            ),
+          ].join("; ")
+        : undefined,
+  });
+  const mixed = inp.approvedAlternatives ?? [];
+  checks.push({
+    code: "approved_alternative",
+    label: "Approved actions come from one alternative",
+    passed: mixed.length <= 1,
+    detail: mixed.length > 1 ? `Approved actions are in ${mixed.join(", ")}. Approve one alternative's actions for the PDF.` : undefined,
+  });
   const unresolved = inp.unresolvedConversions ?? [];
   if (inp.fxFreshness) {
     checks.push({
@@ -218,6 +252,8 @@ export interface WorkspaceReadinessInputs {
   fxConfirmation?: FxConfirmation | null;
   /** The clock for rate age and confirmation expiry; the server's own when omitted. */
   now?: Date;
+  /** D2: the working draft and the other alternatives, to tell whether approvals mix them. */
+  drafts?: WorkingDraft[];
 }
 
 export function evaluateWorkspaceReadiness(ws: WorkspaceReadinessInputs): ComplianceCheck[] {
@@ -229,7 +265,12 @@ export function evaluateWorkspaceReadiness(ws: WorkspaceReadinessInputs): Compli
   const pending = holdingsNeedingReview(holdings);
   const approved = ws.recommendations.filter((r) => r.approvedByAdvisor);
   const proposed = applyRecommendationsToProposed(holdings, approved, ws.accounts, fx);
+  const approvedIds = new Set(approved.map((r) => r.id));
+  const approvedAlternatives = (ws.drafts ?? []).filter((d) => d.memberIds.some((id) => approvedIds.has(id))).map((d) => d.name);
   return evaluateReadiness({
+    blockedUnits: proposed.blocked,
+    reserveBreaches: reserveStatus(proposed.holdings, ws.accounts).filter((r) => r.breached),
+    approvedAlternatives,
     cashShortfalls: cashShortfallsOf(proposed.holdings, ws.accounts, fx),
     unresolvedConversions: proposed.unresolved,
     valuation: valuationSummary(holdings),

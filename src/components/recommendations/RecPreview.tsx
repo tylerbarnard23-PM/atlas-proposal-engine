@@ -15,6 +15,7 @@ const STATE_LABEL: Record<RecommendationPreview["state"], { text: string; tone: 
   simulated: { text: "Simulated, not saved", tone: "bg-navy-50 text-navy-700 ring-navy-200" },
   no_change: { text: "No change", tone: "bg-slatey-100 text-ink-700 ring-ink-200" },
   advisory: { text: "Advisory only", tone: "bg-slatey-100 text-ink-700 ring-ink-200" },
+  linked: { text: "Linked, see Allocation desk", tone: "bg-navy-50 text-navy-700 ring-navy-200" },
   missing_holding: { text: "Can't be applied", tone: "bg-warning-50 text-warning-600 ring-warning-500/40" },
   cannot_apply: { text: "Can't be applied", tone: "bg-warning-50 text-warning-600 ring-warning-500/40" },
 };

@@ -291,14 +291,17 @@ function Inner() {
                             variant={r.approvedByAdvisor ? "secondary" : "primary"}
                             disabled={!r.approvedByAdvisor && !!restatementMessage(r)}
                             title={!r.approvedByAdvisor && restatementMessage(r) ? "Enter an explicit amount first" : undefined}
-                            onClick={() =>
-                              upsert({
-                                ...r,
-                                approvedByAdvisor: !r.approvedByAdvisor,
-                                status: !r.approvedByAdvisor ? "approved" : r.status,
-                                includeInPdf: !r.approvedByAdvisor ? true : r.includeInPdf,
-                              })
-                            }
+                            onClick={() => {
+                              // A linked replacement is approved (or unapproved) as a whole (D2).
+                              const legs = r.linked ? recs.filter((x) => x.linked?.groupId === r.linked!.groupId) : [r];
+                              for (const leg of legs)
+                                upsert({
+                                  ...leg,
+                                  approvedByAdvisor: !r.approvedByAdvisor,
+                                  status: !r.approvedByAdvisor ? "approved" : leg.status,
+                                  includeInPdf: !r.approvedByAdvisor ? true : leg.includeInPdf,
+                                });
+                            }}
                           >
                             {r.approvedByAdvisor ? "Unapprove" : "Approve"}
                           </Button>

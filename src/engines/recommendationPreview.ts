@@ -51,7 +51,7 @@ export interface PreviewWarning {
 }
 
 export interface RecommendationPreview {
-  state: "advisory" | "missing_holding" | "cannot_apply" | "no_change" | "simulated";
+  state: "advisory" | "linked" | "missing_holding" | "cannot_apply" | "no_change" | "simulated";
   reportingCurrency: CurrencyCode;
   holding?: { id: string; name: string; accountName: string; valueDate?: string; currency: CurrencyCode; assetClass: Holding["assetClass"]; isLiability: boolean };
   /** The entered amount and its reporting-currency equivalent, when they differ. */
@@ -167,6 +167,10 @@ export function previewRecommendation(input: {
     });
   }
 
+  // D2: a linked replacement leg or a proposed-investment purchase only means
+  // something with its other legs and the account's funding rule; the
+  // Allocation desk evaluates it as a unit.
+  if (rec.linked || (rec.destination && !rec.relatedHoldingId)) return { ...base, state: "linked", standalone: null, combined: null, warnings };
   if (!rec.relatedHoldingId) return { ...base, state: "advisory", standalone: null, combined: null, warnings };
   const linked = holdings.find((h) => h.id === rec.relatedHoldingId) as MaybeValued | undefined;
   if (!linked) return { ...base, state: "missing_holding", standalone: null, combined: null, warnings };

@@ -77,7 +77,7 @@ describe("readiness is reworded, not changed", () => {
     expect(gates(readiness())).toEqual([
       ["client_profile", true], ["advisor_profile", true], ["accounts_present", true], ["holdings_present", true], ["output_currency", true],
       ["holdings_valued", true], ["imports_complete", true], ["unverified_holdings", false], ["stale_valuations", false], ["market_data", true],
-      ["approved_recs", true], ["recommendation_currency", true], ["recommendation_links", true], ["trades_funded", true], ["fx_current", false],
+      ["approved_recs", true], ["recommendation_currency", true], ["recommendation_links", true], ["trades_funded", true], ["funding_reserves", true], ["approved_alternative", true], ["fx_current", false], // D2 adds funding_reserves and approved_alternative
       ["fx_available", true], ["disclosures_included", true],
     ]);
     const reviewed = SEED_HOLDINGS.map((h) => ({ ...h, advisorVerification: "advisor_reviewed" as const }));

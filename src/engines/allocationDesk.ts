@@ -1,7 +1,7 @@
 import type { Account, AssetClass, CurrencyCode, DraftInputBasis, DraftInputRate, FxRate, Holding, Recommendation, WorkingDraft } from "@/domain/types";
 import { ASSET_CLASS_LABELS } from "@/domain/assetTaxonomy";
 import { normalizeHoldings, type NormalizedHolding } from "./normalizationEngine";
-import { applyRecommendationsToProposed, cashShortfallsOf, type CashShortfall, type FxContext, type UnresolvedConversion } from "./proposalEngine";
+import { applyRecommendationsToProposed, cashShortfallsOf, reserveStatus, type BlockedUnit, type CashShortfall, type FxContext, type ReserveStatus, type UnresolvedConversion } from "./proposalEngine";
 import { valueProvenance } from "./valuationProvenance";
 import { fxRatesInUse } from "./fxPolicy";
 
@@ -119,6 +119,8 @@ export interface DeskPosition {
   current: number | null;
   proposed: number | null;
   synthetic: boolean;
+  /** A proposed investment not currently held (D2). */
+  proposedOnly: boolean;
 }
 
 export interface DeskResult {
@@ -137,6 +139,10 @@ export interface DeskResult {
   cash: { accountId: string; accountName: string; current: number; proposed: number }[];
   shortfalls: CashShortfall[];
   unresolved: UnresolvedConversion[];
+  /** D2 units left out whole (incomplete, across accounts, no eligible cash, currency, reserve). */
+  blocked: BlockedUnit[];
+  /** D2: each account's reserve against its eligible cash, after the view's actions. */
+  reserves: ReserveStatus[];
   /** In-scope holdings with no usable value in the reporting currency: left out of the weights, still blocking as before. */
   unvalued: { id: string; name: string }[];
   /** Context assets and liabilities with no usable value: left out of the context, household and liability totals. */
@@ -201,7 +207,7 @@ export function evaluateDesk(input: {
       continue;
     }
     const after = proposedById.has(h.id) ? valueOf(proposedById.get(h.id)!) : now;
-    positions.push({ id: h.id, name: h.assetName, accountId: h.accountId, accountName: accountName(h.accountId), assetClass: h.assetClass, current: now, proposed: after, synthetic: false });
+    positions.push({ id: h.id, name: h.assetName, accountId: h.accountId, accountName: accountName(h.accountId), assetClass: h.assetClass, current: now, proposed: after, synthetic: false, proposedOnly: false });
     if (now == null || after == null) {
       unvalued.push({ id: h.id, name: h.assetName });
       continue;
@@ -221,7 +227,7 @@ export function evaluateDesk(input: {
     if (currentIds.has(h.id) || !inScope.has(h.accountId) || isLiabilityLine(h)) continue;
     const after = valueOf(h);
     if (after == null) continue;
-    positions.push({ id: h.id, name: h.assetName, accountId: h.accountId, accountName: accountName(h.accountId), assetClass: h.assetClass, current: 0, proposed: after, synthetic: true });
+    positions.push({ id: h.id, name: h.assetName, accountId: h.accountId, accountName: accountName(h.accountId), assetClass: h.assetClass, current: 0, proposed: after, synthetic: !h.proposedOnly, proposedOnly: !!h.proposedOnly });
     row(h.assetClass).proposed += after;
     acct(h.accountId).proposed += after;
     if (h.assetClass === "cash") cash(h.accountId).proposed += after;
@@ -278,6 +284,8 @@ export function evaluateDesk(input: {
     cash: [...inScope].map((id) => ({ accountId: id, accountName: accountName(id), ...(cashByAccount.get(id) ?? { current: 0, proposed: 0 }) })),
     shortfalls: cashShortfallsOf(proposed.holdings, accounts, fx),
     unresolved: proposed.unresolved,
+    blocked: proposed.blocked,
+    reserves: reserveStatus(proposed.holdings, accounts),
     unvalued,
     unvaluedOutside,
     positions,
@@ -300,7 +308,46 @@ export type PositionEditKind = "reduce" | "exit" | "increase";
  * a cash line, so editing one would create or remove money; cash moves only
  * through the actions on other positions.
  */
-export const editablePosition = (p: Pick<DeskPosition, "assetClass" | "current" | "synthetic">) => !p.synthetic && p.current != null && p.assetClass !== "cash";
+export const editablePosition = (p: Pick<DeskPosition, "assetClass" | "current" | "synthetic" | "proposedOnly">) =>
+  !p.synthetic && !p.proposedOnly && p.current != null && p.assetClass !== "cash";
+
+/**
+ * A linked replacement (D2): sell `sellAmount` of an owned position and buy
+ * `buyAmount` of a proposed investment in the same account, both in the
+ * account's eligible-cash currency. The legs share a group and apply whole or
+ * not at all; both are unapproved and outside the PDF prose.
+ */
+export function replacementRecommendations(input: {
+  holding: Pick<Holding, "id" | "accountId" | "assetName" | "assetClass">;
+  sellAmount: number;
+  buyAmount: number;
+  destination: { id: string; name: string; assetClass: AssetClass };
+  currency: CurrencyCode;
+  ids: { sell: string; buy: string; group: string };
+  now: string;
+}): Recommendation[] {
+  const { holding, sellAmount, buyAmount, destination, currency, ids, now } = input;
+  const ok = (n: number) => Number.isFinite(n) && n > 0;
+  if (!ok(sellAmount) || !ok(buyAmount)) throw new Error("A replacement needs positive amounts.");
+  if (holding.assetClass === "cash") throw new Error("Cash isn't replaced; it funds purchases.");
+  if (!destination.name.trim()) throw new Error("Name the new investment.");
+  const money = (n: number) => `${currency} ${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+  const linked = { groupId: ids.group, legs: 2 };
+  const base = { currency, rationale: "", priority: "medium" as const, status: "draft" as const, includeInPdf: false, approvedByAdvisor: false, createdAt: now, updatedAt: now, linked };
+  return [
+    { ...base, id: ids.sell, title: `Replace: sell ${money(sellAmount)} of ${holding.assetName}`, type: "reduce", relatedHoldingId: holding.id, relatedAccountId: holding.accountId, actionAmount: sellAmount, actionAmountUnit: "amount" },
+    {
+      ...base,
+      id: ids.buy,
+      title: `Replace: buy ${money(buyAmount)} of ${destination.name.trim()} (new)`,
+      type: "buy",
+      relatedAccountId: holding.accountId,
+      actionAmount: buyAmount,
+      actionAmountUnit: "amount",
+      destination: { id: destination.id, name: destination.name.trim(), assetClass: destination.assetClass, accountId: holding.accountId, currency },
+    },
+  ];
+}
 
 /**
  * A draft recommendation for an explicit edit to a position already owned:
@@ -341,6 +388,10 @@ export function positionEditRecommendation(input: {
 export interface DraftEditPreview {
   /** The edited position in the working draft, before and after adding the candidate. */
   position: { before: number | null; after: number | null };
+  /** A proposed investment the candidate buys: its value in the resulting draft (null when not applied). */
+  destination: { name: string; after: number | null } | null;
+  /** The candidate's unit if the resulting draft leaves it out whole, with the reason. */
+  blocked: BlockedUnit[];
   /** Cash lines whose draft value the candidate changes (including one it would create). */
   cash: { holdingId: string; name: string; accountName: string; before: number; after: number }[];
   /** Shortfalls in the resulting draft. */
@@ -362,14 +413,18 @@ export function previewDraftEdit(input: {
   accounts: Account[];
   recommendations: Recommendation[];
   draft: WorkingDraft;
-  candidate: Recommendation;
+  /** One edit, or a linked replacement's legs. */
+  candidate: Recommendation | Recommendation[];
   fx: FxContext;
 }): DraftEditPreview {
-  const { holdings, accounts, recommendations, draft, candidate, fx } = input;
+  const { holdings, accounts, recommendations, draft, fx } = input;
+  const candidates = Array.isArray(input.candidate) ? input.candidate : [input.candidate];
+  const ids = new Set(candidates.map((c) => c.id));
+  const candidate = candidates.find((c) => c.relatedHoldingId) ?? candidates[0];
   const names = new Map(accounts.map((a) => [a.id, a.name] as const));
-  const withCandidate = [...recommendations.filter((r) => r.id !== candidate.id), candidate];
-  const draftWith = { ...draft, memberIds: [...draft.memberIds.filter((x) => x !== candidate.id), candidate.id] };
-  const draftWithout = { ...draft, memberIds: draft.memberIds.filter((x) => x !== candidate.id) };
+  const withCandidate = [...recommendations.filter((r) => !ids.has(r.id)), ...candidates];
+  const draftWith = { ...draft, memberIds: [...draft.memberIds.filter((x) => !ids.has(x)), ...ids] };
+  const draftWithout = { ...draft, memberIds: draft.memberIds.filter((x) => !ids.has(x)) };
   const before = applyRecommendationsToProposed(holdings, deskActions(recommendations, draftWithout, "draft"), accounts, fx);
   const after = applyRecommendationsToProposed(holdings, deskActions(withCandidate, draftWith, "draft"), accounts, fx);
   const at = (list: Holding[], id: string) => {
@@ -386,13 +441,31 @@ export function previewDraftEdit(input: {
     cash.push({ holdingId: id, name: h.assetName, accountName: names.get(h.accountId) ?? h.accountId, before: b, after: a });
   }
   const hid = candidate.relatedHoldingId ?? "";
+  const dest = candidates.find((c) => c.destination && !c.relatedHoldingId)?.destination;
+  const blocked = after.blocked.filter((b) => b.recommendationIds.some((x) => ids.has(x)));
   return {
     position: { before: at(before.holdings, hid), after: at(after.holdings, hid) },
+    destination: dest ? { name: dest.name, after: at(after.holdings, dest.id) } : null,
+    blocked,
     cash,
     shortfalls: cashShortfallsOf(after.holdings, accounts, fx),
     unresolved: after.unresolved,
-    applied: !after.unresolved.some((u) => u.recommendationId === candidate.id),
+    applied: blocked.length === 0 && !after.unresolved.some((u) => ids.has(u.recommendationId)),
   };
+}
+
+/**
+ * Every alternative evaluated with the same evaluator (D2): the active draft
+ * first, then the others, each with its own actions only.
+ */
+export function compareAlternatives(input: {
+  holdings: NormalizedHolding[];
+  accounts: Account[];
+  recommendations: Recommendation[];
+  drafts: WorkingDraft[];
+  fx: FxContext;
+}): { draft: WorkingDraft; result: DeskResult }[] {
+  return input.drafts.map((draft) => ({ draft, result: evaluateDesk({ ...input, draft, view: "draft" }) }));
 }
 
 // ---------------------------------------------------------------------------
