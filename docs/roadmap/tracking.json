@@ -41,7 +41,16 @@
         "minimumScope": "One working route and contextual edit/review/presentation navigation.",
         "laterScope": "Broader navigation customization and every exceptional journey.",
         "fullFeatureComplete": false
-      }
+      },
+      "progress": [
+        {
+          "pr": 72,
+          "state": "open",
+          "date": "2026-10-24",
+          "milestone": "D1",
+          "scope": "D1 minimum slice only (allocation desk: scope, grid, working draft, explicit edits, input basis, store/backup v7); full feature not complete"
+        }
+      ]
     },
     {
       "id": "R02",
@@ -63,7 +72,16 @@
         "minimumScope": "Explicit selected-account investment scope, exclusions and denominator.",
         "laterScope": "Advanced custom/ownership scope variants beyond the supported demo.",
         "fullFeatureComplete": false
-      }
+      },
+      "progress": [
+        {
+          "pr": 72,
+          "state": "open",
+          "date": "2026-10-24",
+          "milestone": "D1",
+          "scope": "D1 minimum slice only (allocation desk: scope, grid, working draft, explicit edits, input basis, store/backup v7); full feature not complete"
+        }
+      ]
     },
     {
       "id": "R03",
@@ -91,7 +109,16 @@
         "minimumScope": "Current/proposed/target grid, drift and supported funded edits.",
         "laterScope": "Saved model library and broader automatic action generation; no optimizer claim.",
         "fullFeatureComplete": false
-      }
+      },
+      "progress": [
+        {
+          "pr": 72,
+          "state": "open",
+          "date": "2026-10-24",
+          "milestone": "D1",
+          "scope": "D1 minimum slice only (allocation desk: scope, grid, working draft, explicit edits, input basis, store/backup v7); full feature not complete"
+        }
+      ]
     },
     {
       "id": "R04",
@@ -143,7 +170,16 @@
         "minimumScope": "One active working draft first, then duplicate and compare two named alternatives.",
         "laterScope": "Rich scenario history/undo and advanced comparison management.",
         "fullFeatureComplete": false
-      }
+      },
+      "progress": [
+        {
+          "pr": 72,
+          "state": "open",
+          "date": "2026-10-24",
+          "milestone": "D1",
+          "scope": "D1 minimum slice only (allocation desk: scope, grid, working draft, explicit edits, input basis, store/backup v7); full feature not complete"
+        }
+      ]
     },
     {
       "id": "R06",
@@ -190,7 +226,16 @@
         "minimumScope": "Explicit monetary/percentage/full-exit intent for supported actions; advisory items have no financial effect.",
         "laterScope": "Full task-assignment/status workflow beyond the existing advisory UI.",
         "fullFeatureComplete": false
-      }
+      },
+      "progress": [
+        {
+          "pr": 72,
+          "state": "open",
+          "date": "2026-10-24",
+          "milestone": "D1",
+          "scope": "D1 minimum slice only (allocation desk: scope, grid, working draft, explicit edits, input basis, store/backup v7); full feature not complete"
+        }
+      ]
     },
     {
       "id": "R08",
@@ -218,7 +263,16 @@
         "minimumScope": "Open the existing shared-engine preview from a workspace position and preserve context.",
         "laterScope": "Additional entry points and expert bulk-edit workflows.",
         "fullFeatureComplete": false
-      }
+      },
+      "progress": [
+        {
+          "pr": 72,
+          "state": "open",
+          "date": "2026-10-24",
+          "milestone": "D1",
+          "scope": "D1 minimum slice only (allocation desk: scope, grid, working draft, explicit edits, input basis, store/backup v7); full feature not complete"
+        }
+      ]
     },
     {
       "id": "R09",
@@ -574,7 +628,16 @@
         "minimumScope": "Input/FX-basis record in D1; complete bounded approved economic snapshot and later-edit isolation in D3.",
         "laterScope": "Advanced version navigation/retention and institutional audit/records guarantees.",
         "fullFeatureComplete": false
-      }
+      },
+      "progress": [
+        {
+          "pr": 72,
+          "state": "open",
+          "date": "2026-10-24",
+          "milestone": "D1",
+          "scope": "D1 minimum slice only (allocation desk: scope, grid, working draft, explicit edits, input basis, store/backup v7); full feature not complete"
+        }
+      ]
     },
     {
       "id": "R20",
@@ -796,9 +859,9 @@
     "status": "planned",
     "trackingIssue": 36,
     "mode": "synthetic-employer-demo-first",
-    "nextMilestone": "D1",
+    "nextMilestone": "D1 review, then D2",
     "supersedes": "Serial P0–P5 implementation and standalone R11-first cleanup command; original feature contracts retained",
-    "observedMain": "8b06b6a842d8b11adc1b96967c78aee9c0e12a6c",
+    "observedMain": "bc248e1ea2eb72a405167a3424422624aaa7de3c",
     "developmentAssistant": {
       "application": "Claude Code Desktop",
       "model": "Opus 5.5",
@@ -818,7 +881,7 @@
       {
         "id": "D1",
         "title": "Working allocation desk",
-        "status": "planned",
+        "status": "in_review",
         "dependencies": [],
         "recommendations": [
           "R01",
@@ -836,7 +899,8 @@
           "R25"
         ],
         "effort": "high",
-        "defaultPrBoundary": "One coherent task; minimum contracts/backup and visible workspace may be two linked PRs"
+        "defaultPrBoundary": "One coherent task; minimum contracts/backup and visible workspace may be two linked PRs",
+        "pr": 72
       },
       {
         "id": "D2",

@@ -22,6 +22,8 @@ Inspect → make a short design/contract note in the issue/implementation PR →
 
 ## Next implementation: D1
 
+**Status:** implemented in PR #72, awaiting Codex review. After its owner-authorized release, the next command is D2 (below). Kept for reference.
+
 **Opus 5.5 · High effort.** Use after the approved planning change is available in the implementation base; do not implement from the old stand-alone R11-first prompt. If a planning PR is still unmerged, verify it and obtain/execute only an explicitly owner-authorized pinned merge first. Do not silently merge it merely because this template exists.
 
 ```text
@@ -35,7 +37,6 @@ Deliver one usable portfolio-design workspace: selected-account investment scope
 
 Capture the minimum accepted-value/source-date/FX input-basis record for the draft. Reuse stable IDs/order and preserve legacy effects/evidence. If persisted schema changes, implement a versioned/idempotent migration and supported old-backup upgrade together. Do not build a generic future platform.
 
-Bundle only the small R11 review-label/optional-identifier cleanup: same readiness codes/pass-fail rules, no score penalty for new or saved MISSING_IDENTIFIER issues, no claim that an identifier is needed for quote refresh. Preserve every other penalty. Do not build the exception queue or bond-basis schema now.
 
 Write a short concrete contract/UX note on the implementation issue/PR and proceed within approved scope. One coherent PR is the default; if needed, justify the D1 contracts/backup → workspace split from the plan. Do not stop for another routine design approval or delete existing work.
 
