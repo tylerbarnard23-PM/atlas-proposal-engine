@@ -18,6 +18,7 @@ import {
   Settings,
   Bot,
   Building2,
+  PieChart,
 } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { useAtlasStore } from "@/store/useStore";
@@ -41,6 +42,7 @@ const NAV: NavItem[] = [
   { label: "Accounts & Assets", href: "/accounts-assets", icon: <ListTree className="h-4 w-4" />, group: "Data" },
   { label: "Exchange rates", href: "/market-data", icon: <Activity className="h-4 w-4" />, group: "Data" },
   { label: "Insights", href: "/insights", icon: <Lightbulb className="h-4 w-4" />, group: "Advisory" },
+  { label: "Allocation desk", href: "/allocation-desk", icon: <PieChart className="h-4 w-4" />, group: "Advisory" },
   { label: "Recommendations", href: "/recommendations", icon: <Wand2 className="h-4 w-4" />, group: "Advisory" },
   { label: "Proposal Copilot", href: "/copilot", icon: <Bot className="h-4 w-4" />, group: "Advisory" },
   { label: "Proposal Builder", href: "/proposal-builder", icon: <FileText className="h-4 w-4" />, group: "Proposal" },

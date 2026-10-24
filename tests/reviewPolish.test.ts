@@ -52,8 +52,11 @@ describe("rejecting recommendations and dismissing insights", () => {
     let r = useAtlasStore.getState().recommendations.find((x) => x.id === first.id)!;
     expect(r).toMatchObject({ status: "excluded", approvedByAdvisor: false, includeInPdf: false, rejectionReason: "Client declined" });
 
+    const { needsIntentRestatement } = await import("@/engines/allocationDesk");
     const approved = s.approveAllRecommendations();
-    expect(approved).toBe(rest.filter((x) => !x.approvedByAdvisor).length);
+    // D1 (R07): one saved without an amount needs an explicit size before it can be approved.
+    expect(approved).toBe(rest.filter((x) => !x.approvedByAdvisor && !needsIntentRestatement(x)).length);
+    expect(rest.filter(needsIntentRestatement).map((x) => x.id)).toEqual(["rec_reduce_aapl", "rec_pay_mortgage"]);
     r = useAtlasStore.getState().recommendations.find((x) => x.id === first.id)!;
     expect(r.approvedByAdvisor).toBe(false);
 

@@ -1,11 +1,12 @@
 import { z } from "zod";
-import type { AdvisorProfile, Disclosure, Holding, SourceDocument } from "@/domain/types";
+import type { AdvisorProfile, Disclosure, Holding, Recommendation, SourceDocument, WorkingDraft } from "@/domain/types";
 import { checkLogoDataUrl, isValidAccentColor } from "@/domain/branding";
 import { normalizeHoldings } from "./normalizationEngine";
 import { valuationSummary } from "./valuationTotals";
 import { fxFreshness } from "./fxPolicy";
 import { completenessOf } from "./importCompleteness";
 import { linksNeedingReview, unresolvedRecommendationLinks } from "./recommendationLinks";
+import { legacyWorkingDraft } from "./allocationDesk";
 import { localCalendarDay } from "@/utils/formatting";
 
 // Workspace backup and restore (R23a, #55)
@@ -24,7 +25,9 @@ import { localCalendarDay } from "@/utils/formatting";
 export const BACKUP_FORMAT = "atlas-workspace-backup";
 export const BACKUP_SCHEMA_VERSION = 1;
 /** The saved-workspace schema (store version) the records follow. */
-export const BACKUP_WORKSPACE_VERSION = 6;
+export const BACKUP_WORKSPACE_VERSION = 7;
+/** Older workspace versions a backup may have, upgraded on restore. */
+export const SUPPORTED_OLDER_WORKSPACE_VERSIONS = [6] as const;
 /** The application's backup limit (UTF-8 bytes of the file); it also bounds a file read before validation. */
 export const BACKUP_MAX_BYTES = 20 * 1024 * 1024;
 
@@ -376,17 +379,32 @@ function schemas(strict: boolean) {
     // recommendationLinks), recorded so restore can tell them from corruption.
     unresolvedLinks: z.array(obj({ recommendationId: id, holdingId: id.optional(), accountId: id.optional() })),
   });
-  const envelope = obj({
-    format: z.literal(BACKUP_FORMAT),
-    schemaVersion: z.literal(BACKUP_SCHEMA_VERSION),
-    workspaceVersion: z.literal(BACKUP_WORKSPACE_VERSION),
-    exportedAt: date,
-    notice: text(),
-    omitted: z.array(text()),
-    engagement,
-    firm: obj({ advisor }),
+  // v7 (D1): the working draft. Targets are percentages of the scope.
+  const inputValue = obj({ holdingId: id, accountId: id, amount: finite, currency, sourceKind: text(), date: dateText.nullable() });
+  const inputRate = obj({ base: currency, quote: currency, rate: finite, asOf: text(), source: text() });
+  const workingDraft = obj({
+    id,
+    name: text(),
+    scopeAccountIds: z.array(id).nullable(),
+    memberIds: z.array(id),
+    targets: z.record(assetClass, finite.min(0).max(100)),
+    inputBasis: obj({ recordedAt: date, reportingCurrency: currency, fingerprint: text(), values: z.array(inputValue), rates: z.array(inputRate) }).nullable(),
+    createdAt: date,
+    updatedAt: date,
   });
-  return { envelope, engagement, advisor };
+  const engagementV7 = engagement.extend({ workingDraft });
+  const envelopeOf = <E extends z.ZodTypeAny, V extends number>(e: E, version: V) =>
+    obj({
+      format: z.literal(BACKUP_FORMAT),
+      schemaVersion: z.literal(BACKUP_SCHEMA_VERSION),
+      workspaceVersion: z.literal(version),
+      exportedAt: date,
+      notice: text(),
+      omitted: z.array(text()),
+      engagement: e,
+      firm: obj({ advisor }),
+    });
+  return { envelope: envelopeOf(engagementV7, BACKUP_WORKSPACE_VERSION), envelopeV6: envelopeOf(engagement, 6), engagement: engagementV7, advisor };
 }
 
 const STRICT = schemas(true);
@@ -432,6 +450,7 @@ export interface WorkspaceData {
   pdfHistory: BackupEngagement["pdfHistory"];
   fxRefresh: BackupEngagement["fxRefresh"];
   fxConfirmation: BackupEngagement["fxConfirmation"];
+  workingDraft: WorkingDraft;
 }
 
 /** The backup of a workspace at `now`. */
@@ -457,6 +476,13 @@ export function createBackup(state: WorkspaceData, now: Date): WorkspaceBackup {
     // A running or pending job was orphaned by a closed tab (as in the v2 migration).
     pdfHistory: state.pdfHistory.filter((j) => j.status === "succeeded" || j.status === "failed"),
     unresolvedLinks: unresolvedRecommendationLinks(state),
+    // Only references that still resolve: a deleted recommendation or account
+    // leaves the draft (in the app it is just ignored, so Undo can restore it).
+    workingDraft: {
+      ...state.workingDraft,
+      memberIds: state.workingDraft.memberIds.filter((id) => state.recommendations.some((r) => r.id === id)),
+      scopeAccountIds: state.workingDraft.scopeAccountIds?.filter((id) => state.accounts.some((a) => a.id === id)) ?? null,
+    },
   };
   return {
     format: BACKUP_FORMAT,
@@ -558,15 +584,27 @@ export function parseBackup(text: string, opts: { disclosureIds: string[] }): Pa
     (typeof head.schemaVersion === "number" && head.schemaVersion > BACKUP_SCHEMA_VERSION) ||
     (typeof head.workspaceVersion === "number" && head.workspaceVersion > BACKUP_WORKSPACE_VERSION);
   if (newer) return { ok: false, errors: ["This backup was made by a newer version of Atlas. Nothing was restored."] };
-  if (head.schemaVersion !== BACKUP_SCHEMA_VERSION || head.workspaceVersion !== BACKUP_WORKSPACE_VERSION) {
+  const older = (SUPPORTED_OLDER_WORKSPACE_VERSIONS as readonly unknown[]).includes(head.workspaceVersion);
+  if (head.schemaVersion !== BACKUP_SCHEMA_VERSION || (head.workspaceVersion !== BACKUP_WORKSPACE_VERSION && !older)) {
     return { ok: false, errors: [`This backup's version (${String(head.schemaVersion)}/${String(head.workspaceVersion)}) is not supported. Nothing was restored.`] };
   }
-  const parsed = STRICT.envelope.safeParse(raw);
-  if (!parsed.success) {
-    return { ok: false, errors: parsed.error.issues.slice(0, 20).map((i) => `${i.path.join(".") || "file"}: ${i.message}`) };
+  const issues = (e: z.ZodError) => ({ ok: false as const, errors: e.issues.slice(0, 20).map((i) => `${i.path.join(".") || "file"}: ${i.message}`) });
+  let backup: WorkspaceBackup;
+  if (older) {
+    // A v6 backup is validated as v6 (unknown fields still rejected), then
+    // upgraded like the store's v7 migration: its draft holds the approved
+    // recommendations in saved order. Deterministic: dated by the export.
+    const v6 = STRICT.envelopeV6.safeParse(raw);
+    if (!v6.success) return issues(v6.error);
+    const e = v6.data.engagement;
+    backup = { ...v6.data, workspaceVersion: BACKUP_WORKSPACE_VERSION, engagement: { ...e, workingDraft: legacyWorkingDraft(e.recommendations as Recommendation[], v6.data.exportedAt) } };
+  } else {
+    const parsed = STRICT.envelope.safeParse(raw);
+    if (!parsed.success) return issues(parsed.error);
+    backup = parsed.data;
   }
-  const errors = referenceErrors(parsed.data.engagement, new Set(opts.disclosureIds));
-  return errors.length > 0 ? { ok: false, errors: errors.slice(0, 20) } : { ok: true, backup: parsed.data };
+  const errors = referenceErrors(backup.engagement, new Set(opts.disclosureIds));
+  return errors.length > 0 ? { ok: false, errors: errors.slice(0, 20) } : { ok: true, backup };
 }
 
 function referenceErrors(e: BackupEngagement, disclosureIds: Set<string>): string[] {
@@ -610,6 +648,10 @@ function referenceErrors(e: BackupEngagement, disclosureIds: Set<string>): strin
   for (const r of p.recommendationIds) if (!recs.has(r)) errors.push(`The proposal lists recommendation ${r}, which isn't in the backup.`);
   for (const d of p.disclosureIds) if (!disclosureIds.has(d)) errors.push(`The proposal includes disclosure ${d}, which this version of Atlas doesn't have.`);
   for (const j of e.pdfHistory) if (j.proposalId !== p.id) errors.push(`PDF job ${j.id} belongs to proposal ${j.proposalId}, not this proposal.`);
+  const d = e.workingDraft;
+  unique("working-draft member", d.memberIds);
+  for (const m of d.memberIds) if (!recs.has(m)) errors.push(`The working draft includes recommendation ${m}, which isn't in the backup.`);
+  for (const a of d.scopeAccountIds ?? []) if (!accounts.has(a)) errors.push(`The working draft's scope includes account ${a}, which isn't in the backup.`);
   return errors;
 }
 
@@ -652,6 +694,7 @@ export function restoredState(
     pdfHistory: e.pdfHistory,
     fxRefresh: e.fxRefresh,
     fxConfirmation: e.fxConfirmation,
+    workingDraft: e.workingDraft as WorkingDraft,
     disclosures: current.disclosures,
     insights: [],
     marketDataByIdentifier: {},

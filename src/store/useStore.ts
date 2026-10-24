@@ -5,6 +5,7 @@ import { persist } from "zustand/middleware";
 import type {
   Account,
   AdvisorProfile,
+  AssetClass,
   ClientProfile,
   DismissedInsight,
   Disclosure,
@@ -19,6 +20,7 @@ import type {
   ProposalSection,
   Recommendation,
   SourceDocument,
+  WorkingDraft,
 } from "@/domain/types";
 import { SEED_ACCOUNTS } from "@/data/seedAccounts";
 import { SEED_ADVISOR, SEED_CLIENT } from "@/data/seedClient";
@@ -33,13 +35,15 @@ import { confirmStaleRates } from "@/engines/fxPolicy";
 import { fxClock } from "@/engines/fxClock";
 import { markRemovedLinks } from "@/engines/recommendationLinks";
 import { migrateRecommendationCurrency, withApprovalRule } from "@/engines/recommendationAmounts";
+import { legacyWorkingDraft, needsIntentRestatement, newWorkingDraft, recordInputBasis } from "@/engines/allocationDesk";
+import { normalizeHoldings } from "@/engines/normalizationEngine";
 import { LEGACY_SAMPLE_FIRM_NAME } from "@/domain/branding";
 import type { ImportedWorkspace } from "@/ingestion/documents/toWorkspace";
 import type { RestoredWorkspace } from "@/engines/workspaceBackup";
 
 /** The browser storage key every saved workspace lives under; never renamed. */
 export const STORAGE_KEY = "atlas-proposal-engine";
-export const STORE_VERSION = 6;
+export const STORE_VERSION = 7;
 
 export interface AtlasState {
   client: ClientProfile;
@@ -60,6 +64,8 @@ export interface AtlasState {
   fxRefresh: FxRefreshRecord | null;
   /** The advisor's confirmation of stale rates in use; checked against its fingerprint and expiry (#26). */
   fxConfirmation: FxConfirmation | null;
+  /** The one working allocation draft (D1): scope, members, targets and the inputs it was edited against. */
+  workingDraft: WorkingDraft;
   hasHydrated: boolean;
 }
 
@@ -119,6 +125,17 @@ export interface AtlasActions {
    * if it fails the current workspace stays exactly as it was (R23a).
    */
   restoreWorkspace: (next: RestoredWorkspace) => { ok: true } | { ok: false; error: string };
+  // Working draft (D1). None of these changes a holding, an approval or the
+  // final-PDF inputs; each records the inputs the draft is now edited against.
+  /** The accounts in the allocation scope; null goes back to "not chosen" (every non-liability account). */
+  setDraftScope: (accountIds: string[] | null) => void;
+  setDraftMember: (recommendationId: string, member: boolean) => void;
+  /** A target weight in percent of the scope, or null to clear it. Targets never create trades. */
+  setDraftTarget: (assetClass: AssetClass, pct: number | null) => void;
+  /** Saves an explicit position edit as an unapproved recommendation in the draft. */
+  addDraftEdit: (rec: Recommendation) => void;
+  /** Records the current accepted values and rates as the draft's inputs. */
+  recordDraftInputs: () => void;
 }
 
 function initialProposal(): Proposal {
@@ -155,6 +172,7 @@ const seedState = (): AtlasState => ({
   pdfHistory: [],
   fxRefresh: null,
   fxConfirmation: null,
+  workingDraft: newWorkingDraft(new Date().toISOString()),
   hasHydrated: false,
 });
 
@@ -206,6 +224,7 @@ const blankState = (): AtlasState => {
     pdfHistory: [],
     fxRefresh: null,
     fxConfirmation: null,
+    workingDraft: newWorkingDraft(now),
     hasHydrated: true,
   };
 };
@@ -272,7 +291,31 @@ export function migrateAtlasState(persisted: unknown, version: number): AtlasSta
       return rate;
     });
   }
+  // v7 (D1): one working draft. An existing workspace's draft holds its
+  // approved recommendations, in saved order, so its preview equals the
+  // proposal it already had; nothing about the recommendations changes.
+  // Idempotent: a draft that's already there is kept.
+  if (version < 7 && state && !state.workingDraft) {
+    state.workingDraft = legacyWorkingDraft(Array.isArray(state.recommendations) ? state.recommendations : [], new Date().toISOString());
+  }
   return state;
+}
+
+// The draft after a change, with the inputs it is now edited against.
+function draftChange(s: AtlasState, patch: Partial<WorkingDraft>): { workingDraft: WorkingDraft } {
+  const now = new Date().toISOString();
+  const ccy = s.client.proposalOutputCurrency;
+  return {
+    workingDraft: { ...s.workingDraft, ...patch, inputBasis: recordInputBasis(normalizeHoldings(s.holdings, s.fxRates, ccy), ccy, now), updatedAt: now },
+  };
+}
+
+// A recommendation saved without an amount keeps its legacy effect, but a new
+// approval needs an explicit size first (R07): the approval isn't recorded.
+function guardApproval(prev: Recommendation | undefined, next: Recommendation): Recommendation {
+  const approving = next.approvedByAdvisor && !prev?.approvedByAdvisor;
+  if (!approving || !needsIntentRestatement(next)) return next;
+  return { ...next, approvedByAdvisor: false, status: prev?.status ?? "draft", includeInPdf: prev?.includeInPdf ?? false };
 }
 
 export const useAtlasStore = create<AtlasState & AtlasActions>()(
@@ -316,8 +359,8 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
       upsertRecommendation: (rec) =>
         set((s) => ({
           recommendations: s.recommendations.some((r) => r.id === rec.id)
-            ? s.recommendations.map((r) => (r.id === rec.id ? withApprovalRule(r, { ...r, ...rec }) : r))
-            : [...s.recommendations, rec],
+            ? s.recommendations.map((r) => (r.id === rec.id ? withApprovalRule(r, guardApproval(r, { ...r, ...rec })) : r))
+            : [...s.recommendations, guardApproval(undefined, rec)],
         })),
       removeRecommendation: (id) =>
         set((s) => ({ recommendations: s.recommendations.filter((r) => r.id !== id) })),
@@ -344,8 +387,11 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
       dismissInsight: (d) =>
         set((s) => ({ dismissedInsights: [d, ...s.dismissedInsights.filter((x) => x.key !== d.key)] })),
       restoreInsight: (key) => set((s) => ({ dismissedInsights: s.dismissedInsights.filter((x) => x.key !== key) })),
+      // A rejected recommendation also leaves the working draft (reopening it
+      // doesn't put it back: joining the draft is an explicit choice).
       rejectRecommendation: (id, reason) =>
         set((s) => ({
+          ...(s.workingDraft.memberIds.includes(id) ? draftChange(s, { memberIds: s.workingDraft.memberIds.filter((x) => x !== id) }) : {}),
           recommendations: s.recommendations.map((r) =>
             r.id === id
               ? {
@@ -418,11 +464,13 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
         }),
       approveAllRecommendations: () => {
         // Rejected recommendations are a decision already made: not "pending".
-        const pending = get().recommendations.filter((r) => !r.approvedByAdvisor && r.status !== "excluded");
+        // One saved without an amount needs an explicit size first (R07).
+        const skip = (r: Recommendation) => r.approvedByAdvisor || r.status === "excluded" || needsIntentRestatement(r);
+        const pending = get().recommendations.filter((r) => !skip(r));
         const now = new Date().toISOString();
         set((s) => ({
           recommendations: s.recommendations.map((r) =>
-            r.approvedByAdvisor || r.status === "excluded"
+            skip(r)
               ? r
               : { ...r, approvedByAdvisor: true, status: "approved", includeInPdf: true, updatedAt: now }
           ),
@@ -465,6 +513,28 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
         })),
       clearAll: () => set(blankState()),
       setHasHydrated: (b) => set({ hasHydrated: b }),
+      setDraftScope: (accountIds) => set((s) => draftChange(s, { scopeAccountIds: accountIds == null ? null : [...new Set(accountIds)] })),
+      setDraftMember: (id, member) =>
+        set((s) => {
+          const rec = s.recommendations.find((r) => r.id === id);
+          if (member && (!rec || rec.status === "excluded")) return {};
+          const others = s.workingDraft.memberIds.filter((x) => x !== id);
+          return draftChange(s, { memberIds: member ? [...others, id] : others });
+        }),
+      setDraftTarget: (assetClass, pct) =>
+        set((s) => {
+          const targets = { ...s.workingDraft.targets };
+          if (pct == null) delete targets[assetClass];
+          else if (Number.isFinite(pct) && pct >= 0 && pct <= 100) targets[assetClass] = pct;
+          else return {};
+          return draftChange(s, { targets });
+        }),
+      addDraftEdit: (rec) =>
+        set((s) => {
+          const next = { ...s, recommendations: [...s.recommendations.filter((r) => r.id !== rec.id), guardApproval(undefined, rec)] };
+          return { recommendations: next.recommendations, ...draftChange(next, { memberIds: [...s.workingDraft.memberIds.filter((x) => x !== rec.id), rec.id] }) };
+        }),
+      recordDraftInputs: () => set((s) => draftChange(s, {})),
       restoreWorkspace: (next) => {
         const storage = typeof window !== "undefined" ? window.localStorage : undefined;
         const before = get();
