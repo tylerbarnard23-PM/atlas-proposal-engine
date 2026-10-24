@@ -5,6 +5,11 @@ Tracking issue: #37. Parent roadmap: #36. Original review recommendation: **1 of
 Phase: P2 shell; P4 complete journey. Relative scope: M; no calendar estimate is committed.
 Canonical plan: [R01-guided-proposal-journey.md](R01-guided-proposal-journey.md).
 
+## Delivery routing — 24 October 2026
+
+**D1/D3/D5 — minimum slices only.** Follow [DEMO_DELIVERY_PLAN.md](DEMO_DELIVERY_PLAN.md) and [CLAUDE_COMMANDS.md](CLAUDE_COMMANDS.md); their package order supersedes the original phase queue. Minimum scope: One working route and contextual edit/review/presentation navigation. Later scope: Broader navigation customization and every exceptional journey. This does not implement or complete the full R-plan. Dependencies below mean the minimum required contract, not every advanced feature of the referenced plan. Preserve all financial, backup and privacy safeguards.
+
+
 ## Advisor problem
 Fourteen navigation destinations require the advisor to assemble a single client task across modules.
 

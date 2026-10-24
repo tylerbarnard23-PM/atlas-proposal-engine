@@ -5,6 +5,11 @@ Tracking issue: #41. Parent roadmap: #36. Original review recommendation: **6 of
 Phase: P2. Relative scope: L; no calendar estimate is committed.
 Canonical plan: [R06-funding-and-cash-controls.md](R06-funding-and-cash-controls.md).
 
+## Delivery routing — 24 October 2026
+
+**D1/D2 — minimum slices only.** Follow [DEMO_DELIVERY_PLAN.md](DEMO_DELIVERY_PLAN.md) and [CLAUDE_COMMANDS.md](CLAUDE_COMMANDS.md); their package order supersedes the original phase queue. Minimum scope: Visible account cash first; explicit eligible cash source and enforced reserve for supported replacements. Later scope: New cross-account/owner/currency transfer workflows and arbitrary external flows. This does not implement or complete the full R-plan. Dependencies below mean the minimum required contract, not every advanced feature of the referenced plan. Preserve all financial, backup and privacy safeguards.
+
+
 ## Advisor problem
 The existing engine draws household cash largest-first and posts to the first cash line, without advisor-selected ownership or transfer constraints.
 

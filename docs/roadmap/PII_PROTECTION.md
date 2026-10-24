@@ -1,5 +1,8 @@
 # Client PII protection prerequisite
 
+> Delivery routing (24 October 2026): the [demo-first milestone](DEMO_DELIVERY_PLAN.md) stays synthetic/sample-only. Real-client infrastructure remains later but **this prerequisite is unchanged** before any real-client pilot. Apply relevant minimum-data, secret, payload, logging and authority checks to each touched path now; do not describe postponement as completed protection.
+
+
 Tracking issue: [#59](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/59). Parent roadmap: #36.
 
 _Status: Planned. Recorded 22 October 2026 after the owner asked how to secure client data. This is an addition to the accepted 25-item roadmap, not a renumbering or an implemented security control._

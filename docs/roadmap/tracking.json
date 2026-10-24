@@ -30,7 +30,18 @@
         "R20"
       ],
       "existingIssueReused": false,
-      "scopeDecision": "VALUATION_SCOPE.md"
+      "scopeDecision": "VALUATION_SCOPE.md",
+      "delivery": {
+        "plan": "DEMO_DELIVERY_PLAN.md",
+        "milestones": [
+          "D1",
+          "D3",
+          "D5"
+        ],
+        "minimumScope": "One working route and contextual edit/review/presentation navigation.",
+        "laterScope": "Broader navigation customization and every exceptional journey.",
+        "fullFeatureComplete": false
+      }
     },
     {
       "id": "R02",
@@ -43,7 +54,16 @@
       "status": "planned",
       "dependencies": [],
       "existingIssueReused": false,
-      "scopeDecision": "VALUATION_SCOPE.md"
+      "scopeDecision": "VALUATION_SCOPE.md",
+      "delivery": {
+        "plan": "DEMO_DELIVERY_PLAN.md",
+        "milestones": [
+          "D1"
+        ],
+        "minimumScope": "Explicit selected-account investment scope, exclusions and denominator.",
+        "laterScope": "Advanced custom/ownership scope variants beyond the supported demo.",
+        "fullFeatureComplete": false
+      }
     },
     {
       "id": "R03",
@@ -61,7 +81,17 @@
         "R06",
         "R07"
       ],
-      "existingIssueReused": true
+      "existingIssueReused": true,
+      "delivery": {
+        "plan": "DEMO_DELIVERY_PLAN.md",
+        "milestones": [
+          "D1",
+          "D2"
+        ],
+        "minimumScope": "Current/proposed/target grid, drift and supported funded edits.",
+        "laterScope": "Saved model library and broader automatic action generation; no optimizer claim.",
+        "fullFeatureComplete": false
+      }
     },
     {
       "id": "R04",
@@ -78,7 +108,16 @@
         "R07"
       ],
       "existingIssueReused": false,
-      "scopeDecision": "VALUATION_SCOPE.md"
+      "scopeDecision": "VALUATION_SCOPE.md",
+      "delivery": {
+        "plan": "DEMO_DELIVERY_PLAN.md",
+        "milestones": [
+          "D2"
+        ],
+        "minimumScope": "One supported custom/synthetic destination and an atomic linked sell/buy replacement.",
+        "laterScope": "Broad security search/catalog, complex instrument and replacement variants.",
+        "fullFeatureComplete": false
+      }
     },
     {
       "id": "R05",
@@ -94,7 +133,17 @@
         "R07",
         "R23a"
       ],
-      "existingIssueReused": false
+      "existingIssueReused": false,
+      "delivery": {
+        "plan": "DEMO_DELIVERY_PLAN.md",
+        "milestones": [
+          "D1",
+          "D2"
+        ],
+        "minimumScope": "One active working draft first, then duplicate and compare two named alternatives.",
+        "laterScope": "Rich scenario history/undo and advanced comparison management.",
+        "fullFeatureComplete": false
+      }
     },
     {
       "id": "R06",
@@ -110,7 +159,17 @@
         "R05",
         "R12"
       ],
-      "existingIssueReused": false
+      "existingIssueReused": false,
+      "delivery": {
+        "plan": "DEMO_DELIVERY_PLAN.md",
+        "milestones": [
+          "D1",
+          "D2"
+        ],
+        "minimumScope": "Visible account cash first; explicit eligible cash source and enforced reserve for supported replacements.",
+        "laterScope": "New cross-account/owner/currency transfer workflows and arbitrary external flows.",
+        "fullFeatureComplete": false
+      }
     },
     {
       "id": "R07",
@@ -122,7 +181,16 @@
       "size": "M",
       "status": "planned",
       "dependencies": [],
-      "existingIssueReused": false
+      "existingIssueReused": false,
+      "delivery": {
+        "plan": "DEMO_DELIVERY_PLAN.md",
+        "milestones": [
+          "D1"
+        ],
+        "minimumScope": "Explicit monetary/percentage/full-exit intent for supported actions; advisory items have no financial effect.",
+        "laterScope": "Full task-assignment/status workflow beyond the existing advisory UI.",
+        "fullFeatureComplete": false
+      }
     },
     {
       "id": "R08",
@@ -140,7 +208,17 @@
         "R05",
         "R06"
       ],
-      "existingIssueReused": false
+      "existingIssueReused": false,
+      "delivery": {
+        "plan": "DEMO_DELIVERY_PLAN.md",
+        "milestones": [
+          "D1",
+          "D2"
+        ],
+        "minimumScope": "Open the existing shared-engine preview from a workspace position and preserve context.",
+        "laterScope": "Additional entry points and expert bulk-edit workflows.",
+        "fullFeatureComplete": false
+      }
     },
     {
       "id": "R09",
@@ -154,7 +232,14 @@
       "dependencies": [
         "R23a"
       ],
-      "existingIssueReused": false
+      "existingIssueReused": false,
+      "delivery": {
+        "plan": "DEMO_DELIVERY_PLAN.md",
+        "milestones": [],
+        "minimumScope": "Use the existing initial import/reconciliation flow; do not claim matched-update support.",
+        "laterScope": "Matched/replacement import updates, duplicate detection and reconciliation across versions.",
+        "fullFeatureComplete": false
+      }
     },
     {
       "id": "R10",
@@ -169,7 +254,14 @@
         "R09",
         "R11"
       ],
-      "existingIssueReused": false
+      "existingIssueReused": false,
+      "delivery": {
+        "plan": "DEMO_DELIVERY_PLAN.md",
+        "milestones": [],
+        "minimumScope": "Keep existing extraction review and blockers; do not fabricate repairs.",
+        "laterScope": "Side-by-side source repair workbench and advanced exception resolution.",
+        "fullFeatureComplete": false
+      }
     },
     {
       "id": "R11",
@@ -182,7 +274,25 @@
       "status": "planned",
       "dependencies": [],
       "existingIssueReused": false,
-      "scopeDecision": "VALUATION_SCOPE.md"
+      "scopeDecision": "VALUATION_SCOPE.md",
+      "delivery": {
+        "plan": "DEMO_DELIVERY_PLAN.md",
+        "milestones": [
+          "D1"
+        ],
+        "minimumScope": "Fold review wording and non-penalizing optional identifiers into the workbench; retain all real gates.",
+        "laterScope": "Bond basis validation, exception queue, score redesign and safe bulk/date actions.",
+        "fullFeatureComplete": false
+      },
+      "progress": [
+        {
+          "pr": 70,
+          "state": "open",
+          "date": "2026-10-24",
+          "head": "6449889bfbf9a07ff3a45c8446301e87693a8c4b",
+          "scope": "In-flight shared R18 slice 2 / R11 review wording and optional-identifier score rule; preserve existing PR and count it toward D1 after review/release, no duplicate cleanup"
+        }
+      ]
     },
     {
       "id": "R12",
@@ -196,7 +306,18 @@
       "dependencies": [
         "R23a"
       ],
-      "existingIssueReused": false
+      "existingIssueReused": false,
+      "delivery": {
+        "plan": "DEMO_DELIVERY_PLAN.md",
+        "milestones": [
+          "D1",
+          "D2",
+          "D3"
+        ],
+        "minimumScope": "A concise objective, assessed/unknown constraints and an explicit reserve amount/currency where used.",
+        "laterScope": "Full structured discovery, IPS document and broad constraint library.",
+        "fullFeatureComplete": false
+      }
     },
     {
       "id": "R13",
@@ -213,7 +334,14 @@
         "R11",
         "R12"
       ],
-      "existingIssueReused": false
+      "existingIssueReused": false,
+      "delivery": {
+        "plan": "DEMO_DELIVERY_PLAN.md",
+        "milestones": [],
+        "minimumScope": "Reuse current insights as context without claiming personalized prioritization.",
+        "laterScope": "Personalized ranking, dismissal logic and advisory follow-up/task lifecycle.",
+        "fullFeatureComplete": false
+      }
     },
     {
       "id": "R14",
@@ -229,7 +357,17 @@
         "R09"
       ],
       "existingIssueReused": false,
-      "scopeDecision": "VALUATION_SCOPE.md"
+      "scopeDecision": "VALUATION_SCOPE.md",
+      "delivery": {
+        "plan": "DEMO_DELIVERY_PLAN.md",
+        "milestones": [
+          "D1",
+          "D2"
+        ],
+        "minimumScope": "Honest existing/manual classifications and explicit unknown coverage.",
+        "laterScope": "Estimated-mix editor, look-through and external exposure enrichment.",
+        "fullFeatureComplete": false
+      }
     },
     {
       "id": "R15",
@@ -246,7 +384,14 @@
         "R14"
       ],
       "existingIssueReused": true,
-      "scopeDecision": "VALUATION_SCOPE.md"
+      "scopeDecision": "VALUATION_SCOPE.md",
+      "delivery": {
+        "plan": "DEMO_DELIVERY_PLAN.md",
+        "milestones": [],
+        "minimumScope": "Explain supported concentration/mix and mark unsupported risk analytics unavailable.",
+        "laterScope": "Questionnaire overhaul, quantified risk, historical analytics and projections.",
+        "fullFeatureComplete": false
+      }
     },
     {
       "id": "R16",
@@ -263,7 +408,16 @@
         "R14"
       ],
       "existingIssueReused": true,
-      "scopeDecision": "VALUATION_SCOPE.md"
+      "scopeDecision": "VALUATION_SCOPE.md",
+      "delivery": {
+        "plan": "DEMO_DELIVERY_PLAN.md",
+        "milestones": [
+          "D3"
+        ],
+        "minimumScope": "Show reproducible known-input fees/income and coverage, or explicitly unavailable; no enrichment prerequisite.",
+        "laterScope": "Full fee schedule modeling, transition cost modeling and automatic data enrichment.",
+        "fullFeatureComplete": false
+      }
     },
     {
       "id": "R17",
@@ -279,7 +433,14 @@
         "R06",
         "R12"
       ],
-      "existingIssueReused": false
+      "existingIssueReused": false,
+      "delivery": {
+        "plan": "DEMO_DELIVERY_PLAN.md",
+        "milestones": [],
+        "minimumScope": "Retain cost-basis evidence and clearly say tax/transition optimization is not modeled.",
+        "laterScope": "Taxable transition, gain budgets and tax-aware optimization.",
+        "fullFeatureComplete": false
+      }
     },
     {
       "id": "R18",
@@ -326,12 +487,31 @@
         },
         {
           "pr": 69,
+          "state": "merged",
+          "date": "2026-10-24",
+          "scope": "R18 slice 1 released: quote presentation removed; accepted-source/date wording and approval timestamp corrected. Further R18 work remains planned.",
+          "head": "7619327ca7093a3351760f826560e3c577a30faf",
+          "mergeCommit": "7d5999fa01e15a1271bb81812cd8cabbbf58d095",
+          "ciRun": 40097812771
+        },
+        {
+          "pr": 70,
           "state": "open",
-          "date": "2026-10-23",
-          "scope": "Slice 1: Exchange rates page; no security-quote UI; Dashboard/PDF describe each value's real source and date. No calculation, gate or schema change"
+          "date": "2026-10-24",
+          "head": "6449889bfbf9a07ff3a45c8446301e87693a8c4b",
+          "scope": "In-flight shared R18 slice 2 / R11 review wording and optional-identifier score rule; preserve existing PR and count it toward D1 after review/release, no duplicate cleanup"
         }
       ],
-      "scopeDecision": "VALUATION_SCOPE.md"
+      "scopeDecision": "VALUATION_SCOPE.md",
+      "delivery": {
+        "plan": "DEMO_DELIVERY_PLAN.md",
+        "milestones": [
+          "D1"
+        ],
+        "minimumScope": "Keep released accepted-value/FX behavior; combine only remaining review-copy cleanup with D1.",
+        "laterScope": "Provider/route/cache retirement, candidate FX apply UI and any optional repricing.",
+        "fullFeatureComplete": false
+      }
     },
     {
       "id": "R19",
@@ -379,7 +559,17 @@
           ],
           "dependencyScope": "Core R18 valuation/FX contract; optional pricing and later candidate-FX UI are not prerequisites"
         }
-      ]
+      ],
+      "delivery": {
+        "plan": "DEMO_DELIVERY_PLAN.md",
+        "milestones": [
+          "D1",
+          "D3"
+        ],
+        "minimumScope": "Input/FX-basis record in D1; complete bounded approved economic snapshot and later-edit isolation in D3.",
+        "laterScope": "Advanced version navigation/retention and institutional audit/records guarantees.",
+        "fullFeatureComplete": false
+      }
     },
     {
       "id": "R20",
@@ -393,7 +583,16 @@
       "dependencies": [
         "R19"
       ],
-      "existingIssueReused": false
+      "existingIssueReused": false,
+      "delivery": {
+        "plan": "DEMO_DELIVERY_PLAN.md",
+        "milestones": [
+          "D3"
+        ],
+        "minimumScope": "One concise presentation/PDF using the existing disclosure library and section keys.",
+        "laterScope": "Multiple templates, audience/locale variants and configurable disclosure administration.",
+        "fullFeatureComplete": false
+      }
     },
     {
       "id": "R21",
@@ -409,7 +608,16 @@
         "R20",
         "R23b"
       ],
-      "existingIssueReused": true
+      "existingIssueReused": true,
+      "delivery": {
+        "plan": "DEMO_DELIVERY_PLAN.md",
+        "milestones": [
+          "D3"
+        ],
+        "minimumScope": "Local read-only meeting view and matching PDF from the approved snapshot.",
+        "laterScope": "Remote protected links, acknowledgement/e-signatures and server sharing infrastructure.",
+        "fullFeatureComplete": false
+      }
     },
     {
       "id": "R22",
@@ -427,7 +635,16 @@
         "R19"
       ],
       "existingIssueReused": false,
-      "scopeDecision": "VALUATION_SCOPE.md"
+      "scopeDecision": "VALUATION_SCOPE.md",
+      "delivery": {
+        "plan": "DEMO_DELIVERY_PLAN.md",
+        "milestones": [
+          "D4"
+        ],
+        "minimumScope": "One contextual draft-only agent path, offline orchestration tests and opt-in budgeted live evidence.",
+        "laterScope": "Additional providers/models, broad orchestration framework and autonomous workflows.",
+        "fullFeatureComplete": false
+      }
     },
     {
       "id": "R23",
@@ -452,7 +669,14 @@
           "deployment": "dpl_DUsfyjnmjxaUaLNfBhrNfHixwqsy",
           "date": "2026-10-23"
         }
-      ]
+      ],
+      "delivery": {
+        "plan": "DEMO_DELIVERY_PLAN.md",
+        "milestones": [],
+        "minimumScope": "R23a backup/restore is already released and must support every later schema migration.",
+        "laterScope": "R23b multi-engagement storage, isolation, switching and archiving.",
+        "fullFeatureComplete": false
+      }
     },
     {
       "id": "R24",
@@ -468,7 +692,14 @@
         "R17",
         "R19"
       ],
-      "existingIssueReused": false
+      "existingIssueReused": false,
+      "delivery": {
+        "plan": "DEMO_DELIVERY_PLAN.md",
+        "milestones": [],
+        "minimumScope": "State clearly that no orders or transfers have been executed.",
+        "laterScope": "Structured implementation export, custodian integration and follow-up status.",
+        "fullFeatureComplete": false
+      }
     },
     {
       "id": "R25",
@@ -481,7 +712,17 @@
       "status": "planned",
       "dependencies": [],
       "existingIssueReused": false,
-      "scopeDecision": "VALUATION_SCOPE.md"
+      "scopeDecision": "VALUATION_SCOPE.md",
+      "delivery": {
+        "plan": "DEMO_DELIVERY_PLAN.md",
+        "milestones": [
+          "D1",
+          "D5"
+        ],
+        "minimumScope": "Repeatable synthetic tasks, keyboard checks and honest launch evidence.",
+        "laterScope": "Consented 3–5-advisor study and measured competitor usability comparisons; run earlier if participants exist.",
+        "fullFeatureComplete": false
+      }
     }
   ],
   "supportingIssues": [
@@ -539,8 +780,161 @@
       "mergeCommit": "e56335e5fdb4f2f343cdea605333b16cda9ad932",
       "deployment": "dpl_DUsfyjnmjxaUaLNfBhrNfHixwqsy",
       "state": "merged",
-      "next": "Codex review of the updated documentation PR #67 before any owner-authorized merge"
+      "next": "R23a already released; use the demo-first D1 package. Preserve the valuation/FX and legacy-data contracts."
     },
     "runtimeChanges": false
+  },
+  "deliveryPlan": {
+    "acceptedAt": "2026-10-24",
+    "plan": "DEMO_DELIVERY_PLAN.md",
+    "commandPlaybook": "CLAUDE_COMMANDS.md",
+    "status": "planned",
+    "trackingIssue": 36,
+    "mode": "synthetic-employer-demo-first",
+    "nextMilestone": "D1",
+    "supersedes": "Serial P0–P5 implementation and standalone R11-first cleanup command; original feature contracts retained",
+    "observedMain": "7d5999fa01e15a1271bb81812cd8cabbbf58d095",
+    "developmentAssistant": {
+      "application": "Claude Code Desktop",
+      "model": "Opus 5.5",
+      "control": "effort",
+      "high": "Domain, financial, migration and agent-boundary work",
+      "medium": "Bounded implementation and release",
+      "low": "Save, status and documentation"
+    },
+    "runtimeChanges": false,
+    "mergeAuthority": "Owner-authorized exact-head merge only",
+    "publicAgentMode": "scripted-synthetic",
+    "realClientPrerequisite": 59,
+    "validation": "Focused iteration; required full final application checks and automatic CI retained; no local app rerun solely for PR metadata",
+    "reviewCadence": "One coherent PR/package by default; justified contract/migration split allowed, self-review and blocking fixes together; no release-only docs PR",
+    "forecast": "No new promised deadline; measure D1/D2 actual sessions, review loops and blockers before reforecasting",
+    "milestones": [
+      {
+        "id": "D1",
+        "title": "Working allocation desk",
+        "status": "planned",
+        "dependencies": [],
+        "recommendations": [
+          "R01",
+          "R02",
+          "R03",
+          "R05",
+          "R06",
+          "R07",
+          "R08",
+          "R11",
+          "R12",
+          "R14",
+          "R18",
+          "R19",
+          "R25"
+        ],
+        "effort": "high",
+        "defaultPrBoundary": "One coherent task; minimum contracts/backup and visible workspace may be two linked PRs"
+      },
+      {
+        "id": "D2",
+        "title": "Funded alternatives",
+        "status": "planned",
+        "dependencies": [
+          "D1"
+        ],
+        "recommendations": [
+          "R03",
+          "R04",
+          "R05",
+          "R06",
+          "R08",
+          "R12",
+          "R14"
+        ],
+        "effort": "high"
+      },
+      {
+        "id": "D3",
+        "title": "Review once, present consistently",
+        "status": "planned",
+        "dependencies": [
+          "D1",
+          "D2"
+        ],
+        "recommendations": [
+          "R01",
+          "R12",
+          "R16",
+          "R19",
+          "R20",
+          "R21"
+        ],
+        "effort": "high"
+      },
+      {
+        "id": "D4",
+        "title": "Demonstrate the bounded agent",
+        "status": "planned",
+        "dependencies": [
+          "D1",
+          "D2",
+          "D3"
+        ],
+        "recommendations": [
+          "R22"
+        ],
+        "effort": "high",
+        "note": "Offline foundations may accompany D1–D3; live evaluations are opt-in and explicitly budgeted"
+      },
+      {
+        "id": "D5",
+        "title": "Package for LinkedIn",
+        "status": "planned",
+        "dependencies": [
+          "D1",
+          "D2",
+          "D3",
+          "D4"
+        ],
+        "recommendations": [
+          "R01",
+          "R25"
+        ],
+        "supportingIssues": [
+          35
+        ],
+        "effort": "medium",
+        "note": "A live-agent claim requires recorded live evidence; public deployment stays scripted/synthetic"
+      }
+    ],
+    "laterRecommendations": [
+      "R09",
+      "R10",
+      "R13",
+      "R15",
+      "R17",
+      "R24"
+    ],
+    "laterExtensions": [
+      "Full R11 queue/bulk/bond conventions",
+      "R14 enrichment",
+      "Full R16 schedules",
+      "R18 provider/cache retirement and candidate refresh",
+      "R23b client isolation",
+      "R21 remote sharing",
+      "Additional agent providers/models",
+      "Real-client controls before any real-client pilot"
+    ],
+    "contextPolicy": {
+      "activeHandoff": "../CLAUDE_HANDOFF.md",
+      "history": "../CLAUDE_HANDOFF_HISTORY_2026-10-24.md",
+      "automaticHistoryRead": false,
+      "guidance": "Load latest checkpoint, selected package and relevant contracts only; keep active handoff roughly 100 lines or fewer"
+    },
+    "inflightWork": {
+      "pr": 70,
+      "head": "6449889bfbf9a07ff3a45c8446301e87693a8c4b",
+      "branch": "feat/r18-r11-review-wording",
+      "state": "open",
+      "next": "Codex review and owner-authorized release before D1; preserve/reuse, do not duplicate"
+    }
   }
 }

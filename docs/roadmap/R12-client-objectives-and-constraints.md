@@ -5,6 +5,11 @@ Tracking issue: #47. Parent roadmap: #36. Original review recommendation: **12 o
 Phase: P1 inputs; P3 IPS. Relative scope: M; no calendar estimate is committed.
 Canonical plan: [R12-client-objectives-and-constraints.md](R12-client-objectives-and-constraints.md).
 
+## Delivery routing — 24 October 2026
+
+**D1/D2/D3 — minimum slices only.** Follow [DEMO_DELIVERY_PLAN.md](DEMO_DELIVERY_PLAN.md) and [CLAUDE_COMMANDS.md](CLAUDE_COMMANDS.md); their package order supersedes the original phase queue. Minimum scope: A concise objective, assessed/unknown constraints and an explicit reserve amount/currency where used. Later scope: Full structured discovery, IPS document and broad constraint library. This does not implement or complete the full R-plan. Dependencies below mean the minimum required contract, not every advanced feature of the referenced plan. Preserve all financial, backup and privacy safeguards.
+
+
 ## Advisor problem
 Liquidity/income preferences appear in output without corresponding profile controls, while important constraints remain free text.
 

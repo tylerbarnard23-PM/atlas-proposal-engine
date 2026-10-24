@@ -5,6 +5,11 @@ Tracking issue: #42. Parent roadmap: #36. Original review recommendation: **7 of
 Phase: P1. Relative scope: M; no calendar estimate is committed.
 Canonical plan: [R07-explicit-recommendation-intent.md](R07-explicit-recommendation-intent.md).
 
+## Delivery routing — 24 October 2026
+
+**D1 — minimum slices only.** Follow [DEMO_DELIVERY_PLAN.md](DEMO_DELIVERY_PLAN.md) and [CLAUDE_COMMANDS.md](CLAUDE_COMMANDS.md); their package order supersedes the original phase queue. Minimum scope: Explicit monetary/percentage/full-exit intent for supported actions; advisory items have no financial effect. Later scope: Full task-assignment/status workflow beyond the existing advisory UI. This does not implement or complete the full R-plan. Dependencies below mean the minimum required contract, not every advanced feature of the referenced plan. Preserve all financial, backup and privacy safeguards.
+
+
 ## Advisor problem
 A missing amount can imply a full sale or 50% reduction/paydown; service tasks share an oversized investment-action form.
 

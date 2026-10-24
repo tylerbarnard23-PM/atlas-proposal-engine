@@ -5,6 +5,11 @@ Tracking issue: #49. Parent roadmap: #36. Original review recommendation: **14 o
 Phase: P1 truthful labels/estimates; external enrichment deferred. Relative scope: L; no calendar estimate is committed.
 Canonical plan: [R14-classification-and-exposure-coverage.md](R14-classification-and-exposure-coverage.md).
 
+## Delivery routing — 24 October 2026
+
+**D1/D2 — minimum slices only.** Follow [DEMO_DELIVERY_PLAN.md](DEMO_DELIVERY_PLAN.md) and [CLAUDE_COMMANDS.md](CLAUDE_COMMANDS.md); their package order supersedes the original phase queue. Minimum scope: Honest existing/manual classifications and explicit unknown coverage. Later scope: Estimated-mix editor, look-through and external exposure enrichment. This does not implement or complete the full R-plan. Dependencies below mean the minimum required contract, not every advanced feature of the referenced plan. Preserve all financial, backup and privacy safeguards.
+
+
 ## Advisor problem
 A single holding classification, denomination or issuer country can be mistaken for full economic exposure.
 

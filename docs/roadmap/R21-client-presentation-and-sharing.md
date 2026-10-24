@@ -5,6 +5,11 @@ Tracking issue: #16. Parent roadmap: #36. Original review recommendation: **21 o
 Phase: P4 local presentation; P5 protected sharing. Relative scope: L; no calendar estimate is committed.
 Canonical plan: [R21-client-presentation-and-sharing.md](R21-client-presentation-and-sharing.md).
 
+## Delivery routing — 24 October 2026
+
+**D3 — minimum slices only.** Follow [DEMO_DELIVERY_PLAN.md](DEMO_DELIVERY_PLAN.md) and [CLAUDE_COMMANDS.md](CLAUDE_COMMANDS.md); their package order supersedes the original phase queue. Minimum scope: Local read-only meeting view and matching PDF from the approved snapshot. Later scope: Remote protected links, acknowledgement/e-signatures and server sharing infrastructure. This does not implement or complete the full R-plan. Dependencies below mean the minimum required contract, not every advanced feature of the referenced plan. Preserve all financial, backup and privacy safeguards.
+
+
 ## Advisor problem
 PDF is the primary deliverable and there is no version-bound interactive client view.
 

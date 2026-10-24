@@ -5,6 +5,11 @@ Tracking issue: #48. Parent roadmap: #36. Original review recommendation: **13 o
 Phase: P3. Relative scope: M; no calendar estimate is committed.
 Canonical plan: [R13-personalized-insights-and-tasks.md](R13-personalized-insights-and-tasks.md).
 
+## Delivery routing — 24 October 2026
+
+**After the demo milestone.** Follow [DEMO_DELIVERY_PLAN.md](DEMO_DELIVERY_PLAN.md) and [CLAUDE_COMMANDS.md](CLAUDE_COMMANDS.md); their package order supersedes the original phase queue. Minimum scope: Reuse current insights as context without claiming personalized prioritization. Later scope: Personalized ranking, dismissal logic and advisory follow-up/task lifecycle. This does not implement or complete the full R-plan. Dependencies below mean the minimum required contract, not every advanced feature of the referenced plan. Preserve all financial, backup and privacy safeguards.
+
+
 ## Advisor problem
 Fixed thresholds and repeated manual-valuation notices mix investment opportunities with service/data work.
 

@@ -5,6 +5,11 @@ Tracking issue: #54. Parent roadmap: #36. Original review recommendation: **22 o
 Phase: P4. Relative scope: M; no calendar estimate is committed.
 Canonical plan: [R22-contextual-copilot.md](R22-contextual-copilot.md).
 
+## Delivery routing — 24 October 2026
+
+**D4 — minimum slices only.** Follow [DEMO_DELIVERY_PLAN.md](DEMO_DELIVERY_PLAN.md) and [CLAUDE_COMMANDS.md](CLAUDE_COMMANDS.md); their package order supersedes the original phase queue. Minimum scope: One contextual draft-only agent path, offline orchestration tests and opt-in budgeted live evidence. Later scope: Additional providers/models, broad orchestration framework and autonomous workflows. This does not implement or complete the full R-plan. Dependencies below mean the minimum required contract, not every advanced feature of the referenced plan. Preserve all financial, backup and privacy safeguards.
+
+
 ## Advisor problem
 Separate chat loses the advisor's selected scope/scenario and initial wording can blur scripted demo versus live model.
 
@@ -60,6 +65,7 @@ Additional acceptance:
 Follow [VALUATION_SCOPE.md](VALUATION_SCOPE.md) without changing provider/agent authority. Tools consume the accepted source-value/FX revision and explain its dates and gaps. The model cannot invent a price, select a fallback as verified, silently refresh/reprice the baseline or bypass incomplete inputs. Core simulations and supported dollar drafts work without security-quote keys. Add no-quote/quote-failure/mixed-date cases to the existing offline and opt-in synthetic live evaluation plans, preserving draft-only authority and #59.
 
 ## Dependencies and sequencing
+- **D4 demo slice:** use delivered D1–D3 scope/scenario/snapshot/evaluator contracts and current insight context. A completed R13 personalized-insights system is not required. Full contextual extensions retain the broader dependencies below.
 - [R03](R03-allocation-workspace.md)
 - [R08](R08-contextual-holding-preview.md)
 - [R13](R13-personalized-insights-and-tasks.md)

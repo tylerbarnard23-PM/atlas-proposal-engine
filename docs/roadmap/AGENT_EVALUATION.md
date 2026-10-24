@@ -26,6 +26,10 @@ Follow [VALUATION_SCOPE.md](VALUATION_SCOPE.md). Evaluation tools use the accept
 - Unsupported features are explicit. Provider failover is off unless separately configured and reviewed; never silently send data to another vendor or claim a fallback was the requested model.
 - Keep setup instructions distinct: no-key scripted demo; locally enabled live provider; developer coding assistant. A model subscription is not assumed to include API usage.
 
+## Demo delivery routing — 24 October 2026
+
+[D4 in DEMO_DELIVERY_PLAN.md](DEMO_DELIVERY_PLAN.md#d4-prove-agent-behavior-without-a-provider-detour) owns the bounded agent demonstration. Offline loop fixtures may be built alongside D1–D3 without waiting for full personalized insights. Use delivered scope/scenario/snapshot contracts and one existing provider; additional provider/model comparison is later. Keep every offline/live/browser, budget, authority, numerical-evidence and privacy gate below. A synthetic demo is not a production-ready or real-client claim, and live evidence cannot be replaced by a source scan or scripted output.
+
 ## Implementation slices and order
 
 1. Add offline orchestration tests around the existing live loop using an injected fake provider/client; this can begin before later contextual UI dependencies.

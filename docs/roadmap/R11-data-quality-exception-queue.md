@@ -5,6 +5,11 @@ Tracking issue: #46. Parent roadmap: #36. Original review recommendation: **11 o
 Phase: P1. Relative scope: M; no calendar estimate is committed.
 Canonical plan: [R11-data-quality-exception-queue.md](R11-data-quality-exception-queue.md).
 
+## Delivery routing — 24 October 2026
+
+**D1 — minimum slices only.** Follow [DEMO_DELIVERY_PLAN.md](DEMO_DELIVERY_PLAN.md) and [CLAUDE_COMMANDS.md](CLAUDE_COMMANDS.md); their package order supersedes the original phase queue. Minimum scope: Fold review wording and non-penalizing optional identifiers into the workbench; retain all real gates. Later scope: Bond basis validation, exception queue, score redesign and safe bulk/date actions. This does not implement or complete the full R-plan. Dependencies below mean the minimum required contract, not every advanced feature of the referenced plan. Preserve all financial, backup and privacy safeguards.
+
+
 ## Advisor problem
 An aggregate score of 0 hides priorities, and bonds quoted per 100 of face value receive misleading quantity-times-price warnings.
 

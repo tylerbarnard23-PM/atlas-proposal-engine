@@ -174,6 +174,8 @@ If you adapt it for real client work, removing the sample markings is your decis
 
 **Approved scope adjustment (planning only, 22 October 2026):** the core proposal journey will use verified statement/imported account values or explicit advisor-approved valuations, retaining FX, dates, provenance and financial safeguards. Broad security pricing/research will become optional; safe retirement of unnecessary integrations is planned, not implemented. See the [valuation scope and migration plan](docs/roadmap/VALUATION_SCOPE.md). R18 slice 1 removed security quotes from the ordinary UI and corrected the value-source wording in the Dashboard and PDF; the quote adapters and routes remain in the codebase until their planned retirement.
 
+**Delivery priority (24 October 2026, planned):** [five coherent demo packages](docs/roadmap/DEMO_DELIVERY_PLAN.md) take the existing input foundation through portfolio construction, funded alternatives, approved presentation and a tested bounded agent. The [Claude command playbook](docs/roadmap/CLAUDE_COMMANDS.md) defines the next workspace task and effort settings. Full advanced features remain later; none of these packages is claimed built by this planning update.
+
 The **[accepted 25-item advisor roadmap](ROADMAP.md)** has detailed plans, dependencies, phases and linked issues. Planned features are separate from the capabilities above. Start implementation with **[the roadmap guide](docs/roadmap/IMPLEMENTATION_GUIDE.md)** and the current handoff.
 
 - State lives in the browser. There are no accounts, no database and no audit trail, all of which a real advisory platform needs.

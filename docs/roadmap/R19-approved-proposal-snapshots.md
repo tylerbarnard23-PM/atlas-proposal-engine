@@ -5,6 +5,11 @@ Tracking issue: #52. Parent roadmap: #36. Original review recommendation: **19 o
 Phase: P1 accepted input basis (R19a); P3/P4 full approved snapshots. Relative scope: L; no calendar estimate is committed.
 Canonical plan: [R19-approved-proposal-snapshots.md](R19-approved-proposal-snapshots.md).
 
+## Delivery routing — 24 October 2026
+
+**D1/D3 — minimum slices only.** Follow [DEMO_DELIVERY_PLAN.md](DEMO_DELIVERY_PLAN.md) and [CLAUDE_COMMANDS.md](CLAUDE_COMMANDS.md); their package order supersedes the original phase queue. Minimum scope: Input/FX-basis record in D1; complete bounded approved economic snapshot and later-edit isolation in D3. Later scope: Advanced version navigation/retention and institutional audit/records guarantees. This does not implement or complete the full R-plan. Dependencies below mean the minimum required contract, not every advanced feature of the referenced plan. Preserve all financial, backup and privacy safeguards.
+
+
 ## Advisor problem
 Current calculations follow changing workspace inputs and approval/prose controls can leave the final economic package unclear.
 

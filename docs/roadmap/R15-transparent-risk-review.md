@@ -5,6 +5,11 @@ Tracking issue: #12. Parent roadmap: #36. Original review recommendation: **15 o
 Phase: P3 bounded risk; quantitative/history-dependent analytics deferred. Relative scope: L; no calendar estimate is committed.
 Canonical plan: [R15-transparent-risk-review.md](R15-transparent-risk-review.md).
 
+## Delivery routing — 24 October 2026
+
+**After the demo milestone.** Follow [DEMO_DELIVERY_PLAN.md](DEMO_DELIVERY_PLAN.md) and [CLAUDE_COMMANDS.md](CLAUDE_COMMANDS.md); their package order supersedes the original phase queue. Minimum scope: Explain supported concentration/mix and mark unsupported risk analytics unavailable. Later scope: Questionnaire overhaul, quantified risk, historical analytics and projections. This does not implement or complete the full R-plan. Dependencies below mean the minimum required contract, not every advanced feature of the referenced plan. Preserve all financial, backup and privacy safeguards.
+
+
 ## Advisor problem
 A proprietary-looking score can suggest precision or suitability unsupported by Atlas's inputs and methodology.
 

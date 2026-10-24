@@ -2,9 +2,15 @@
 
 Read [ROADMAP.md](../../ROADMAP.md) and the selected R01–R25 plan before coding. All 25 directions were accepted by Tyler on 22 October 2026. This document coordinates their implementation and does not report any feature as complete.
 
+## Active delivery plan — 24 October 2026
+
+Use [DEMO_DELIVERY_PLAN.md](DEMO_DELIVERY_PLAN.md) and the [Claude command playbook](CLAUDE_COMMANDS.md). The active handoff is intentionally short; archived release notes are not automatic startup context. The next task is D1's usable allocation workspace, not another standalone cleanup. Original R01–R25 plans remain full backlog/contract references; implement their package minimums together rather than completing all feature dependencies serially. Provider deletion, advanced analytics and real-client infrastructure do not precede the synthetic demo.
+
+Claude Code Desktop currently uses Opus 5.5 with effort as the available control: High for financial/domain/migration/agent boundary design, Medium for bounded implementation and release, Low for save/status/docs. Carry one coherent task through implementation, focused tests, self-review, final validation, docs and PR; do not stop for repeated routine design confirmations or create planning/release-only PRs. Owner merge/spend/privacy/name authority and real financial gates remain.
+
 ## Authority and working boundaries
 
-The owner selected the complete numbered roadmap. Do not ask again whether those directions should be planned or implemented. Use the detailed plan and session context for routine choices. Surface a concrete unresolved decision when it materially changes financial meaning, requires a paid/new external service or changes the selected scope; continue independent work while that decision is resolved.
+The owner selected the complete numbered roadmap. Do not ask again whether those directions should be planned or implemented. Use the active delivery package, detailed contracts and session context for routine choices. Record concise design decisions in the same implementation issue/PR and proceed; no separate approval-only design stage is required inside the accepted scope. Surface a concrete unresolved decision when it materially changes financial meaning, requires a paid/new external service or changes the selected scope; continue independent work while that decision is resolved.
 
 The roadmap save recorded plans only. PR #34 has since been reviewed, fixed and merged (`4e6da18`); its follow-up (R08) builds on it. Existing merge/deployment approval requirements remain in effect. No new branding name, provider purchase, live-model enablement or trade execution is selected.
 
@@ -24,7 +30,7 @@ R23a backup/restore is merged (PR #66, `e56335e`); every later stored-schema cha
 6. Freeze reproducible approved versions before protected sharing. Local storage alone is not identity assurance, tamper-proof records or production readiness.
 7. Keep synthetic data/sample markings and public scripted Copilot mode. No private PDFs or keys in git; no live model enabled on the unauthenticated public demo.
 8. New or changed economic intent requires review; client acknowledgement and implementation completion are separate from advisor approval.
-9. Each implementation uses a focused issue/branch/PR, tests meaningful financial/ingestion/state behavior first, runs the repository-required checks and a relevant browser flow. Documentation-only updates require link/coverage/privacy checks, not a new app test suite.
+9. Each coherent delivery package uses one focused branch/PR (or a justified contract/migration split). Test meaningful financial/state behavior first, iterate with focused checks, self-review and batch blocking fixes, then run required full checks once on the final application code after including its docs. Re-run after later runtime changes; metadata-only edits need no local application rerun. Documentation-only updates require link/coverage/privacy checks. Do not skip automatic CI.
 10. Update plan/issue status and handoff with actual evidence. An accepted plan is Planned, not Implemented. No blanket rewrite, merge, deployment or new external integration is implied by roadmap acceptance.
 
 
@@ -57,11 +63,11 @@ Use the existing engines and clearly typed input/output contracts; the UI must n
 ## Migration sequence
 
 1. R23a adds schema-validated export/restore before substantial persisted-schema changes.
-2. Preserve the current v5 workspace and its current currency/approval behavior as a migration fixture. Existing PR #34 tests (merged) remain a baseline.
+2. Preserve the current v6 workspace/backup and supported legacy versions as migration fixtures; keep their actual currency/approval behavior. Existing PR #34 tests (merged) remain a baseline.
 3. Add the minimum scope, objective and explicit-intent contracts; do not silently reinterpret legacy monetary instructions.
 4. Migrate recommendations into an editable legacy scenario with equivalent effects. Flag ambiguous intent for restatement, without rewriting the historical evidence.
 5. Capture the R19a accepted input/FX-basis record after the minimum R02/R18 contracts; this is not final approval. Add proposed positions, funding and model targets against the scenario without requiring security quotes.
-6. Introduce approved snapshots and multi-engagement boundaries with round-trip/reference tests.
+6. Introduce the bounded approved snapshot in D3 with round-trip/reference tests. Full multi-engagement isolation is later R23b, not a synthetic demo prerequisite; current single-workspace/backup behavior stays explicit.
 7. Treat every later schema change as an explicit version migration. A cosmetic project rename cannot change storage keys or reset data.
 
 Migrations need clear ownership, recoverability and idempotence. Reject an invalid imported backup before writing any of it. Unknown future schemas must not be coerced into the current one. Preserve source-document metadata even when original PDF bytes are unavailable.
@@ -104,6 +110,8 @@ For a meaningful financial, ingestion or state change, first reproduce the defec
 
 Run required typecheck, full tests, extraction eval, production build and a focused browser flow for implementation. Inspect the generated PDF visually when its layout changes. Keep the sample baseline stable unless an intended behavior change is explicitly documented; do not recapture a baseline merely to hide a failure.
 
+Use focused tests while iterating, then the full final application checks after code and its docs settle; do not repeat a local build for PR metadata alone or poll CI repeatedly. Blockers are wrong money/funding, approval/authority/privacy failures, data loss/broken restore or a critical broken/inaccessible task; log nonblocking cosmetics/enrichment to the relevant later slice.
+
 Documentation-only roadmap saves need coverage, link, dependency, privacy and preserved-checkpoint checks. Do not claim a new app test/build run for a documentation change. A planning checklist is not passed acceptance evidence.
 
 ## Status model
@@ -114,15 +122,9 @@ Update ROADMAP.md, the issue and CLAUDE_HANDOFF.md at each stopping point. Repor
 
 ## Next-session prompt
 
-```text
-Read docs/CLAUDE_HANDOFF.md, ROADMAP.md and docs/roadmap/IMPLEMENTATION_GUIDE.md.
-All 25 numbered enhancements are accepted; the saved work is planning, not implementation.
-Read docs/roadmap/VALUATION_SCOPE.md: the approved core uses accepted client values and FX; optional security-pricing breadth is deferred. PR #66 (R23a) is merged; use bounded R18/R11/R19a slices and the construction dependency chain. Do not start deleting providers or changing values from this prompt alone.
+Use [CLAUDE_COMMANDS.md](CLAUDE_COMMANDS.md), starting with D1 at High effort on Opus 5.5. Read the latest checkpoint and selected package/contracts only; verify actual GitHub/local state and any in-flight work. The previous standalone R11-first and broad P0–P5 sequencing is superseded. Do not execute all packages or delete providers merely because they are in the backlog.
 
-Confirm repository and working-tree state without discarding work. PR #34 is merged (4e6da18) and live; its checkpoint is resolved.
-
-#26 (PR #60) and #28 (PR #63) are complete; follow the newest checkpoint in the handoff for what comes next, and R18's sequencing. Use one bounded implementation branch/PR and the required validation. R23a backup/validated restore is merged (PR #66, `e56335e`); give each later store version a backup migration step. Follow the selected plan's dependencies and preserve the existing engines, saved data, currencies, import safeguards and working links. Update the roadmap and handoff with actual evidence. Do not start all 25 at once or claim planned features are already delivered.
-```
+Each command completes inspect/design/code/test/self-review/save/PR for one coherent task. Keep docs in it, report actual heads/checks, stop for Codex review and merge only when owner-authorized. Save WIP precisely if session budget ends; do not create an unrelated tiny task or another release-checkpoint PR.
 
 ## Agent changes require separate evidence
 
