@@ -59,13 +59,13 @@ function readiness(m: M, s: ReturnType<M["useAtlasStore"]["getState"]>, patch: P
 }
 const gates = (checks: { code: string; passed: boolean; detail?: string }[]) => checks.map((c) => [c.code, c.passed, c.detail ?? null]);
 
-function pdfText(m: M, s: ReturnType<M["useAtlasStore"]["getState"]>, patch: { holdings?: Holding[]; sections?: ProposalSection[]; disclosures?: Disclosure[]; recommendations?: Recommendation[] } = {}) {
+function pdfText(m: M, s: ReturnType<M["useAtlasStore"]["getState"]>, patch: { holdings?: Holding[]; sections?: ProposalSection[]; disclosures?: Disclosure[]; recommendations?: Recommendation[]; timeZone?: string } = {}) {
   const html = renderToStaticMarkup(
     React.createElement(m.ProposalPdfTemplate, {
       client: s.client, advisor: s.advisor, accounts: s.accounts, holdings: patch.holdings ?? s.holdings,
       recommendations: patch.recommendations ?? approveAll(s.recommendations), sections: patch.sections ?? s.proposalSections,
       disclosures: patch.disclosures ?? s.disclosures, fxRates: s.fxRates, proposal: { id: "p", title: "Proposal" } as Proposal,
-      variant: "draft", now: NOW.toISOString(), timeZone: "UTC",
+      variant: "draft", now: NOW.toISOString(), timeZone: patch.timeZone ?? "UTC",
     })
   );
   return html.replace(/<style[\s\S]*?<\/style>/g, " ").replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/&#x27;/g, "'").replace(/\s+/g, " ");
@@ -172,7 +172,7 @@ describe("value sources and dates are represented honestly", () => {
     const hs = variety(m);
     const p = (id: string) => m.valueProvenance(hs.find((h) => h.id === id)!);
 
-    expect(p("h_aapl")).toMatchObject({ basis: "approved", label: "Approved value", date: "2026-06-30", approvedOn: "2026-07-01" });
+    expect(p("h_aapl")).toMatchObject({ basis: "approved", label: "Approved value", date: "2026-06-30", approvedAt: "2026-07-01T10:00:00.000Z" });
     expect(p("h_aapl").detail).toMatch(/Finnhub/);
     expect(p("h_aapl").detail).toMatch(/market data/i);
     // The holding's own (different) source stays visible.
@@ -249,6 +249,27 @@ describe("value sources and dates are represented honestly", () => {
     // The accurate FX disclosures are kept.
     expect(text).toContain("Exchange rates used in this proposal");
     expect(text).toContain("Exchange rates used: ECB reference rates, each listed with its date below.");
+  });
+
+  it("the approval date is the lock instant in the advisor's time zone; the source's calendar date never moves", async () => {
+    const m = await load();
+    const s = m.useAtlasStore.getState();
+    const lockedAt = (at: string) => variety(m).map((h) => (h.id === "h_aapl" ? { ...h, proposalApprovedValue: { ...h.proposalApprovedValue!, lockedAt: at } } : h));
+    const cases: [string, string, string][] = [
+      // An evening lock in New York is already the next day in UTC and Kiritimati.
+      ["2026-10-24T01:30:00Z", "America/New_York", "Oct 23, 2026"],
+      ["2026-10-24T01:30:00Z", "UTC", "Oct 24, 2026"],
+      ["2026-10-24T01:30:00Z", "Pacific/Kiritimati", "Oct 24, 2026"],
+      // A morning lock in UTC is already the next day in Kiritimati (UTC+14).
+      ["2026-10-23T10:30:00Z", "America/New_York", "Oct 23, 2026"],
+      ["2026-10-23T10:30:00Z", "UTC", "Oct 23, 2026"],
+      ["2026-10-23T10:30:00Z", "Pacific/Kiritimati", "Oct 24, 2026"],
+    ];
+    for (const [at, timeZone, day] of cases) {
+      const text = pdfText(m, s, { holdings: lockedAt(at), timeZone });
+      const row = text.slice(text.indexOf(" Apple Inc. Approved value"), text.indexOf(" Microsoft Corporation Approved value"));
+      expect(row, `${at} in ${timeZone}`).toContain(`Jun 30, 2026; approved ${day}`);
+    }
   });
 
   it("section titles come from their keys, so saved labels need no migration; selections are kept", async () => {

@@ -1,6 +1,18 @@
 # Handoff
 
-## Current checkpoint — 24 October 2026: PR #69 self-review; three fixes (still open, unmerged)
+## Current checkpoint — 24 October 2026: PR #69 approval-date time-zone fix (still open, unmerged)
+
+- **Codex finding at `77765ce`:** an approved value's lock date was turned into a UTC calendar day in `valueProvenance` before the PDF printed it. A value locked at 2026-10-24T01:30:00Z therefore showed "Oct 24" even for an advisor in America/New_York.
+- **Reproduced first:** a rendered-template test failed before the fix.
+- **Fix:**
+  - `valueProvenance` now passes the raw `lockedAt` instant as `approvedAt`. Its only consumer is the PDF's Data Sources row, which formats it with `formatTimestampDate` in the PDF's supplied `timeZone`, as the recommendation approval line already does.
+  - Statement dates, `source.asOf` and other calendar-date fields are unchanged. A missing `lockedAt` still omits the approval date.
+  - Nothing else changed: stored data, schema, calculations, approvals and readiness.
+- **Test:** the template rendered for New York, UTC and Pacific/Kiritimati with instants that cross their date boundaries. The approval day follows the zone; the source date stays "Jun 30, 2026" in every case.
+- **Local checks:** typecheck passed; 23 files, **395 passed, 0 skipped**; extraction eval 2 of 2; build passed. The earlier source-date, disclosure and baseline regressions still pass. No browser test was run, and the browser workspace was not touched.
+- **Next step:** Codex reviews PR #69. Merge only on the owner's approval.
+
+## Checkpoint — 24 October 2026: PR #69 self-review; three fixes
 
 - **Verified first:** main is at `298b719`, the PR #69 head was `2ffdb57` (docs-only after the tested `d08087d`), and the tree was clean with the stash intact.
   - CI on `2ffdb57` (run 39972460244) passed, and its Vercel preview was ready for that exact commit.
@@ -16,7 +28,7 @@
   - Calculations, approvals, readiness, quality score, schema, stored data, backup format and provider routes are unchanged.
 - **Local checks after the fixes:** typecheck passed; 23 files, **394 passed, 0 skipped**; extraction eval 2 of 2; build passed. No browser test was run (text and test changes only). No task server was started. The browser workspace was not touched.
 - **Remaining risks for Codex:**
-  - Override and lock dates are instants shown as their UTC calendar day, as before this PR (the same class as #64).
+  - Override and lock dates are instants shown as their UTC calendar day, as before this PR (the same class as #64). *(Lock dates: fixed in the next checkpoint above.)*
   - The approval date is omitted rather than shown as "not recorded" when `lockedAt` is missing.
   - The no-quote-request guard is a source scan plus the recorded browser evidence, not a live network test.
 - **Next step:** Codex reviews PR #69 at the new head. Merge only on the owner's approval. No provider retirement, schema change, R11 implementation or live AI.

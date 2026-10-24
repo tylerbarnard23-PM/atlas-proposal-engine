@@ -779,7 +779,7 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
                   <td>{[v.detail, v.holdingSource && `holding shows ${v.holdingSource}`].filter(Boolean).join("; ") || "—"}</td>
                   <td>
                     {v.date ? formatCalendarDate(v.date) : "Not recorded"}
-                    {v.approvedOn ? `; approved ${formatCalendarDate(v.approvedOn)}` : ""}
+                    {v.approvedAt ? `; approved ${formatTimestampDate(v.approvedAt, { timeZone: props.timeZone })}` : ""}
                   </td>
                   <td className="right">{v.review}</td>
                 </tr>

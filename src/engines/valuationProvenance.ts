@@ -35,8 +35,8 @@ export interface ValueProvenance {
   detail?: string;
   /** The value's own recorded date (a calendar day), or null when none was recorded. */
   date: string | null;
-  /** For an approved value: the day it was locked. */
-  approvedOn?: string | null;
+  /** For an approved value: when it was locked, the raw instant (shown in the advisor's time zone). */
+  approvedAt?: string;
   /** The holding's own source, when the value used comes from somewhere else. */
   holdingSource?: string;
   review: string;
@@ -86,7 +86,7 @@ export function valueProvenance(h: Holding): ValueProvenance {
       detail: `From ${from}${detail ? `: ${detail}` : ""}`,
       // The approved value's own source date only: the holding's date may belong to a different value.
       date: calendarDay(used.source.asOf),
-      approvedOn: calendarDay(h.proposalApprovedValue?.lockedAt),
+      approvedAt: h.proposalApprovedValue?.lockedAt,
       holdingSource: describeHoldingSource(h),
       review,
     };
