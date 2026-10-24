@@ -105,7 +105,7 @@ function valuationNote(ctx: CopilotContext) {
     missing_rates: missingPairs(s.net, ctx.reportingCurrency),
     note: s.complete
       ? undefined
-      : "Valuation is incomplete: totals cover valued holdings only, portfolio weights are null, and allocation-changing drafts are refused until the missing rates are added in Market Data.",
+      : "Valuation is incomplete: totals cover valued holdings only, portfolio weights are null, and allocation-changing drafts are refused until the missing rates are added in Exchange rates.",
   };
 }
 
@@ -437,7 +437,7 @@ function draftRecommendation(ctx: CopilotContext, input: z.infer<typeof DraftInp
     const changes = before == null || input.proposed_value != null || Math.abs(applyRecToValue(before, rec, !!h.isLiability) - before) >= 1;
     if (changes && !ctx.valuationComplete) {
       throw new ToolInputError(
-        `Valuation is incomplete (${missingPairs(valuationSummary(ctx.holdings).net, ctx.reportingCurrency).join(", ")} rate missing), so allocation-changing drafts are paused. Draft an advisory recommendation instead, or ask the advisor to add the missing rate in Market Data.`
+        `Valuation is incomplete (${missingPairs(valuationSummary(ctx.holdings).net, ctx.reportingCurrency).join(", ")} rate missing), so allocation-changing drafts are paused. Draft an advisory recommendation instead, or ask the advisor to add the missing rate in Exchange rates.`
       );
     }
     if (changes) {

@@ -1,6 +1,75 @@
 # Handoff
 
-## Current checkpoint — 23 October 2026: PR #67 released; R18 provider-retirement audit saved (documentation PR in review)
+## Current checkpoint — 24 October 2026: PR #69 approval-date time-zone fix (still open, unmerged)
+
+- **Codex finding at `77765ce`:** an approved value's lock date was turned into a UTC calendar day in `valueProvenance` before the PDF printed it. A value locked at 2026-10-24T01:30:00Z therefore showed "Oct 24" even for an advisor in America/New_York.
+- **Reproduced first:** a rendered-template test failed before the fix.
+- **Fix:**
+  - `valueProvenance` now passes the raw `lockedAt` instant as `approvedAt`. Its only consumer is the PDF's Data Sources row, which formats it with `formatTimestampDate` in the PDF's supplied `timeZone`, as the recommendation approval line already does.
+  - Statement dates, `source.asOf` and other calendar-date fields are unchanged. A missing `lockedAt` still omits the approval date.
+  - Nothing else changed: stored data, schema, calculations, approvals and readiness.
+- **Test:** the template rendered for New York, UTC and Pacific/Kiritimati with instants that cross their date boundaries. The approval day follows the zone; the source date stays "Jun 30, 2026" in every case.
+- **Local checks:** typecheck passed; 23 files, **395 passed, 0 skipped**; extraction eval 2 of 2; build passed. The earlier source-date, disclosure and baseline regressions still pass. No browser test was run, and the browser workspace was not touched.
+- **Next step:** Codex reviews PR #69. Merge only on the owner's approval.
+
+## Checkpoint — 24 October 2026: PR #69 self-review; three fixes
+
+- **Verified first:** main is at `298b719`, the PR #69 head was `2ffdb57` (docs-only after the tested `d08087d`), and the tree was clean with the stash intact.
+  - CI on `2ffdb57` (run 39972460244) passed, and its Vercel preview was ready for that exact commit.
+  - The PR's only comment is Vercel's bot. No review was posted.
+- **Review findings (each reproduced in a scratchpad probe, test written first and seen failing, then fixed):**
+  1. **Holding-source date borrowing.** When an approved value is used, the "holding shows ..." text for a holding whose own source is mock or legacy market data borrowed the statement date ("as of Apr 30, 2026"). It now follows the same rule as the value used (`ownDate`) and says "date not recorded".
+  2. **Disclosure coverage.** The required Data Sources and Market Prices disclosures didn't account for legacy market-data or mock values, and the optional mock disclosure isn't included by default. Data Sources now says some values may be carried over from earlier market-data records. Market Prices now says mock or placeholder values are labeled as such. IDs, titles, required flags and FX text are unchanged.
+  3. **Baseline coverage gap.** Cutting the rewritten Valuation Sources page from the sample-PDF comparison also dropped its per-holding currency and reporting-value columns. The test now requires all 25 currency/value pairs to equal the baseline's.
+- **Checked and unchanged:**
+  - Approved values use only their own source date. Overrides are dated when entered. Missing providers and dates say so. The mixed-date note states that totals add values from different dates.
+  - Section keys, selections and defaults are unchanged, and titles resolve by key.
+  - The no-quote, legacy-value, missing-FX, incomplete-import (now asserting the qa.pdf mismatch detail) and backup round-trip tests use real engine and store paths.
+  - Calculations, approvals, readiness, quality score, schema, stored data, backup format and provider routes are unchanged.
+- **Local checks after the fixes:** typecheck passed; 23 files, **394 passed, 0 skipped**; extraction eval 2 of 2; build passed. No browser test was run (text and test changes only). No task server was started. The browser workspace was not touched.
+- **Remaining risks for Codex:**
+  - Override and lock dates are instants shown as their UTC calendar day, as before this PR (the same class as #64). *(Lock dates: fixed in the next checkpoint above.)*
+  - The approval date is omitted rather than shown as "not recorded" when `lockedAt` is missing.
+  - The no-quote-request guard is a source scan plus the recorded browser evidence, not a live network test.
+- **Next step:** Codex reviews PR #69 at the new head. Merge only on the owner's approval. No provider retirement, schema change, R11 implementation or live AI.
+
+## Checkpoint — 23 October 2026: R18 audit merged; slice 1 in review (PR #69)
+
+- **PR #68 (R18 audit, docs only)** was verified unchanged at `4f9470e` (mergeable, clean, all checks passing) and merged pinned as **`298b7193d45b9f4d1e4faa095edca94344fa5060`**. #51 stays open.
+- **PR #69: R18 slice 1** on `feat/r18-slice1-valuation-sources`. The implementation commit is `ee745f5`; this documentation commit follows it (see the PR for the exact head). Not merged and not deployed to production.
+  - **Exchange rates.** "Market Data" is renamed **Exchange rates** at the same `/market-data` address. Removed: Refresh quotes, the quote-coverage table, the provider cards and the stale-value "Refresh price" link. Settings explains the FX source.
+  - **Value sources.** `engines/valuationProvenance` describes the value the resolver actually uses, with that value's own date: approved values never borrow the holding's date; overrides are dated when entered; mock or legacy labels without a date say "Not recorded". The Dashboard and PDF use it; "public market data references", the configured-provider appendix and the quote-provider assumption are gone.
+  - **No migration.** Section titles (`sectionLabel`) and library disclosures (`currentDisclosure`) resolve by key/id. The Data Sources, Market Prices and Mock data disclosure texts were corrected. FX disclosures are unchanged.
+  - **Docs.** README and `.env.example` describe the quote keys as optional legacy enrichment. AI configuration is untouched.
+  - **Not changed:** calculations, approvals, readiness, the quality score, schema, stored data, enums, backup format, IDs, identifiers, the quote-cache field, providers, routes and packages.
+- **Local checks:** typecheck passed; full suite 23 files, **393 passed, 0 skipped** (the private UBS PDF is present locally; CI skips those 2); extraction eval 2 of 2; production build passed (all five market-data routes still built).
+  - The tests were written first: all 15 in `tests/valuationSources.test.ts` failed before the change.
+  - The sample baseline now cuts only the declared rewritten PDF regions; every other word still matches.
+- **Browser check** (in-app browser, `next start` on port 3001, synthetic sample workspace):
+  - **Saved data.** The origin's existing workspace (200,907 bytes) was kept privately in browser storage and restored byte-identical (SHA-256 match). The preview opened the app once before the snapshot was taken. Nothing was saved to the repo; the task server was stopped.
+  - **Network.** Across Dashboard, Exchange rates, Settings, Accounts & Assets, Insights, Recommendations, Builder, Assumptions & Disclosures and PDF Preview, no quote, fundamentals or provider-status request was made. The only `/api/` request logged was the one the snapshot step made itself.
+  - **Builder.** Old saved section labels showed the new key-based names.
+  - **PDF.** A draft PDF generated by the running server (22 pages) was rendered and inspected page by page. The final variant still returned 422 for the four failing checks. Rows shown:
+    - Apple: an approved value from Finnhub market data, Jun 30, 2026, approved Jul 1; the holding itself shows a statement value of Apr 30.
+    - Microsoft: approved, date not recorded.
+    - VTI: an override dated Oct 15.
+    - BRK.B: legacy market data, provider not recorded.
+    - QQQM: mock, not recorded.
+    - The page also carries the mixed-date note, the A3 sources appendix and the unchanged FX table.
+- **Saved for the day (23 October).** The tested head is `d08087d3a6d541943842851bc675b1be580e91cc`; PR #69 is open and unmerged.
+  - **CI on that head:** run 39968973024 passed: typecheck; **391 passed, 2 skipped (393)**; extraction eval 2 of 2; build. This is separate from the local results above.
+  - **Preview:** Vercel preview for `d08087d` is READY at https://atlas-proposal-engine-yjee5v03n-tylerbarnard23-pms-projects.vercel.app (protected; not production).
+  - **Browser workspace:** restored to the captured snapshot (taken after the first app load). The task server is stopped.
+  - **Disclosure texts:** the three corrected texts (Data Sources, Market Prices, Mock data) are included for Codex review.
+  - Any commit after this note is documentation only.
+- **Next step:** Codex reviews PR #69, especially:
+  - provenance and date selection in `engines/valuationProvenance`;
+  - disclosure and section rendering by key/id (`currentDisclosure`, `sectionLabel`);
+  - the sample-PDF baseline exclusions in `tests/valuationFx.test.ts`.
+
+  Merge only on the owner's approval. No provider retirement, schema change, R11 implementation or live-AI enablement. Later R18 slices, in order: review semantics with R11; retiring unused routes and adapters; dropping the quote-cache field only with another migration. Not started: R11, R19a, R23b, #61, #64 and naming #35.
+
+## Checkpoint — 23 October 2026: PR #67 released; R18 provider-retirement audit saved (PR #68, since merged as `298b719`)
 
 - **PR #67 (valuation-scope docs) is merged and live.** Codex reviewed head `4b8892b` (no blocking findings); merged pinned as **`a63de4a8ff738ca24b83c29213e5e764b1a8918b`**. CI on `main` (run 39962702771) passed: typecheck; 22 test files, **376 passed and 2 skipped (378 total;** the 2 need the private UBS PDF); build. Production deployment `dpl_6CxmP5jGHwMcmY4X15vPwQwfbG6r` (from `a63de4a`) is READY at https://atlas-proposal-engine.vercel.app. A read-only Dashboard/Settings check passed (net worth $17.75M, readiness 13/17, saved data unchanged at 38,704 bytes). Recorded on PR #67 and #36; #36, #51, #55 and #59 stay open.
 - **R18 audit (documentation only):** [R18-provider-retirement-audit.md](roadmap/R18-provider-retirement-audit.md), on branch `docs/r18-provider-audit-2026-10-23`, linked to #51. No code, provider, stored data or schema changed; the full suite was not rerun (a 5-case read-only scratchpad probe passed).
@@ -8,7 +77,7 @@
   - **Highest-priority defect:** the client PDF's required "Market Data & Valuation Sources" and "Assumptions" pages, Key Findings and the default appendix describe values as third-party provider quotes, although every app-written value comes from a statement or the advisor.
   - **Legacy data:** quote-derived accepted values, provider names, dates and approvals round-trip through backup unchanged; later slices must never narrow the enums or backup schema.
 - **Recommended slice 1 (UI and wording only):** remove Refresh quotes, the coverage table and provider cards (keep FX); correct the PDF/Dashboard wording to the accepted value basis; reword setup docs; tests A1–A6. Needs a proposal with the owner's decisions first (seven listed in the audit).
-- **Next step:** Codex reviews the audit PR. Merge only on the owner's approval; then propose slice 1. Not started: provider removal, valuation changes, schema migrations, live AI, R23b, #61, #64, naming #35.
+- **Next step (done 23 October; see the top):** Codex reviews the audit PR. Merge only on the owner's approval; then propose slice 1. Not started: provider removal, valuation changes, schema migrations, live AI, R23b, #61, #64, naming #35.
 
 ## Checkpoint — 23 October 2026: R23a released; valuation-scope docs reconciled (PR #67, since merged as `a63de4a`)
 

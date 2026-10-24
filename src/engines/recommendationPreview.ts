@@ -194,7 +194,7 @@ export function previewRecommendation(input: {
   if (linked.valuation && linked.valuation.status !== "valued") {
     warnings.unshift({
       kind: "unvalued",
-      message: `${linked.assetName} can't be valued in ${fx.reportingCurrency} (no ${linked.valuation.currency}/${fx.reportingCurrency} rate), so this recommendation can't be applied until the rate is added in Market Data.`,
+      message: `${linked.assetName} can't be valued in ${fx.reportingCurrency} (no ${linked.valuation.currency}/${fx.reportingCurrency} rate), so this recommendation can't be applied until the rate is added in Exchange rates.`,
       blocksFinal: true,
     });
     return { ...base, state: "cannot_apply", holding: holdingInfo, standalone: { applied: false, position: null, cash: [], shortfalls: [] }, combined: null, warnings };

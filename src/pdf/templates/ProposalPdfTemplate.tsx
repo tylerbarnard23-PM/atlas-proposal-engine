@@ -16,7 +16,9 @@ import { ACCOUNT_TYPE_LABELS } from "@/domain/accountTaxonomy";
 import { PDF_BASE_CSS } from "../styles/pdfStyles";
 import { formatCalendarDate, formatCurrency, formatPercent, formatTimestampDate } from "@/utils/formatting";
 import { sumBy, groupBy } from "@/utils/numbers";
-import { applyRecommendationsToProposed, cashShortfallsOf } from "@/engines/proposalEngine";
+import { applyRecommendationsToProposed, cashShortfallsOf, sectionLabel } from "@/engines/proposalEngine";
+import { basisBreakdown, describeBasisCounts, describeDateRange, describeValueDates, provenanceCounts, valueDateSummary, valueProvenance } from "@/engines/valuationProvenance";
+import { currentDisclosure } from "@/domain/disclosureLibrary";
 import { describeAmounts } from "@/engines/recommendationAmounts";
 import { resolveFxRate } from "@/engines/currencyEngine";
 import { STALE_FX_DAYS, describeFxSources, fxFreshness, utcDate, utcMinute, type FxFreshness } from "@/engines/fxPolicy";
@@ -195,6 +197,8 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
   const accent = isValidAccentColor(advisor.accentColor) ? advisor.accentColor : undefined;
 
   const enabled = (key: string) => sections.find((s) => s.key === key)?.enabled !== false;
+  // Page titles come from the section key, as the builder's labels do.
+  const titleOf = (key: string) => sectionLabel({ key, label: key, enabled: true });
   // Any advisor-approved rec drives the Proposed view's math. The
   // Include-in-PDF toggle only controls whether the rec's prose appears in
   // the Recommendations section — it should not silently zero out the
@@ -246,8 +250,11 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
   const dq = dataQualityScore(holdings.flatMap((h) => h.dataQuality));
   const stale = holdings.filter((h) => h.priceFreshness === "stale").length;
   const mockCount = holdings.filter((h) => h.valuationSource.kind === "mock").length;
-  const manualCount = holdings.filter((h) => h.valuationSource.kind === "manual_valuation").length;
-  const enrichedCount = holdings.filter((h) => h.marketDataSource).length;
+  // What each value is based on: the valuation the resolver uses, with its own date (R18).
+  const provenance = new Map(holdings.map((h) => [h.id, valueProvenance(h)]));
+  const basisCounts = provenanceCounts(holdings);
+  const manualCount = basisCounts.manual;
+  const valueDates = describeValueDates(valueDateSummary(holdings));
 
   let pageIdx = 1;
   const pages: React.ReactNode[] = [];
@@ -366,8 +373,9 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
             Reporting currency for this proposal is <strong>{reportingCurrency}</strong>;{" "}
             {fxSources ? `FX conversion uses ${fxSources}.` : noConversion ? "no currency conversion was needed." : "no usable exchange rate is stored for the conversion needed."}
           </li>
-          <li>{enrichedCount} of {holdings.length} holdings have public market data references; {manualCount} are manually valued.</li>
-          {stale > 0 && <li>{stale} holding(s) have stale price labels and should be refreshed before finalization.</li>}
+          <li>Values used: {describeBasisCounts(basisCounts)}. Each value&apos;s source and recorded date are listed under {titleOf("market_data_sources")}.</li>
+          {valueDates && <li>{valueDates}</li>}
+          {stale > 0 && <li>{stale} holding(s) have values labelled out of date; update or review them before finalization.</li>}
           {mockCount > 0 && <li>{mockCount} holding(s) currently use mock/fallback values — review before final delivery.</li>}
           <li>{approvedRecs.length} advisor-approved recommendation(s) are included in this proposal.</li>
         </ul>
@@ -755,41 +763,49 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
           <thead>
             <tr>
               <th>Holding</th>
-              <th>Source kind</th>
-              <th>Provider</th>
-              <th>As of</th>
-              <th className="right">Confidence</th>
+              <th>Value used</th>
+              <th>Recorded source</th>
+              <th>Date</th>
+              <th className="right">Review</th>
             </tr>
           </thead>
           <tbody>
-            {holdings.map((h) => (
-              <tr key={h.id}>
-                <td>{h.assetName}</td>
-                <td>{h.valuationSource.kind.replace(/_/g, " ")}</td>
-                <td>{h.valuationSource.providerName ?? "—"}</td>
-                <td>{formatCalendarDate(h.valuationSource.asOf ?? h.valuationDate)}</td>
-                <td className="right" style={{ textTransform: "capitalize" }}>{h.valuationSource.confidence ?? "—"}</td>
-              </tr>
-            ))}
+            {holdings.map((h) => {
+              const v = provenance.get(h.id)!;
+              return (
+                <tr key={h.id}>
+                  <td>{h.assetName}</td>
+                  <td>{v.label}</td>
+                  <td>{[v.detail, v.holdingSource && `holding shows ${v.holdingSource}`].filter(Boolean).join("; ") || "—"}</td>
+                  <td>
+                    {v.date ? formatCalendarDate(v.date) : "Not recorded"}
+                    {v.approvedAt ? `; approved ${formatTimestampDate(v.approvedAt, { timeZone: props.timeZone })}` : ""}
+                  </td>
+                  <td className="right">{v.review}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </PageWrap>
     );
   }
 
-  // ---------- MARKET DATA & VALUATION SOURCES ----------
+  // ---------- VALUATION SOURCES & DATES (key market_data_sources) ----------
   if (enabled("market_data_sources")) {
     pages.push(
-      <PageWrap key="md" title="Market Data & Valuation Sources" eyebrow="12">
+      <PageWrap key="md" title={titleOf("market_data_sources")} eyebrow="12">
         <p className="pdf-text">
-          Public market quotes used in this proposal are obtained from third-party providers and may be delayed, end-of-day, reference rates, or fallback values. Each holding's quote type is shown below. Privately held, illiquid, or alternative investments are valued using advisor-entered or sponsor-reported figures.
+          Each value is the one used in this proposal: an advisor-approved value where one was locked, otherwise an advisor override, otherwise the holding&apos;s statement, advisor-entered or manual value. Atlas does not reprice securities from market data. A value carried over from an earlier market-data record is shown with the provider and date recorded at the time. Privately held, illiquid, or alternative investments are valued using advisor-entered or sponsor-reported figures.
         </p>
+        {valueDates && <p className="pdf-text">{valueDates}</p>}
         <table className="pdf-table" style={{ marginTop: 12 }}>
           <thead>
             <tr>
               <th>Holding</th>
               <th>Identifier</th>
-              <th>Quote type</th>
+              <th>Value basis</th>
+              <th>Date</th>
               <th>Currency</th>
               <th className="right">Reporting value</th>
             </tr>
@@ -799,7 +815,8 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
               <tr key={h.id}>
                 <td>{h.assetName}</td>
                 <td>{h.identifier?.value ?? "—"}</td>
-                <td style={{ textTransform: "capitalize" }}>{(h.quoteType ?? "manual").replace("_", " ")}</td>
+                <td>{provenance.get(h.id)!.label}</td>
+                <td>{provenance.get(h.id)!.date ? formatCalendarDate(provenance.get(h.id)!.date!) : "Not recorded"}</td>
                 <td>{h.currency}</td>
                 <td className="right">{reportingValue(h) == null ? `Not valued in ${reportingCurrency}` : formatCurrency(reportingValue(h), reportingCurrency, { compact: true })}</td>
               </tr>
@@ -823,7 +840,7 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
               ? "No currency conversion was needed."
               : "No usable exchange rate is stored for the conversion needed; the holdings affected are not valued."}
           </li>
-          <li>Public market values reflect end-of-day or delayed quotes from configured providers; quote type is disclosed per holding.</li>
+          <li>Holding values are the statement, advisor-entered, override or approved values listed with their recorded dates under {titleOf("market_data_sources")}; they are not live market prices.</li>
           <li>Manually valued or sponsor-reported values are advisor estimates and may not represent realizable values.</li>
           <li>Income and expense ratio figures are estimates derived from advisor-entered fields where available.</li>
           <li>The proposal does not model trading costs, custodian fees, market impact, taxes, or after-tax outcomes unless explicitly stated.</li>
@@ -837,7 +854,7 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
   if (enabled("disclosures")) {
     pages.push(
       <PageWrap key="disclosures" title="Disclosures" eyebrow="14">
-        {disclosures.map((d) => (
+        {disclosures.map(currentDisclosure).map((d) => (
           <div className="pdf-disclosure" key={d.id}>
             <h4>{d.title}</h4>
             <div>{resolveFirmPlaceholder(d.body, advisor)}</div>
@@ -923,31 +940,40 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
     );
   }
 
-  // ---------- APPENDIX MARKET DATA SOURCES ----------
+  // ---------- APPENDIX: VALUATION & EXCHANGE-RATE SOURCES (key appendix_market_data) ----------
   if (enabled("appendix_market_data")) {
     pages.push(
-      <PageWrap key="apx_m" title="Appendix — Market Data Sources" eyebrow="A3">
+      <PageWrap key="apx_m" title={titleOf("appendix_market_data")} eyebrow="A3">
         <p className="pdf-text">
-          Configured market data providers and the role each plays. API keys, where required, are stored on the server and never exposed to the client deliverable.
+          The sources of the values and exchange rates this proposal uses. Atlas does not use a security-price feed: values come from statements, advisor entry or advisor-approved values, and exchange rates are reference rates.
         </p>
         <table className="pdf-table" style={{ marginTop: 8 }}>
           <thead>
             <tr>
-              <th>Provider</th>
-              <th>Type</th>
-              <th>Used for</th>
+              <th>Source</th>
+              <th className="right">Count</th>
+              <th>Recorded dates</th>
             </tr>
           </thead>
           <tbody>
-            <tr><td>ECB / Frankfurter</td><td>Official</td><td>FX reference rates for currency conversion</td></tr>
-            <tr><td>Alpha Vantage</td><td>Aggregator</td><td>Equities, ETFs, FX, commodities (key required)</td></tr>
-            <tr><td>Finnhub</td><td>Aggregator</td><td>Equity quotes and company profiles (key required)</td></tr>
-            <tr><td>Twelve Data</td><td>Aggregator</td><td>Global symbols, equities, FX (key required)</td></tr>
-            <tr><td>SEC EDGAR</td><td>Official</td><td>US-listed company facts and filings (no key)</td></tr>
-            <tr><td>FRED</td><td>Official</td><td>Macroeconomic series (key required)</td></tr>
-            <tr><td>CoinGecko</td><td>Aggregator</td><td>Crypto market prices (no key)</td></tr>
-            <tr><td>Manual valuation</td><td>Manual</td><td>Private equity, real estate, business interests</td></tr>
-            <tr><td>Mock provider</td><td>Fallback</td><td>Used only when no provider returns data; clearly labeled</td></tr>
+            {basisBreakdown(holdings).map((r) => (
+              <tr key={r.basis}>
+                <td>{r.label}</td>
+                <td className="right">{r.count}</td>
+                <td>{describeDateRange(r.summary) || "Not recorded"}</td>
+              </tr>
+            ))}
+            <tr>
+              <td>Exchange rates</td>
+              <td className="right">{fxStatus.inUse.length}</td>
+              <td>
+                {fxSources
+                  ? `${fxSources}; each rate and its date are listed under Assumptions`
+                  : noConversion
+                  ? "No currency conversion was needed"
+                  : "No usable exchange rate is stored for the conversion needed"}
+              </td>
+            </tr>
           </tbody>
         </table>
       </PageWrap>
@@ -962,7 +988,7 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
           <li>Advisor profile complete and on record.</li>
           <li>Client profile complete with risk tolerance, tax sensitivity, and time horizon.</li>
           <li>All holdings advisor-reviewed; manual valuations reviewed for staleness.</li>
-          <li>Public quotes labeled with source, type, and timestamp.</li>
+          <li>Each value labeled with its source and recorded date.</li>
           <li>Required disclosures included.</li>
           <li>Recommendations reviewed and approved.</li>
         </ul>

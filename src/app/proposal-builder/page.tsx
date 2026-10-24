@@ -12,6 +12,7 @@ import { Input, Label, Textarea } from "@/components/ui/Input";
 import { useNormalizedHoldings } from "@/hooks/useNormalizedHoldings";
 import { useFxNow } from "@/hooks/useFxNow";
 import { evaluateWorkspaceReadiness } from "@/engines/complianceEngine";
+import { sectionLabel } from "@/engines/proposalEngine";
 import { ReadinessChecklist } from "@/components/proposal/ReadinessChecklist";
 import { ReadinessBanner } from "@/components/proposal/ReadinessBanner";
 import { ChevronRight } from "lucide-react";
@@ -68,7 +69,7 @@ function Inner() {
                 {sections.map((s) => (
                   <li key={s.key} className="px-5 py-3 flex items-center justify-between">
                     <div>
-                      <div className="text-[14px] text-ink-900 font-medium">{s.label}</div>
+                      <div className="text-[14px] text-ink-900 font-medium">{sectionLabel(s)}</div>
                       <div className="text-2xs text-ink-500 mt-0.5">{s.required ? "Required" : "Optional"}</div>
                     </div>
                     <label className="flex items-center gap-2 text-[12px] text-ink-700">

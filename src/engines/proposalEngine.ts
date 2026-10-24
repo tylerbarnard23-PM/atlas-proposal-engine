@@ -20,14 +20,20 @@ export const DEFAULT_PROPOSAL_SECTIONS: ProposalSection[] = [
   { key: "tax_considerations", label: "Tax Considerations", enabled: true },
   { key: "implementation", label: "Implementation Plan", enabled: true },
   { key: "data_sources", label: "Data Sources & Quality", enabled: true, required: true },
-  { key: "market_data_sources", label: "Market Data & Valuation Sources", enabled: true, required: true },
+  { key: "market_data_sources", label: "Valuation Sources & Dates", enabled: true, required: true },
   { key: "assumptions", label: "Assumptions", enabled: true, required: true },
   { key: "disclosures", label: "Disclosures", enabled: true, required: true },
   { key: "appendix_holdings", label: "Appendix — Holdings", enabled: true },
   { key: "appendix_accounts", label: "Appendix — Accounts", enabled: true },
-  { key: "appendix_market_data", label: "Appendix — Market Data Sources", enabled: true },
+  { key: "appendix_market_data", label: "Appendix — Valuation & Exchange-Rate Sources", enabled: true },
   { key: "appendix_compliance", label: "Appendix — Compliance Checklist", enabled: false },
 ];
+
+// A section's visible name comes from its key, so a label saved with an older
+// version (R18 renamed the market-data sections) needs no migration. Only
+// keys this version doesn't know keep their saved label.
+const SECTION_LABELS = new Map(DEFAULT_PROPOSAL_SECTIONS.map((s) => [s.key, s.label]));
+export const sectionLabel = (s: ProposalSection) => SECTION_LABELS.get(s.key) ?? s.label;
 
 // Compute the post-rec value for a single holding given its current value,
 // the recommendation's amounts, and whether the holding is a liability. Pure

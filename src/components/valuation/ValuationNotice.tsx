@@ -32,7 +32,7 @@ export function ValuationNotice({
         {describeUnvalued(summary, reportingCurrency)} Totals and charts cover valued holdings only.
       </div>
       <Link href="/market-data" className="font-medium text-navy-700 hover:underline">
-        Add the rate in Market Data →
+        Add the rate in Exchange rates →
       </Link>
     </div>
   );

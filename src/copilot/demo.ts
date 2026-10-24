@@ -83,7 +83,7 @@ export function runDemoCopilot(snapshot: CopilotSnapshot, question: string): Cop
       overview.net_worth.net == null
         ? "No total is available until they're valued."
         : `Valued holdings only (${v.holdings_valued} of ${v.holdings_total}) come to ${money(overview.net_worth.net)} net; that is not the household's full net worth.`,
-      "Portfolio-wide checks (concentration, currency, country, liquidity and cash) and allocation-changing drafts are paused until the rate is added in Market Data.",
+      "Portfolio-wide checks (concentration, currency, country, liquidity and cash) and allocation-changing drafts are paused until the rate is added in Exchange rates.",
       ""
     );
   }

@@ -316,6 +316,19 @@
           "deployment": "dpl_4FLG7i5QibQQFV2ywyLob3R3V88Y",
           "date": "2026-10-22",
           "followUp": 64
+        },
+        {
+          "pr": 68,
+          "state": "merged",
+          "mergeCommit": "298b7193d45b9f4d1e4faa095edca94344fa5060",
+          "date": "2026-10-23",
+          "scope": "Slice 2: consumer audit of quote, cache, provider, readiness, Copilot and PDF paths (documentation only)"
+        },
+        {
+          "pr": 69,
+          "state": "open",
+          "date": "2026-10-23",
+          "scope": "Slice 1: Exchange rates page; no security-quote UI; Dashboard/PDF describe each value's real source and date. No calculation, gate or schema change"
         }
       ],
       "scopeDecision": "VALUATION_SCOPE.md"

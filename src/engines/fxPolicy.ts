@@ -325,5 +325,5 @@ export function describeFreshness(f: FxFreshness): string | undefined {
       : c.state === "invalid"
       ? "; the stored confirmation isn't valid (its times are unreadable, in the future or inconsistent)"
       : "";
-  return `${legs}${why}. Refresh in Market Data or confirm them (policy: ${f.policyDays} days).`;
+  return `${legs}${why}. Refresh in Exchange rates or confirm them (policy: ${f.policyDays} days).`;
 }
