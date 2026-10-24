@@ -1,8 +1,9 @@
-import type { Account, AssetClass, CurrencyCode, DraftInputBasis, DraftInputRate, Holding, Recommendation, WorkingDraft } from "@/domain/types";
+import type { Account, AssetClass, CurrencyCode, DraftInputBasis, DraftInputRate, FxRate, Holding, Recommendation, WorkingDraft } from "@/domain/types";
 import { ASSET_CLASS_LABELS } from "@/domain/assetTaxonomy";
-import type { NormalizedHolding } from "./normalizationEngine";
+import { normalizeHoldings, type NormalizedHolding } from "./normalizationEngine";
 import { applyRecommendationsToProposed, cashShortfallsOf, type CashShortfall, type FxContext, type UnresolvedConversion } from "./proposalEngine";
 import { valueProvenance } from "./valuationProvenance";
+import { fxRatesInUse } from "./fxPolicy";
 
 // D1 — the working allocation desk (R02 scope, R03 grid, R05/R07 working
 // draft, R19a input basis). Everything here reads; nothing changes holdings,
@@ -79,12 +80,13 @@ export function scopeAccountIds(accounts: Account[], draft: WorkingDraft): strin
 
 /**
  * The actions a view applies, in the recommendations' saved order: the
- * draft's members (approved or not), or the approved set the final PDF uses.
- * Rejected recommendations are never applied.
+ * draft's members (approved or not; a rejected one never applies), or
+ * exactly the set the final PDF and readiness apply (every approved one).
  */
 export function deskActions(recommendations: Recommendation[], draft: WorkingDraft, view: DeskView): Recommendation[] {
+  if (view === "approved") return recommendations.filter((r) => r.approvedByAdvisor);
   const members = new Set(draft.memberIds);
-  return recommendations.filter((r) => r.status !== "excluded" && (view === "draft" ? members.has(r.id) : r.approvedByAdvisor));
+  return recommendations.filter((r) => r.status !== "excluded" && members.has(r.id));
 }
 
 export interface DeskRow {
@@ -131,6 +133,8 @@ export interface DeskResult {
   unresolved: UnresolvedConversion[];
   /** In-scope holdings with no usable value in the reporting currency: left out of the weights, still blocking as before. */
   unvalued: { id: string; name: string }[];
+  /** Context assets and liabilities with no usable value: left out of the context, household and liability totals. */
+  unvaluedOutside: { id: string; name: string; accountName: string; liability: boolean }[];
   positions: DeskPosition[];
   actions: Recommendation[];
   /** Approved recommendations outside the draft: the final PDF still uses them. */
@@ -172,6 +176,7 @@ export function evaluateDesk(input: {
   const contextByAccount = new Map<string, number>();
   const liabilities: DeskResult["liabilities"]["lines"] = [];
   const unvalued: DeskResult["unvalued"] = [];
+  const unvaluedOutside: DeskResult["unvaluedOutside"] = [];
   const positions: DeskPosition[] = [];
   let householdAssets = 0;
 
@@ -180,11 +185,13 @@ export function evaluateDesk(input: {
     const now = valueOf(h);
     if (isLiabilityLine(h)) {
       liabilities.push({ id: h.id, name: h.assetName, accountName: accountName(h.accountId), value: now });
+      if (now == null) unvaluedOutside.push({ id: h.id, name: h.assetName, accountName: accountName(h.accountId), liability: true });
       continue;
     }
     if (now != null) householdAssets += now;
     if (!inScope.has(h.accountId)) {
       if (now != null) contextByAccount.set(h.accountId, (contextByAccount.get(h.accountId) ?? 0) + now);
+      else unvaluedOutside.push({ id: h.id, name: h.assetName, accountName: accountName(h.accountId), liability: false });
       continue;
     }
     const after = proposedById.has(h.id) ? valueOf(proposedById.get(h.id)!) : now;
@@ -252,8 +259,9 @@ export function evaluateDesk(input: {
       accounts: [...scopeByAccount].map(([id, v]) => ({ id, name: accountName(id), ...v })),
     },
     context: {
-      accounts: scopeCandidates(accounts)
-        .filter((a) => !inScope.has(a.id))
+      // Every out-of-scope candidate, plus any liability account holding an asset (e.g. offset cash).
+      accounts: accounts
+        .filter((a) => !inScope.has(a.id) && (!a.isLiabilityAccount || contextByAccount.has(a.id)))
         .map((a) => ({ id: a.id, name: a.name, value: contextByAccount.get(a.id) ?? 0 })),
       total: [...contextByAccount.values()].reduce((a, b) => a + b, 0),
     },
@@ -265,9 +273,10 @@ export function evaluateDesk(input: {
     shortfalls: cashShortfallsOf(proposed.holdings, accounts, fx),
     unresolved: proposed.unresolved,
     unvalued,
+    unvaluedOutside,
     positions,
     actions,
-    approvedOutsideDraft: live.filter((r) => r.approvedByAdvisor && !members.has(r.id)),
+    approvedOutsideDraft: recommendations.filter((r) => r.approvedByAdvisor && !members.has(r.id)),
     unapprovedInDraft: live.filter((r) => members.has(r.id) && !r.approvedByAdvisor),
     targetSum: Object.values(draft.targets).reduce<number>((a, b) => a + (b ?? 0), 0),
   };
@@ -337,28 +346,53 @@ function fnv1a(text: string): string {
   return (h >>> 0).toString(16).padStart(8, "0");
 }
 
-/** The accepted values and rates the workspace currently values with. */
-export function inputBasisOf(holdings: NormalizedHolding[], reportingCurrency: CurrencyCode): Omit<DraftInputBasis, "recordedAt"> {
+export interface InputBasisInputs {
+  /** Current holdings, normalized against the current rates. */
+  holdings: NormalizedHolding[];
+  accounts: Account[];
+  /** The draft's actions (deskActions(…, "draft")). */
+  actions: Recommendation[];
+  fxRates: FxRate[];
+  reportingCurrency: CurrencyCode;
+}
+
+/**
+ * The accepted values the workspace values with, and every rate the draft
+ * uses: valuing holdings, converting its actions' amounts and writing
+ * proposed values and cash back in their own currencies (fxPolicy's in-use
+ * rule, applied to the draft's actions).
+ */
+export function inputBasisOf(input: InputBasisInputs): Omit<DraftInputBasis, "recordedAt"> {
+  const { holdings, reportingCurrency } = input;
   const values = holdings
     .map((h) => {
       const p = valueProvenance(h);
       return { holdingId: h.id, accountId: h.accountId, amount: h.valuation.amount, currency: h.valuation.currency, sourceKind: p.basis, date: p.date };
     })
     .sort((a, b) => a.holdingId.localeCompare(b.holdingId));
-  const rates = new Map<string, DraftInputRate>();
-  for (const h of holdings) {
-    if (h.valuation.status !== "valued") continue;
-    for (const r of h.valuation.rateLegs) rates.set(`${r.base}/${r.quote}`, { base: r.base, quote: r.quote, rate: r.rate, asOf: r.asOf, source: r.source });
-  }
-  const sortedRates = [...rates.values()].sort((a, b) => `${a.base}/${a.quote}`.localeCompare(`${b.base}/${b.quote}`));
-  return { reportingCurrency, fingerprint: fnv1a(JSON.stringify([reportingCurrency, values, sortedRates])), values, rates: sortedRates };
+  const used = fxRatesInUse({ holdings, accounts: input.accounts, recommendations: input.actions.map((r) => ({ ...r, approvedByAdvisor: true })), fxRates: input.fxRates, reportingCurrency });
+  const rates: DraftInputRate[] = used
+    .map(({ leg }) => ({ base: leg.base, quote: leg.quote, rate: leg.rate, asOf: leg.asOf, source: leg.source }))
+    .sort((a, b) => `${a.base}/${a.quote}`.localeCompare(`${b.base}/${b.quote}`));
+  return { reportingCurrency, fingerprint: fnv1a(JSON.stringify([reportingCurrency, values, rates])), values, rates };
 }
 
-export function recordInputBasis(holdings: NormalizedHolding[], reportingCurrency: CurrencyCode, now: string): DraftInputBasis {
-  return { recordedAt: now, ...inputBasisOf(holdings, reportingCurrency) };
+/** The basis inputs of a workspace and its draft (store, page and tests use the same). */
+export function draftBasisInputs(ws: { holdings: Holding[]; accounts: Account[]; recommendations: Recommendation[]; fxRates: FxRate[]; reportingCurrency: CurrencyCode; draft: WorkingDraft }): InputBasisInputs {
+  return {
+    holdings: normalizeHoldings(ws.holdings, ws.fxRates, ws.reportingCurrency),
+    accounts: ws.accounts,
+    actions: deskActions(ws.recommendations, ws.draft, "draft"),
+    fxRates: ws.fxRates,
+    reportingCurrency: ws.reportingCurrency,
+  };
+}
+
+export function recordInputBasis(input: InputBasisInputs, now: string): DraftInputBasis {
+  return { recordedAt: now, ...inputBasisOf(input) };
 }
 
 /** Whether the workspace's inputs differ from those the draft recorded. */
-export function inputsChanged(basis: DraftInputBasis | null, holdings: NormalizedHolding[], reportingCurrency: CurrencyCode): boolean {
-  return basis != null && basis.fingerprint !== inputBasisOf(holdings, reportingCurrency).fingerprint;
+export function inputsChanged(basis: DraftInputBasis | null, input: InputBasisInputs): boolean {
+  return basis != null && basis.fingerprint !== inputBasisOf(input).fingerprint;
 }

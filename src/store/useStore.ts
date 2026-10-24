@@ -35,8 +35,7 @@ import { confirmStaleRates } from "@/engines/fxPolicy";
 import { fxClock } from "@/engines/fxClock";
 import { markRemovedLinks } from "@/engines/recommendationLinks";
 import { migrateRecommendationCurrency, withApprovalRule } from "@/engines/recommendationAmounts";
-import { legacyWorkingDraft, needsIntentRestatement, newWorkingDraft, recordInputBasis } from "@/engines/allocationDesk";
-import { normalizeHoldings } from "@/engines/normalizationEngine";
+import { draftBasisInputs, legacyWorkingDraft, needsIntentRestatement, newWorkingDraft, recordInputBasis } from "@/engines/allocationDesk";
 import { LEGACY_SAMPLE_FIRM_NAME } from "@/domain/branding";
 import type { ImportedWorkspace } from "@/ingestion/documents/toWorkspace";
 import type { RestoredWorkspace } from "@/engines/workspaceBackup";
@@ -304,10 +303,9 @@ export function migrateAtlasState(persisted: unknown, version: number): AtlasSta
 // The draft after a change, with the inputs it is now edited against.
 function draftChange(s: AtlasState, patch: Partial<WorkingDraft>): { workingDraft: WorkingDraft } {
   const now = new Date().toISOString();
-  const ccy = s.client.proposalOutputCurrency;
-  return {
-    workingDraft: { ...s.workingDraft, ...patch, inputBasis: recordInputBasis(normalizeHoldings(s.holdings, s.fxRates, ccy), ccy, now), updatedAt: now },
-  };
+  const draft = { ...s.workingDraft, ...patch };
+  const inputs = draftBasisInputs({ holdings: s.holdings, accounts: s.accounts, recommendations: s.recommendations, fxRates: s.fxRates, reportingCurrency: s.client.proposalOutputCurrency, draft });
+  return { workingDraft: { ...draft, inputBasis: recordInputBasis(inputs, now), updatedAt: now } };
 }
 
 // A recommendation saved without an amount keeps its legacy effect, but a new

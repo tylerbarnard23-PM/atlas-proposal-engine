@@ -10,9 +10,10 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { useNormalizedHoldings } from "@/hooks/useNormalizedHoldings";
 import { useFxNow } from "@/hooks/useFxNow";
-import type { AssetClass, Recommendation } from "@/domain/types";
+import type { AssetClass, CurrencyCode as AssetCurrency, Recommendation } from "@/domain/types";
 import { ASSET_CLASS_LABELS } from "@/domain/assetTaxonomy";
 import {
+  draftBasisInputs,
   evaluateDesk,
   inputsChanged,
   editablePosition,
@@ -61,7 +62,7 @@ function Desk() {
   const fx = React.useMemo(() => ({ reportingCurrency, rates: fxRates, now }), [reportingCurrency, fxRates, now]);
   const d = React.useMemo(() => evaluateDesk({ holdings, accounts, recommendations, draft, fx, view }), [holdings, accounts, recommendations, draft, fx, view]);
   const money = (n: number) => formatCurrency(n, reportingCurrency);
-  const changed = inputsChanged(draft.inputBasis, holdings, reportingCurrency);
+  const changed = inputsChanged(draft.inputBasis, draftBasisInputs({ holdings, accounts, recommendations, fxRates, reportingCurrency: reportingCurrency as AssetCurrency, draft }));
   const candidates = scopeCandidates(accounts);
   const inScope = new Set(d.scope.accountIds);
   const toggleScope = (id: string) => setScope(inScope.has(id) ? d.scope.accountIds.filter((x) => x !== id) : [...d.scope.accountIds, id]);
@@ -141,7 +142,8 @@ function Desk() {
               </tbody>
             </table>
             <p className="px-4 py-3 text-2xs text-ink-500 leading-relaxed border-t border-ink-100">
-              Targets total {d.targetSum.toFixed(1)}%{Math.abs(d.targetSum - 100) >= 0.05 && d.targetSum > 0 ? `; ${(100 - d.targetSum).toFixed(1)}% unassigned` : ""}. A target is a desired weight: it creates no trades. Drift stays visible until you add explicit actions; new investments and automatic rebalancing come later (D2).
+              Targets total {d.targetSum.toFixed(1)}%
+              {d.targetSum > 100.05 ? `, ${(d.targetSum - 100).toFixed(1)}% more than the whole scope` : d.targetSum > 0 && d.targetSum < 99.95 ? `; ${(100 - d.targetSum).toFixed(1)}% unassigned` : ""}. A target is a desired weight: it creates no trades. Drift stays visible until you add explicit actions; new investments and automatic rebalancing come later (D2).
             </p>
           </CardBody>
         </Card>
@@ -165,7 +167,7 @@ function Desk() {
               })}
               <div className="border-t border-ink-100 pt-2 text-2xs text-ink-500 space-y-1">
                 <div className="flex justify-between"><span>In scope (denominator)</span><span className="tabular">{money(d.totals.current)}</span></div>
-                <div className="flex justify-between"><span>Context only, not in the weights</span><span className="tabular">{money(d.context.total)}</span></div>
+                <div className="flex justify-between"><span>Context only, not in the weights{d.unvaluedOutside.length > 0 ? " (valued only)" : ""}</span><span className="tabular">{money(d.context.total)}</span></div>
                 <div className="flex justify-between"><span>Household assets</span><span className="tabular">{money(d.householdAssets)}</span></div>
                 <div className="flex justify-between"><span>Liabilities (kept separate)</span><span className="tabular">{money(d.liabilities.total)}</span></div>
               </div>
@@ -193,10 +195,16 @@ function Desk() {
         </div>
       </div>
 
-      {(d.unvalued.length > 0 || d.unresolved.length > 0) && (
+      {(d.unvalued.length > 0 || d.unvaluedOutside.length > 0 || d.unresolved.length > 0) && (
         <Card className="mt-5 border-warning-200">
           <CardBody className="text-[13px] text-warning-600 space-y-1">
             {d.unvalued.length > 0 && <p>Not valued in {reportingCurrency} (left out of the weights; the final PDF stays blocked until they are): {d.unvalued.map((u) => u.name).join(", ")}.</p>}
+            {d.unvaluedOutside.length > 0 && (
+              <p>
+                Outside the scope and not valued in {reportingCurrency} (left out of the context, household and liability totals, which cover valued items only):{" "}
+                {d.unvaluedOutside.map((u) => `${u.name} (${u.accountName}${u.liability ? ", liability" : ""})`).join(", ")}.
+              </p>
+            )}
             {d.unresolved.map((u) => <p key={u.recommendationId + u.holdingId}>{u.reason}</p>)}
           </CardBody>
         </Card>

@@ -212,6 +212,74 @@ describe("scope and context", () => {
   });
 });
 
+describe("review fixes (PR #72)", () => {
+  it("unvalued wealth outside the scope is listed, not silently dropped from context, household or liabilities", async () => {
+    const m = await load();
+    story(m);
+    const homeNok: Holding = { ...m.STORY_HOLDINGS[3], id: "h_story_cabin", assetName: "Cabin (NOK)", currency: "NOK", nativeMarketValue: 900_000 };
+    const loanNok: Holding = { ...m.STORY_HOLDINGS[3], id: "h_story_loan", assetName: "Cabin loan (NOK)", assetClass: "liability", isLiability: true, currency: "NOK", nativeMarketValue: -300_000 };
+    m.useAtlasStore.setState({ holdings: [...m.STORY_HOLDINGS, homeNok, loanNok] });
+    m.useAtlasStore.getState().setDraftScope(["acc_story_invest"]);
+    const d = desk(m);
+    expect(d.unvalued).toEqual([]);
+    expect(d.unvaluedOutside).toEqual([
+      { id: "h_story_cabin", name: "Cabin (NOK)", accountName: "Story — Primary Residence", liability: false },
+      { id: "h_story_loan", name: "Cabin loan (NOK)", accountName: "Story — Primary Residence", liability: true },
+    ]);
+    expect(d.context.total).toBe(400_000); // valued context only, and said so
+    expect(d.liabilities.lines.find((l) => l.id === "h_story_loan")!.value).toBeNull();
+  });
+
+  it("household assets always equal scope plus context, even for an asset in a liability account", async () => {
+    const m = await load();
+    story(m);
+    const loanAcct = { ...m.STORY_ACCOUNTS[0], id: "acc_story_loan", name: "Story — Mortgage", type: "liability_account" as const, isLiabilityAccount: true };
+    const offset: Holding = { ...m.STORY_HOLDINGS[2], id: "h_story_offset", accountId: "acc_story_loan", assetName: "Offset cash", nativeMarketValue: 2_500 };
+    const loan: Holding = { ...m.STORY_HOLDINGS[2], id: "h_story_mortgage", accountId: "acc_story_loan", assetName: "Mortgage", assetClass: "liability", isLiability: true, nativeMarketValue: -150_000 };
+    m.useAtlasStore.setState({ accounts: [...m.STORY_ACCOUNTS, loanAcct], holdings: [...m.STORY_HOLDINGS, offset, loan] });
+    m.useAtlasStore.getState().setDraftScope(["acc_story_invest"]);
+    const d = desk(m);
+    expect(d.householdAssets).toBe(502_500);
+    expect(d.totals.current + d.context.total).toBe(d.householdAssets);
+    expect(d.context.accounts.map((a) => [a.id, a.value])).toEqual([["acc_story_home", 400_000], ["acc_story_loan", 2_500]]);
+    expect(d.liabilities.total).toBe(-150_000);
+    expect(d.scope.accountIds).toEqual(["acc_story_invest"]); // a liability account is never in scope
+  });
+
+  it("a change to a rate the draft's actions use shows as changed inputs", async () => {
+    const m = await load();
+    story(m);
+    const st = m.useAtlasStore.getState();
+    // A draft action entered in EUR: converting it uses EUR/USD, which no holding needs.
+    st.addDraftEdit({ ...edit(m, "h_story_equity", "reduce", 1_000, "rec_eur"), currency: "EUR" });
+    const basis = m.useAtlasStore.getState().workingDraft.inputBasis!;
+    expect(basis.rates.map((r) => `${r.base}/${r.quote}`)).toContain("EUR/USD");
+    const s = m.useAtlasStore.getState();
+    const inputs = () => {
+      const x = m.useAtlasStore.getState();
+      return m.draftBasisInputs({ holdings: x.holdings, accounts: x.accounts, recommendations: x.recommendations, fxRates: x.fxRates, reportingCurrency: "USD", draft: x.workingDraft });
+    };
+    expect(m.inputsChanged(basis, inputs())).toBe(false);
+    st.setFxRates(s.fxRates.map((r) => (r.base === "EUR" ? { ...r, rate: r.rate + 0.05 } : r)));
+    expect(m.inputsChanged(basis, inputs())).toBe(true);
+  });
+
+  it("the approved view applies exactly what the final PDF and readiness apply", async () => {
+    const m = await load();
+    story(m);
+    // Legacy data can be approved and marked excluded at once; the PDF engine applies it, so the approved view must too.
+    const odd = { ...edit(m, "h_story_equity", "reduce", 5_000, "rec_odd"), approvedByAdvisor: true, status: "excluded" as const };
+    m.useAtlasStore.setState({ recommendations: [odd] });
+    m.useAtlasStore.getState().setDraftScope(["acc_story_invest"]);
+    const s = m.useAtlasStore.getState();
+    const hs = m.normalizeHoldings(s.holdings, s.fxRates, "USD");
+    const pdf = m.applyRecommendationsToProposed(hs, s.recommendations.filter((r) => r.approvedByAdvisor), s.accounts, { reportingCurrency: "USD", rates: s.fxRates });
+    const pdfEquity = pdf.holdings.filter((h) => h.assetClass === "equity").reduce((a, h) => a + (h.reportingMarketValue ?? 0), 0);
+    expect(row(desk(m, "approved"), "equity").proposed).toBe(pdfEquity);
+    expect(pdfEquity).toBe(55_000);
+  });
+});
+
 describe("membership, approval and PDF prose are separate", () => {
   it("joining the draft doesn't approve; approving doesn't join; prose inclusion moves neither", async () => {
     const m = await load();
@@ -336,12 +404,18 @@ describe("input basis", () => {
     expect(basis.values).toHaveLength(s.holdings.length);
     expect(basis.values.find((v) => v.holdingId === "h_aapl")).toEqual({ holdingId: "h_aapl", accountId: "acc_brokerage_us", amount: 941_556, currency: "USD", sourceKind: "statement", date: "2026-04-30" });
     expect(basis.rates.map((r) => `${r.base}/${r.quote}`)).toEqual(["CAD/USD", "CHF/USD", "EUR/USD", "GBP/USD", "JPY/USD"]);
-    const hs = () => m.normalizeHoldings(m.useAtlasStore.getState().holdings, m.useAtlasStore.getState().fxRates, "USD");
-    expect(m.inputsChanged(basis, hs(), "USD")).toBe(false);
+    const hs = () => {
+      const x = m.useAtlasStore.getState();
+      return m.draftBasisInputs({ holdings: x.holdings, accounts: x.accounts, recommendations: x.recommendations, fxRates: x.fxRates, reportingCurrency: "USD", draft: x.workingDraft });
+    };
+    expect(m.inputsChanged(basis, hs())).toBe(false);
     st.setFxRates(s.fxRates.map((r) => (r.base === "EUR" ? { ...r, rate: 1.2, asOf: "2026-10-23" } : r)));
-    expect(m.inputsChanged(basis, hs(), "USD")).toBe(true);
+    expect(m.inputsChanged(basis, hs())).toBe(true);
     st.recordDraftInputs();
-    expect(m.inputsChanged(m.useAtlasStore.getState().workingDraft.inputBasis, hs(), "USD")).toBe(false);
+    expect(m.inputsChanged(m.useAtlasStore.getState().workingDraft.inputBasis, hs())).toBe(false);
+    // A changed source date alone is a changed input too.
+    st.patchHolding("h_aapl", { valuationSource: { ...s.holdings.find((h) => h.id === "h_aapl")!.valuationSource, asOf: "2026-05-01" } });
+    expect(m.inputsChanged(m.useAtlasStore.getState().workingDraft.inputBasis, hs())).toBe(true);
   });
 });
 

@@ -7,18 +7,22 @@
   - **Delivered:** `/allocation-desk` with selected-account scope (context assets and liabilities out of the denominator), current/proposed/target grid with drift and actual cash, one working draft (members separate from approval and PDF prose; draft vs approved-subset preview), explicit position edits through `previewRecommendation`/`applyRecommendationsToProposed`, and a recorded input basis with change detection.
   - **State:** store v7 and backup workspace v7 add `workingDraft`. The idempotent migration and the strict v6-backup upgrade make approved recommendations the members, so previews are unchanged. Legacy implicit sizes keep their effect, but a new approval needs an explicit amount.
   - **Not in D1:** new destinations, automatic trades, scenario duplication and reserve enforcement (D2). Cash lines take no edit.
-- **Heads:** the implementation is `ee55b96`. The tested head `ff750941ae8eb80fc1323c3d22f47b9cc1c258b3` includes the docs. Any later commit is a docs-only checkpoint that won't have finished CI yet.
-- **Validation:**
-  - **Local (`ff75094`):** typecheck passed; 25 files, **420 passed, 0 skipped** (the private UBS PDF is present locally); eval 2 of 2; build passed.
-  - **CI (run 40103554615 on `ff75094`):** **418 passed, 2 skipped (420)**, where the 2 need the private PDF; eval 2 of 2; build passed. The Vercel preview for `ff75094` is ready.
-- **Browser check:**
-  - The real saved v6 workspace on localhost:3001 migrated to v7 with draft and approved previews identical.
-  - The acceptance story passed: 60/30/10 → targets with no trades → a 10,000 reduction previewed as 50/30/20 with cash 20,000 → the state survived a reload.
-  - The legacy Approve gate showed correctly.
-  - The workspace was restored byte-identical (v6, 200,907 bytes) and the task server stopped.
+- **Review (24 October 2026):** four defects were found. Each was reproduced first with a failing regression, then fixed on this PR:
+  1. **FX detection:** the input basis now records every rate the draft uses (fxPolicy's in-use rule applied to the draft's actions), so a change to an action-amount or cash-write-back rate shows as changed inputs.
+  2. **Approved view:** it applies exactly the PDF/readiness set (every `approvedByAdvisor`).
+  3. **Unvalued items outside the scope:** context assets and liabilities without a value are now listed, and the totals are labelled "valued only".
+  4. **Context list:** a liability account holding an asset now appears in it, so household = scope + context.
+  - **Also fixed:** the over-100% target wording.
+- **Heads:** implementation `ee55b96`, then the review fixes; the review commit is the tested head (see the PR). Any later docs-only commit won't have finished CI yet.
+- **Validation (review head, local):** typecheck passed; 25 files, **424 passed, 0 skipped**; eval 2 of 2; build passed. CI skips the 2 private-PDF tests. Earlier CI on `ff75094` (run 40103554615) passed: 418 passed, 2 skipped.
+- **Browser check:** the original v6 workspace still matched its saved hash before testing.
+  - **Earlier, on `ff75094`:** the real v6 → v7 migration, the acceptance story and the legacy Approve gate all passed.
+  - **This review:** the unvalued-outside notice and the over-100% target text rendered correctly.
+  - **Cleanup:** the workspace was restored byte-identical each time, and the task server stopped.
 - **Limitations:**
-  - The seed's `rec_reduce_aapl` and `rec_pay_mortgage` need explicit amounts before a new approval.
-  - Existing actions are edited on Recommendations, not on the desk.
+  - Seed `rec_reduce_aapl` and `rec_pay_mortgage` need explicit amounts before a new approval.
+  - Existing actions are edited on Recommendations.
+  - Liabilities show current values only (no proposed paydown column).
   - At narrow widths the grid scrolls sideways.
   - Reserves, new destinations, automatic trades and alternatives are D2.
 - **Next step:** Codex reviews PR #72 before any owner-authorized merge. D2 has not started.
