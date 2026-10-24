@@ -1,6 +1,28 @@
 # Handoff
 
-## Current checkpoint — 24 October 2026: PR #69 approval-date time-zone fix (still open, unmerged)
+## Current checkpoint — 24 October 2026: PR #69 released; R18 slice 2 / R11 wording in review (PR #70)
+
+- **PR #69 (R18 slice 1) is merged and live.** Codex reviewed `7619327ca7093a3351760f826560e3c577a30faf`; it was merged pinned as **`7d5999fa01e15a1271bb81812cd8cabbbf58d095`**.
+  - CI on main (run 40097812771): 393 passed, 2 skipped (395); eval 2 of 2; build.
+  - GitHub records a successful Production deployment for that SHA. The Vercel connector returns 403, so the `dpl_` ID couldn't be read.
+  - The production smoke test passed on synthetic data, with the browser workspace restored byte-identical. Evidence is on PR #69 and #51.
+  - #51 stays open.
+- **PR #70 (part of #46 and #51)** on `feat/r18-r11-review-wording`. The implementation commit is `5dcb174`; this documentation commit follows it (see the PR for the exact head). It is not merged or deployed.
+  - **Readiness wording.** "Out-of-date values reviewed" and "Placeholder values reviewed", with "N … value(s) not yet reviewed". Codes, applicability and results are unchanged.
+  - **Score.** `dataQualityScore` skips `MISSING_IDENTIFIER` by code: new, legacy saved and statement-import warnings alike. The issue is still reported, saved holdings aren't rewritten, and every other penalty is unchanged.
+  - **Identifier task.** Identifiers are optional matching evidence; the task no longer says they're needed to refresh prices.
+  - **Value review.** The stale task says to update from a newer statement or your own figure, or "Keep recorded date", which doesn't make the value current. The manual-valuation insight and the lock explanation no longer mention price refreshes.
+  - **Not changed:** readiness logic, staleness thresholds, bond calculations, approvals, schema, stored data, backups, providers and routes.
+- **Local checks:** typecheck passed; 24 files, **404 passed, 0 skipped**; extraction eval 2 of 2; build passed.
+  - The tests were written first: 6 of the 9 new ones failed before the change, and 3 are guards.
+  - In the sample baseline only the reworded readiness detail is mapped; the baseline wasn't recaptured, and the PDF text and score are unchanged.
+- **Browser check** (`next start` on port 3001, synthetic sample):
+  - **Saved data.** The workspace read right after the first load was identical to the hash recorded at the previous restore (`99aa0da7…`), so that load changed nothing. It was restored byte-identical afterwards, and the task server was stopped.
+  - **Wording.** The Dashboard and banner show the new readiness wording. Insights shows the new identifier and stale text and 20 "Keep recorded date" buttons.
+  - **Keep recorded date.** Clicking it for Apple added only `dataAcks.acceptedValuationDate`: the date and value were unchanged and the final PDF still had 5 blockers.
+- **Next step:** Codex reviews PR #70. Merge only on the owner's approval. Not started: the exception queue, bond checks, staleness rules, bulk actions, provider retirement, schema changes, R19a, R23b and live AI.
+
+## Checkpoint — 24 October 2026: PR #69 approval-date time-zone fix (since merged as `7d5999f`)
 
 - **Codex finding at `77765ce`:** an approved value's lock date was turned into a UTC calendar day in `valueProvenance` before the PDF printed it. A value locked at 2026-10-24T01:30:00Z therefore showed "Oct 24" even for an advisor in America/New_York.
 - **Reproduced first:** a rendered-template test failed before the fix.

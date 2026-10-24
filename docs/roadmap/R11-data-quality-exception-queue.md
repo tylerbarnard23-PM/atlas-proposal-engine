@@ -1,6 +1,6 @@
 # R11 — Make data-quality review actionable and correct bond checks
 
-Accepted for planning: 22 October 2026. **Status: Planned; not implemented by this document.**
+Accepted for planning: 22 October 2026. **Status: Planned; not implemented by this document.** A first wording slice shared with R18 is in review as PR #70: value-review labels, no quality-score penalty for a missing identifier, and identifier/stale task text. The exception queue, bond checks and staleness rules are not started.
 Tracking issue: #46. Parent roadmap: #36. Original review recommendation: **11 of 25**.
 Phase: P1. Relative scope: M; no calendar estimate is committed.
 Canonical plan: [R11-data-quality-exception-queue.md](R11-data-quality-exception-queue.md).

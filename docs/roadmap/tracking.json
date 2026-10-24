@@ -182,7 +182,15 @@
       "status": "planned",
       "dependencies": [],
       "existingIssueReused": false,
-      "scopeDecision": "VALUATION_SCOPE.md"
+      "scopeDecision": "VALUATION_SCOPE.md",
+      "progress": [
+        {
+          "pr": 70,
+          "state": "open",
+          "date": "2026-10-24",
+          "scope": "Shared R18 slice 2 / R11: value-review readiness wording (same codes and results); no quality-score penalty for MISSING_IDENTIFIER; identifier/stale task wording"
+        }
+      ]
     },
     {
       "id": "R12",
@@ -326,9 +334,18 @@
         },
         {
           "pr": 69,
+          "state": "merged",
+          "date": "2026-10-24",
+          "scope": "Slice 1: Exchange rates page; no security-quote UI; Dashboard/PDF describe each value's real source and date. No calculation, gate or schema change",
+          "head": "7619327ca7093a3351760f826560e3c577a30faf",
+          "mergeCommit": "7d5999fa01e15a1271bb81812cd8cabbbf58d095",
+          "deployment": "GitHub Production deployment for 7d5999f (Vercel dpl_ ID not readable: connector 403)"
+        },
+        {
+          "pr": 70,
           "state": "open",
-          "date": "2026-10-23",
-          "scope": "Slice 1: Exchange rates page; no security-quote UI; Dashboard/PDF describe each value's real source and date. No calculation, gate or schema change"
+          "date": "2026-10-24",
+          "scope": "Shared R18 slice 2 / R11: value-review readiness wording (same codes and results); no quality-score penalty for MISSING_IDENTIFIER; identifier/stale task wording"
         }
       ],
       "scopeDecision": "VALUATION_SCOPE.md"
