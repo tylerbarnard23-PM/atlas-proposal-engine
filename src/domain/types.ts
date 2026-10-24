@@ -825,6 +825,61 @@ export interface ProposalSection {
   required?: boolean;
 }
 
+// D1 working allocation desk (R02/R03/R05/R07/R19a minimum contracts).
+// One working draft per workspace. It is a scenario, not an approval: its
+// members are previewed with the shared proposal engine, while approval and
+// PDF prose inclusion stay on each recommendation. Current holdings are never
+// changed by a draft, and targets never create trades.
+
+/** One accepted input value, as recorded for the draft (R19a minimum). */
+export interface DraftInputValue {
+  holdingId: string;
+  accountId: string;
+  /** The amount valuation uses, in `currency` (an approved value's own currency). */
+  amount: number;
+  currency: CurrencyCode;
+  /** The valuation source kind actually used (approved values record their own source). */
+  sourceKind: string;
+  /** That value's own recorded calendar date, or null when none was recorded. */
+  date: string | null;
+}
+
+/** An exchange rate used to value the draft's inputs. */
+export interface DraftInputRate {
+  base: CurrencyCode;
+  quote: CurrencyCode;
+  rate: number;
+  asOf: string;
+  source: string;
+}
+
+/** The accepted values and rates the draft was last edited against. Not an approval or snapshot. */
+export interface DraftInputBasis {
+  recordedAt: string;
+  reportingCurrency: CurrencyCode;
+  /** Identifies these inputs; recomputed from the workspace to tell whether they have changed since. */
+  fingerprint: string;
+  values: DraftInputValue[];
+  rates: DraftInputRate[];
+}
+
+export interface WorkingDraft {
+  id: string;
+  name: string;
+  /**
+   * Accounts whose holdings form the allocation denominator (R02), or null
+   * when the advisor hasn't chosen yet (every non-liability account is shown).
+   */
+  scopeAccountIds: string[] | null;
+  /** Recommendations in this scenario, independent of approval and PDF prose. Saved order is the recommendations' own. */
+  memberIds: string[];
+  /** Desired weights by asset class, in percent of the selected scope. A target never creates a trade. */
+  targets: Partial<Record<AssetClass, number>>;
+  inputBasis: DraftInputBasis | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Proposal {
   id: string;
   clientId: string;

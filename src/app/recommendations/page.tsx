@@ -21,6 +21,7 @@ import { proposedCashShortfalls } from "@/engines/proposalEngine";
 import { useNormalizedHoldings } from "@/hooks/useNormalizedHoldings";
 import { useFxNow } from "@/hooks/useFxNow";
 import { hasMoneyAmounts, newRecommendation } from "@/engines/recommendationAmounts";
+import { restatementMessage } from "@/engines/allocationDesk";
 import { summarizePreview } from "@/components/recommendations/recEffect";
 import { RecPreview } from "@/components/recommendations/RecPreview";
 import { previewRecommendation } from "@/engines/recommendationPreview";
@@ -234,6 +235,12 @@ function Inner() {
                         )}
                       </div>
                       <h4 className={`font-serif text-lg mt-1.5 ${rejected ? "text-ink-500 line-through decoration-ink-300" : "text-ink-900"}`}>{r.title}</h4>
+                      {!rejected && restatementMessage(r) && (
+                        <p className="mt-1 text-[13px] text-warning-600">
+                          {r.approvedByAdvisor ? "Approved before amounts were required: it keeps its saved effect. " : ""}
+                          {restatementMessage(r)}
+                        </p>
+                      )}
                       {rejected && (
                         <p className="mt-1 text-[13px] text-negative-600">
                           Rejected{r.rejectedAt ? ` ${formatTimestampDate(r.rejectedAt)}` : ""}
@@ -282,6 +289,8 @@ function Inner() {
                           <Button
                             size="sm"
                             variant={r.approvedByAdvisor ? "secondary" : "primary"}
+                            disabled={!r.approvedByAdvisor && !!restatementMessage(r)}
+                            title={!r.approvedByAdvisor && restatementMessage(r) ? "Enter an explicit amount first" : undefined}
                             onClick={() =>
                               upsert({
                                 ...r,
