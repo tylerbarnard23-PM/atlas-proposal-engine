@@ -268,9 +268,8 @@ function applyCore(
   // line in the account's base currency.
   // An account's designated eligible cash line (D2), when it has one.
   const cashLine = (accountId: string): MaybeNormalized | undefined => {
-    const designated = accountById.get(accountId)?.funding?.cashHoldingId;
-    const chosen = designated ? current.find((h) => h.id === designated && h.accountId === accountId) : undefined;
-    return chosen ?? current.find((h) => h.accountId === accountId && h.assetClass === "cash" && !h.isLiability);
+    const account = accountById.get(accountId);
+    return (account && eligibleCashOf(account, current)) ?? current.find((h) => h.accountId === accountId && h.assetClass === "cash" && !h.isLiability);
   };
   const cashCurrency = (accountId: string): CurrencyCode =>
     cashLine(accountId)?.currency ?? accountById.get(accountId)?.baseCurrency ?? fx.reportingCurrency;
@@ -328,10 +327,25 @@ function applyCore(
 
     for (const rec of recs) {
       const before = value;
-      value = applyRecToValue(value, amountsById.get(rec.id)!, !!h.isLiability);
+      const amounts = amountsById.get(rec.id)!;
+      value = applyRecToValue(value, amounts, !!h.isLiability);
 
       // Record the cash side of this rec.
       const change = value - before;
+      // A unit's sale must fit the position as it stands here: a clamped sale
+      // would fund the unit's purchase with proceeds that don't exist.
+      if (isUnit(rec) && SALE.has(rec.type) && amounts.actionAmount != null && !h.isLiability) {
+        const raw = Math.abs(amounts.actionAmount);
+        const wanted = amounts.actionAmountUnit === "percent" ? Math.abs(before) * (raw / 100) : raw;
+        if (wanted - (before - value) > 0.005) {
+          blockedCore.push({
+            unitId: unitIdOf(rec),
+            recommendationIds: [rec.id],
+            accountId: h.accountId,
+            reason: `the sale of ${fx.reportingCurrency} ${amountText(wanted)} of ${h.assetName} is more than its ${fx.reportingCurrency} ${amountText(Math.max(0, before))} value in the draft.`,
+          });
+        }
+      }
       if (h.isLiability) {
         // change is positive when paying down debt (moving toward 0).
         if (change > 0) paydown += change;
@@ -518,6 +532,7 @@ function applyCore(
 const unitIdOf = (r: Recommendation) => r.linked?.groupId ?? `unit:${r.id}`;
 const isUnit = (r: Recommendation) => !!r.linked || (!!r.destination && !r.relatedHoldingId);
 const PURCHASE = new Set<Recommendation["type"]>(["buy", "increase"]);
+const SALE = new Set<Recommendation["type"]>(["sell", "raise_cash", "reduce", "reduce_concentration"]);
 
 /** Why a proposed-investment purchase can't be applied, or null (D2 rules). */
 function destinationProblem(rec: Recommendation, current: Holding[], accounts: Map<string, Account>, fx: FxContext): string | null {
@@ -526,13 +541,19 @@ function destinationProblem(rec: Recommendation, current: Holding[], accounts: M
   if (!account || account.isLiabilityAccount) return `The account for ${d.name} isn't a supported investment account.`;
   if (!PURCHASE.has(rec.type)) return `${d.name} isn't held yet, so it can only be bought.`;
   if (d.assetClass === "cash" || d.assetClass === "liability") return `${d.name} must be an investment, not cash or a liability.`;
-  const source = account.funding ? current.find((h) => h.id === account.funding!.cashHoldingId && h.accountId === account.id) : undefined;
+  const source = eligibleCashOf(account, current);
   if (!source) return `${account.name} has no eligible cash source chosen, so ${d.name} can't be funded. Choose its eligible cash first.`;
   const sourceCurrency = (source as MaybeNormalized).valuation?.currency ?? source.proposalApprovedValue?.currency ?? source.currency;
   if (sourceCurrency !== d.currency) return `${d.name} is in ${d.currency} but the eligible cash in ${account.name} is in ${sourceCurrency}; currency conversion inside the account isn't supported.`;
   if (rateToReporting(fx, d.currency) == null) return `No ${d.currency}/${fx.reportingCurrency} exchange rate, so ${d.name} can't be valued.`;
   return null;
 }
+
+/** An account's designated eligible cash: a cash line in that account, or nothing (a line since reclassified isn't spendable). */
+const eligibleCashOf = (account: Account, holdings: Holding[]): Holding | undefined => {
+  const id = account.funding?.cashHoldingId;
+  return id ? holdings.find((h) => h.id === id && h.accountId === account.id && h.assetClass === "cash" && !h.isLiability) : undefined;
+};
 
 /** An account's reserve against its designated eligible cash in a (proposed) portfolio. */
 export interface ReserveStatus {
@@ -552,7 +573,7 @@ export function reserveStatus(holdings: Holding[], accounts: Account[]): Reserve
   return accounts
     .filter((a) => a.funding)
     .map((a) => {
-      const h = holdings.find((x) => x.id === a.funding!.cashHoldingId && x.accountId === a.id) as MaybeNormalized | undefined;
+      const h = eligibleCashOf(a, holdings) as MaybeNormalized | undefined;
       const available = !h ? null : h.valuation ? (h.valuation.status === "valued" ? h.valuation.amount : null) : h.nativeMarketValue;
       const reserve = a.funding!.reserve;
       const headroom = available == null ? null : available - reserve;

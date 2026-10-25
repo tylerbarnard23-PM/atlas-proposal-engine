@@ -1,6 +1,6 @@
 # Handoff
 
-## Current checkpoint — 24 October 2026: D1 released; D2 funded alternatives in review (PR #75)
+## Current checkpoint — 25 October 2026: D1 released; D2 funded alternatives reviewed and fixed (PR #75)
 
 - **D1 released:** PR #72 was Codex-reviewed at `d6df4cf` and merged pinned as **`0381db13a69b1b62d65019b89fc5d6da47e1b420`**. Main CI run 40136036212 passed: 427 passed, 2 skipped (429). GitHub records a Production deployment for `0381db1`. Production smoke and backup-cycle evidence is on [PR #72](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/72#issuecomment-6390031556) and [#36](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/36#issuecomment-6390031724).
 - **PR #75** on `feat/d2-funded-alternatives`, built from main `0381db1`. The implementation commit is `55b83e0`; the docs commit follows (see the PR for the exact head). Not merged or deployed. The contract notes are in the PR.
@@ -8,19 +8,26 @@
   - **Readiness:** new checks `funding_reserves` and `approved_alternative`. The final-PDF route receives the alternatives.
   - **State:** store/backup v8 add `alternatives`, account funding and the new action fields. The migration is idempotent, and v7/v6 backups are validated strictly as their own version, then upgraded.
   - **Desk:** duplicate, rename and switch alternatives (isolated, approvals cleared); funding rows; a replace-into-new-investment edit; units left out; and the alternatives comparison.
-- **Heads:** the implementation is `55b83e0`. The tested head `dc1be24c3007185cf0ce87d9bfbbda67be9718a3` adds the docs and the "In <alternative>" label fix. Any later commit is a docs-only checkpoint that won't have finished CI yet.
-- **Validation:**
-  - **Local (`dc1be24`):** typecheck passed; 26 files, **441 passed, 0 skipped**; eval 2 of 2; build passed.
-  - **CI (run 40139204916 on `dc1be24`):** passed; the 2 private-PDF tests are skipped there. The Vercel preview for `dc1be24` is ready.
-- **Browser check:** the synthetic story ran end to end: funding with a 10,000 reserve; 10,001 blocked whole; 50/40/10; duplicate B at 55/35/10 vs A at 50/40/10; the state survived a reload. The workspace was restored byte-identical (v6) and the task server stopped.
+- **Review fixes (25 October, on PR #75):** the review commit follows `5408dbc` (see the PR for the exact head).
+  - An oversized linked sale (more than the position as it stands in the draft, including after earlier actions) is left out whole. Before, it sold only what existed and was reported as applied.
+  - Eligible cash must still be a cash line in its account. A line reclassified after the rule was set, or a backup naming a fund, is no longer spendable, and the backup is rejected.
+  - Copilot readiness now receives the alternatives, so it applies the same one-alternative rule as the final-PDF route.
+  - Stale desk wording was corrected. Regressions are in `tests/fundedAlternatives.test.ts`, under "review boundaries".
+- **Validation (review head, local):** typecheck passed; 26 files, **448 passed, 0 skipped**; eval 2 of 2; build passed. CI runs on the pushed head; the 2 private-PDF tests are skipped there.
+- **Browser check (review):**
+  - in the desk, a 25,000 replacement sale of a position already trimmed to 20,000 is shown as left out, with its reason, and 20,000 applies;
+  - Copilot (demo mode) accepted the real request carrying the alternatives.
+  The workspace was restored byte-identical (v6, hash `99aa0da7…`) and the task server stopped.
+- **Earlier evidence (`dc1be24`):** CI run 40139204916; synthetic story (10,001 blocked; 50/40/10; B 55/35/10 vs A 50/40/10; reload).
 - **Sequencing (approved):** D2 → **D2a** (model portfolios and manager sleeves) → D3 (presentation). The D2a plan is saved separately in PR #74 (tracking issue #73), unmerged. Before implementing D2a, reconcile that branch with D2's delivered contracts (store/backup v8, `Account.funding`, `Recommendation.destination`/`linked`, `alternatives`, `funding_reserves`/`approved_alternative`), preserving both branches' documentation.
 - **Limitations:**
   - Replacements stay within one account and its eligible-cash currency.
   - Alternatives can't be deleted yet.
   - There is no reserve currency other than the cash line's own.
   - The comparison has no history.
+  - When a legacy action (such as a household loan paydown) breaches a reserve, the latest unit buying in that account is left out and blamed, even if it adds cash. Readiness still blocks; follow-up issue filed.
   - Approved snapshots and presentation are D3.
-- **Next step:** Codex reviews PR #75 before any owner-authorized merge. D2a and D3 have not started.
+- **Next step:** Codex re-reviews PR #75 at the review head before any owner-authorized merge. D2a and D3 have not started.
 - **Preserved:** accepted values/FX/source dates, all existing readiness and final-PDF gates, legacy recommendation effects, v6/v7 compatibility, #59 and agent requirements. All 25 IDs remain Planned.
 
 ## Working agreements

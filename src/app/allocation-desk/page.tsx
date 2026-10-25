@@ -187,7 +187,7 @@ function Desk() {
             </table>
             <p className="px-4 py-3 text-2xs text-ink-500 leading-relaxed border-t border-ink-100">
               Targets total {d.targetSum.toFixed(1)}%
-              {d.targetSum > 100.05 ? `, ${(d.targetSum - 100).toFixed(1)}% more than the whole scope` : d.targetSum > 0 && d.targetSum < 99.95 ? `; ${(100 - d.targetSum).toFixed(1)}% unassigned` : ""}. A target is a desired weight: it creates no trades. Drift stays visible until you add explicit actions; new investments and automatic rebalancing come later (D2).
+              {d.targetSum > 100.05 ? `, ${(d.targetSum - 100).toFixed(1)}% more than the whole scope` : d.targetSum > 0 && d.targetSum < 99.95 ? `; ${(100 - d.targetSum).toFixed(1)}% unassigned` : ""}. A target is a desired weight: it creates no trades. Drift stays visible until you add explicit actions, such as a replacement into a new investment; automatic rebalancing isn't available.
             </p>
           </CardBody>
         </Card>

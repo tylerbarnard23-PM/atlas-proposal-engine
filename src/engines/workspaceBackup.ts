@@ -691,6 +691,7 @@ function referenceErrors(e: BackupEngagement, disclosureIds: Set<string>): strin
     if (!a.funding) continue;
     const h = e.holdings.find((x) => x.id === a.funding!.cashHoldingId);
     if (!h || h.accountId !== a.id) errors.push(`Account ${a.id}'s eligible cash ${a.funding.cashHoldingId} isn't a holding in that account.`);
+    else if (h.assetClass !== "cash" || h.isLiability) errors.push(`Account ${a.id}'s eligible cash ${h.id} isn't a cash line.`);
   }
   for (const r of e.recommendations) if (r.destination && !accounts.has(r.destination.accountId)) errors.push(`Recommendation ${r.id} buys into account ${r.destination.accountId}, which isn't in the backup.`);
   return errors;

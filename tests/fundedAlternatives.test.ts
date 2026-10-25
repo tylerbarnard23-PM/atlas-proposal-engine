@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Holding, Recommendation } from "@/domain/types";
 
+vi.mock("puppeteer-core", async () => (await import("./support/fakeChromium")).puppeteerModule);
+vi.mock("@/pdf/chromiumPath", async () => (await import("./support/fakeChromium")).chromiumPathModule);
+
 // D2 — funded alternatives. A proposed-only investment, a linked sell/buy
 // replacement applied whole or not at all, an explicit eligible cash source
 // with an enforced reserve, two independent named alternatives and their
@@ -349,5 +352,152 @@ describe("output surfaces use the same result", () => {
     const { previewRecommendation } = await import("@/engines/recommendationPreview");
     const p = previewRecommendation({ rec: s.recommendations.find((r) => r.id === "rec_buy_a")!, holdings: m.normalizeHoldings(s.holdings, s.fxRates, "USD"), recommendations: s.recommendations, accounts: s.accounts, fx: { reportingCurrency: "USD", rates: s.fxRates }, sourceDocuments: [] });
     expect(p.state).toBe("linked");
+  });
+});
+
+describe("review boundaries (PR #75)", () => {
+  it("an oversized linked sale is left out whole: no proceeds beyond the position, no false completion, in preview and draft", async () => {
+    const m = await load();
+    story(m);
+    const s = m.useAtlasStore.getState();
+    const legs = replace(m, 70_000, 60_000); // the position is 60,000
+    const p = m.previewDraftEdit({ holdings: m.normalizeHoldings(s.holdings, s.fxRates, "USD"), accounts: s.accounts, recommendations: s.recommendations, draft: s.workingDraft, candidate: legs, fx: { reportingCurrency: "USD", rates: s.fxRates } });
+    expect(p.applied).toBe(false);
+    expect(p.destination).toMatchObject({ after: null });
+    expect(p.blocked).toEqual([expect.objectContaining({ unitId: "grp_a", reason: expect.stringMatching(/USD 70,000.*more than.*USD 60,000/) })]);
+    m.useAtlasStore.getState().addDraftEdit(legs);
+    expect(weights(desk(m))).toEqual({ equity: 60_000, fixed_income: 30_000, cash: 10_000 });
+    approve(m, ["rec_sell_a", "rec_buy_a"]);
+    expect(check(m, "funding_reserves")).toMatchObject({ passed: false, detail: expect.stringMatching(/more than/) });
+  });
+
+  it("the sale is checked against the position after earlier actions in the draft", async () => {
+    const m = await load();
+    story(m);
+    const h = m.useAtlasStore.getState().holdings.find((x) => x.id === "h_story_equity")!;
+    m.useAtlasStore.getState().addDraftEdit(m.positionEditRecommendation({ holding: h, kind: "reduce", amount: 20_000, reportingCurrency: "USD", id: "rec_trim", now: NOW.toISOString() }));
+    m.useAtlasStore.getState().addDraftEdit(replace(m, 50_000, 50_000)); // only 40,000 is left
+    const d = desk(m);
+    expect(d.blocked.map((b) => b.unitId)).toEqual(["grp_a"]);
+    expect(weights(d)).toEqual({ equity: 40_000, fixed_income: 30_000, cash: 30_000 }); // the trim alone
+    // Exactly the remaining 40,000 applies.
+    m.useAtlasStore.getState().setDraftMember("rec_sell_a", false);
+    m.useAtlasStore.getState().addDraftEdit(replace(m, 40_000, 40_000, "c"));
+    expect(weights(desk(m))).toEqual({ equity: 0, fixed_income: 70_000, cash: 30_000 });
+  });
+
+  it("the reserve is in the eligible cash's own currency, with the boundary exact after conversion", async () => {
+    const m = await load();
+    story(m, 10_000);
+    m.useAtlasStore.setState({ holdings: m.STORY_HOLDINGS.map((h) => (h.id === "h_story_cash" ? { ...h, currency: "EUR" as Holding["currency"] } : h)) });
+    const eur = (sell: number, buy: number, tag: string) => {
+      const h = m.useAtlasStore.getState().holdings.find((x) => x.id === "h_story_equity")!;
+      return m.replacementRecommendations({ holding: h, sellAmount: sell, buyAmount: buy, destination: BOND_B, currency: "EUR", ids: { sell: `rec_sell_${tag}`, buy: `rec_buy_${tag}`, group: `grp_${tag}` }, now: NOW.toISOString() });
+    };
+    // EUR 10,000 cash (USD 10,850) against a EUR 10,000 reserve: headroom 0, not USD 850.
+    expect(desk(m).reserves[0]).toMatchObject({ currency: "EUR", available: 10_000, headroom: 0, breached: false });
+    m.useAtlasStore.getState().addDraftEdit(eur(10_000, 10_000, "a"));
+    let d = desk(m);
+    expect(d.blocked).toEqual([]);
+    expect(d.reserves[0].headroom).toBeCloseTo(0, 6);
+    m.useAtlasStore.getState().setDraftMember("rec_sell_a", false);
+    m.useAtlasStore.getState().addDraftEdit(eur(10_000, 10_001, "b"));
+    d = desk(m);
+    expect(d.blocked).toEqual([expect.objectContaining({ unitId: "grp_b", reason: expect.stringMatching(/EUR 9,999.*below its EUR 10,000 reserve/) })]);
+    // A EUR 10,500 reserve is breached by EUR 10,000 even though the cash is worth USD 10,850.
+    m.useAtlasStore.getState().setAccountFunding("acc_story_invest", { cashHoldingId: "h_story_cash", reserve: 10_500 });
+    expect(desk(m).reserves[0]).toMatchObject({ available: 10_000, breached: true });
+  });
+
+  it("the final-PDF route enforces the reserve and the one-alternative rule on the server", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(NOW);
+    try {
+      const m = await load();
+      story(m);
+      const st = m.useAtlasStore.getState();
+      st.renameActiveDraft("Alternative A");
+      st.addDraftEdit(replace(m, 10_000, 10_000));
+      approve(m, ["rec_sell_a", "rec_buy_a"]);
+      const { POST } = await import("@/app/api/proposals/[id]/generate-pdf/route");
+      const post = async () => {
+        const s = JSON.parse(JSON.stringify(m.useAtlasStore.getState()));
+        const state = { client: s.client, advisor: s.advisor, accounts: s.accounts, holdings: s.holdings, recommendations: s.recommendations, sections: s.proposal.sections, disclosures: s.disclosures, proposal: s.proposal, fxRates: s.fxRates, sourceDocuments: [], fxConfirmation: null, workingDraft: s.workingDraft, alternatives: s.alternatives };
+        const res = await POST(new Request("http://localhost/api/proposals/p1/generate-pdf?variant=final", { method: "POST", body: JSON.stringify({ state }) }), { params: Promise.resolve({ id: "p1" }) });
+        return res.status === 422 ? ((await res.json()).failing as string[]) : [];
+      };
+      const FUNDING = "Linked replacements applied whole and cash reserves kept";
+      const ONE = "Approved actions come from one alternative";
+      expect(await post()).not.toContain(FUNDING); // headroom exactly 0
+      m.useAtlasStore.getState().setAccountFunding("acc_story_invest", { cashHoldingId: "h_story_cash", reserve: 10_000.01 });
+      expect(await post()).toContain(FUNDING);
+      m.useAtlasStore.getState().setAccountFunding("acc_story_invest", { cashHoldingId: "h_story_cash", reserve: 10_000 });
+      m.useAtlasStore.getState().duplicateDraft("Alternative B");
+      approve(m, m.useAtlasStore.getState().workingDraft.memberIds);
+      expect(await post()).toContain(ONE);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("Copilot's readiness sees the alternatives, as the PDF route does", async () => {
+    const m = await load();
+    story(m);
+    const st = m.useAtlasStore.getState();
+    st.addDraftEdit(replace(m, 10_000, 10_000));
+    approve(m, ["rec_sell_a", "rec_buy_a"]);
+    st.duplicateDraft("Alternative B");
+    approve(m, m.useAtlasStore.getState().workingDraft.memberIds);
+    const s = JSON.parse(JSON.stringify(m.useAtlasStore.getState()));
+    const { parseCopilotRequest } = await import("@/copilot/snapshot");
+    const { CopilotContext, executeTool } = await import("@/copilot/tools");
+    const parsed = parseCopilotRequest({ question: "ready?", snapshot: { client: s.client, advisor: s.advisor, accounts: s.accounts, holdings: s.holdings, fxRates: s.fxRates, recommendations: s.recommendations, disclosures: s.disclosures, workingDraft: s.workingDraft, alternatives: s.alternatives } });
+    if (!parsed.ok) throw new Error(parsed.error);
+    const out = JSON.parse(executeTool(new CopilotContext(parsed.value.snapshot), "check_proposal_readiness", {}).content);
+    expect(out.checks.find((c: { check: string }) => c.check === "Approved actions come from one alternative")).toMatchObject({ passed: false });
+  });
+
+  it("eligible cash that is no longer a cash line (reclassified, or in a backup) is never spent", async () => {
+    const m = await load();
+    story(m, 0);
+    // The chosen line is reclassified as a fund after the rule was set.
+    m.useAtlasStore.getState().patchHolding("h_story_cash", { assetClass: "fixed_income" });
+    m.useAtlasStore.getState().addDraftEdit(replace(m, 10_000, 10_001));
+    const d = desk(m);
+    expect(d.blocked).toEqual([expect.objectContaining({ unitId: "grp_a", reason: expect.stringMatching(/no eligible cash/) })]);
+    expect(d.positions.some((x) => x.id === "dest_bond_b")).toBe(false);
+    expect(d.reserves[0]).toMatchObject({ available: null, breached: true });
+    // A backup can't name a non-cash line as eligible cash either.
+    story(m);
+    const b = m.createBackup(m.useAtlasStore.getState(), NOW);
+    const bad = { ...b, engagement: { ...b.engagement, accounts: b.engagement.accounts.map((a) => (a.id === "acc_story_invest" ? { ...a, funding: { cashHoldingId: "h_story_bond", reserve: 0 } } : a)) } };
+    expect(m.parseBackup(JSON.stringify(bad), { disclosureIds: m.DISCLOSURE_LIBRARY.map((x) => x.id) })).toEqual({ ok: false, errors: [expect.stringMatching(/h_story_bond isn't a cash line/)] });
+  });
+
+  it("export, restore and reload keep approvals, blocked units, funding and readiness", async () => {
+    let m = await load();
+    story(m);
+    const st = m.useAtlasStore.getState();
+    st.renameActiveDraft("Alternative A");
+    st.addDraftEdit(replace(m, 10_000, 10_000));
+    st.addDraftEdit(replace(m, 1_000, 1_001, "x")); // breaches the reserve: left out whole
+    approve(m, ["rec_sell_a", "rec_buy_a", "rec_sell_x", "rec_buy_x"]);
+    st.duplicateDraft("Alternative B");
+    const state = (mm: M) => {
+      const s = mm.useAtlasStore.getState();
+      const r = mm.evaluateWorkspaceReadiness({ client: s.client, advisor: s.advisor, accounts: s.accounts, holdings: s.holdings, recommendations: s.recommendations, disclosures: s.disclosures, fxRates: s.fxRates, sourceDocuments: s.sourceDocuments, now: NOW, drafts: [s.workingDraft, ...s.alternatives] });
+      return { approved: desk(mm, undefined, "approved"), draft: desk(mm), alternatives: s.alternatives.map((a) => [a.id, a.name, a.memberIds]), active: [s.workingDraft.id, s.workingDraft.memberIds], funding: s.accounts.map((a) => a.funding ?? null), checks: r.map((c) => [c.code, c.passed, c.detail ?? null]) };
+    };
+    const before = state(m);
+    expect(before.approved.blocked.map((b) => b.unitId)).toEqual(["grp_x"]);
+    const text = m.serializeBackup(m.createBackup(m.useAtlasStore.getState(), NOW));
+    const parsed = m.parseBackup(text, { disclosureIds: m.DISCLOSURE_LIBRARY.map((d) => d.id) });
+    if (!parsed.ok) throw new Error(parsed.errors.join("; "));
+    m.useAtlasStore.getState().startNewClient();
+    expect(m.useAtlasStore.getState().restoreWorkspace(m.restoredState(parsed.backup, m.useAtlasStore.getState(), { replaceFirm: false }))).toEqual({ ok: true });
+    vi.resetModules();
+    m = await load();
+    await m.useAtlasStore.persist.rehydrate();
+    expect(state(m)).toEqual(before);
   });
 });

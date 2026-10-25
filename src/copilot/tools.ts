@@ -399,6 +399,7 @@ function checkReadiness(ctx: CopilotContext) {
     sourceDocuments: s.sourceDocuments ?? [],
     fxConfirmation: s.fxConfirmation ?? null,
     now: ctx.now,
+    drafts: [...(s.workingDraft ? [s.workingDraft] : []), ...(s.alternatives ?? [])],
   });
   return {
     ready: readinessOk(checks),
