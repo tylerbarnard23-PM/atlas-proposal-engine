@@ -15,6 +15,8 @@ export interface UnresolvedLink {
   holdingId?: string;
   /** The linked account that no longer exists. */
   accountId?: string;
+  /** D2: the account a proposed investment is bought into, which no longer exists. */
+  destinationAccountId?: string;
 }
 
 type Workspace = { recommendations: Recommendation[]; holdings: Pick<Holding, "id">[]; accounts: Pick<Account, "id">[] };
@@ -27,7 +29,10 @@ export function unresolvedRecommendationLinks(ws: Workspace): UnresolvedLink[] {
   for (const r of ws.recommendations) {
     const holdingId = r.relatedHoldingId && !holdings.has(r.relatedHoldingId) ? r.relatedHoldingId : undefined;
     const accountId = r.relatedAccountId && !accounts.has(r.relatedAccountId) ? r.relatedAccountId : undefined;
-    if (holdingId || accountId) out.push({ recommendationId: r.id, ...(holdingId ? { holdingId } : {}), ...(accountId ? { accountId } : {}) });
+    const destinationAccountId = r.destination && !accounts.has(r.destination.accountId) ? r.destination.accountId : undefined;
+    if (holdingId || accountId || destinationAccountId) {
+      out.push({ recommendationId: r.id, ...(holdingId ? { holdingId } : {}), ...(accountId ? { accountId } : {}), ...(destinationAccountId ? { destinationAccountId } : {}) });
+    }
   }
   return out;
 }
@@ -41,10 +46,45 @@ export function linksNeedingReview(ws: Workspace): (UnresolvedLink & { title: st
     .map(({ rec, ...l }) => ({ ...l, title: rec.title }));
 }
 
+/** "holding h_aapl and account acc_1": what an unresolved link pointed at. */
+export const linkTargets = (l: UnresolvedLink) =>
+  [l.holdingId && `holding ${l.holdingId}`, l.accountId && `account ${l.accountId}`, l.destinationAccountId && `destination account ${l.destinationAccountId}`].filter(Boolean).join(" and ");
+
 /** "Trim Apple: its holding h_aapl was removed" */
 export function describeLink(l: UnresolvedLink & { title: string }): string {
-  const what = [l.holdingId && `holding ${l.holdingId}`, l.accountId && `account ${l.accountId}`].filter(Boolean).join(" and ");
-  return `${l.title}: its ${what} was removed`;
+  return `${l.title}: its ${linkTargets(l)} was removed`;
+}
+
+/**
+ * D2: an account's eligible-cash rule whose cash line was removed, or is no
+ * longer a cash line in that account (reclassified). The rule and its reserve
+ * are kept as the advisor set them, never cleared or pointed at other cash;
+ * nothing is spent from it, and readiness blocks the final PDF until the
+ * advisor chooses valid eligible cash (or the line is a cash line again).
+ */
+export interface UnresolvedFunding {
+  accountId: string;
+  cashHoldingId: string;
+  reason: "removed" | "not_cash";
+}
+
+type FundingHolding = Pick<Holding, "id" | "accountId" | "assetClass" | "isLiability">;
+
+/** Why an account's eligible-cash rule doesn't resolve, or null (no rule, or a cash line in that account). */
+export function fundingProblem(account: Pick<Account, "id" | "funding">, holdings: FundingHolding[]): UnresolvedFunding["reason"] | null {
+  const id = account.funding?.cashHoldingId;
+  if (!id) return null;
+  const h = holdings.find((x) => x.id === id);
+  if (!h) return "removed";
+  return h.accountId === account.id && h.assetClass === "cash" && !h.isLiability ? null : "not_cash";
+}
+
+/** Every eligible-cash rule that doesn't resolve, in account order. */
+export function unresolvedFundingOf(ws: { accounts: Pick<Account, "id" | "funding">[]; holdings: FundingHolding[] }): UnresolvedFunding[] {
+  return ws.accounts.flatMap((a) => {
+    const reason = fundingProblem(a, ws.holdings);
+    return reason ? [{ accountId: a.id, cashHoldingId: a.funding!.cashHoldingId, reason }] : [];
+  });
 }
 
 /**
@@ -77,7 +117,10 @@ export function linkToHolding(
  */
 export function markRemovedLinks(recs: Recommendation[], removed: { holdingIds: Set<string>; accountIds: Set<string> }, now: string): Recommendation[] {
   return recs.map((r) => {
-    const affected = (r.relatedHoldingId && removed.holdingIds.has(r.relatedHoldingId)) || (r.relatedAccountId && removed.accountIds.has(r.relatedAccountId));
+    const affected =
+      (r.relatedHoldingId && removed.holdingIds.has(r.relatedHoldingId)) ||
+      (r.relatedAccountId && removed.accountIds.has(r.relatedAccountId)) ||
+      (r.destination && removed.accountIds.has(r.destination.accountId));
     if (!affected || r.status === "excluded") return r;
     return { ...r, approvedByAdvisor: false, status: "needs_review", updatedAt: now };
   });

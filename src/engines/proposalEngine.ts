@@ -3,6 +3,7 @@ import { sumBy } from "@/utils/numbers";
 import { resolveFxRate } from "./currencyEngine";
 import type { HoldingValuation } from "./normalizationEngine";
 import { amountsInReporting, type ReportingAmounts } from "./recommendationAmounts";
+import { fundingProblem, type UnresolvedFunding } from "./recommendationLinks";
 
 export const DEFAULT_PROPOSAL_SECTIONS: ProposalSection[] = [
   { key: "executive_summary", label: "Executive Summary", enabled: true, required: true },
@@ -542,6 +543,8 @@ function destinationProblem(rec: Recommendation, current: Holding[], accounts: M
   if (!PURCHASE.has(rec.type)) return `${d.name} isn't held yet, so it can only be bought.`;
   if (d.assetClass === "cash" || d.assetClass === "liability") return `${d.name} must be an investment, not cash or a liability.`;
   const source = eligibleCashOf(account, current);
+  const problem = fundingProblem(account, current);
+  if (problem) return `The eligible cash chosen for ${account.name} ${problem === "removed" ? "was removed" : "is no longer a cash line in the account"}, so ${d.name} can't be funded. Choose its eligible cash again.`;
   if (!source) return `${account.name} has no eligible cash source chosen, so ${d.name} can't be funded. Choose its eligible cash first.`;
   const sourceCurrency = (source as MaybeNormalized).valuation?.currency ?? source.proposalApprovedValue?.currency ?? source.currency;
   if (sourceCurrency !== d.currency) return `${d.name} is in ${d.currency} but the eligible cash in ${account.name} is in ${sourceCurrency}; currency conversion inside the account isn't supported.`;
@@ -549,11 +552,9 @@ function destinationProblem(rec: Recommendation, current: Holding[], accounts: M
   return null;
 }
 
-/** An account's designated eligible cash: a cash line in that account, or nothing (a line since reclassified isn't spendable). */
-const eligibleCashOf = (account: Account, holdings: Holding[]): Holding | undefined => {
-  const id = account.funding?.cashHoldingId;
-  return id ? holdings.find((h) => h.id === id && h.accountId === account.id && h.assetClass === "cash" && !h.isLiability) : undefined;
-};
+/** An account's designated eligible cash: a cash line in that account, or nothing (removed, or since reclassified: not spendable). */
+const eligibleCashOf = (account: Account, holdings: Holding[]): Holding | undefined =>
+  fundingProblem(account, holdings) ? undefined : holdings.find((h) => h.id === account.funding?.cashHoldingId);
 
 /** An account's reserve against its designated eligible cash in a (proposed) portfolio. */
 export interface ReserveStatus {
@@ -565,6 +566,8 @@ export interface ReserveStatus {
   reserve: number;
   /** The eligible cash in its own currency, or null when unknown (missing or unvalued): unknown is never spendable. */
   available: number | null;
+  /** Why the rule doesn't resolve: its cash line was removed, or is no longer a cash line in the account. */
+  problem: UnresolvedFunding["reason"] | null;
   headroom: number | null;
   breached: boolean;
 }
@@ -574,6 +577,7 @@ export function reserveStatus(holdings: Holding[], accounts: Account[]): Reserve
     .filter((a) => a.funding)
     .map((a) => {
       const h = eligibleCashOf(a, holdings) as MaybeNormalized | undefined;
+      const problem = fundingProblem(a, holdings);
       const available = !h ? null : h.valuation ? (h.valuation.status === "valued" ? h.valuation.amount : null) : h.nativeMarketValue;
       const reserve = a.funding!.reserve;
       const headroom = available == null ? null : available - reserve;
@@ -585,6 +589,7 @@ export function reserveStatus(holdings: Holding[], accounts: Account[]): Reserve
         currency: h ? h.valuation?.currency ?? h.currency : null,
         reserve,
         available,
+        problem,
         headroom,
         breached: headroom == null || headroom < -0.005,
       };

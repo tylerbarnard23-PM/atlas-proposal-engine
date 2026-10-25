@@ -360,8 +360,9 @@ describe("legacy approved-and-rejected records (review fix)", () => {
     expect(row(desk(m), "equity").proposed).toBe(55_000);
 
     const v7 = JSON.parse(m.serializeBackup(m.createBackup(m.useAtlasStore.getState(), NOW)));
-    const { workingDraft: _d, alternatives: _alt, ...engagement } = v7.engagement; // a v6 file has neither (D2 adds alternatives)
+    const { workingDraft: _d, alternatives: _alt, unresolvedFunding: _uf, ...engagement } = v7.engagement; // a v6 file has none of these (D2 adds alternatives and funding declarations)
     void _alt;
+    void _uf;
     void _d;
     const parsed = m.parseBackup(JSON.stringify({ ...v7, workspaceVersion: 6, engagement }), { disclosureIds: m.DISCLOSURE_LIBRARY.map((d) => d.id) });
     if (!parsed.ok) throw new Error(parsed.errors.join("; "));
@@ -538,8 +539,9 @@ describe("backup and restore", () => {
     const st = m.useAtlasStore.getState();
     st.upsertRecommendation({ ...st.recommendations[0], approvedByAdvisor: true, status: "approved", includeInPdf: true });
     const v7 = JSON.parse(m.serializeBackup(m.createBackup(m.useAtlasStore.getState(), NOW)));
-    const { workingDraft: _d, alternatives: _alt, ...engagement } = v7.engagement; // a v6 file has neither (D2 adds alternatives)
+    const { workingDraft: _d, alternatives: _alt, unresolvedFunding: _uf, ...engagement } = v7.engagement; // a v6 file has none of these (D2 adds alternatives and funding declarations)
     void _alt;
+    void _uf;
     void _d;
     const v6 = { ...v7, workspaceVersion: 6, engagement };
     const parsed = m.parseBackup(JSON.stringify(v6), ids(m));

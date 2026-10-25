@@ -5,7 +5,7 @@ import { normalizeHoldings } from "./normalizationEngine";
 import { valuationSummary } from "./valuationTotals";
 import { fxFreshness } from "./fxPolicy";
 import { completenessOf } from "./importCompleteness";
-import { linksNeedingReview, unresolvedRecommendationLinks } from "./recommendationLinks";
+import { linksNeedingReview, unresolvedFundingOf, unresolvedRecommendationLinks } from "./recommendationLinks";
 import { legacyWorkingDraft } from "./allocationDesk";
 import { localCalendarDay } from "@/utils/formatting";
 
@@ -399,7 +399,13 @@ function schemas(strict: boolean) {
   });
   // v8 (D2): inactive alternatives, each a working draft of its own actions.
   const engagementV7 = engagement.extend({ workingDraft });
-  const engagementV8 = engagementV7.extend({ alternatives: z.array(workingDraft) });
+  // Removed or reclassified eligible cash and removed destination accounts
+  // are declared like other removed links, so restore can tell them from corruption.
+  const engagementV8 = engagementV7.extend({
+    alternatives: z.array(workingDraft),
+    unresolvedLinks: z.array(obj({ recommendationId: id, holdingId: id.optional(), accountId: id.optional(), destinationAccountId: id.optional() })),
+    unresolvedFunding: z.array(obj({ accountId: id, cashHoldingId: id, reason: z.enum(["removed", "not_cash"]) })),
+  });
   const envelopeOf = <E extends z.ZodTypeAny, V extends number>(e: E, version: V) =>
     obj({
       format: z.literal(BACKUP_FORMAT),
@@ -499,6 +505,7 @@ export function createBackup(state: WorkspaceData, now: Date): WorkspaceBackup {
     // A running or pending job was orphaned by a closed tab (as in the v2 migration).
     pdfHistory: state.pdfHistory.filter((j) => j.status === "succeeded" || j.status === "failed"),
     unresolvedLinks: unresolvedRecommendationLinks(state),
+    unresolvedFunding: unresolvedFundingOf(state),
     // Only references that still resolve: a deleted recommendation or account
     // leaves the draft (in the app it is just ignored, so Undo can restore it).
     workingDraft: resolvable(state.workingDraft),
@@ -618,12 +625,12 @@ export function parseBackup(text: string, opts: { disclosureIds: string[] }): Pa
     const v6 = STRICT.envelopeV6.safeParse(raw);
     if (!v6.success) return issues(v6.error);
     const e = v6.data.engagement;
-    backup = { ...v6.data, workspaceVersion: BACKUP_WORKSPACE_VERSION, engagement: { ...e, workingDraft: legacyWorkingDraft(e.recommendations as Recommendation[], v6.data.exportedAt), alternatives: [] } } as WorkspaceBackup;
+    backup = { ...v6.data, workspaceVersion: BACKUP_WORKSPACE_VERSION, engagement: { ...e, workingDraft: legacyWorkingDraft(e.recommendations as Recommendation[], v6.data.exportedAt), alternatives: [], unresolvedFunding: [] } } as WorkspaceBackup;
   } else if (head.workspaceVersion === 7) {
     // v7 → v8: no other alternatives, no funding rules or D2 actions yet.
     const v7 = STRICT.envelopeV7.safeParse(raw);
     if (!v7.success) return issues(v7.error);
-    backup = { ...v7.data, workspaceVersion: BACKUP_WORKSPACE_VERSION, engagement: { ...v7.data.engagement, alternatives: [] } } as WorkspaceBackup;
+    backup = { ...v7.data, workspaceVersion: BACKUP_WORKSPACE_VERSION, engagement: { ...v7.data.engagement, alternatives: [], unresolvedFunding: [] } } as WorkspaceBackup;
   } else {
     const parsed = STRICT.envelope.safeParse(raw);
     if (!parsed.success) return issues(parsed.error);
@@ -662,9 +669,17 @@ function referenceErrors(e: BackupEngagement, disclosureIds: Set<string>): strin
     const l = recorded.get(r.id);
     const holdingMissing = !!r.relatedHoldingId && !holdings.has(r.relatedHoldingId);
     const accountMissing = !!r.relatedAccountId && !accounts.has(r.relatedAccountId);
+    const destinationMissing = !!r.destination && !accounts.has(r.destination.accountId);
     if (holdingMissing && l?.holdingId !== r.relatedHoldingId) errors.push(`Recommendation ${r.id} refers to holding ${r.relatedHoldingId}, which isn't in the backup.`);
     if (accountMissing && l?.accountId !== r.relatedAccountId) errors.push(`Recommendation ${r.id} refers to account ${r.relatedAccountId}, which isn't in the backup.`);
-    if (l && ((l.holdingId && !holdingMissing) || (l.accountId && !accountMissing) || (!l.holdingId && !l.accountId))) {
+    if (destinationMissing && l?.destinationAccountId !== r.destination!.accountId) errors.push(`Recommendation ${r.id} buys into account ${r.destination!.accountId}, which isn't in the backup.`);
+    if (
+      l &&
+      ((l.holdingId && !holdingMissing) ||
+        (l.accountId && !accountMissing) ||
+        (l.destinationAccountId && !destinationMissing) ||
+        (!l.holdingId && !l.accountId && !l.destinationAccountId))
+    ) {
       errors.push(`The backup lists recommendation ${r.id}'s link as unresolved, but it isn't.`);
     }
   }
@@ -687,13 +702,22 @@ function referenceErrors(e: BackupEngagement, disclosureIds: Set<string>): strin
     }
     for (const a of d.scopeAccountIds ?? []) if (!accounts.has(a)) errors.push(`${label}'s scope includes account ${a}, which isn't in the backup.`);
   }
-  for (const a of e.accounts) {
-    if (!a.funding) continue;
-    const h = e.holdings.find((x) => x.id === a.funding!.cashHoldingId);
-    if (!h || h.accountId !== a.id) errors.push(`Account ${a.id}'s eligible cash ${a.funding.cashHoldingId} isn't a holding in that account.`);
-    else if (h.assetClass !== "cash" || h.isLiability) errors.push(`Account ${a.id}'s eligible cash ${h.id} isn't a cash line.`);
+  // An eligible-cash rule either resolves or is declared unresolved, with the
+  // reason the workspace itself gives (removed, or no longer a cash line).
+  unique("unresolved funding for account", e.unresolvedFunding.map((f) => f.accountId));
+  const declared = new Map(e.unresolvedFunding.map((f) => [f.accountId, f]));
+  const actual = new Map(unresolvedFundingOf(e as Parameters<typeof unresolvedFundingOf>[0]).map((f) => [f.accountId, f]));
+  for (const [accountId, f] of actual) {
+    const d = declared.get(accountId);
+    if (!d || d.cashHoldingId !== f.cashHoldingId || d.reason !== f.reason) {
+      errors.push(
+        f.reason === "removed"
+          ? `Account ${accountId}'s eligible cash ${f.cashHoldingId} isn't in the backup.`
+          : `Account ${accountId}'s eligible cash ${f.cashHoldingId} isn't a cash line in that account.`
+      );
+    }
   }
-  for (const r of e.recommendations) if (r.destination && !accounts.has(r.destination.accountId)) errors.push(`Recommendation ${r.id} buys into account ${r.destination.accountId}, which isn't in the backup.`);
+  for (const d of e.unresolvedFunding) if (!actual.has(d.accountId)) errors.push(`The backup lists account ${d.accountId}'s eligible cash as unresolved, but it isn't.`);
   return errors;
 }
 

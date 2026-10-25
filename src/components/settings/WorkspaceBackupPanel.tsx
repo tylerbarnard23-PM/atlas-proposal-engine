@@ -15,7 +15,7 @@ import {
   type BackupPreview,
   type WorkspaceBackup,
 } from "@/engines/workspaceBackup";
-import { describeLink, linksNeedingReview } from "@/engines/recommendationLinks";
+import { describeLink, linksNeedingReview, unresolvedFundingOf } from "@/engines/recommendationLinks";
 import { formatTotal } from "@/engines/valuationTotals";
 import { formatDateTime } from "@/utils/formatting";
 
@@ -71,9 +71,11 @@ export function WorkspaceBackupPanel() {
       return;
     }
     const review = linksNeedingReview(state);
+    const funding = unresolvedFundingOf(state);
     setMessage(
       `Exported ${result.fileName}. Keep it somewhere private: it isn't encrypted.` +
-        (review.length > 0 ? ` It includes ${review.length} recommendation${review.length === 1 ? "" : "s"} still marked for review.` : "")
+        (review.length > 0 ? ` It includes ${review.length} recommendation${review.length === 1 ? "" : "s"} still marked for review.` : "") +
+        (funding.length > 0 ? ` ${funding.length} account${funding.length === 1 ? "" : "s"} still need${funding.length === 1 ? "s" : ""} eligible cash chosen again.` : "")
     );
   }
 

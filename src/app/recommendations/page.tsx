@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { holdingsFromIncompleteImports } from "@/engines/importCompleteness";
-import { linkToHolding, unresolvedRecommendationLinks } from "@/engines/recommendationLinks";
+import { linkTargets, linkToHolding, unresolvedRecommendationLinks } from "@/engines/recommendationLinks";
 import { ImportNotice, IncompleteImportTag } from "@/components/import/ImportNotice";
 import Link from "next/link";
 import { Ban, CheckCheck, CheckCircle2, Lightbulb, Plus, RotateCcw, Trash2 } from "lucide-react";
@@ -230,7 +230,7 @@ function Inner() {
                         {r.relatedHoldingId && fromIncomplete.has(r.relatedHoldingId) && <IncompleteImportTag />}
                         {unresolved.has(r.id) && (
                           <Badge tone="warning" title="Relink it to a current holding or account, reject it or delete it. The final PDF waits for this review.">
-                            Linked {unresolved.get(r.id)!.holdingId ? `holding ${unresolved.get(r.id)!.holdingId}` : `account ${unresolved.get(r.id)!.accountId}`} removed: review
+                            Linked {linkTargets(unresolved.get(r.id)!)} removed: review
                           </Badge>
                         )}
                       </div>

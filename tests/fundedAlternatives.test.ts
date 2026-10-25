@@ -279,8 +279,9 @@ describe("preview, saved result, reload and backup agree", () => {
     st.upsertRecommendation({ ...st.recommendations[0], approvedByAdvisor: true, status: "approved", includeInPdf: true });
     const v8 = JSON.parse(m.serializeBackup(m.createBackup(m.useAtlasStore.getState(), NOW)));
     const ids = { disclosureIds: m.DISCLOSURE_LIBRARY.map((d) => d.id) };
-    const { alternatives: _a, ...e7 } = v8.engagement;
+    const { alternatives: _a, unresolvedFunding: _f, ...e7 } = v8.engagement;
     void _a;
+    void _f;
     const v7 = { ...v8, workspaceVersion: 7, engagement: e7 };
     const p7 = m.parseBackup(JSON.stringify(v7), ids);
     if (!p7.ok) throw new Error(p7.errors.join("; "));
@@ -315,7 +316,7 @@ describe("preview, saved result, reload and backup agree", () => {
     const shared = { ...b, engagement: { ...b.engagement, alternatives: [{ ...b.engagement.alternatives[0], memberIds: b.engagement.workingDraft.memberIds }] } };
     expect(m.parseBackup(JSON.stringify(shared), ids)).toEqual({ ok: false, errors: expect.arrayContaining([expect.stringMatching(/more than one alternative/)]) });
     const misplaced = { ...b, engagement: { ...b.engagement, accounts: b.engagement.accounts.map((a) => (a.id === "acc_story_invest" ? { ...a, funding: { cashHoldingId: "h_story_home", reserve: 0 } } : a)) } };
-    expect(m.parseBackup(JSON.stringify(misplaced), ids)).toEqual({ ok: false, errors: [expect.stringMatching(/eligible cash h_story_home isn't a holding in that account/)] });
+    expect(m.parseBackup(JSON.stringify(misplaced), ids)).toEqual({ ok: false, errors: [expect.stringMatching(/eligible cash h_story_home isn't a cash line in that account/)] });
   });
 });
 
@@ -464,7 +465,7 @@ describe("review boundaries (PR #75)", () => {
     m.useAtlasStore.getState().patchHolding("h_story_cash", { assetClass: "fixed_income" });
     m.useAtlasStore.getState().addDraftEdit(replace(m, 10_000, 10_001));
     const d = desk(m);
-    expect(d.blocked).toEqual([expect.objectContaining({ unitId: "grp_a", reason: expect.stringMatching(/no eligible cash/) })]);
+    expect(d.blocked).toEqual([expect.objectContaining({ unitId: "grp_a", reason: expect.stringMatching(/eligible cash chosen for .* is no longer a cash line/) })]);
     expect(d.positions.some((x) => x.id === "dest_bond_b")).toBe(false);
     expect(d.reserves[0]).toMatchObject({ available: null, breached: true });
     // A backup can't name a non-cash line as eligible cash either.

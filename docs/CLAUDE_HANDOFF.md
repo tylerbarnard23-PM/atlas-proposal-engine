@@ -8,16 +8,36 @@
   - **Readiness:** new checks `funding_reserves` and `approved_alternative`. The final-PDF route receives the alternatives.
   - **State:** store/backup v8 add `alternatives`, account funding and the new action fields. The migration is idempotent, and v7/v6 backups are validated strictly as their own version, then upgraded.
   - **Desk:** duplicate, rename and switch alternatives (isolated, approvals cleared); funding rows; a replace-into-new-investment edit; units left out; and the alternatives comparison.
-- **Review fixes (25 October, on PR #75):** the review commit follows `5408dbc` (see the PR for the exact head).
-  - An oversized linked sale (more than the position as it stands in the draft, including after earlier actions) is left out whole. Before, it sold only what existed and was reported as applied.
-  - Eligible cash must still be a cash line in its account. A line reclassified after the rule was set, or a backup naming a fund, is no longer spendable, and the backup is rejected.
-  - Copilot readiness now receives the alternatives, so it applies the same one-alternative rule as the final-PDF route.
-  - Stale desk wording was corrected. Regressions are in `tests/fundedAlternatives.test.ts`, under "review boundaries".
-- **Validation (review head, local):** typecheck passed; 26 files, **448 passed, 0 skipped**; eval 2 of 2; build passed. CI runs on the pushed head; the 2 private-PDF tests are skipped there.
-- **Browser check (review):**
-  - in the desk, a 25,000 replacement sale of a position already trimmed to 20,000 is shown as left out, with its reason, and 20,000 applies;
-  - Copilot (demo mode) accepted the real request carrying the alternatives.
-  The workspace was restored byte-identical (v6, hash `99aa0da7…`) and the task server stopped.
+- **Review fixes, round 1 (`b5c3e19`):**
+  - An oversized linked sale, measured against the position as it stands in the draft, is left out whole.
+  - Eligible cash must still be a cash line in its account.
+  - Copilot readiness receives the alternatives.
+- **Review fixes, round 2 (backup consistency):** the commit follows `b5c3e19` (see the PR for the exact head). Normal app actions could leave references that the export refused:
+  - removing the eligible cash line;
+  - reclassifying it as an investment;
+  - removing a proposed investment's destination account.
+
+  They are now declared in v8 backups, the same way removed recommendation links are:
+  - `engagement.unresolvedFunding: [{ accountId, cashHoldingId, reason: "removed" | "not_cash" }]`;
+  - `unresolvedLinks[].destinationAccountId`.
+
+  Rules for these declarations:
+  - Both are derived at export and checked exactly on restore. Undeclared or false declarations are still rejected, and v7/v6 files can't carry them.
+  - The funding rule and reserve are kept and never pointed at other cash. Nothing is spent until the advisor chooses valid cash, and `funding_reserves` names the problem.
+  - A replacement whose destination account is removed keeps its destination, loses its approval (`needs_review`) and blocks `recommendation_links`. A rejected one stays rejected and can be reopened.
+  - Recovery never re-approves anything.
+  - The store contract is unchanged (no migration); v8 is unreleased, so only the v8 backup schema gains the fields.
+  - Regressions are in `tests/backupConsistency.test.ts` (three new normal-workflow round trips and "D2 references the app can leave unresolved").
+- **Validation (round 2, local):** typecheck passed; 26 files, **456 passed, 0 skipped**; eval 2 of 2; build passed. CI runs on the pushed head; the 2 private-PDF tests are skipped there.
+- **Browser check (round 2):**
+  - The run used a fresh `atlas-review.localhost` origin, so the user's localhost workspace was never loaded.
+  - Steps, all through the UI: set eligible cash with a 25,000 reserve; remove that cash line; export (captured in-page, no download); restore; reload.
+  - Results:
+    - the store matched the exported file;
+    - readiness and the desk say the cash line was removed and the reserve is kept;
+    - Final PDF showed "5 to resolve" throughout.
+  - Afterwards the origin's storage was cleared and the server stopped.
+- **Round 1 browser check:** the desk refused an oversized sale. The localhost workspace was restored byte-identical (v6, hash `99aa0da7…`).
 - **Earlier evidence (`dc1be24`):** CI run 40139204916; synthetic story (10,001 blocked; 50/40/10; B 55/35/10 vs A 50/40/10; reload).
 - **Sequencing (approved):** D2 → **D2a** (model portfolios and manager sleeves) → D3 (presentation). The D2a plan is saved separately in PR #74 (tracking issue #73), unmerged. Before implementing D2a, reconcile that branch with D2's delivered contracts (store/backup v8, `Account.funding`, `Recommendation.destination`/`linked`, `alternatives`, `funding_reserves`/`approved_alternative`), preserving both branches' documentation.
 - **Limitations:**

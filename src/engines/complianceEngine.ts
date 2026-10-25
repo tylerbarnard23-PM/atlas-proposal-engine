@@ -162,7 +162,11 @@ export function evaluateReadiness(inp: ReadinessInputs): ComplianceCheck[] {
         ? [
             ...blockedUnits.map((b) => b.reason),
             ...breaches.map((b) =>
-              b.available == null
+              b.problem === "removed"
+                ? `${b.accountName}: its eligible cash ${b.cashHoldingId} was removed; choose its eligible cash again (reserve ${money(b.reserve)} kept)`
+                : b.problem === "not_cash"
+                ? `${b.accountName}: its eligible cash ${b.cashHoldingId} is no longer a cash line in this account; choose its eligible cash again (reserve ${money(b.reserve)} kept)`
+                : b.available == null
                 ? `${b.accountName}: eligible cash unknown, so its ${money(b.reserve)} reserve can't be confirmed`
                 : `${b.accountName}: eligible cash ${b.currency} ${money(b.available)} is below its ${money(b.reserve)} reserve`
             ),

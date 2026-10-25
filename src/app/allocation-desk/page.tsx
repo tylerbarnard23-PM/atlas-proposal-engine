@@ -642,7 +642,9 @@ function FundingRow({
       </div>
       {status && (
         <p className={`text-2xs ${status.breached ? "text-negative-600" : "text-ink-500"}`}>
-          {status.available == null
+          {status.problem
+            ? `The chosen eligible cash ${status.cashHoldingId} ${status.problem === "removed" ? "was removed" : "is no longer a cash line in this account"}. Nothing is spent from this account until you choose its eligible cash again; the ${fmt(status.reserve)} reserve is kept.`
+            : status.available == null
             ? `Eligible cash can't be valued, so the ${fmt(status.reserve)} reserve can't be confirmed; nothing is spent from it.`
             : `Eligible cash after this preview ${fmt(status.available)}; reserve ${fmt(status.reserve)}; headroom ${fmt(status.headroom ?? 0)}${status.breached ? " (below the reserve)" : ""}.`}
         </p>
