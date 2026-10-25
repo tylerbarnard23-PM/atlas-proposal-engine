@@ -7,6 +7,7 @@ import type {
   AdvisorProfile,
   AssetClass,
   ClientProfile,
+  CurrencyCode,
   DismissedInsight,
   Disclosure,
   FxConfirmation,
@@ -33,7 +34,7 @@ import { safeId, todayIso } from "@/utils/formatting";
 import { DEFAULT_PROPOSAL_SECTIONS } from "@/engines/proposalEngine";
 import { confirmStaleRates } from "@/engines/fxPolicy";
 import { fxClock } from "@/engines/fxClock";
-import { markRemovedLinks } from "@/engines/recommendationLinks";
+import { cashBasisCurrency, markRemovedLinks } from "@/engines/recommendationLinks";
 import { migrateRecommendationCurrency, withApprovalRule } from "@/engines/recommendationAmounts";
 import { deskActions, draftBasisInputs, legacyWorkingDraft, needsIntentRestatement, newWorkingDraft, recordInputBasis } from "@/engines/allocationDesk";
 import { LEGACY_SAMPLE_FIRM_NAME } from "@/domain/branding";
@@ -139,7 +140,8 @@ export interface AtlasActions {
   recordDraftInputs: () => void;
   // D2. Funding rules live on the account, so every engine path sees them.
   /** Chooses an account's eligible cash line and minimum reserve, or clears them (null). */
-  setAccountFunding: (accountId: string, funding: { cashHoldingId: string; reserve: number } | null) => void;
+  /** A reserve is stated in its cash line's currency (`reserveCurrency` must match it); null removes the rule. */
+  setAccountFunding: (accountId: string, funding: { cashHoldingId: string; reserve: number; reserveCurrency: CurrencyCode } | null) => void;
   /** Copies the active draft into a new named alternative with new action IDs and no approvals, and makes it active. */
   duplicateDraft: (name: string) => void;
   /** Makes another alternative the active (editable) draft. */
@@ -565,10 +567,14 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
             const h = s.holdings.find((x) => x.id === funding.cashHoldingId);
             if (!h || h.accountId !== accountId || h.assetClass !== "cash" || h.isLiability) return {};
             if (!Number.isFinite(funding.reserve) || funding.reserve < 0) return {};
+            // The reserve is stated in its cash line's currency; another currency is never relabelled.
+            if (funding.reserveCurrency !== cashBasisCurrency(h)) return {};
           }
           const { funding: _old, ...rest } = account;
           void _old;
-          const updated = funding ? { ...rest, funding: { cashHoldingId: funding.cashHoldingId, reserve: funding.reserve }, updatedAt: todayIso() } : { ...rest, updatedAt: todayIso() };
+          const updated = funding
+            ? { ...rest, funding: { cashHoldingId: funding.cashHoldingId, reserve: funding.reserve, reserveCurrency: funding.reserveCurrency }, updatedAt: todayIso() }
+            : { ...rest, updatedAt: todayIso() };
           return { accounts: s.accounts.map((a) => (a.id === accountId ? updated : a)) };
         }),
       duplicateDraft: (name) =>

@@ -785,7 +785,12 @@ export interface Account {
    * Only this cash line funds proposed investments and replacements here;
    * the reserve is in that line's own currency.
    */
-  funding?: { cashHoldingId: string; reserve: number };
+  funding?: {
+    cashHoldingId: string;
+    reserve: number;
+    /** The currency the reserve was stated in (its cash line's). Absent on a rule saved before reserves carried one: unknown, so it must be restated. */
+    reserveCurrency?: CurrencyCode;
+  };
   createdAt: string;
   updatedAt: string;
 }

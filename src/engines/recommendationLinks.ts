@@ -65,18 +65,39 @@ export function describeLink(l: UnresolvedLink & { title: string }): string {
 export interface UnresolvedFunding {
   accountId: string;
   cashHoldingId: string;
-  reason: "removed" | "not_cash";
+  /** removed; no longer a cash line in the account; or its reserve isn't stated in the line's (current) currency. */
+  reason: "removed" | "not_cash" | "reserve_currency";
 }
 
-type FundingHolding = Pick<Holding, "id" | "accountId" | "assetClass" | "isLiability">;
+type FundingHolding = Pick<Holding, "id" | "accountId" | "assetClass" | "isLiability" | "currency" | "proposalApprovedValue">;
 
-/** Why an account's eligible-cash rule doesn't resolve, or null (no rule, or a cash line in that account). */
+/** The currency a cash line is valued in (an approved value's own, else its statement currency): a reserve's basis. */
+export const cashBasisCurrency = (h: Pick<Holding, "currency" | "proposalApprovedValue">) => h.proposalApprovedValue?.currency ?? h.currency;
+
+/**
+ * Why an account's eligible-cash rule doesn't resolve, or null (no rule, or a
+ * cash line in that account whose currency the reserve was stated in). A
+ * reserve is never relabelled or converted: a change of basis, or a reserve
+ * with no recorded currency, waits for the advisor to restate it.
+ */
 export function fundingProblem(account: Pick<Account, "id" | "funding">, holdings: FundingHolding[]): UnresolvedFunding["reason"] | null {
   const id = account.funding?.cashHoldingId;
   if (!id) return null;
   const h = holdings.find((x) => x.id === id);
   if (!h) return "removed";
-  return h.accountId === account.id && h.assetClass === "cash" && !h.isLiability ? null : "not_cash";
+  if (h.accountId !== account.id || h.assetClass !== "cash" || h.isLiability) return "not_cash";
+  return account.funding!.reserveCurrency === cashBasisCurrency(h) ? null : "reserve_currency";
+}
+
+/** "was removed", "is valued in EUR, but its reserve was set in USD": what's wrong with an account's eligible cash, or null. */
+export function fundingProblemText(account: Pick<Account, "id" | "funding">, holdings: FundingHolding[]): string | null {
+  const reason = fundingProblem(account, holdings);
+  if (!reason) return null;
+  if (reason === "removed") return "was removed";
+  if (reason === "not_cash") return "is no longer a cash line in this account";
+  const basis = cashBasisCurrency(holdings.find((x) => x.id === account.funding!.cashHoldingId)!);
+  const rc = account.funding!.reserveCurrency;
+  return rc ? `is valued in ${basis}, but its reserve was set in ${rc}` : `has a reserve with no recorded currency (it is valued in ${basis})`;
 }
 
 /** Every eligible-cash rule that doesn't resolve, in account order. */

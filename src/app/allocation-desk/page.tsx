@@ -17,6 +17,7 @@ import {
   compareAlternatives,
   draftBasisInputs,
   evaluateDesk,
+  pendingReserveText,
   replacementRecommendations,
   inputsChanged,
   editablePosition,
@@ -623,37 +624,64 @@ function FundingRow({
   /** The saved eligible cash when it was removed or is no longer a cash line in this account. */
   unresolvedSource: { id: string; label: string } | null;
   status: ReserveStatus | undefined;
-  onSave: (funding: { cashHoldingId: string; reserve: number } | null) => void;
+  onSave: (funding: { cashHoldingId: string; reserve: number; reserveCurrency: AssetCurrency } | null) => void;
 }) {
-  const [source, setSource] = React.useState(account.funding?.cashHoldingId ?? "");
-  const [reserve, setReserve] = React.useState(account.funding ? String(account.funding.reserve) : "0");
+  const saved = account.funding;
+  const currencyOf = (id: string) => cashLines.find((c) => c.id === id)?.currency ?? null;
+  // The pending reserve starts from the saved one only when it was stated in
+  // the pending source's currency; otherwise it is entered again, never relabelled.
+  const initialReserve = (id: string) => (saved ? pendingReserveText(saved, currencyOf(id)) : "0");
+  const [source, setSource] = React.useState(saved?.cashHoldingId ?? "");
+  const [reserve, setReserve] = React.useState(() => initialReserve(saved?.cashHoldingId ?? ""));
+  const savedLineCurrency = saved ? currencyOf(saved.cashHoldingId) : null;
   React.useEffect(() => {
-    setSource(account.funding?.cashHoldingId ?? "");
-    setReserve(account.funding ? String(account.funding.reserve) : "0");
-  }, [account.funding]);
+    setSource(saved?.cashHoldingId ?? "");
+    setReserve(saved ? pendingReserveText(saved, savedLineCurrency) : "0");
+  }, [saved, savedLineCurrency]);
   const r = Number(reserve.replace(/[,\s]/g, ""));
   const line = cashLines.find((c) => c.id === source);
-  // The reserve is in its cash line's currency; when that is unknown, none is invented.
-  const currency = status?.currency ?? line?.currency ?? null;
-  const fmt = (n: number) => (currency ? formatCurrency(n, currency) : `${n.toLocaleString("en-US", { maximumFractionDigits: 2 })} (currency unknown)`);
-  const choosable = !!line && Number.isFinite(r) && r >= 0;
+  const pendingCurrency = line?.currency ?? null;
+  const choosable = !!line && reserve.trim() !== "" && Number.isFinite(r) && r >= 0;
+  const money = (n: number, currency: string | null) => (currency ? formatCurrency(n, currency) : `${n.toLocaleString("en-US", { maximumFractionDigits: 2 })} (currency unknown)`);
+  const savedSourceLabel = saved ? (unresolvedSource?.id === saved.cashHoldingId ? unresolvedSource.label : cashLines.find((c) => c.id === saved.cashHoldingId)?.name ?? saved.cashHoldingId) : null;
+  const restate = !!saved && !!line && saved.reserveCurrency !== line.currency;
   return (
     <div className="space-y-1.5 border-b border-ink-100 pb-2 last:border-b-0">
       <div className="text-[13px] text-ink-900">{account.name}</div>
+      {saved && (
+        <p className="text-2xs text-ink-500">
+          Saved rule: {savedSourceLabel}; reserve {money(saved.reserve, saved.reserveCurrency ?? null)}.
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-2 text-[12px] text-ink-600">
-        <select value={source} onChange={(e) => setSource(e.target.value)} aria-label={`Eligible cash for ${account.name}`} className="rounded border border-ink-200 px-2 py-1">
-          {!account.funding && <option value="">No eligible cash chosen</option>}
+        <select
+          value={source}
+          onChange={(e) => {
+            setSource(e.target.value);
+            setReserve(initialReserve(e.target.value));
+          }}
+          aria-label={`Eligible cash for ${account.name}`}
+          className="rounded border border-ink-200 px-2 py-1"
+        >
+          {!saved && <option value="">No eligible cash chosen</option>}
           {unresolvedSource && <option value={unresolvedSource.id}>Saved: {unresolvedSource.label}</option>}
           {cashLines.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.currency})</option>)}
         </select>
         <label className="flex items-center gap-1.5">
-          Reserve
-          <input inputMode="decimal" value={reserve} onChange={(e) => setReserve(e.target.value)} aria-label={`Minimum reserve for ${account.name}`} className="w-24 rounded border border-ink-200 px-2 py-1 text-right tabular" />
+          Reserve{pendingCurrency ? ` (${pendingCurrency})` : ""}
+          <input
+            inputMode="decimal"
+            value={reserve}
+            onChange={(e) => setReserve(e.target.value)}
+            placeholder={pendingCurrency ? `in ${pendingCurrency}` : "choose cash first"}
+            aria-label={`Minimum reserve for ${account.name}${pendingCurrency ? ` in ${pendingCurrency}` : ""}`}
+            className="w-24 rounded border border-ink-200 px-2 py-1 text-right tabular"
+          />
         </label>
-        <Button size="sm" variant="secondary" disabled={!choosable} onClick={() => choosable && onSave({ cashHoldingId: source, reserve: r })}>
-          {account.funding ? "Save funding rule" : "Set funding rule"}
+        <Button size="sm" variant="secondary" disabled={!choosable} onClick={() => line && choosable && onSave({ cashHoldingId: source, reserve: r, reserveCurrency: line.currency as AssetCurrency })}>
+          {saved ? "Save funding rule" : "Set funding rule"}
         </Button>
-        {account.funding && (
+        {saved && (
           <Button size="sm" variant="ghost" onClick={() => onSave(null)} aria-label={`Remove the funding rule and reserve for ${account.name}`}>
             Remove funding rule
           </Button>
@@ -662,13 +690,20 @@ function FundingRow({
       {unresolvedSource && source === unresolvedSource.id && (
         <p className="text-2xs text-ink-500">Choose a valid cash line to fund this account, or remove the rule. Saving can&apos;t keep a source that no longer resolves.</p>
       )}
+      {restate && (
+        <p className="text-2xs text-warning-600">
+          Enter the reserve in {line!.currency}: the saved reserve {saved!.reserveCurrency ? `is in ${saved!.reserveCurrency}` : "has no recorded currency"} and isn&apos;t converted.
+        </p>
+      )}
       {status && (
         <p className={`text-2xs ${status.breached ? "text-negative-600" : "text-ink-500"}`}>
-          {status.problem
-            ? `The chosen eligible cash ${status.cashHoldingId} ${status.problem === "removed" ? "was removed" : "is no longer a cash line in this account"}. Nothing is spent from this account, and no other cash is used, until you choose its eligible cash again; the ${fmt(status.reserve)} reserve is kept.`
+          {status.problem === "reserve_currency"
+            ? `The saved reserve ${status.reserveCurrency ? `is in ${status.reserveCurrency}` : "has no recorded currency"} but the eligible cash is valued in ${status.sourceCurrency}. Nothing is spent from this account until you restate the reserve in ${status.sourceCurrency}.`
+            : status.problem
+            ? `The chosen eligible cash ${status.cashHoldingId} ${status.problem === "removed" ? "was removed" : "is no longer a cash line in this account"}. Nothing is spent from this account, and no other cash is used, until you choose its eligible cash again; the ${money(status.reserve, status.reserveCurrency)} reserve is kept.`
             : status.available == null
-            ? `Eligible cash can't be valued, so the ${fmt(status.reserve)} reserve can't be confirmed; nothing is spent from this account, and no other cash is used.`
-            : `Eligible cash after this preview ${fmt(status.available)}; reserve ${fmt(status.reserve)}; headroom ${fmt(status.headroom ?? 0)}${status.breached ? " (below the reserve)" : ""}.`}
+            ? `Eligible cash can't be valued, so the ${money(status.reserve, status.reserveCurrency)} reserve can't be confirmed; nothing is spent from this account, and no other cash is used.`
+            : `Eligible cash after this preview ${money(status.available, status.currency)}; reserve ${money(status.reserve, status.reserveCurrency)}; headroom ${money(status.headroom ?? 0, status.currency)}${status.breached ? " (below the reserve)" : ""}.`}
         </p>
       )}
     </div>

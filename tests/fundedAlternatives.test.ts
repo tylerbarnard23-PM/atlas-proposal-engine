@@ -59,7 +59,7 @@ function story(m: M, reserve = 10_000) {
   });
   const st = m.useAtlasStore.getState();
   st.setDraftScope(["acc_story_invest"]);
-  st.setAccountFunding("acc_story_invest", { cashHoldingId: "h_story_cash", reserve });
+  st.setAccountFunding("acc_story_invest", { cashHoldingId: "h_story_cash", reserve, reserveCurrency: "USD" });
 }
 
 const replace = (m: M, sell: number, buy: number, tag = "a", holdingId = "h_story_equity") => {
@@ -151,7 +151,7 @@ describe("a linked replacement into a proposed investment", () => {
     // A money-market slice listed first isn't touched: offsets go to the designated line.
     const mmf: Holding = { ...m.STORY_HOLDINGS[2], id: "h_story_mmf", assetName: "Money market fund (slice)", nativeMarketValue: 5_000 };
     m.useAtlasStore.setState({ holdings: [mmf, ...m.STORY_HOLDINGS] });
-    m.useAtlasStore.getState().setAccountFunding("acc_story_invest", { cashHoldingId: "h_story_cash", reserve: 10_000 });
+    m.useAtlasStore.getState().setAccountFunding("acc_story_invest", { cashHoldingId: "h_story_cash", reserve: 10_000, reserveCurrency: "USD" });
     const sale = { ...replace(m, 3_000, 1_000, "s")[0], id: "rec_plain_sale", linked: undefined };
     m.useAtlasStore.setState((s) => ({ recommendations: [sale], workingDraft: { ...s.workingDraft, memberIds: ["rec_plain_sale"] } }));
     const d = desk(m);
@@ -163,7 +163,7 @@ describe("a linked replacement into a proposed investment", () => {
     const status = desk(m).reserves[0];
     expect(status).toMatchObject({ available: null, breached: true });
     // Funding can only point at a cash line in that account.
-    m.useAtlasStore.getState().setAccountFunding("acc_story_invest", { cashHoldingId: "h_story_equity", reserve: 0 });
+    m.useAtlasStore.getState().setAccountFunding("acc_story_invest", { cashHoldingId: "h_story_equity", reserve: 0, reserveCurrency: "USD" });
     expect(m.useAtlasStore.getState().accounts.find((a) => a.id === "acc_story_invest")!.funding!.cashHoldingId).toBe("h_story_cash");
   });
 
@@ -391,6 +391,8 @@ describe("review boundaries (PR #75)", () => {
     const m = await load();
     story(m, 10_000);
     m.useAtlasStore.setState({ holdings: m.STORY_HOLDINGS.map((h) => (h.id === "h_story_cash" ? { ...h, currency: "EUR" as Holding["currency"] } : h)) });
+    // The line is now EUR: the reserve is restated in EUR (a USD reserve isn't relabelled).
+    m.useAtlasStore.getState().setAccountFunding("acc_story_invest", { cashHoldingId: "h_story_cash", reserve: 10_000, reserveCurrency: "EUR" });
     const eur = (sell: number, buy: number, tag: string) => {
       const h = m.useAtlasStore.getState().holdings.find((x) => x.id === "h_story_equity")!;
       return m.replacementRecommendations({ holding: h, sellAmount: sell, buyAmount: buy, destination: BOND_B, currency: "EUR", ids: { sell: `rec_sell_${tag}`, buy: `rec_buy_${tag}`, group: `grp_${tag}` }, now: NOW.toISOString() });
@@ -406,7 +408,7 @@ describe("review boundaries (PR #75)", () => {
     d = desk(m);
     expect(d.blocked).toEqual([expect.objectContaining({ unitId: "grp_b", reason: expect.stringMatching(/EUR 9,999.*below its EUR 10,000 reserve/) })]);
     // A EUR 10,500 reserve is breached by EUR 10,000 even though the cash is worth USD 10,850.
-    m.useAtlasStore.getState().setAccountFunding("acc_story_invest", { cashHoldingId: "h_story_cash", reserve: 10_500 });
+    m.useAtlasStore.getState().setAccountFunding("acc_story_invest", { cashHoldingId: "h_story_cash", reserve: 10_500, reserveCurrency: "EUR" });
     expect(desk(m).reserves[0]).toMatchObject({ available: 10_000, breached: true });
   });
 
@@ -430,9 +432,9 @@ describe("review boundaries (PR #75)", () => {
       const FUNDING = "Linked replacements applied whole and cash reserves kept";
       const ONE = "Approved actions come from one alternative";
       expect(await post()).not.toContain(FUNDING); // headroom exactly 0
-      m.useAtlasStore.getState().setAccountFunding("acc_story_invest", { cashHoldingId: "h_story_cash", reserve: 10_000.01 });
+      m.useAtlasStore.getState().setAccountFunding("acc_story_invest", { cashHoldingId: "h_story_cash", reserve: 10_000.01, reserveCurrency: "USD" });
       expect(await post()).toContain(FUNDING);
-      m.useAtlasStore.getState().setAccountFunding("acc_story_invest", { cashHoldingId: "h_story_cash", reserve: 10_000 });
+      m.useAtlasStore.getState().setAccountFunding("acc_story_invest", { cashHoldingId: "h_story_cash", reserve: 10_000, reserveCurrency: "USD" });
       m.useAtlasStore.getState().duplicateDraft("Alternative B");
       approve(m, m.useAtlasStore.getState().workingDraft.memberIds);
       expect(await post()).toContain(ONE);
@@ -559,6 +561,7 @@ describe("an explicit funding rule never falls back to other cash (PR #75)", () 
     const m = await load();
     twoCash(m);
     m.useAtlasStore.getState().patchHolding("h_story_cash", { currency: "NOK" as Holding["currency"] });
+    m.useAtlasStore.getState().setAccountFunding("acc_story_invest", { cashHoldingId: "h_story_cash", reserve: 0, reserveCurrency: "NOK" as Holding["currency"] });
     increase(m);
     unchanged(m, /eligible cash Cash can't be valued/);
   });
@@ -604,7 +607,7 @@ describe("an explicit funding rule never falls back to other cash (PR #75)", () 
     expect(v("h_mortgage")).toBe(-1_385_000);
     expect(v("h_cash_brokerage2")! + v("h_cash_brokerage")!).toBeCloseTo(184_200 + 300_000 - 100_000, 6);
     // A valid rule: only the designated line is available (184,200 of a 250,000 paydown); the rest comes from other accounts.
-    m.useAtlasStore.getState().setAccountFunding("acc_brokerage_us", { cashHoldingId: "h_cash_brokerage", reserve: 0 });
+    m.useAtlasStore.getState().setAccountFunding("acc_brokerage_us", { cashHoldingId: "h_cash_brokerage", reserve: 0, reserveCurrency: "USD" });
     ({ r, v } = pay(250_000));
     expect([v("h_mortgage"), v("h_cash_brokerage"), v("h_cash_brokerage2")]).toEqual([-1_235_000, 0, 300_000]);
     // The designated line removed: the brokerage account isn't drawn at all.
@@ -613,5 +616,111 @@ describe("an explicit funding rule never falls back to other cash (PR #75)", () 
     expect(v("h_cash_brokerage2")).toBe(300_000);
     expect(v("h_mortgage")).toBe(-1_385_000);
     expect(r.unresolved).toEqual([]);
+  });
+});
+
+describe("a reserve keeps its currency basis (PR #75)", () => {
+  /** The story (USD cash, USD 5,000 reserve) with a EUR deposit in the same account. */
+  function withEur(m: M) {
+    story(m, 5_000);
+    const cash = m.useAtlasStore.getState().holdings.find((h) => h.id === "h_story_cash")!;
+    m.useAtlasStore.getState().upsertHolding({ ...cash, id: "h_story_eur", assetName: "EUR deposit", currency: "EUR" as Holding["currency"], nativeMarketValue: 9_000 });
+  }
+  const funding = (m: M) => m.useAtlasStore.getState().accounts.find((a) => a.id === "acc_story_invest")!.funding;
+  const increase = (m: M, amount: number) => {
+    const h = m.useAtlasStore.getState().holdings.find((x) => x.id === "h_story_equity")!;
+    m.useAtlasStore.getState().addDraftEdit(m.positionEditRecommendation({ holding: h, kind: "increase", amount, reportingCurrency: "USD", id: "rec_inc", now: NOW.toISOString() }));
+  };
+
+  it("a USD reserve can't be saved, untouched, against a EUR source; the pending reserve must be restated", async () => {
+    const m = await load();
+    withEur(m);
+    expect(funding(m)).toEqual({ cashHoldingId: "h_story_cash", reserve: 5_000, reserveCurrency: "USD" });
+    // The store refuses a reserve whose stated currency isn't the source's.
+    m.useAtlasStore.getState().setAccountFunding("acc_story_invest", { cashHoldingId: "h_story_eur", reserve: 5_000, reserveCurrency: "USD" });
+    expect(funding(m)).toEqual({ cashHoldingId: "h_story_cash", reserve: 5_000, reserveCurrency: "USD" });
+    // The control starts a EUR source with no reserve (nothing relabelled); the saved USD source keeps its number.
+    expect(m.pendingReserveText(funding(m), "EUR")).toBe("");
+    expect(m.pendingReserveText(funding(m), "USD")).toBe("5000");
+  });
+
+  it("an explicitly entered EUR reserve saves and is enforced in EUR", async () => {
+    const m = await load();
+    withEur(m);
+    m.useAtlasStore.getState().setAccountFunding("acc_story_invest", { cashHoldingId: "h_story_eur", reserve: 8_000, reserveCurrency: "EUR" });
+    expect(funding(m)).toEqual({ cashHoldingId: "h_story_eur", reserve: 8_000, reserveCurrency: "EUR" });
+    expect(desk(m).reserves[0]).toMatchObject({ currency: "EUR", reserveCurrency: "EUR", available: 9_000, headroom: 1_000, breached: false });
+    increase(m, 2_170); // EUR 2,000 at 1.085
+    const d = desk(m);
+    expect(d.reserves[0].available).toBeCloseTo(7_000, 6);
+    expect(d.reserves[0].breached).toBe(true);
+    approve(m, ["rec_inc"]);
+    expect(check(m, "funding_reserves")).toMatchObject({ passed: false, detail: expect.stringMatching(/EUR 7,000 is below its EUR 8,000 reserve/) });
+  });
+
+  it("a reserve with no recorded currency is shown as unknown and must be restated; nothing is guessed", async () => {
+    const m = await load();
+    withEur(m);
+    // A rule saved before reserves carried a currency (an earlier v8 build).
+    m.useAtlasStore.setState({ accounts: m.useAtlasStore.getState().accounts.map((a) => (a.id === "acc_story_invest" ? { ...a, funding: { cashHoldingId: "h_story_cash", reserve: 5_000 } } : a)) });
+    m.useAtlasStore.getState().removeHolding("h_story_cash");
+    expect(desk(m).reserves[0]).toMatchObject({ problem: "removed", reserveCurrency: null, reserve: 5_000 });
+    expect(check(m, "funding_reserves").detail).toMatch(/reserve 5,000 \(currency unknown\) kept/);
+    expect(m.pendingReserveText(funding(m), "USD")).toBe("");
+    expect(m.pendingReserveText(funding(m), "EUR")).toBe("");
+    // The same with the source still present: unresolved until restated.
+    m.useAtlasStore.setState({ accounts: m.useAtlasStore.getState().accounts.map((a) => (a.id === "acc_story_invest" ? { ...a, funding: { cashHoldingId: "h_story_eur", reserve: 5_000 } } : a)) });
+    expect(desk(m).reserves[0]).toMatchObject({ problem: "reserve_currency", breached: true });
+    m.useAtlasStore.getState().setAccountFunding("acc_story_invest", { cashHoldingId: "h_story_eur", reserve: 4_000, reserveCurrency: "EUR" });
+    expect(desk(m).reserves[0]).toMatchObject({ problem: null, breached: false, headroom: 5_000 });
+  });
+
+  it("changing the designated line's native or approved currency leaves the reserve unresolved until restated", async () => {
+    const m = await load();
+    withEur(m);
+    increase(m, 1_000);
+    m.useAtlasStore.getState().patchHolding("h_story_cash", { currency: "EUR" as Holding["currency"] });
+    let d = desk(m);
+    expect(d.reserves[0]).toMatchObject({ problem: "reserve_currency", reserveCurrency: "USD", reserve: 5_000, breached: true });
+    expect(d.blocked).toEqual([expect.objectContaining({ recommendationIds: ["rec_inc"], reason: expect.stringMatching(/valued in EUR, but its reserve was set in USD/) })]);
+    expect(funding(m)).toEqual({ cashHoldingId: "h_story_cash", reserve: 5_000, reserveCurrency: "USD" }); // never relabelled
+    // An approved value in another currency is a change of basis too.
+    m.useAtlasStore.getState().patchHolding("h_story_cash", { currency: "USD" as Holding["currency"], proposalApprovedValue: { amount: 9_000, currency: "EUR", source: { kind: "statement", asOf: NOW.toISOString(), confidence: "high" } } as Holding["proposalApprovedValue"] });
+    expect(desk(m).reserves[0].problem).toBe("reserve_currency");
+    // Restated in EUR: resolved, and the increase is funded again.
+    m.useAtlasStore.getState().setAccountFunding("acc_story_invest", { cashHoldingId: "h_story_cash", reserve: 4_000, reserveCurrency: "EUR" });
+    d = desk(m);
+    expect(d.reserves[0]).toMatchObject({ problem: null, reserveCurrency: "EUR" });
+    expect(d.blocked).toEqual([]);
+  });
+
+  it("save, reload, export and restore keep the reserve basis and the unresolved state", async () => {
+    let m = await load();
+    withEur(m);
+    m.useAtlasStore.getState().patchHolding("h_story_cash", { currency: "EUR" as Holding["currency"] });
+    const before = JSON.parse(JSON.stringify(m.useAtlasStore.getState().accounts));
+    vi.resetModules();
+    m = await load();
+    await m.useAtlasStore.persist.rehydrate();
+    expect(m.useAtlasStore.getState().accounts).toEqual(before);
+    const s = m.useAtlasStore.getState();
+    const exported = m.exportBackup(s, NOW, { disclosureIds: m.DISCLOSURE_LIBRARY.map((d) => d.id) });
+    if (!exported.ok) throw new Error(exported.errors.join("; "));
+    const file = JSON.parse(exported.text);
+    expect(file.engagement.accounts.find((a: { id: string }) => a.id === "acc_story_invest").funding).toEqual({ cashHoldingId: "h_story_cash", reserve: 5_000, reserveCurrency: "USD" });
+    expect(file.engagement.unresolvedFunding).toEqual([{ accountId: "acc_story_invest", cashHoldingId: "h_story_cash", reason: "reserve_currency" }]);
+    // A false declaration is still rejected.
+    const lie = structuredClone(file);
+    lie.engagement.unresolvedFunding = [];
+    expect(m.parseBackup(JSON.stringify(lie), { disclosureIds: m.DISCLOSURE_LIBRARY.map((d) => d.id) }).ok).toBe(false);
+    const parsed = m.parseBackup(exported.text, { disclosureIds: m.DISCLOSURE_LIBRARY.map((d) => d.id) });
+    if (!parsed.ok) throw new Error(parsed.errors.join("; "));
+    m.useAtlasStore.getState().startNewClient();
+    expect(m.useAtlasStore.getState().restoreWorkspace(m.restoredState(parsed.backup, s, { replaceFirm: false }))).toEqual({ ok: true });
+    vi.resetModules();
+    m = await load();
+    await m.useAtlasStore.persist.rehydrate();
+    expect(m.useAtlasStore.getState().accounts).toEqual(before);
+    expect(check(m, "funding_reserves")).toMatchObject({ passed: false, detail: expect.stringMatching(/reserve was set in USD/) });
   });
 });

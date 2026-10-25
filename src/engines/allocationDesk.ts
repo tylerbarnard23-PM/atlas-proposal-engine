@@ -312,6 +312,15 @@ export const editablePosition = (p: Pick<DeskPosition, "assetClass" | "current" 
   !p.synthetic && !p.proposedOnly && p.current != null && p.assetClass !== "cash";
 
 /**
+ * The reserve the funding control starts with for a source in `currency`:
+ * the saved number when it was stated in that same currency, else nothing,
+ * so a reserve in another (or an unknown) currency is restated, never relabelled.
+ */
+export function pendingReserveText(saved: Account["funding"] | undefined, currency: string | null): string {
+  return saved?.reserveCurrency && currency && saved.reserveCurrency === currency ? String(saved.reserve) : "";
+}
+
+/**
  * A linked replacement (D2): sell `sellAmount` of an owned position and buy
  * `buyAmount` of a proposed investment in the same account, both in the
  * account's eligible-cash currency. The legs share a group and apply whole or

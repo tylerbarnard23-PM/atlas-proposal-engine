@@ -3,7 +3,7 @@ import { sumBy } from "@/utils/numbers";
 import { resolveFxRate } from "./currencyEngine";
 import type { HoldingValuation } from "./normalizationEngine";
 import { amountsInReporting, type ReportingAmounts } from "./recommendationAmounts";
-import { fundingProblem, type UnresolvedFunding } from "./recommendationLinks";
+import { cashBasisCurrency, fundingProblem, fundingProblemText, type UnresolvedFunding } from "./recommendationLinks";
 
 export const DEFAULT_PROPOSAL_SECTIONS: ProposalSection[] = [
   { key: "executive_summary", label: "Executive Summary", enabled: true, required: true },
@@ -293,7 +293,7 @@ function applyCore(
       if (problem) {
         return {
           kind: "funding",
-          reason: `${account.name}'s eligible cash ${account.funding.cashHoldingId} ${problem === "removed" ? "was removed" : "is no longer a cash line in this account"}, so this action can't be funded. Choose its eligible cash again.`,
+          reason: `${account.name}'s eligible cash ${account.funding.cashHoldingId} ${fundingProblemText(account, current)}, so this action can't be funded. ${problem === "reserve_currency" ? "Restate its reserve in the Allocation desk." : "Choose its eligible cash again."}`,
         };
       }
       if (line && reportingValueOf(line, fx) == null) {
@@ -574,7 +574,7 @@ function destinationProblem(rec: Recommendation, current: Holding[], accounts: M
   if (d.assetClass === "cash" || d.assetClass === "liability") return `${d.name} must be an investment, not cash or a liability.`;
   const source = eligibleCashOf(account, current);
   const problem = fundingProblem(account, current);
-  if (problem) return `The eligible cash chosen for ${account.name} ${problem === "removed" ? "was removed" : "is no longer a cash line in the account"}, so ${d.name} can't be funded. Choose its eligible cash again.`;
+  if (problem) return `The eligible cash chosen for ${account.name} ${fundingProblemText(account, current)}, so ${d.name} can't be funded. ${problem === "reserve_currency" ? "Restate its reserve." : "Choose its eligible cash again."}`;
   if (!source) return `${account.name} has no eligible cash source chosen, so ${d.name} can't be funded. Choose its eligible cash first.`;
   const sourceCurrency = (source as MaybeNormalized).valuation?.currency ?? source.proposalApprovedValue?.currency ?? source.currency;
   if (sourceCurrency !== d.currency) return `${d.name} is in ${d.currency} but the eligible cash in ${account.name} is in ${sourceCurrency}; currency conversion inside the account isn't supported.`;
@@ -596,8 +596,12 @@ export interface ReserveStatus {
   reserve: number;
   /** The eligible cash in its own currency, or null when unknown (missing or unvalued): unknown is never spendable. */
   available: number | null;
-  /** Why the rule doesn't resolve: its cash line was removed, or is no longer a cash line in the account. */
+  /** Why the rule doesn't resolve: its cash line was removed, is no longer a cash line in the account, or the reserve isn't in its currency. */
   problem: UnresolvedFunding["reason"] | null;
+  /** The currency the reserve was stated in, or null when none was recorded (unknown). */
+  reserveCurrency: CurrencyCode | null;
+  /** The designated line's currency basis when it still exists, else null. */
+  sourceCurrency: CurrencyCode | null;
   headroom: number | null;
   breached: boolean;
 }
@@ -608,6 +612,7 @@ export function reserveStatus(holdings: Holding[], accounts: Account[]): Reserve
     .map((a) => {
       const h = eligibleCashOf(a, holdings) as MaybeNormalized | undefined;
       const problem = fundingProblem(a, holdings);
+      const designated = holdings.find((x) => x.id === a.funding!.cashHoldingId);
       const available = !h ? null : h.valuation ? (h.valuation.status === "valued" ? h.valuation.amount : null) : h.nativeMarketValue;
       const reserve = a.funding!.reserve;
       const headroom = available == null ? null : available - reserve;
@@ -620,6 +625,8 @@ export function reserveStatus(holdings: Holding[], accounts: Account[]): Reserve
         reserve,
         available,
         problem,
+        reserveCurrency: a.funding!.reserveCurrency ?? null,
+        sourceCurrency: designated ? cashBasisCurrency(designated) : null,
         headroom,
         breached: headroom == null || headroom < -0.005,
       };

@@ -179,7 +179,7 @@ function schemas(strict: boolean) {
     notes: text().optional(),
     isLiabilityAccount: z.boolean().optional(),
     // v8 (D2): the account's eligible cash and its reserve, in that line's currency.
-    funding: obj({ cashHoldingId: id, reserve: finite.min(0) }).optional(),
+    funding: obj({ cashHoldingId: id, reserve: finite.min(0), reserveCurrency: currency.optional() }).optional(),
     createdAt: date,
     updatedAt: date,
   });
@@ -404,7 +404,7 @@ function schemas(strict: boolean) {
   const engagementV8 = engagementV7.extend({
     alternatives: z.array(workingDraft),
     unresolvedLinks: z.array(obj({ recommendationId: id, holdingId: id.optional(), accountId: id.optional(), destinationAccountId: id.optional() })),
-    unresolvedFunding: z.array(obj({ accountId: id, cashHoldingId: id, reason: z.enum(["removed", "not_cash"]) })),
+    unresolvedFunding: z.array(obj({ accountId: id, cashHoldingId: id, reason: z.enum(["removed", "not_cash", "reserve_currency"]) })),
   });
   const envelopeOf = <E extends z.ZodTypeAny, V extends number>(e: E, version: V) =>
     obj({
@@ -713,7 +713,9 @@ function referenceErrors(e: BackupEngagement, disclosureIds: Set<string>): strin
       errors.push(
         f.reason === "removed"
           ? `Account ${accountId}'s eligible cash ${f.cashHoldingId} isn't in the backup.`
-          : `Account ${accountId}'s eligible cash ${f.cashHoldingId} isn't a cash line in that account.`
+          : f.reason === "not_cash"
+          ? `Account ${accountId}'s eligible cash ${f.cashHoldingId} isn't a cash line in that account.`
+          : `Account ${accountId}'s reserve isn't stated in the currency of its eligible cash ${f.cashHoldingId}.`
       );
     }
   }

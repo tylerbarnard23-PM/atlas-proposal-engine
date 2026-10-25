@@ -76,7 +76,7 @@ async function d2Story(m: Mods) {
   const { replacementRecommendations } = await import("@/engines/allocationDesk");
   m.useAtlasStore.getState().startNewClient();
   m.useAtlasStore.setState({ client: { ...m.useAtlasStore.getState().client, fullName: "Story Household", proposalOutputCurrency: "USD" }, accounts: STORY_ACCOUNTS, holdings: STORY_HOLDINGS, recommendations: [] });
-  m.useAtlasStore.getState().setAccountFunding("acc_story_invest", { cashHoldingId: "h_story_cash", reserve: 5_000 });
+  m.useAtlasStore.getState().setAccountFunding("acc_story_invest", { cashHoldingId: "h_story_cash", reserve: 5_000, reserveCurrency: "USD" });
   const legs = (tag: string, sell: number) =>
     replacementRecommendations({ holding: STORY_HOLDINGS[0], sellAmount: sell, buyAmount: sell, destination: { id: `dest_${tag}`, name: `Bond ETF ${tag}`, assetClass: "fixed_income" }, currency: "USD", ids: { sell: `rec_sell_${tag}`, buy: `rec_buy_${tag}`, group: `grp_${tag}` }, now: NOW.toISOString() });
   m.useAtlasStore.getState().addDraftEdit(legs("B", 10_000));
@@ -382,12 +382,12 @@ describe("D2 references the app can leave unresolved", () => {
     const { m: m2, file } = await exportRestoreReload(m);
     m = m2;
     expect(file.engagement.unresolvedFunding).toEqual([{ accountId: "acc_story_invest", cashHoldingId: "h_story_cash", reason: "removed" }]);
-    expect(m.useAtlasStore.getState().accounts.find((a) => a.id === "acc_story_invest")!.funding).toEqual({ cashHoldingId: "h_story_cash", reserve: 5_000 });
+    expect(m.useAtlasStore.getState().accounts.find((a) => a.id === "acc_story_invest")!.funding).toEqual({ cashHoldingId: "h_story_cash", reserve: 5_000, reserveCurrency: "USD" });
     expect(check(m, "funding_reserves")).toMatchObject({ passed: false, detail: expect.stringMatching(/h_story_cash was removed/) });
     // Recovery: choose a valid cash line (a new deposit) explicitly; approvals are as they were, none added.
     const approvedBefore = m.useAtlasStore.getState().recommendations.filter((r) => r.approvedByAdvisor).map((r) => r.id);
     m.useAtlasStore.getState().upsertHolding({ ...structuredClone(m.useAtlasStore.getState().holdings[0]), id: "h_story_cash2", assetName: "New deposit", assetClass: "cash", assetType: "cash", nativeMarketValue: 10_000 });
-    m.useAtlasStore.getState().setAccountFunding("acc_story_invest", { cashHoldingId: "h_story_cash2", reserve: 5_000 });
+    m.useAtlasStore.getState().setAccountFunding("acc_story_invest", { cashHoldingId: "h_story_cash2", reserve: 5_000, reserveCurrency: "USD" });
     expect(check(m, "funding_reserves").passed).toBe(true);
     expect(m.useAtlasStore.getState().recommendations.filter((r) => r.approvedByAdvisor).map((r) => r.id)).toEqual(approvedBefore);
     expect(m.useAtlasStore.getState().recommendations.find((r) => r.id === "rec_sell_C")!.status).toBe("excluded");

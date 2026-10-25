@@ -161,15 +161,21 @@ export function evaluateReadiness(inp: ReadinessInputs): ComplianceCheck[] {
       blockedUnits.length + breaches.length > 0
         ? [
             ...blockedUnits.map((b) => b.reason),
-            ...breaches.map((b) =>
-              b.problem === "removed"
-                ? `${b.accountName}: its eligible cash ${b.cashHoldingId} was removed; choose its eligible cash again (reserve ${money(b.reserve)} kept)`
+            ...breaches.map((b) => {
+              // A reserve is shown in the currency it was stated in, never one guessed.
+              const reserve = b.reserveCurrency ? `${b.reserveCurrency} ${money(b.reserve)}` : `${money(b.reserve)} (currency unknown)`;
+              return b.problem === "removed"
+                ? `${b.accountName}: its eligible cash ${b.cashHoldingId} was removed; choose its eligible cash again (reserve ${reserve} kept)`
                 : b.problem === "not_cash"
-                ? `${b.accountName}: its eligible cash ${b.cashHoldingId} is no longer a cash line in this account; choose its eligible cash again (reserve ${money(b.reserve)} kept)`
+                ? `${b.accountName}: its eligible cash ${b.cashHoldingId} is no longer a cash line in this account; choose its eligible cash again (reserve ${reserve} kept)`
+                : b.problem === "reserve_currency"
+                ? b.reserveCurrency
+                  ? `${b.accountName}: its eligible cash ${b.cashHoldingId} is valued in ${b.sourceCurrency}, but its reserve was set in ${b.reserveCurrency}; restate the reserve in ${b.sourceCurrency} (reserve ${reserve} kept, not converted)`
+                  : `${b.accountName}: its reserve ${reserve} has no recorded currency; restate it in ${b.sourceCurrency}`
                 : b.available == null
-                ? `${b.accountName}: eligible cash unknown, so its ${money(b.reserve)} reserve can't be confirmed`
-                : `${b.accountName}: eligible cash ${b.currency} ${money(b.available)} is below its ${money(b.reserve)} reserve`
-            ),
+                ? `${b.accountName}: eligible cash unknown, so its ${reserve} reserve can't be confirmed`
+                : `${b.accountName}: eligible cash ${b.currency} ${money(b.available)} is below its ${reserve} reserve`;
+            }),
           ].join("; ")
         : undefined,
   });

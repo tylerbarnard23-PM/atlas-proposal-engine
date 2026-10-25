@@ -28,22 +28,32 @@
   - Recovery never re-approves anything.
   - The store contract is unchanged (no migration); v8 is unreleased, so only the v8 backup schema gains the fields.
   - Regressions are in `tests/backupConsistency.test.ts` (three new normal-workflow round trips and "D2 references the app can leave unresolved").
-- **Review fixes, round 3 (explicit funding):** the commit follows `9815c55` (see the PR for the exact head).
+- **Review fixes, round 3 (explicit funding, `c50188c`):**
   - An account with a funding rule now uses its designated eligible cash only. When that line is removed, reclassified or unvalued, the engine never falls back to another cash line or creates a new one.
   - Affected actions stay unapplied. Units are left out whole, and legacy actions are reported in `blocked` with a funding reason: `funding_reserves` blocks, not `fx_available`. The Recommendations preview says "can't be funded" rather than "missing rate".
   - Household loan paydown draws only on an account's valid eligible cash; accounts without rules are unchanged.
   - **Funding control:** an unresolved saved source stays selected and labelled ("Saved: … removed"), and Save can't overwrite it. "Remove funding rule" is a separate, labelled action. When the source currency is unknown, the reserve is shown without inventing one.
   - Regressions are under "an explicit funding rule never falls back" in `tests/fundedAlternatives.test.ts`.
-- **Validation (round 3, local):** typecheck passed; 26 files, **463 passed, 0 skipped**; eval 2 of 2; build passed. CI runs on the pushed head; the 2 private-PDF tests are skipped there.
-- **Browser check (round 3):**
-  - The run used a fresh `atlas-funding.localhost` origin, so the user's localhost workspace was never loaded.
-  - Setup (synthetic): a second brokerage cash line was added to the stored seed.
+- **Review fixes, round 4 (reserve currency):** the commit follows `c50188c` (see the PR for the exact head).
+  - `Account.funding.reserveCurrency` records the currency a reserve was stated in. The store saves a rule only when that currency matches the source's basis (an approved value's currency, else its statement currency).
+  - A mismatch is a new unresolved-funding reason, `reserve_currency`, declared in v8 backups like the others. It covers a source whose native or approved currency changed, and a rule with no recorded currency (from an earlier v8 build: shown as "currency unknown", never guessed). Nothing is spent, `funding_reserves` names it, and the reserve is kept and never relabelled or converted.
+  - **Control:** the saved rule is shown separately from the pending source and reserve, and the input is labelled with the pending currency. A source in another currency, or an unknown one, starts with an empty reserve that must be entered before Save. Unchanged valid rules keep their values.
+  - No store migration and no change to the v7/v6 upgrades: those versions have no funding rules.
+  - Regressions are under "a reserve keeps its currency basis" in `tests/fundedAlternatives.test.ts`. Older tests that change a line's currency now restate the reserve, and their `setAccountFunding` calls state `reserveCurrency`.
+- **Validation (round 4, local):** typecheck passed; 26 files, **468 passed, 0 skipped**; eval 2 of 2; build passed. CI runs on the pushed head; the 2 private-PDF tests are skipped there.
+- **Browser check (round 4):**
+  - The run used a fresh `atlas-reserve.localhost` origin, so the user's localhost workspace was never loaded.
+  - Setup (synthetic): a EUR deposit was added to the brokerage in the stored seed.
   - Steps and results, all through the UI:
-    - designate the first cash line (25,000 reserve), then remove it in Accounts & assets;
-    - a 10,000 Apple increase is left unapplied with the funding reason, and the second deposit isn't drawn;
-    - the control shows the saved source as removed, and Save doesn't change the rule;
-    - "Remove funding rule" removes it, after which legacy funding applies.
+    - set a USD 25,000 rule;
+    - switch the pending source to EUR: the reserve is empty and labelled EUR, the restatement prompt shows, Save is disabled, and the saved rule is unchanged;
+    - enter EUR 20,000 and save: the rule is stored with `reserveCurrency` EUR and enforced in EUR (headroom €30,000);
+    - after reload, switching back to USD asks for a USD restatement.
   - Afterwards the origin's storage was cleared and the server stopped.
+- **Round 3 evidence (`c50188c`):**
+  - local: 463 passed;
+  - CI run 40201711359: 461 passed, 2 skipped;
+  - browser: no fallback after the designated line was removed; unchanged Save; deliberate rule removal.
 - **Round 2 evidence (`9815c55`):**
   - local: 456 passed;
   - CI run 40200538647: 454 passed, 2 skipped;
