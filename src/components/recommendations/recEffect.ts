@@ -56,11 +56,13 @@ export function summarizePreview(p: RecommendationPreview): PreviewSummary {
   switch (p.state) {
     case "advisory":
       return { headline: "Advisory only: appears in the proposal text and doesn't change any holding.", tone: "neutral", ...empty };
+    case "linked":
+      return { headline: "Part of a linked replacement or a new investment: applied together with its other actions, or not at all. See its effect on the Allocation desk.", tone: "neutral", ...empty };
     case "missing_holding":
       return { headline: "The linked holding no longer exists, so this can't be applied.", tone: "warning", ...empty };
     case "cannot_apply":
       return {
-        headline: `Can't be applied: ${p.warnings.find((w) => w.kind === "missing_rate" || w.kind === "unvalued")?.message ?? "a rate is missing."}`,
+        headline: `Can't be applied: ${p.warnings.find((w) => w.kind === "missing_rate" || w.kind === "unvalued" || w.kind === "funding")?.message ?? "a rate is missing."}`,
         tone: "warning",
         ...empty,
       };

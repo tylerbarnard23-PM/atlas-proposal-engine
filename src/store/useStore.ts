@@ -7,6 +7,7 @@ import type {
   AdvisorProfile,
   AssetClass,
   ClientProfile,
+  CurrencyCode,
   DismissedInsight,
   Disclosure,
   FxConfirmation,
@@ -29,20 +30,20 @@ import { SEED_HOLDINGS } from "@/data/seedHoldings";
 import { SEED_RECOMMENDATIONS } from "@/data/seedRecommendations";
 import { SEED_MARKET_QUOTES } from "@/data/seedMarketData";
 import { DISCLOSURE_LIBRARY } from "@/domain/disclosureLibrary";
-import { todayIso } from "@/utils/formatting";
+import { safeId, todayIso } from "@/utils/formatting";
 import { DEFAULT_PROPOSAL_SECTIONS } from "@/engines/proposalEngine";
 import { confirmStaleRates } from "@/engines/fxPolicy";
 import { fxClock } from "@/engines/fxClock";
-import { markRemovedLinks } from "@/engines/recommendationLinks";
+import { cashBasisCurrency, markRemovedLinks } from "@/engines/recommendationLinks";
 import { migrateRecommendationCurrency, withApprovalRule } from "@/engines/recommendationAmounts";
-import { draftBasisInputs, legacyWorkingDraft, needsIntentRestatement, newWorkingDraft, recordInputBasis } from "@/engines/allocationDesk";
+import { deskActions, draftBasisInputs, legacyWorkingDraft, needsIntentRestatement, newWorkingDraft, recordInputBasis } from "@/engines/allocationDesk";
 import { LEGACY_SAMPLE_FIRM_NAME } from "@/domain/branding";
 import type { ImportedWorkspace } from "@/ingestion/documents/toWorkspace";
 import type { RestoredWorkspace } from "@/engines/workspaceBackup";
 
 /** The browser storage key every saved workspace lives under; never renamed. */
 export const STORAGE_KEY = "atlas-proposal-engine";
-export const STORE_VERSION = 7;
+export const STORE_VERSION = 8;
 
 export interface AtlasState {
   client: ClientProfile;
@@ -65,6 +66,8 @@ export interface AtlasState {
   fxConfirmation: FxConfirmation | null;
   /** The one working allocation draft (D1): scope, members, targets and the inputs it was edited against. */
   workingDraft: WorkingDraft;
+  /** D2: the other named alternatives (inactive drafts), each with its own actions. */
+  alternatives: WorkingDraft[];
   hasHydrated: boolean;
 }
 
@@ -131,10 +134,19 @@ export interface AtlasActions {
   setDraftMember: (recommendationId: string, member: boolean) => void;
   /** A target weight in percent of the scope, or null to clear it. Targets never create trades. */
   setDraftTarget: (assetClass: AssetClass, pct: number | null) => void;
-  /** Saves an explicit position edit as an unapproved recommendation in the draft. */
-  addDraftEdit: (rec: Recommendation) => void;
+  /** Saves an explicit position edit (or a linked replacement's legs) as unapproved recommendations in the draft. */
+  addDraftEdit: (rec: Recommendation | Recommendation[]) => void;
   /** Records the current accepted values and rates as the draft's inputs. */
   recordDraftInputs: () => void;
+  // D2. Funding rules live on the account, so every engine path sees them.
+  /** Chooses an account's eligible cash line and minimum reserve, or clears them (null). */
+  /** A reserve is stated in its cash line's currency (`reserveCurrency` must match it); null removes the rule. */
+  setAccountFunding: (accountId: string, funding: { cashHoldingId: string; reserve: number; reserveCurrency: CurrencyCode } | null) => void;
+  /** Copies the active draft into a new named alternative with new action IDs and no approvals, and makes it active. */
+  duplicateDraft: (name: string) => void;
+  /** Makes another alternative the active (editable) draft. */
+  setActiveDraft: (id: string) => void;
+  renameActiveDraft: (name: string) => void;
 }
 
 function initialProposal(): Proposal {
@@ -172,6 +184,7 @@ const seedState = (): AtlasState => ({
   fxRefresh: null,
   fxConfirmation: null,
   workingDraft: newWorkingDraft(new Date().toISOString()),
+  alternatives: [],
   hasHydrated: false,
 });
 
@@ -224,6 +237,7 @@ const blankState = (): AtlasState => {
     fxRefresh: null,
     fxConfirmation: null,
     workingDraft: newWorkingDraft(now),
+    alternatives: [],
     hasHydrated: true,
   };
 };
@@ -296,6 +310,11 @@ export function migrateAtlasState(persisted: unknown, version: number): AtlasSta
   // Idempotent: a draft that's already there is kept.
   if (version < 7 && state && !state.workingDraft) {
     state.workingDraft = legacyWorkingDraft(Array.isArray(state.recommendations) ? state.recommendations : [], new Date().toISOString());
+  }
+  // v8 (D2): named alternatives (none yet), funding rules on accounts (none
+  // yet). Nothing existing changes. Idempotent.
+  if (version < 8 && state && !Array.isArray(state.alternatives)) {
+    state.alternatives = [];
   }
   return state;
 }
@@ -390,6 +409,7 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
       rejectRecommendation: (id, reason) =>
         set((s) => ({
           ...(s.workingDraft.memberIds.includes(id) ? draftChange(s, { memberIds: s.workingDraft.memberIds.filter((x) => x !== id) }) : {}),
+          alternatives: s.alternatives.map((d) => (d.memberIds.includes(id) ? { ...d, memberIds: d.memberIds.filter((x) => x !== id) } : d)),
           recommendations: s.recommendations.map((r) =>
             r.id === id
               ? {
@@ -512,12 +532,17 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
       clearAll: () => set(blankState()),
       setHasHydrated: (b) => set({ hasHydrated: b }),
       setDraftScope: (accountIds) => set((s) => draftChange(s, { scopeAccountIds: accountIds == null ? null : [...new Set(accountIds)] })),
+      // A linked replacement joins or leaves as a whole. An action that
+      // belongs to another alternative can't join this one (each
+      // alternative's actions are its own).
       setDraftMember: (id, member) =>
         set((s) => {
           const rec = s.recommendations.find((r) => r.id === id);
           if (member && (!rec || rec.status === "excluded")) return {};
-          const others = s.workingDraft.memberIds.filter((x) => x !== id);
-          return draftChange(s, { memberIds: member ? [...others, id] : others });
+          const ids = rec?.linked ? s.recommendations.filter((r) => r.linked?.groupId === rec.linked!.groupId).map((r) => r.id) : [id];
+          if (member && s.alternatives.some((d) => ids.some((x) => d.memberIds.includes(x)))) return {};
+          const others = s.workingDraft.memberIds.filter((x) => !ids.includes(x));
+          return draftChange(s, { memberIds: member ? [...others, ...ids] : others });
         }),
       setDraftTarget: (assetClass, pct) =>
         set((s) => {
@@ -527,11 +552,53 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
           else return {};
           return draftChange(s, { targets });
         }),
-      addDraftEdit: (rec) =>
+      addDraftEdit: (input) =>
         set((s) => {
-          const next = { ...s, recommendations: [...s.recommendations.filter((r) => r.id !== rec.id), guardApproval(undefined, rec)] };
-          return { recommendations: next.recommendations, ...draftChange(next, { memberIds: [...s.workingDraft.memberIds.filter((x) => x !== rec.id), rec.id] }) };
+          const recs = Array.isArray(input) ? input : [input];
+          const ids = new Set(recs.map((r) => r.id));
+          const next = { ...s, recommendations: [...s.recommendations.filter((r) => !ids.has(r.id)), ...recs.map((r) => guardApproval(undefined, r))] };
+          return { recommendations: next.recommendations, ...draftChange(next, { memberIds: [...s.workingDraft.memberIds.filter((x) => !ids.has(x)), ...ids] }) };
         }),
+      setAccountFunding: (accountId, funding) =>
+        set((s) => {
+          const account = s.accounts.find((a) => a.id === accountId);
+          if (!account || account.isLiabilityAccount) return {};
+          if (funding) {
+            const h = s.holdings.find((x) => x.id === funding.cashHoldingId);
+            if (!h || h.accountId !== accountId || h.assetClass !== "cash" || h.isLiability) return {};
+            if (!Number.isFinite(funding.reserve) || funding.reserve < 0) return {};
+            // The reserve is stated in its cash line's currency; another currency is never relabelled.
+            if (funding.reserveCurrency !== cashBasisCurrency(h)) return {};
+          }
+          const { funding: _old, ...rest } = account;
+          void _old;
+          const updated = funding
+            ? { ...rest, funding: { cashHoldingId: funding.cashHoldingId, reserve: funding.reserve, reserveCurrency: funding.reserveCurrency }, updatedAt: todayIso() }
+            : { ...rest, updatedAt: todayIso() };
+          return { accounts: s.accounts.map((a) => (a.id === accountId ? updated : a)) };
+        }),
+      duplicateDraft: (name) =>
+        set((s) => {
+          const now = new Date().toISOString();
+          const source = deskActions(s.recommendations, s.workingDraft, "draft");
+          // New action and group IDs; the proposed investment keeps its identity.
+          const groupIds = new Map<string, string>();
+          const copies = source.map((r) => {
+            const linked = r.linked ? { ...r.linked, groupId: groupIds.get(r.linked.groupId) ?? (groupIds.set(r.linked.groupId, safeId("grp")), groupIds.get(r.linked.groupId)!) } : undefined;
+            const copy: Recommendation = { ...r, id: safeId("rec"), status: "draft", approvedByAdvisor: false, includeInPdf: false, rejectionReason: undefined, rejectedAt: undefined, createdAt: now, updatedAt: now, ...(linked ? { linked } : {}) };
+            return copy;
+          });
+          const copy: WorkingDraft = { ...s.workingDraft, id: safeId("draft"), name: name.trim() || `Alternative ${s.alternatives.length + 2}`, memberIds: copies.map((r) => r.id), createdAt: now, updatedAt: now };
+          const next = { ...s, recommendations: [...s.recommendations, ...copies], workingDraft: copy };
+          return { recommendations: next.recommendations, alternatives: [...s.alternatives, s.workingDraft], ...draftChange(next, {}) };
+        }),
+      setActiveDraft: (id) =>
+        set((s) => {
+          const target = s.alternatives.find((d) => d.id === id);
+          if (!target) return {};
+          return { workingDraft: target, alternatives: [...s.alternatives.filter((d) => d.id !== id), s.workingDraft] };
+        }),
+      renameActiveDraft: (name) => set((s) => (name.trim() ? { workingDraft: { ...s.workingDraft, name: name.trim(), updatedAt: new Date().toISOString() } } : {})),
       recordDraftInputs: () => set((s) => draftChange(s, {})),
       restoreWorkspace: (next) => {
         const storage = typeof window !== "undefined" ? window.localStorage : undefined;

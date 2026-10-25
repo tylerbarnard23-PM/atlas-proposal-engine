@@ -78,6 +78,9 @@ function Inner() {
             disclosures: state.disclosures,
             sourceDocuments: state.sourceDocuments.map(forReadiness),
             fxConfirmation: state.fxConfirmation,
+            // D2: lets readiness tell approvals that mix alternatives, as the PDF route does.
+            workingDraft: state.workingDraft,
+            alternatives: state.alternatives,
           },
         }),
       });

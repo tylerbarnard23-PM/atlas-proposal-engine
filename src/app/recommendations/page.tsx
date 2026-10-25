@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { holdingsFromIncompleteImports } from "@/engines/importCompleteness";
-import { linkToHolding, unresolvedRecommendationLinks } from "@/engines/recommendationLinks";
+import { linkTargets, linkToHolding, unresolvedRecommendationLinks } from "@/engines/recommendationLinks";
 import { ImportNotice, IncompleteImportTag } from "@/components/import/ImportNotice";
 import Link from "next/link";
 import { Ban, CheckCheck, CheckCircle2, Lightbulb, Plus, RotateCcw, Trash2 } from "lucide-react";
@@ -230,7 +230,7 @@ function Inner() {
                         {r.relatedHoldingId && fromIncomplete.has(r.relatedHoldingId) && <IncompleteImportTag />}
                         {unresolved.has(r.id) && (
                           <Badge tone="warning" title="Relink it to a current holding or account, reject it or delete it. The final PDF waits for this review.">
-                            Linked {unresolved.get(r.id)!.holdingId ? `holding ${unresolved.get(r.id)!.holdingId}` : `account ${unresolved.get(r.id)!.accountId}`} removed: review
+                            Linked {linkTargets(unresolved.get(r.id)!)} removed: review
                           </Badge>
                         )}
                       </div>
@@ -291,14 +291,17 @@ function Inner() {
                             variant={r.approvedByAdvisor ? "secondary" : "primary"}
                             disabled={!r.approvedByAdvisor && !!restatementMessage(r)}
                             title={!r.approvedByAdvisor && restatementMessage(r) ? "Enter an explicit amount first" : undefined}
-                            onClick={() =>
-                              upsert({
-                                ...r,
-                                approvedByAdvisor: !r.approvedByAdvisor,
-                                status: !r.approvedByAdvisor ? "approved" : r.status,
-                                includeInPdf: !r.approvedByAdvisor ? true : r.includeInPdf,
-                              })
-                            }
+                            onClick={() => {
+                              // A linked replacement is approved (or unapproved) as a whole (D2).
+                              const legs = r.linked ? recs.filter((x) => x.linked?.groupId === r.linked!.groupId) : [r];
+                              for (const leg of legs)
+                                upsert({
+                                  ...leg,
+                                  approvedByAdvisor: !r.approvedByAdvisor,
+                                  status: !r.approvedByAdvisor ? "approved" : leg.status,
+                                  includeInPdf: !r.approvedByAdvisor ? true : leg.includeInPdf,
+                                });
+                            }}
                           >
                             {r.approvedByAdvisor ? "Unapprove" : "Approve"}
                           </Button>

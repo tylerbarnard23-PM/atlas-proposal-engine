@@ -70,6 +70,26 @@ beforeEach(() => {
   storage.clear();
 });
 
+/** D2: the story household with eligible cash, an approved replacement into a proposed investment and a rejected one. */
+async function d2Story(m: Mods) {
+  const { STORY_ACCOUNTS, STORY_HOLDINGS } = await import("@/data/allocationStory");
+  const { replacementRecommendations } = await import("@/engines/allocationDesk");
+  m.useAtlasStore.getState().startNewClient();
+  m.useAtlasStore.setState({ client: { ...m.useAtlasStore.getState().client, fullName: "Story Household", proposalOutputCurrency: "USD" }, accounts: STORY_ACCOUNTS, holdings: STORY_HOLDINGS, recommendations: [] });
+  m.useAtlasStore.getState().setAccountFunding("acc_story_invest", { cashHoldingId: "h_story_cash", reserve: 5_000, reserveCurrency: "USD" });
+  const legs = (tag: string, sell: number) =>
+    replacementRecommendations({ holding: STORY_HOLDINGS[0], sellAmount: sell, buyAmount: sell, destination: { id: `dest_${tag}`, name: `Bond ETF ${tag}`, assetClass: "fixed_income" }, currency: "USD", ids: { sell: `rec_sell_${tag}`, buy: `rec_buy_${tag}`, group: `grp_${tag}` }, now: NOW.toISOString() });
+  m.useAtlasStore.getState().addDraftEdit(legs("B", 10_000));
+  m.useAtlasStore.getState().addDraftEdit(legs("C", 2_000));
+  // A rejected (historical) replacement, kept as evidence.
+  m.useAtlasStore.getState().rejectRecommendation("rec_sell_C", "Not now");
+  m.useAtlasStore.getState().rejectRecommendation("rec_buy_C", "Not now");
+  for (const id of ["rec_sell_B", "rec_buy_B"]) {
+    const r = m.useAtlasStore.getState().recommendations.find((x) => x.id === id)!;
+    m.useAtlasStore.getState().upsertRecommendation({ ...r, approvedByAdvisor: true, status: "approved", includeInPdf: true });
+  }
+}
+
 describe("a removed holding or account leaves its recommendations for review", () => {
   it("deleting a recommended holding keeps the recommendation, clears its approval and blocks the final PDF until reviewed", async () => {
     const m = await load();
@@ -283,6 +303,27 @@ describe("every export from the supported workflows restores with the same resul
       },
     ],
     [
+      "D2: eligible cash chosen, then that cash line removed",
+      async (m) => {
+        await d2Story(m);
+        m.useAtlasStore.getState().removeHolding("h_story_cash");
+      },
+    ],
+    [
+      "D2: eligible cash chosen, then that line reclassified as an investment",
+      async (m) => {
+        await d2Story(m);
+        m.useAtlasStore.getState().patchHolding("h_story_cash", { assetClass: "fixed_income" });
+      },
+    ],
+    [
+      "D2: a replacement into a proposed investment, then its destination account removed",
+      async (m) => {
+        await d2Story(m);
+        m.useAtlasStore.getState().removeAccount("acc_story_invest");
+      },
+    ],
+    [
       "a value confirmed, overridden and an insight dismissed",
       (m) => {
         const st = m.useAtlasStore.getState();
@@ -305,4 +346,139 @@ describe("every export from the supported workflows restores with the same resul
       expect(after.sourceDocuments.map((d) => [d.id, d.importCompleteness])).toEqual(before.sourceDocuments.map((d) => [d.id, d.importCompleteness ?? m.importCompletenessOf(d)]));
     });
   }
+});
+
+describe("D2 references the app can leave unresolved", () => {
+  const check = (m: Mods, code: string) => {
+    const s = m.useAtlasStore.getState();
+    return m
+      .evaluateWorkspaceReadiness({ client: s.client, advisor: s.advisor, accounts: s.accounts, holdings: s.holdings, recommendations: s.recommendations, disclosures: s.disclosures, fxRates: s.fxRates, sourceDocuments: s.sourceDocuments, now: NOW, drafts: [s.workingDraft, ...s.alternatives] })
+      .find((c) => c.code === code)!;
+  };
+  /** Export, check with restore's validation, restore, then reload from storage. */
+  async function exportRestoreReload(m: Mods) {
+    const before = JSON.parse(JSON.stringify(m.useAtlasStore.getState()));
+    const exported = m.exportBackup(before, NOW, ids(m));
+    if (!exported.ok) throw new Error(`export failed: ${exported.errors.join("; ")}`);
+    const parsed = m.parseBackup(exported.text, ids(m));
+    if (!parsed.ok) throw new Error(`restore rejected the export: ${parsed.errors.join("; ")}`);
+    m.useAtlasStore.getState().startNewClient();
+    expect(m.useAtlasStore.getState().restoreWorkspace(m.restoredState(parsed.backup, { advisor: before.advisor, disclosures: m.DISCLOSURE_LIBRARY }, { replaceFirm: false }))).toEqual({ ok: true });
+    vi.resetModules();
+    const m2 = await load();
+    await m2.useAtlasStore.persist.rehydrate();
+    const after = m2.useAtlasStore.getState();
+    expect(after.accounts).toEqual(before.accounts);
+    expect(after.holdings).toEqual(before.holdings);
+    expect(after.recommendations).toEqual(before.recommendations);
+    expect([after.workingDraft.memberIds, after.alternatives]).toEqual([before.workingDraft.memberIds, before.alternatives]);
+    return { m: m2, file: JSON.parse(exported.text) };
+  }
+
+  it("removed eligible cash: the rule and reserve are kept and declared, readiness blocks, and choosing valid cash recovers without approving anything", async () => {
+    let m = await load();
+    await d2Story(m);
+    m.useAtlasStore.getState().removeHolding("h_story_cash");
+    const { m: m2, file } = await exportRestoreReload(m);
+    m = m2;
+    expect(file.engagement.unresolvedFunding).toEqual([{ accountId: "acc_story_invest", cashHoldingId: "h_story_cash", reason: "removed" }]);
+    expect(m.useAtlasStore.getState().accounts.find((a) => a.id === "acc_story_invest")!.funding).toEqual({ cashHoldingId: "h_story_cash", reserve: 5_000, reserveCurrency: "USD" });
+    expect(check(m, "funding_reserves")).toMatchObject({ passed: false, detail: expect.stringMatching(/h_story_cash was removed/) });
+    // Recovery: choose a valid cash line (a new deposit) explicitly; approvals are as they were, none added.
+    const approvedBefore = m.useAtlasStore.getState().recommendations.filter((r) => r.approvedByAdvisor).map((r) => r.id);
+    m.useAtlasStore.getState().upsertHolding({ ...structuredClone(m.useAtlasStore.getState().holdings[0]), id: "h_story_cash2", assetName: "New deposit", assetClass: "cash", assetType: "cash", nativeMarketValue: 10_000 });
+    m.useAtlasStore.getState().setAccountFunding("acc_story_invest", { cashHoldingId: "h_story_cash2", reserve: 5_000, reserveCurrency: "USD" });
+    expect(check(m, "funding_reserves").passed).toBe(true);
+    expect(m.useAtlasStore.getState().recommendations.filter((r) => r.approvedByAdvisor).map((r) => r.id)).toEqual(approvedBefore);
+    expect(m.useAtlasStore.getState().recommendations.find((r) => r.id === "rec_sell_C")!.status).toBe("excluded");
+  });
+
+  it("reclassified eligible cash is declared, never spent, and blocks until valid cash is chosen", async () => {
+    let m = await load();
+    await d2Story(m);
+    m.useAtlasStore.getState().patchHolding("h_story_cash", { assetClass: "fixed_income" });
+    const { m: m2, file } = await exportRestoreReload(m);
+    m = m2;
+    expect(file.engagement.unresolvedFunding).toEqual([{ accountId: "acc_story_invest", cashHoldingId: "h_story_cash", reason: "not_cash" }]);
+    expect(check(m, "funding_reserves")).toMatchObject({ passed: false, detail: expect.stringMatching(/h_story_cash is no longer a cash line/) });
+    // Reclassifying it back as cash resolves it; the reserve was never erased.
+    m.useAtlasStore.getState().patchHolding("h_story_cash", { assetClass: "cash" });
+    expect(check(m, "funding_reserves").passed).toBe(true);
+  });
+
+  it("a removed destination account: the replacement is kept with its destination, declared, unapproved and blocking; rejected history stays recoverable", async () => {
+    let m = await load();
+    await d2Story(m);
+    m.useAtlasStore.getState().removeAccount("acc_story_invest");
+    const recs = m.useAtlasStore.getState().recommendations;
+    expect(recs.find((r) => r.id === "rec_buy_B")).toMatchObject({ approvedByAdvisor: false, status: "needs_review", destination: { id: "dest_B", accountId: "acc_story_invest" } });
+    expect(recs.find((r) => r.id === "rec_buy_C")).toMatchObject({ status: "excluded", destination: { accountId: "acc_story_invest" } });
+    const { m: m2, file } = await exportRestoreReload(m);
+    m = m2;
+    expect(file.engagement.unresolvedLinks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ recommendationId: "rec_buy_B", destinationAccountId: "acc_story_invest" }), expect.objectContaining({ recommendationId: "rec_buy_C", destinationAccountId: "acc_story_invest" })])
+    );
+    expect(check(m, "recommendation_links")).toMatchObject({ passed: false, detail: expect.stringMatching(/destination account acc_story_invest/) });
+    // The rejected replacement can be reopened, and then needs review like the others.
+    m.useAtlasStore.getState().reopenRecommendation("rec_buy_C");
+    expect(check(m, "recommendation_links").detail).toMatch(/Bond ETF C/);
+    m.useAtlasStore.getState().rejectRecommendation("rec_buy_C");
+    // Recovery: put the account and its holdings back (as an undo would). The links resolve; nothing is re-approved.
+    const { STORY_ACCOUNTS, STORY_HOLDINGS } = await import("@/data/allocationStory");
+    m.useAtlasStore.getState().upsertAccount(STORY_ACCOUNTS[0]);
+    for (const h of STORY_HOLDINGS.filter((x) => x.accountId === "acc_story_invest")) m.useAtlasStore.getState().upsertHolding(h);
+    expect(check(m, "recommendation_links").passed).toBe(true);
+    expect(m.useAtlasStore.getState().recommendations.some((r) => r.approvedByAdvisor)).toBe(false);
+  });
+
+  it("a removed destination account can also be resolved by rejecting the replacement", async () => {
+    const m = await load();
+    await d2Story(m);
+    m.useAtlasStore.getState().removeAccount("acc_story_invest");
+    expect(check(m, "recommendation_links").passed).toBe(false);
+    m.useAtlasStore.getState().rejectRecommendation("rec_sell_B");
+    m.useAtlasStore.getState().rejectRecommendation("rec_buy_B");
+    expect(check(m, "recommendation_links").passed).toBe(true);
+    expect(check(m, "funding_reserves").passed).toBe(true);
+  });
+
+  it("undeclared or false declarations are still rejected, and an invalid export is refused", async () => {
+    const m = await load();
+    await d2Story(m);
+    m.useAtlasStore.getState().removeHolding("h_story_cash");
+    m.useAtlasStore.getState().removeAccount("acc_story_home");
+    const exported = m.exportBackup(m.useAtlasStore.getState(), NOW, ids(m));
+    if (!exported.ok) throw new Error(exported.errors.join("; "));
+    const b = JSON.parse(exported.text);
+    const mutate = (fn: (x: any) => void) => {
+      const c = structuredClone(b);
+      fn(c);
+      return m.parseBackup(JSON.stringify(c), ids(m));
+    };
+    // Funding to a missing line that isn't declared.
+    expect(mutate((x) => (x.engagement.unresolvedFunding = []))).toEqual({ ok: false, errors: [expect.stringMatching(/eligible cash h_story_cash/)] });
+    // A declaration for funding that resolves, or with the wrong reason.
+    expect(mutate((x) => x.engagement.unresolvedFunding.push({ accountId: "acc_story_invest", cashHoldingId: "h_story_equity", reason: "removed" })).ok).toBe(false);
+    expect(mutate((x) => (x.engagement.unresolvedFunding[0].reason = "not_cash")).ok).toBe(false);
+    // A destination account that isn't in the backup and isn't declared.
+    expect(
+      mutate((x) => {
+        const r = x.engagement.recommendations.find((y: Recommendation) => y.id === "rec_buy_B");
+        r.destination.accountId = "acc_nowhere";
+      }).ok
+    ).toBe(false);
+    // A declared destination that does resolve.
+    expect(mutate((x) => x.engagement.unresolvedLinks.push({ recommendationId: "rec_buy_B", destinationAccountId: "acc_story_invest" })).ok).toBe(false);
+    // An older (v7) file can't carry the new declarations.
+    const { alternatives: _a, unresolvedFunding: _f, ...e7 } = b.engagement;
+    void _a;
+    void _f;
+    expect(m.parseBackup(JSON.stringify({ ...b, workspaceVersion: 7, engagement: { ...e7, unresolvedFunding: [] } }), ids(m)).ok).toBe(false);
+    // Export still refuses data restore can't accept: nothing to download, no success.
+    const h = m.useAtlasStore.getState().holdings[0];
+    m.useAtlasStore.getState().patchHolding(h.id, { nativeMarketValue: Number.NaN });
+    const refused = m.exportBackup(m.useAtlasStore.getState(), NOW, ids(m));
+    expect(refused.ok).toBe(false);
+    expect(refused).not.toHaveProperty("text");
+  });
 });

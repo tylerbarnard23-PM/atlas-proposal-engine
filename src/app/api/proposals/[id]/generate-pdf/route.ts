@@ -6,6 +6,7 @@ import {
 } from "@/pdf/templates/ProposalPdfTemplate";
 import type {
   Account,
+  WorkingDraft,
   AdvisorProfile,
   ClientProfile,
   Disclosure,
@@ -33,6 +34,9 @@ interface RequestBody {
     recommendations: Recommendation[];
     sections: ProposalSection[];
     disclosures: Disclosure[];
+    /** D2: the working draft and other alternatives, so the gate can tell approvals that mix them. */
+    workingDraft?: WorkingDraft;
+    alternatives?: WorkingDraft[];
     proposal: Proposal;
     // Rates for expressing proposed trades in each holding's own currency.
     // Missing rates are reported by readiness; they never default to 1:1.
@@ -89,6 +93,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       sourceDocuments: Array.isArray(sourceDocuments) ? sourceDocuments : [],
       fxConfirmation,
       now,
+      drafts: [body.state.workingDraft, ...(Array.isArray(body.state.alternatives) ? body.state.alternatives : [])].filter(
+        (d): d is WorkingDraft => !!d && typeof d.name === "string" && Array.isArray(d.memberIds)
+      ),
     });
     if (!readinessOk(checks)) {
       const failing = checks.filter((c) => !c.passed).map((c) => c.label);

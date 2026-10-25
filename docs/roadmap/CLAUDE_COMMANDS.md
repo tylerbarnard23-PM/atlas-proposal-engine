@@ -24,7 +24,7 @@ Inspect → make a short design/contract note in the issue/implementation PR →
 
 ## Historical D1 command — delivered in PR #72
 
-**Status:** implemented in PR #72, awaiting Codex review. After its owner-authorized release, the next command is D2 (below). Kept for reference.
+**Status:** released (PR #72, `0381db1`). D2 is released too (PR #75, `073049f`); D2a model/manager proposals are next, then D3. Kept for reference.
 
 **Opus 5.5 · High effort.** Use after the approved planning change is available in the implementation base; do not implement from the old stand-alone R11-first prompt. If a planning PR is still unmerged, verify it and obtain/execute only an explicitly owner-authorized pinned merge first. Do not silently merge it merely because this template exists.
 
@@ -56,7 +56,7 @@ D1 released as `0381db1` (PR #72). The D1 command above is historical; do not re
 ## Subsequent package prompts
 
 - **D2 — Opus 5.5 High:** use D1's delivered contracts; implement supported new destination/atomic replacement, explicit eligible funding/reserve enforcement and two independent named alternatives. Avoid a broad catalog, optimizer and unsupported transfer workflows. Stop at one reviewed package/justified split.
-- **D2a — Opus 5.5 High:** after D2, implement [MODEL_AND_MANAGER_PROPOSALS.md](MODEL_AND_MANAGER_PROPOSALS.md): a small versioned model library, funded manager/strategy sleeves, known minimums/fees and explicit unknown exposure. Keep sleeve grouping separate from asset-class exposure; no double-counting or implicit trades. Use D2 funding/reserves, independent alternatives, real migrations and supported backup upgrades. Follow the committed synthetic fixtures and stop for Codex review; no manager feeds, execution or UMA administration.
+- **D2a — Opus 5.5 High:** after D2, implement [MODEL_AND_MANAGER_PROPOSALS.md](MODEL_AND_MANAGER_PROPOSALS.md): a small versioned model library, funded manager/strategy sleeves, known minimums/fees and explicit unknown exposure. Keep sleeve grouping separate from asset-class exposure; no double-counting or implicit trades. Use D2's delivered contracts (see the plan's "Delivered D2 contracts" section): designated eligible cash with no fallback, `reserveCurrency`, declared unresolved funding, atomic units and independent alternatives, plus real migrations and supported backup upgrades. Follow the committed synthetic fixtures and stop for Codex review; no manager feeds, execution or UMA administration.
 - **D3 — Opus 5.5 High:** capture the whole reviewed economic package, including D2a model/strategy revisions and sleeve/exposure/fee coverage and use it for local presentation/PDF. Preserve new-final-request server gates and old-version isolation. One template; known/unknown coverage, no remote sharing or financial forecast detour.
 - **D4 — Opus 5.5 High:** contextual engine-backed draft agent, real offline orchestration tests and a prepared capped synthetic live runner. No spend without explicit budget, no second provider, no public live key. Report offline/fake/browser/live evidence separately.
 - **D5 — Opus 5.5 Medium:** run the complete supported story, critical keyboard/error checks, README/demo narrative and owner-selected screened branding. Preserve links/keys; no fabricated study or production-ready claim. Real advisor recruitment and final name choice are explicit owner activities.

@@ -6,7 +6,21 @@ Approved by Tyler on 24 October 2026. **Planned, not implemented.** Tracking [#7
 
 An advisor can propose a saved model or allocate a supported account among named manager/strategy sleeves, compare the funded result with the current portfolio, and later present the reviewed version. This is UMA-style **proposal design**, not a UMA operating platform, manager appointment, trade execution or proof of product availability/suitability. Use synthetic examples and bounded advisor-entered definitions; do not imply a manager integration or verified offering.
 
-Sequence: D1 released → D2 funded alternatives → **D2a** → D3 review/presentation → D4 agent evidence → D5 publication. D2a is one bounded additional slice within the existing 25 directions, not R26. D2 can proceed without implementing a speculative sleeve platform first. Full model administration, security catalog and exposure enrichment stay later.
+Sequence: D1 released → D2 funded alternatives released (PR #75, `073049f`) → **D2a** → D3 review/presentation → D4 agent evidence → D5 publication. D2a is one bounded additional slice within the existing 25 directions, not R26. D2 can proceed without implementing a speculative sleeve platform first. Full model administration, security catalog and exposure enrichment stay later.
+
+## Delivered D2 contracts D2a builds on
+
+D2 is released (store/backup v8). D2a extends these rather than adding parallel paths:
+- **Destinations and units:** `Recommendation.destination` (a proposed-only investment) and `Recommendation.linked` (units applied whole or listed in `ProposedPortfolio.blocked` with a reason). A sleeve purchase is such a unit, never a partial apply.
+- **Funding:** `Account.funding = { cashHoldingId, reserve, reserveCurrency }`.
+  - Only the designated eligible cash funds purchases; there is no fallback to other cash or synthetic cash.
+  - The reserve is kept in its stated currency, and a change of basis needs an explicit restatement.
+  - Unresolved funding (`removed`, `not_cash`, `reserve_currency`) blocks spending and readiness, and v8 backups declare it in `engagement.unresolvedFunding`.
+  - A sleeve minimum is checked on top of these rules, never instead of them.
+- **Alternatives:** inactive drafts with isolated membership, compared through `compareAlternatives`.
+- **Readiness:** `funding_reserves` and `approved_alternative` are shared by the desk, final-PDF route and Copilot.
+- **Persistence:** removed destination accounts are declared in `unresolvedLinks[].destinationAccountId`. Any new D2a field updates the store migration, the v8→v9 backup contract and the strict v6/v7/v8 upgrades together.
+- **Open follow-up:** #76 (reserve-breach attribution for legacy actions) is outside D2a unless a sleeve change needs it.
 
 ## Advisor workflow
 

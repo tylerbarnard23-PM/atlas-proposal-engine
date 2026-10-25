@@ -38,10 +38,13 @@ function Inner() {
   const fxRates = useAtlasStore((s) => s.fxRates);
   const sourceDocuments = useAtlasStore((s) => s.sourceDocuments);
   const fxConfirmation = useAtlasStore((s) => s.fxConfirmation);
+  const workingDraft = useAtlasStore((s) => s.workingDraft);
+  const alternatives = useAtlasStore((s) => s.alternatives);
+  const drafts = React.useMemo(() => [workingDraft, ...alternatives], [workingDraft, alternatives]);
   const now = useFxNow();
   const { holdings } = useNormalizedHoldings();
 
-  const readiness = evaluateWorkspaceReadiness({ client, advisor, accounts, holdings, recommendations: recs, disclosures, fxRates, sourceDocuments, fxConfirmation, now });
+  const readiness = evaluateWorkspaceReadiness({ drafts, client, advisor, accounts, holdings, recommendations: recs, disclosures, fxRates, sourceDocuments, fxConfirmation, now });
 
   return (
     <>

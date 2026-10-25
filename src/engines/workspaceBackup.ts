@@ -5,7 +5,7 @@ import { normalizeHoldings } from "./normalizationEngine";
 import { valuationSummary } from "./valuationTotals";
 import { fxFreshness } from "./fxPolicy";
 import { completenessOf } from "./importCompleteness";
-import { linksNeedingReview, unresolvedRecommendationLinks } from "./recommendationLinks";
+import { linksNeedingReview, unresolvedFundingOf, unresolvedRecommendationLinks } from "./recommendationLinks";
 import { legacyWorkingDraft } from "./allocationDesk";
 import { localCalendarDay } from "@/utils/formatting";
 
@@ -25,9 +25,9 @@ import { localCalendarDay } from "@/utils/formatting";
 export const BACKUP_FORMAT = "atlas-workspace-backup";
 export const BACKUP_SCHEMA_VERSION = 1;
 /** The saved-workspace schema (store version) the records follow. */
-export const BACKUP_WORKSPACE_VERSION = 7;
+export const BACKUP_WORKSPACE_VERSION = 8;
 /** Older workspace versions a backup may have, upgraded on restore. */
-export const SUPPORTED_OLDER_WORKSPACE_VERSIONS = [6] as const;
+export const SUPPORTED_OLDER_WORKSPACE_VERSIONS = [6, 7] as const;
 /** The application's backup limit (UTF-8 bytes of the file); it also bounds a file read before validation. */
 export const BACKUP_MAX_BYTES = 20 * 1024 * 1024;
 
@@ -178,6 +178,8 @@ function schemas(strict: boolean) {
     asOf: dateText.optional(),
     notes: text().optional(),
     isLiabilityAccount: z.boolean().optional(),
+    // v8 (D2): the account's eligible cash and its reserve, in that line's currency.
+    funding: obj({ cashHoldingId: id, reserve: finite.min(0), reserveCurrency: currency.optional() }).optional(),
     createdAt: date,
     updatedAt: date,
   });
@@ -252,6 +254,9 @@ function schemas(strict: boolean) {
     sourceInsightKey: text().optional(),
     rejectionReason: text().optional(),
     rejectedAt: date.optional(),
+    // v8 (D2): a proposed-only investment, and linked-replacement legs.
+    destination: obj({ id, name: text(), assetClass, accountId: id, currency }).optional(),
+    linked: obj({ groupId: id, legs: z.number().int().min(1) }).optional(),
     createdAt: date,
     updatedAt: date,
   });
@@ -392,7 +397,15 @@ function schemas(strict: boolean) {
     createdAt: date,
     updatedAt: date,
   });
+  // v8 (D2): inactive alternatives, each a working draft of its own actions.
   const engagementV7 = engagement.extend({ workingDraft });
+  // Removed or reclassified eligible cash and removed destination accounts
+  // are declared like other removed links, so restore can tell them from corruption.
+  const engagementV8 = engagementV7.extend({
+    alternatives: z.array(workingDraft),
+    unresolvedLinks: z.array(obj({ recommendationId: id, holdingId: id.optional(), accountId: id.optional(), destinationAccountId: id.optional() })),
+    unresolvedFunding: z.array(obj({ accountId: id, cashHoldingId: id, reason: z.enum(["removed", "not_cash", "reserve_currency"]) })),
+  });
   const envelopeOf = <E extends z.ZodTypeAny, V extends number>(e: E, version: V) =>
     obj({
       format: z.literal(BACKUP_FORMAT),
@@ -404,7 +417,17 @@ function schemas(strict: boolean) {
       engagement: e,
       firm: obj({ advisor }),
     });
-  return { envelope: envelopeOf(engagementV7, BACKUP_WORKSPACE_VERSION), envelopeV6: envelopeOf(engagement, 6), engagement: engagementV7, advisor };
+  // Older envelopes validate their own records strictly, so a v6/v7 file can't carry v8 fields.
+  const accountV7 = account.omit({ funding: true });
+  const recommendationV7 = recommendation.omit({ destination: true, linked: true });
+  const olderEngagement = engagement.extend({ accounts: z.array(accountV7), recommendations: z.array(recommendationV7) });
+  return {
+    envelope: envelopeOf(engagementV8, BACKUP_WORKSPACE_VERSION),
+    envelopeV7: envelopeOf(olderEngagement.extend({ workingDraft }), 7),
+    envelopeV6: envelopeOf(olderEngagement, 6),
+    engagement: engagementV8,
+    advisor,
+  };
 }
 
 const STRICT = schemas(true);
@@ -451,10 +474,16 @@ export interface WorkspaceData {
   fxRefresh: BackupEngagement["fxRefresh"];
   fxConfirmation: BackupEngagement["fxConfirmation"];
   workingDraft: WorkingDraft;
+  alternatives: WorkingDraft[];
 }
 
 /** The backup of a workspace at `now`. */
 export function createBackup(state: WorkspaceData, now: Date): WorkspaceBackup {
+  const resolvable = (d: WorkingDraft): WorkingDraft => ({
+    ...d,
+    memberIds: d.memberIds.filter((id) => state.recommendations.some((r) => r.id === id)),
+    scopeAccountIds: d.scopeAccountIds?.filter((id) => state.accounts.some((a) => a.id === id)) ?? null,
+  });
   const sourceDocuments = state.sourceDocuments.map((d) => ({
     ...d,
     // Frozen here: the restored document has no extracted rows to derive it
@@ -476,13 +505,11 @@ export function createBackup(state: WorkspaceData, now: Date): WorkspaceBackup {
     // A running or pending job was orphaned by a closed tab (as in the v2 migration).
     pdfHistory: state.pdfHistory.filter((j) => j.status === "succeeded" || j.status === "failed"),
     unresolvedLinks: unresolvedRecommendationLinks(state),
+    unresolvedFunding: unresolvedFundingOf(state),
     // Only references that still resolve: a deleted recommendation or account
     // leaves the draft (in the app it is just ignored, so Undo can restore it).
-    workingDraft: {
-      ...state.workingDraft,
-      memberIds: state.workingDraft.memberIds.filter((id) => state.recommendations.some((r) => r.id === id)),
-      scopeAccountIds: state.workingDraft.scopeAccountIds?.filter((id) => state.accounts.some((a) => a.id === id)) ?? null,
-    },
+    workingDraft: resolvable(state.workingDraft),
+    alternatives: state.alternatives.map(resolvable),
   };
   return {
     format: BACKUP_FORMAT,
@@ -590,14 +617,20 @@ export function parseBackup(text: string, opts: { disclosureIds: string[] }): Pa
   }
   const issues = (e: z.ZodError) => ({ ok: false as const, errors: e.issues.slice(0, 20).map((i) => `${i.path.join(".") || "file"}: ${i.message}`) });
   let backup: WorkspaceBackup;
-  if (older) {
+  if (head.workspaceVersion === 6) {
     // A v6 backup is validated as v6 (unknown fields still rejected), then
-    // upgraded like the store's v7 migration: its draft holds the approved
-    // recommendations in saved order. Deterministic: dated by the export.
+    // upgraded like the store's v7 and v8 migrations: its draft holds the
+    // approved recommendations in saved order, with no other alternatives.
+    // Deterministic: dated by the export.
     const v6 = STRICT.envelopeV6.safeParse(raw);
     if (!v6.success) return issues(v6.error);
     const e = v6.data.engagement;
-    backup = { ...v6.data, workspaceVersion: BACKUP_WORKSPACE_VERSION, engagement: { ...e, workingDraft: legacyWorkingDraft(e.recommendations as Recommendation[], v6.data.exportedAt) } };
+    backup = { ...v6.data, workspaceVersion: BACKUP_WORKSPACE_VERSION, engagement: { ...e, workingDraft: legacyWorkingDraft(e.recommendations as Recommendation[], v6.data.exportedAt), alternatives: [], unresolvedFunding: [] } } as WorkspaceBackup;
+  } else if (head.workspaceVersion === 7) {
+    // v7 → v8: no other alternatives, no funding rules or D2 actions yet.
+    const v7 = STRICT.envelopeV7.safeParse(raw);
+    if (!v7.success) return issues(v7.error);
+    backup = { ...v7.data, workspaceVersion: BACKUP_WORKSPACE_VERSION, engagement: { ...v7.data.engagement, alternatives: [], unresolvedFunding: [] } } as WorkspaceBackup;
   } else {
     const parsed = STRICT.envelope.safeParse(raw);
     if (!parsed.success) return issues(parsed.error);
@@ -636,9 +669,17 @@ function referenceErrors(e: BackupEngagement, disclosureIds: Set<string>): strin
     const l = recorded.get(r.id);
     const holdingMissing = !!r.relatedHoldingId && !holdings.has(r.relatedHoldingId);
     const accountMissing = !!r.relatedAccountId && !accounts.has(r.relatedAccountId);
+    const destinationMissing = !!r.destination && !accounts.has(r.destination.accountId);
     if (holdingMissing && l?.holdingId !== r.relatedHoldingId) errors.push(`Recommendation ${r.id} refers to holding ${r.relatedHoldingId}, which isn't in the backup.`);
     if (accountMissing && l?.accountId !== r.relatedAccountId) errors.push(`Recommendation ${r.id} refers to account ${r.relatedAccountId}, which isn't in the backup.`);
-    if (l && ((l.holdingId && !holdingMissing) || (l.accountId && !accountMissing) || (!l.holdingId && !l.accountId))) {
+    if (destinationMissing && l?.destinationAccountId !== r.destination!.accountId) errors.push(`Recommendation ${r.id} buys into account ${r.destination!.accountId}, which isn't in the backup.`);
+    if (
+      l &&
+      ((l.holdingId && !holdingMissing) ||
+        (l.accountId && !accountMissing) ||
+        (l.destinationAccountId && !destinationMissing) ||
+        (!l.holdingId && !l.accountId && !l.destinationAccountId))
+    ) {
       errors.push(`The backup lists recommendation ${r.id}'s link as unresolved, but it isn't.`);
     }
   }
@@ -648,10 +689,37 @@ function referenceErrors(e: BackupEngagement, disclosureIds: Set<string>): strin
   for (const r of p.recommendationIds) if (!recs.has(r)) errors.push(`The proposal lists recommendation ${r}, which isn't in the backup.`);
   for (const d of p.disclosureIds) if (!disclosureIds.has(d)) errors.push(`The proposal includes disclosure ${d}, which this version of Atlas doesn't have.`);
   for (const j of e.pdfHistory) if (j.proposalId !== p.id) errors.push(`PDF job ${j.id} belongs to proposal ${j.proposalId}, not this proposal.`);
-  const d = e.workingDraft;
-  unique("working-draft member", d.memberIds);
-  for (const m of d.memberIds) if (!recs.has(m)) errors.push(`The working draft includes recommendation ${m}, which isn't in the backup.`);
-  for (const a of d.scopeAccountIds ?? []) if (!accounts.has(a)) errors.push(`The working draft's scope includes account ${a}, which isn't in the backup.`);
+  const drafts = [e.workingDraft, ...e.alternatives];
+  unique("alternative ID", drafts.map((x) => x.id));
+  const owner = new Map<string, string>();
+  for (const d of drafts) {
+    const label = d === e.workingDraft ? "The working draft" : `Alternative ${d.name}`;
+    unique(`member of ${d.name}`, d.memberIds);
+    for (const m of d.memberIds) {
+      if (!recs.has(m)) errors.push(`${label} includes recommendation ${m}, which isn't in the backup.`);
+      else if (owner.has(m) && owner.get(m) !== d.id) errors.push(`Recommendation ${m} is in more than one alternative; each alternative's actions are its own.`);
+      owner.set(m, d.id);
+    }
+    for (const a of d.scopeAccountIds ?? []) if (!accounts.has(a)) errors.push(`${label}'s scope includes account ${a}, which isn't in the backup.`);
+  }
+  // An eligible-cash rule either resolves or is declared unresolved, with the
+  // reason the workspace itself gives (removed, or no longer a cash line).
+  unique("unresolved funding for account", e.unresolvedFunding.map((f) => f.accountId));
+  const declared = new Map(e.unresolvedFunding.map((f) => [f.accountId, f]));
+  const actual = new Map(unresolvedFundingOf(e as Parameters<typeof unresolvedFundingOf>[0]).map((f) => [f.accountId, f]));
+  for (const [accountId, f] of actual) {
+    const d = declared.get(accountId);
+    if (!d || d.cashHoldingId !== f.cashHoldingId || d.reason !== f.reason) {
+      errors.push(
+        f.reason === "removed"
+          ? `Account ${accountId}'s eligible cash ${f.cashHoldingId} isn't in the backup.`
+          : f.reason === "not_cash"
+          ? `Account ${accountId}'s eligible cash ${f.cashHoldingId} isn't a cash line in that account.`
+          : `Account ${accountId}'s reserve isn't stated in the currency of its eligible cash ${f.cashHoldingId}.`
+      );
+    }
+  }
+  for (const d of e.unresolvedFunding) if (!actual.has(d.accountId)) errors.push(`The backup lists account ${d.accountId}'s eligible cash as unresolved, but it isn't.`);
   return errors;
 }
 
@@ -695,6 +763,7 @@ export function restoredState(
     fxRefresh: e.fxRefresh,
     fxConfirmation: e.fxConfirmation,
     workingDraft: e.workingDraft as WorkingDraft,
+    alternatives: e.alternatives as WorkingDraft[],
     disclosures: current.disclosures,
     insights: [],
     marketDataByIdentifier: {},

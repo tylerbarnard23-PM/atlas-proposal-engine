@@ -346,7 +346,7 @@ function simulate(ctx: CopilotContext, input: z.infer<typeof SimulateInput>) {
       pct_of_investible_after: null,
       cash_movements: [],
       shortfalls: [],
-      note: preview.warnings.find((w) => w.kind === "missing_rate" || w.kind === "unvalued")?.message ?? "This recommendation can't be simulated.",
+      note: preview.warnings.find((w) => w.kind === "missing_rate" || w.kind === "unvalued" || w.kind === "funding")?.message ?? "This recommendation can't be simulated.",
     };
   }
   const { before, after, change } = position;
@@ -399,6 +399,7 @@ function checkReadiness(ctx: CopilotContext) {
     sourceDocuments: s.sourceDocuments ?? [],
     fxConfirmation: s.fxConfirmation ?? null,
     now: ctx.now,
+    drafts: [...(s.workingDraft ? [s.workingDraft] : []), ...(s.alternatives ?? [])],
   });
   return {
     ready: readinessOk(checks),

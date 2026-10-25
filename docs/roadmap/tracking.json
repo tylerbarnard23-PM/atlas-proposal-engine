@@ -49,7 +49,9 @@
           "date": "2026-10-24",
           "milestone": "D1",
           "scope": "D1 minimum slice only (allocation desk: scope, grid, working draft, explicit edits, input basis, store/backup v7); full feature not complete",
-          "mergeCommit": "0381db13a69b1b62d65019b89fc5d6da47e1b420"
+          "head": "d6df4cf1ab69ea7d27a2c7156af4ea6c976a80f4",
+          "mergeCommit": "0381db13a69b1b62d65019b89fc5d6da47e1b420",
+          "ciRun": 40136036212
         }
       ]
     },
@@ -81,7 +83,9 @@
           "date": "2026-10-24",
           "milestone": "D1",
           "scope": "D1 minimum slice only (allocation desk: scope, grid, working draft, explicit edits, input basis, store/backup v7); full feature not complete",
-          "mergeCommit": "0381db13a69b1b62d65019b89fc5d6da47e1b420"
+          "head": "d6df4cf1ab69ea7d27a2c7156af4ea6c976a80f4",
+          "mergeCommit": "0381db13a69b1b62d65019b89fc5d6da47e1b420",
+          "ciRun": 40136036212
         }
       ]
     },
@@ -120,7 +124,9 @@
           "date": "2026-10-24",
           "milestone": "D1",
           "scope": "D1 minimum slice only (allocation desk: scope, grid, working draft, explicit edits, input basis, store/backup v7); full feature not complete",
-          "mergeCommit": "0381db13a69b1b62d65019b89fc5d6da47e1b420"
+          "head": "d6df4cf1ab69ea7d27a2c7156af4ea6c976a80f4",
+          "mergeCommit": "0381db13a69b1b62d65019b89fc5d6da47e1b420",
+          "ciRun": 40136036212
         }
       ]
     },
@@ -149,7 +155,20 @@
         "minimumScope": "One supported custom/synthetic destination and an atomic linked sell/buy replacement. D2a: bounded versioned model/manager-sleeve proposal contracts from MODEL_AND_MANAGER_PROPOSALS.md.",
         "laterScope": "Broad security search/catalog, complex instrument and replacement variants.",
         "fullFeatureComplete": false
-      }
+      },
+      "progress": [
+        {
+          "pr": 75,
+          "state": "merged",
+          "date": "2026-10-24",
+          "milestone": "D2",
+          "scope": "D2 minimum slice only (proposed investments, atomic linked replacements, eligible cash and reserve, named alternatives and comparison, store/backup v8); full feature not complete",
+          "head": "5b0f8b1082c87919542c8b67f08ac8e69f242b8c",
+          "mergeCommit": "073049ff526a58b0ab14bc05a6bf640ab80c5cb8",
+          "ciRun": 40204437975,
+          "mergedAt": "2026-10-25"
+        }
+      ]
     },
     {
       "id": "R05",
@@ -184,7 +203,20 @@
           "date": "2026-10-24",
           "milestone": "D1",
           "scope": "D1 minimum slice only (allocation desk: scope, grid, working draft, explicit edits, input basis, store/backup v7); full feature not complete",
-          "mergeCommit": "0381db13a69b1b62d65019b89fc5d6da47e1b420"
+          "head": "d6df4cf1ab69ea7d27a2c7156af4ea6c976a80f4",
+          "mergeCommit": "0381db13a69b1b62d65019b89fc5d6da47e1b420",
+          "ciRun": 40136036212
+        },
+        {
+          "pr": 75,
+          "state": "merged",
+          "date": "2026-10-24",
+          "milestone": "D2",
+          "scope": "D2 minimum slice only (proposed investments, atomic linked replacements, eligible cash and reserve, named alternatives and comparison, store/backup v8); full feature not complete",
+          "head": "5b0f8b1082c87919542c8b67f08ac8e69f242b8c",
+          "mergeCommit": "073049ff526a58b0ab14bc05a6bf640ab80c5cb8",
+          "ciRun": 40204437975,
+          "mergedAt": "2026-10-25"
         }
       ]
     },
@@ -213,7 +245,20 @@
         "minimumScope": "Visible account cash first; explicit eligible cash source and enforced reserve for supported replacements. D2a: bounded versioned model/manager-sleeve proposal contracts from MODEL_AND_MANAGER_PROPOSALS.md.",
         "laterScope": "New cross-account/owner/currency transfer workflows and arbitrary external flows.",
         "fullFeatureComplete": false
-      }
+      },
+      "progress": [
+        {
+          "pr": 75,
+          "state": "merged",
+          "date": "2026-10-24",
+          "milestone": "D2",
+          "scope": "D2 minimum slice only (proposed investments, atomic linked replacements, eligible cash and reserve, named alternatives and comparison, store/backup v8); full feature not complete",
+          "head": "5b0f8b1082c87919542c8b67f08ac8e69f242b8c",
+          "mergeCommit": "073049ff526a58b0ab14bc05a6bf640ab80c5cb8",
+          "ciRun": 40204437975,
+          "mergedAt": "2026-10-25"
+        }
+      ]
     },
     {
       "id": "R07",
@@ -242,7 +287,9 @@
           "date": "2026-10-24",
           "milestone": "D1",
           "scope": "D1 minimum slice only (allocation desk: scope, grid, working draft, explicit edits, input basis, store/backup v7); full feature not complete",
-          "mergeCommit": "0381db13a69b1b62d65019b89fc5d6da47e1b420"
+          "head": "d6df4cf1ab69ea7d27a2c7156af4ea6c976a80f4",
+          "mergeCommit": "0381db13a69b1b62d65019b89fc5d6da47e1b420",
+          "ciRun": 40136036212
         }
       ]
     },
@@ -280,7 +327,9 @@
           "date": "2026-10-24",
           "milestone": "D1",
           "scope": "D1 minimum slice only (allocation desk: scope, grid, working draft, explicit edits, input basis, store/backup v7); full feature not complete",
-          "mergeCommit": "0381db13a69b1b62d65019b89fc5d6da47e1b420"
+          "head": "d6df4cf1ab69ea7d27a2c7156af4ea6c976a80f4",
+          "mergeCommit": "0381db13a69b1b62d65019b89fc5d6da47e1b420",
+          "ciRun": 40136036212
         }
       ]
     },
@@ -649,7 +698,9 @@
           "date": "2026-10-24",
           "milestone": "D1",
           "scope": "D1 minimum slice only (allocation desk: scope, grid, working draft, explicit edits, input basis, store/backup v7); full feature not complete",
-          "mergeCommit": "0381db13a69b1b62d65019b89fc5d6da47e1b420"
+          "head": "d6df4cf1ab69ea7d27a2c7156af4ea6c976a80f4",
+          "mergeCommit": "0381db13a69b1b62d65019b89fc5d6da47e1b420",
+          "ciRun": 40136036212
         }
       ]
     },
@@ -873,9 +924,9 @@
     "status": "planned",
     "trackingIssue": 36,
     "mode": "synthetic-employer-demo-first",
-    "nextMilestone": "D2, then D2a, then D3–D5",
+    "nextMilestone": "D2a (plan in PR #74, issue #73), then D3–D5",
     "supersedes": "Serial P0–P5 implementation and standalone R11-first cleanup command; original feature contracts retained",
-    "observedMain": "0381db13a69b1b62d65019b89fc5d6da47e1b420",
+    "observedMain": "073049ff526a58b0ab14bc05a6bf640ab80c5cb8",
     "developmentAssistant": {
       "application": "Claude Code Desktop",
       "model": "Opus 5.5",
@@ -920,7 +971,7 @@
       {
         "id": "D2",
         "title": "Funded alternatives",
-        "status": "planned",
+        "status": "released",
         "dependencies": [
           "D1"
         ],
@@ -933,7 +984,9 @@
           "R12",
           "R14"
         ],
-        "effort": "high"
+        "effort": "high",
+        "pr": 75,
+        "mergeCommit": "073049ff526a58b0ab14bc05a6bf640ab80c5cb8"
       },
       {
         "id": "D2a",

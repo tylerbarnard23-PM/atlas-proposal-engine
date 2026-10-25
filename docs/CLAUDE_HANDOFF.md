@@ -1,13 +1,33 @@
 # Handoff
 
-## Current checkpoint — 24 October 2026
+## Current checkpoint — 25 October 2026: D2 released; D2a plan reconciled (PR #74)
 
-- **D1 released:** PR #72 merged pinned to reviewed head `d6df4cf1ab69ea7d27a2c7156af4ea6c976a80f4` as `0381db13a69b1b62d65019b89fc5d6da47e1b420`. Main CI run 40136036212 passed: 427 passed, 2 private-PDF skips (429), eval 2/2 and build. Release evidence: [PR #72](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/72#issuecomment-6390031556), [#36](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/36#issuecomment-6390031724).
-- **Reported production evidence:** scope/targets, second-sale preview matching save, combined shortfall/cancel, reload and v7 Settings backup/restore passed. Restore field/grid checks passed; the harness lost its exact-draft comparison reference. Original browser workspace restored byte-identical. These are release records, not rerun by this docs change.
-- **Next:** D2 funded alternatives at Opus 5.5 High, preserving any work already started. Then **D2a model/manager proposals** (#73), then D3 review/presentation, D4 agent evidence, D5 publication. Read [delivery plan](roadmap/DEMO_DELIVERY_PLAN.md), [command playbook](roadmap/CLAUDE_COMMANDS.md) and only the relevant contracts.
-- **Approved addition:** [MODEL_AND_MANAGER_PROPOSALS.md](roadmap/MODEL_AND_MANAGER_PROPOSALS.md) defines versioned model targets and funded manager/strategy sleeves, known minimums/fees and explicit unknown exposures. This is proposal design, not UMA operations or execution. No runtime functionality is implemented by this planning change.
-- **State contract:** D1 store/backup v7 with supported strict v6 upgrade; preserve current IDs, order, approvals and contradictory legacy evidence. Draft membership, approval and PDF prose are distinct. Future migrations upgrade every currently supported backup version.
-- **D1 limitations:** existing actions edited on Recommendations; liabilities current-only; narrow grid scrolls; reserves/new destinations/alternatives await D2. Model/sleeve proposals await D2a. All 25 full R-plans remain Planned/partial; no scope issue closes here.
+- **D2 released:** PR #75 merged pinned to reviewed head `5b0f8b1082c87919542c8b67f08ac8e69f242b8c` as **`073049ff526a58b0ab14bc05a6bf640ab80c5cb8`**. Main CI run 40204437975 passed: 466 passed, 2 private-PDF skips (468), eval 2/2, build. GitHub records a successful Production deployment for `073049f`. A synthetic production smoke passed; it is recorded on [PR #75](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/75) and [#36](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/36), and the browser workspace was restored byte-identical. It checked:
+  - 50/40/10 for a funded replacement;
+  - a 10,001 purchase left unapplied by the 10,000 reserve;
+  - independent alternatives;
+  - no fallback after the designated cash was removed;
+  - explicit reserve restatement after a switch to EUR;
+  - a final-PDF 422 on the funding gate.
+- **D2 contracts to build on (store/backup v8):**
+  - `Recommendation.destination` and `Recommendation.linked`: units are applied whole or listed in `ProposedPortfolio.blocked`.
+  - `Account.funding = { cashHoldingId, reserve, reserveCurrency }`. The designated cash only, with no fallback; unresolved funding (`removed`, `not_cash`, `reserve_currency`) blocks spending and readiness, and v8 backups declare it in `engagement.unresolvedFunding`.
+  - `alternatives` (inactive drafts) with isolated membership.
+  - Readiness checks `funding_reserves` and `approved_alternative`, shared by the desk, PDF route and Copilot.
+  - Removed destination accounts are declared in `unresolvedLinks[].destinationAccountId`.
+  - v7/v6 backups upgrade strictly.
+- **Next:** review and merge this planning PR (#74). Then implement **D2a model/manager proposals** (#73) at Opus 5.5 High from [MODEL_AND_MANAGER_PROPOSALS.md](roadmap/MODEL_AND_MANAGER_PROPOSALS.md), on the D2 contracts above, then D3 review/presentation, D4 agent evidence, D5 publication. Read the [delivery plan](roadmap/DEMO_DELIVERY_PLAN.md), the [command playbook](roadmap/CLAUDE_COMMANDS.md) and only the relevant contracts.
+- **D2a scope:** versioned model targets and funded manager/strategy sleeves, with known minimums and fees and explicit unknown exposures. Sleeves are funded through D2's eligible cash, reserves (in their stated currency) and atomic units. This is proposal design, not UMA operations or execution.
+- **Open follow-up:** #76 (a reserve breach caused by a legacy action can leave out and blame a cash-adding replacement). It is not part of D2a.
+- **Limitations carried forward:**
+  - replacements stay within one account and its cash currency;
+  - alternatives can't be deleted;
+  - there is no reserve conversion helper;
+  - the comparison has no history;
+  - approved snapshots and presentation are D3.
+
+  All 25 R-plans remain Planned or partial; no scope issue closes.
+- **Preserved:** accepted values, FX and source dates, every readiness and final-PDF gate, legacy recommendation effects, #59 privacy, backup and agent requirements.
 
 ## Working agreements
 
