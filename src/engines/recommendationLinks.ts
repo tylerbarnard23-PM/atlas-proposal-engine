@@ -15,6 +15,8 @@ export interface UnresolvedLink {
   holdingId?: string;
   /** The linked account that no longer exists. */
   accountId?: string;
+  /** D2: the account a proposed investment is bought into, which no longer exists. */
+  destinationAccountId?: string;
 }
 
 type Workspace = { recommendations: Recommendation[]; holdings: Pick<Holding, "id">[]; accounts: Pick<Account, "id">[] };
@@ -27,7 +29,10 @@ export function unresolvedRecommendationLinks(ws: Workspace): UnresolvedLink[] {
   for (const r of ws.recommendations) {
     const holdingId = r.relatedHoldingId && !holdings.has(r.relatedHoldingId) ? r.relatedHoldingId : undefined;
     const accountId = r.relatedAccountId && !accounts.has(r.relatedAccountId) ? r.relatedAccountId : undefined;
-    if (holdingId || accountId) out.push({ recommendationId: r.id, ...(holdingId ? { holdingId } : {}), ...(accountId ? { accountId } : {}) });
+    const destinationAccountId = r.destination && !accounts.has(r.destination.accountId) ? r.destination.accountId : undefined;
+    if (holdingId || accountId || destinationAccountId) {
+      out.push({ recommendationId: r.id, ...(holdingId ? { holdingId } : {}), ...(accountId ? { accountId } : {}), ...(destinationAccountId ? { destinationAccountId } : {}) });
+    }
   }
   return out;
 }
@@ -41,10 +46,66 @@ export function linksNeedingReview(ws: Workspace): (UnresolvedLink & { title: st
     .map(({ rec, ...l }) => ({ ...l, title: rec.title }));
 }
 
+/** "holding h_aapl and account acc_1": what an unresolved link pointed at. */
+export const linkTargets = (l: UnresolvedLink) =>
+  [l.holdingId && `holding ${l.holdingId}`, l.accountId && `account ${l.accountId}`, l.destinationAccountId && `destination account ${l.destinationAccountId}`].filter(Boolean).join(" and ");
+
 /** "Trim Apple: its holding h_aapl was removed" */
 export function describeLink(l: UnresolvedLink & { title: string }): string {
-  const what = [l.holdingId && `holding ${l.holdingId}`, l.accountId && `account ${l.accountId}`].filter(Boolean).join(" and ");
-  return `${l.title}: its ${what} was removed`;
+  return `${l.title}: its ${linkTargets(l)} was removed`;
+}
+
+/**
+ * D2: an account's eligible-cash rule whose cash line was removed, or is no
+ * longer a cash line in that account (reclassified). The rule and its reserve
+ * are kept as the advisor set them, never cleared or pointed at other cash;
+ * nothing is spent from it, and readiness blocks the final PDF until the
+ * advisor chooses valid eligible cash (or the line is a cash line again).
+ */
+export interface UnresolvedFunding {
+  accountId: string;
+  cashHoldingId: string;
+  /** removed; no longer a cash line in the account; or its reserve isn't stated in the line's (current) currency. */
+  reason: "removed" | "not_cash" | "reserve_currency";
+}
+
+type FundingHolding = Pick<Holding, "id" | "accountId" | "assetClass" | "isLiability" | "currency" | "proposalApprovedValue">;
+
+/** The currency a cash line is valued in (an approved value's own, else its statement currency): a reserve's basis. */
+export const cashBasisCurrency = (h: Pick<Holding, "currency" | "proposalApprovedValue">) => h.proposalApprovedValue?.currency ?? h.currency;
+
+/**
+ * Why an account's eligible-cash rule doesn't resolve, or null (no rule, or a
+ * cash line in that account whose currency the reserve was stated in). A
+ * reserve is never relabelled or converted: a change of basis, or a reserve
+ * with no recorded currency, waits for the advisor to restate it.
+ */
+export function fundingProblem(account: Pick<Account, "id" | "funding">, holdings: FundingHolding[]): UnresolvedFunding["reason"] | null {
+  const id = account.funding?.cashHoldingId;
+  if (!id) return null;
+  const h = holdings.find((x) => x.id === id);
+  if (!h) return "removed";
+  if (h.accountId !== account.id || h.assetClass !== "cash" || h.isLiability) return "not_cash";
+  return account.funding!.reserveCurrency === cashBasisCurrency(h) ? null : "reserve_currency";
+}
+
+/** "was removed", "is valued in EUR, but its reserve was set in USD": what's wrong with an account's eligible cash, or null. */
+export function fundingProblemText(account: Pick<Account, "id" | "funding">, holdings: FundingHolding[]): string | null {
+  const reason = fundingProblem(account, holdings);
+  if (!reason) return null;
+  if (reason === "removed") return "was removed";
+  if (reason === "not_cash") return "is no longer a cash line in this account";
+  const basis = cashBasisCurrency(holdings.find((x) => x.id === account.funding!.cashHoldingId)!);
+  const rc = account.funding!.reserveCurrency;
+  return rc ? `is valued in ${basis}, but its reserve was set in ${rc}` : `has a reserve with no recorded currency (it is valued in ${basis})`;
+}
+
+/** Every eligible-cash rule that doesn't resolve, in account order. */
+export function unresolvedFundingOf(ws: { accounts: Pick<Account, "id" | "funding">[]; holdings: FundingHolding[] }): UnresolvedFunding[] {
+  return ws.accounts.flatMap((a) => {
+    const reason = fundingProblem(a, ws.holdings);
+    return reason ? [{ accountId: a.id, cashHoldingId: a.funding!.cashHoldingId, reason }] : [];
+  });
 }
 
 /**
@@ -77,7 +138,10 @@ export function linkToHolding(
  */
 export function markRemovedLinks(recs: Recommendation[], removed: { holdingIds: Set<string>; accountIds: Set<string> }, now: string): Recommendation[] {
   return recs.map((r) => {
-    const affected = (r.relatedHoldingId && removed.holdingIds.has(r.relatedHoldingId)) || (r.relatedAccountId && removed.accountIds.has(r.relatedAccountId));
+    const affected =
+      (r.relatedHoldingId && removed.holdingIds.has(r.relatedHoldingId)) ||
+      (r.relatedAccountId && removed.accountIds.has(r.relatedAccountId)) ||
+      (r.destination && removed.accountIds.has(r.destination.accountId));
     if (!affected || r.status === "excluded") return r;
     return { ...r, approvedByAdvisor: false, status: "needs_review", updatedAt: now };
   });

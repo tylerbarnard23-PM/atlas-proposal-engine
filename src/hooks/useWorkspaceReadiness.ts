@@ -1,5 +1,7 @@
 "use client";
 
+import * as React from "react";
+
 import { useMemo } from "react";
 import { useAtlasStore } from "@/store/useStore";
 import { useNormalizedHoldings } from "@/hooks/useNormalizedHoldings";
@@ -17,11 +19,14 @@ export function useWorkspaceReadiness() {
   const fxRates = useAtlasStore((s) => s.fxRates);
   const sourceDocuments = useAtlasStore((s) => s.sourceDocuments);
   const fxConfirmation = useAtlasStore((s) => s.fxConfirmation);
+  const workingDraft = useAtlasStore((s) => s.workingDraft);
+  const alternatives = useAtlasStore((s) => s.alternatives);
+  const drafts = React.useMemo(() => [workingDraft, ...alternatives], [workingDraft, alternatives]);
   const { holdings } = useNormalizedHoldings();
   const now = useFxNow();
   return useMemo(() => {
-    const checks = evaluateWorkspaceReadiness({ client, advisor, accounts, holdings, recommendations, disclosures, fxRates, sourceDocuments, fxConfirmation, now });
+    const checks = evaluateWorkspaceReadiness({ drafts, client, advisor, accounts, holdings, recommendations, disclosures, fxRates, sourceDocuments, fxConfirmation, now });
     const failing = checks.filter((c) => !c.passed);
     return { checks, failing, ready: readinessOk(checks) };
-  }, [client, advisor, accounts, holdings, recommendations, disclosures, fxRates, sourceDocuments, fxConfirmation, now]);
+  }, [client, advisor, accounts, holdings, recommendations, disclosures, fxRates, sourceDocuments, fxConfirmation, now, drafts]);
 }

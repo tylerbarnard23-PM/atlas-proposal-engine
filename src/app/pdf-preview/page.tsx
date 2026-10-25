@@ -37,12 +37,15 @@ function Inner() {
   const fxRates = useAtlasStore((s) => s.fxRates);
   const sourceDocuments = useAtlasStore((s) => s.sourceDocuments);
   const fxConfirmation = useAtlasStore((s) => s.fxConfirmation);
+  const workingDraft = useAtlasStore((s) => s.workingDraft);
+  const alternatives = useAtlasStore((s) => s.alternatives);
+  const drafts = React.useMemo(() => [workingDraft, ...alternatives], [workingDraft, alternatives]);
   const now = useFxNow();
   const pdfHistory = useAtlasStore((s) => s.pdfHistory);
   const recordPdfJob = useAtlasStore((s) => s.recordPdfJob);
   const { holdings } = useNormalizedHoldings();
 
-  const checks = evaluateWorkspaceReadiness({ client, advisor, accounts, holdings, recommendations: recs, disclosures, fxRates, sourceDocuments, fxConfirmation, now });
+  const checks = evaluateWorkspaceReadiness({ drafts, client, advisor, accounts, holdings, recommendations: recs, disclosures, fxRates, sourceDocuments, fxConfirmation, now });
   const ready = readinessOk(checks);
   const failing = checks.filter((c) => !c.passed);
 
@@ -77,6 +80,9 @@ function Inner() {
             sourceDocuments: sourceDocuments.map(forReadiness),
             // Checked again on the server against its own clock (#26).
             fxConfirmation,
+            // D2: lets the server tell approvals that mix alternatives.
+            workingDraft,
+            alternatives,
           },
           // Timestamps in the PDF (the prepared date) in this browser's time zone, as in the preview (#28).
           timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,

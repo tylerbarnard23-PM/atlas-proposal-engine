@@ -9,6 +9,7 @@ import type {
   Holding,
   Recommendation,
   SourceDocument,
+  WorkingDraft,
 } from "@/domain/types";
 
 // The workspace lives in the advisor's browser (zustand + localStorage), so the
@@ -26,6 +27,9 @@ export interface CopilotSnapshot {
   sourceDocuments?: SourceDocument[];
   /** The advisor's confirmation of stale rates in use (#26); absent from older clients. */
   fxConfirmation?: FxConfirmation | null;
+  /** D2: the working draft and the other alternatives, for the one-alternative check; absent from older clients. */
+  workingDraft?: WorkingDraft;
+  alternatives?: WorkingDraft[];
 }
 
 // Structural guard only: the engines are defensive about optional fields, so
@@ -43,6 +47,8 @@ export const CopilotRequestSchema = z.object({
     disclosures: z.array(record).max(200),
     sourceDocuments: z.array(record.and(z.object({ id: z.string(), fileName: z.string() }))).max(500).optional(),
     fxConfirmation: record.nullable().optional(),
+    workingDraft: record.and(z.object({ name: z.string(), memberIds: z.array(z.string()) })).optional(),
+    alternatives: z.array(record.and(z.object({ name: z.string(), memberIds: z.array(z.string()) }))).max(50).optional(),
   }),
 });
 

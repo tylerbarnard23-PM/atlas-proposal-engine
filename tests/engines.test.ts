@@ -94,7 +94,7 @@ describe("applyRecommendationsToProposed", () => {
   });
   it("ignores advisory-only recommendations", () => {
     const before = [holding({})];
-    expect(applyRecommendationsToProposed(before, [rec({ type: "sell" })], [], USD_FX)).toEqual({ holdings: before, unresolved: [] });
+    expect(applyRecommendationsToProposed(before, [rec({ type: "sell" })], [], USD_FX)).toEqual({ holdings: before, unresolved: [], blocked: [] });
   });
 });
 

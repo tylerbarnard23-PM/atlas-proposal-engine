@@ -22,7 +22,7 @@ Inspect → make a short design/contract note in the issue/implementation PR →
 
 ## Next implementation: D1
 
-**Status:** implemented in PR #72, awaiting Codex review. After its owner-authorized release, the next command is D2 (below). Kept for reference.
+**Status:** released (PR #72, `0381db1`). D2 is implemented in PR #75, awaiting Codex review; after its owner-authorized release, D3 is next. Kept for reference.
 
 **Opus 5.5 · High effort.** Use after the approved planning change is available in the implementation base; do not implement from the old stand-alone R11-first prompt. If a planning PR is still unmerged, verify it and obtain/execute only an explicitly owner-authorized pinned merge first. Do not silently merge it merely because this template exists.
 

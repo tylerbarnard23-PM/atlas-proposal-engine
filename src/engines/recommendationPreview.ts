@@ -44,14 +44,14 @@ export interface Scenario {
 }
 
 export interface PreviewWarning {
-  kind: "missing_rate" | "unvalued" | "incomplete_import" | "currency_review" | "shortfall";
+  kind: "missing_rate" | "unvalued" | "funding" | "incomplete_import" | "currency_review" | "shortfall";
   message: string;
   /** Whether this keeps the final PDF blocked (now, or once approved and included). */
   blocksFinal: boolean;
 }
 
 export interface RecommendationPreview {
-  state: "advisory" | "missing_holding" | "cannot_apply" | "no_change" | "simulated";
+  state: "advisory" | "linked" | "missing_holding" | "cannot_apply" | "no_change" | "simulated";
   reportingCurrency: CurrencyCode;
   holding?: { id: string; name: string; accountName: string; valueDate?: string; currency: CurrencyCode; assetClass: Holding["assetClass"]; isLiability: boolean };
   /** The entered amount and its reporting-currency equivalent, when they differ. */
@@ -167,6 +167,10 @@ export function previewRecommendation(input: {
     });
   }
 
+  // D2: a linked replacement leg or a proposed-investment purchase only means
+  // something with its other legs and the account's funding rule; the
+  // Allocation desk evaluates it as a unit.
+  if (rec.linked || (rec.destination && !rec.relatedHoldingId)) return { ...base, state: "linked", standalone: null, combined: null, warnings };
   if (!rec.relatedHoldingId) return { ...base, state: "advisory", standalone: null, combined: null, warnings };
   const linked = holdings.find((h) => h.id === rec.relatedHoldingId) as MaybeValued | undefined;
   if (!linked) return { ...base, state: "missing_holding", standalone: null, combined: null, warnings };
@@ -205,6 +209,12 @@ export function previewRecommendation(input: {
   const current = holdings;
   const currentShortfalls = cashShortfallsOf(current, accounts, fx);
   const alone = applyRecommendationsToProposed(current, [rec], accounts, fx);
+  // Its account's funding rule can't fund it (D2): unapplied, for that reason.
+  const unfunded = alone.blocked.find((b) => b.recommendationIds.includes(rec.id));
+  if (unfunded) {
+    warnings.unshift({ kind: "funding", message: unfunded.reason, blocksFinal: true });
+    return { ...base, state: "cannot_apply", holding: holdingInfo, standalone: { applied: false, position: movement(linked, linked, () => holdingInfo.accountName), cash: [], shortfalls: [] }, combined: null, warnings };
+  }
   const unresolved = alone.unresolved.find((u) => u.recommendationId === rec.id);
   if (unresolved) {
     warnings.unshift({ kind: "missing_rate", message: unresolved.reason, blocksFinal: true });

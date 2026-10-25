@@ -1,37 +1,75 @@
 # Handoff
 
-## Current checkpoint — 24 October 2026: D1 allocation desk in review (PR #72)
+## Current checkpoint — 25 October 2026: D1 released; D2 funded alternatives reviewed and fixed (PR #75)
 
-- **Read next:** [DEMO_DELIVERY_PLAN.md](roadmap/DEMO_DELIVERY_PLAN.md) and [CLAUDE_COMMANDS.md](roadmap/CLAUDE_COMMANDS.md). D1 is implemented and awaits Codex review; D2 (funded alternatives) follows only after D1's owner-authorized release.
-- **PR #72** on `feat/d1-allocation-desk`, built from main `bc248e1ea2eb72a405167a3424422624aaa7de3c` (PRs #70 and #71 merged). The implementation commit is `ee55b96`; the docs commit follows (see the PR for the exact head). Not merged or deployed.
-  - **Delivered:** `/allocation-desk` with selected-account scope (context assets and liabilities out of the denominator), current/proposed/target grid with drift and actual cash, one working draft (members separate from approval and PDF prose; draft vs approved-subset preview), explicit position edits through `previewRecommendation`/`applyRecommendationsToProposed`, and a recorded input basis with change detection.
-  - **State:** store v7 and backup workspace v7 add `workingDraft`. The idempotent migration and the strict v6-backup upgrade make approved recommendations the members, so previews are unchanged. Legacy implicit sizes keep their effect, but a new approval needs an explicit amount.
-  - **Not in D1:** new destinations, automatic trades, scenario duplication and reserve enforcement (D2). Cash lines take no edit.
-- **Review (24 October 2026):** four defects were found. Each was reproduced first with a failing regression, then fixed on this PR:
-  1. **FX detection:** the input basis now records every rate the draft uses (fxPolicy's in-use rule applied to the draft's actions), so a change to an action-amount or cash-write-back rate shows as changed inputs.
-  2. **Approved view:** it applies exactly the PDF/readiness set (every `approvedByAdvisor`).
-  3. **Unvalued items outside the scope:** context assets and liabilities without a value are now listed, and the totals are labelled "valued only".
-  4. **Context list:** a liability account holding an asset now appears in it, so household = scope + context.
-  - **Also fixed:** the over-100% target wording.
-- **Codex review fixes (24 October 2026):**
-  1. **Draft preview:** the contextual editor previews the candidate in the working draft. `previewDraftEdit` runs the shared engine on the draft's actions without the candidate and with it added last, so a second sale shows 50,000 → 40,000 and the combined funding shortfall appears before saving. Approved actions outside the draft stay out. The Recommendations-page preview is unchanged.
-  2. **Legacy approved-and-rejected records:** they stay draft members through the store migration and the v6-backup upgrade, and are applied as the PDF applies them. Their approval and status are kept; ordinary rejection is unchanged.
-- **Heads:** implementation `ee55b96`, the self-review fixes `ebc68ba`, then the Codex review fixes; the latest commit is the tested head (see the PR). CI on `ebc68ba` passed.
-- **Validation (latest head, local):** typecheck passed; 25 files, **429 passed, 0 skipped**; eval 2 of 2; build passed. CI skips the 2 private-PDF tests. Earlier CI on `ff75094` passed: 418 passed, 2 skipped.
-- **Browser check:** the original v6 workspace still matched its saved hash before testing.
-  - **Earlier, on `ff75094`:** the real v6 → v7 migration, the acceptance story and the legacy Approve gate all passed.
-  - **Self-review:** the unvalued-outside notice and the over-100% target text rendered correctly.
-  - **Codex review fixes:** a second 10,000 sale previewed 50,000 → 40,000 with cash 20,000 → 30,000, and the desk matched after saving. A further purchase showed "short $5,000.00" before saving. Cancel changed nothing.
-  - **Cleanup:** the workspace was restored byte-identical each time, and the task server stopped.
+- **D1 released:** PR #72 was Codex-reviewed at `d6df4cf` and merged pinned as **`0381db13a69b1b62d65019b89fc5d6da47e1b420`**. Main CI run 40136036212 passed: 427 passed, 2 skipped (429). GitHub records a Production deployment for `0381db1`. Production smoke and backup-cycle evidence is on [PR #72](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/72#issuecomment-6390031556) and [#36](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/36#issuecomment-6390031724).
+- **PR #75** on `feat/d2-funded-alternatives`, built from main `0381db1`. The implementation commit is `55b83e0`; the docs commit follows (see the PR for the exact head). Not merged or deployed. The contract notes are in the PR.
+  - **Engine:** proposed-only investments (`Recommendation.destination`) and linked replacements (`Recommendation.linked`) apply as units, whole or not at all. Anything left out goes to `ProposedPortfolio.blocked` with its reason. `Account.funding` sets the eligible cash and reserve, and `reserveStatus` reports headroom (unknown is never spendable). Legacy actions and household paydown are unchanged.
+  - **Readiness:** new checks `funding_reserves` and `approved_alternative`. The final-PDF route receives the alternatives.
+  - **State:** store/backup v8 add `alternatives`, account funding and the new action fields. The migration is idempotent, and v7/v6 backups are validated strictly as their own version, then upgraded.
+  - **Desk:** duplicate, rename and switch alternatives (isolated, approvals cleared); funding rows; a replace-into-new-investment edit; units left out; and the alternatives comparison.
+- **Review fixes, round 1 (`b5c3e19`):**
+  - An oversized linked sale, measured against the position as it stands in the draft, is left out whole.
+  - Eligible cash must still be a cash line in its account.
+  - Copilot readiness receives the alternatives.
+- **Review fixes, round 2 (backup consistency, `9815c55`):** Normal app actions could leave references that the export refused:
+  - removing the eligible cash line;
+  - reclassifying it as an investment;
+  - removing a proposed investment's destination account.
+
+  They are now declared in v8 backups, the same way removed recommendation links are:
+  - `engagement.unresolvedFunding: [{ accountId, cashHoldingId, reason: "removed" | "not_cash" }]`;
+  - `unresolvedLinks[].destinationAccountId`.
+
+  Rules for these declarations:
+  - Both are derived at export and checked exactly on restore. Undeclared or false declarations are still rejected, and v7/v6 files can't carry them.
+  - The funding rule and reserve are kept and never pointed at other cash. Nothing is spent until the advisor chooses valid cash, and `funding_reserves` names the problem.
+  - A replacement whose destination account is removed keeps its destination, loses its approval (`needs_review`) and blocks `recommendation_links`. A rejected one stays rejected and can be reopened.
+  - Recovery never re-approves anything.
+  - The store contract is unchanged (no migration); v8 is unreleased, so only the v8 backup schema gains the fields.
+  - Regressions are in `tests/backupConsistency.test.ts` (three new normal-workflow round trips and "D2 references the app can leave unresolved").
+- **Review fixes, round 3 (explicit funding, `c50188c`):**
+  - An account with a funding rule now uses its designated eligible cash only. When that line is removed, reclassified or unvalued, the engine never falls back to another cash line or creates a new one.
+  - Affected actions stay unapplied. Units are left out whole, and legacy actions are reported in `blocked` with a funding reason: `funding_reserves` blocks, not `fx_available`. The Recommendations preview says "can't be funded" rather than "missing rate".
+  - Household loan paydown draws only on an account's valid eligible cash; accounts without rules are unchanged.
+  - **Funding control:** an unresolved saved source stays selected and labelled ("Saved: … removed"), and Save can't overwrite it. "Remove funding rule" is a separate, labelled action. When the source currency is unknown, the reserve is shown without inventing one.
+  - Regressions are under "an explicit funding rule never falls back" in `tests/fundedAlternatives.test.ts`.
+- **Review fixes, round 4 (reserve currency):** the commit follows `c50188c` (see the PR for the exact head).
+  - `Account.funding.reserveCurrency` records the currency a reserve was stated in. The store saves a rule only when that currency matches the source's basis (an approved value's currency, else its statement currency).
+  - A mismatch is a new unresolved-funding reason, `reserve_currency`, declared in v8 backups like the others. It covers a source whose native or approved currency changed, and a rule with no recorded currency (from an earlier v8 build: shown as "currency unknown", never guessed). Nothing is spent, `funding_reserves` names it, and the reserve is kept and never relabelled or converted.
+  - **Control:** the saved rule is shown separately from the pending source and reserve, and the input is labelled with the pending currency. A source in another currency, or an unknown one, starts with an empty reserve that must be entered before Save. Unchanged valid rules keep their values.
+  - No store migration and no change to the v7/v6 upgrades: those versions have no funding rules.
+  - Regressions are under "a reserve keeps its currency basis" in `tests/fundedAlternatives.test.ts`. Older tests that change a line's currency now restate the reserve, and their `setAccountFunding` calls state `reserveCurrency`.
+- **Validation (round 4, local):** typecheck passed; 26 files, **468 passed, 0 skipped**; eval 2 of 2; build passed. CI runs on the pushed head; the 2 private-PDF tests are skipped there.
+- **Browser check (round 4):**
+  - The run used a fresh `atlas-reserve.localhost` origin, so the user's localhost workspace was never loaded.
+  - Setup (synthetic): a EUR deposit was added to the brokerage in the stored seed.
+  - Steps and results, all through the UI:
+    - set a USD 25,000 rule;
+    - switch the pending source to EUR: the reserve is empty and labelled EUR, the restatement prompt shows, Save is disabled, and the saved rule is unchanged;
+    - enter EUR 20,000 and save: the rule is stored with `reserveCurrency` EUR and enforced in EUR (headroom €30,000);
+    - after reload, switching back to USD asks for a USD restatement.
+  - Afterwards the origin's storage was cleared and the server stopped.
+- **Round 3 evidence (`c50188c`):**
+  - local: 463 passed;
+  - CI run 40201711359: 461 passed, 2 skipped;
+  - browser: no fallback after the designated line was removed; unchanged Save; deliberate rule removal.
+- **Round 2 evidence (`9815c55`):**
+  - local: 456 passed;
+  - CI run 40200538647: 454 passed, 2 skipped;
+  - browser: export → restore → reload with removed eligible cash.
+- **Round 1 browser check:** the desk refused an oversized sale. The localhost workspace was restored byte-identical (v6, hash `99aa0da7…`).
+- **Earlier evidence (`dc1be24`):** CI run 40139204916; synthetic story (10,001 blocked; 50/40/10; B 55/35/10 vs A 50/40/10; reload).
+- **Sequencing (approved):** D2 → **D2a** (model portfolios and manager sleeves) → D3 (presentation). The D2a plan is saved separately in PR #74 (tracking issue #73), unmerged. Before implementing D2a, reconcile that branch with D2's delivered contracts (store/backup v8, `Account.funding`, `Recommendation.destination`/`linked`, `alternatives`, `funding_reserves`/`approved_alternative`), preserving both branches' documentation.
 - **Limitations:**
-  - Seed `rec_reduce_aapl` and `rec_pay_mortgage` need explicit amounts before a new approval.
-  - Existing actions are edited on Recommendations.
-  - Liabilities show current values only (no proposed paydown column).
-  - At narrow widths the grid scrolls sideways.
-  - Reserves, new destinations, automatic trades and alternatives are D2.
-- **Next step:** Codex reviews PR #72 before any owner-authorized merge. D2 has not started.
-- **Preserved:** accepted values/FX/source dates, readiness and final-PDF gates (they still use approved actions), funding/import/approval protections, v6 compatibility, #59 and agent requirements. All 25 IDs remain Planned; D1 is a minimum slice.
-- **Before this:** PR #70 (`8b06b6a`, review wording/identifier score) and PR #71 (`bc248e1`, demo-first plan) merged on 24 October 2026; main CI passed 402/2 skipped (404). Older history: [CLAUDE_HANDOFF_HISTORY_2026-10-24.md](CLAUDE_HANDOFF_HISTORY_2026-10-24.md).
+  - Replacements stay within one account and its eligible-cash currency.
+  - Alternatives can't be deleted yet.
+  - There is no reserve currency other than the cash line's own.
+  - The comparison has no history.
+  - When a legacy action (such as a household loan paydown) breaches a reserve, the latest unit buying in that account is left out and blamed, even if it adds cash. Readiness still blocks; follow-up issue filed.
+  - Approved snapshots and presentation are D3.
+- **Next step:** Codex re-reviews PR #75 at the review head before any owner-authorized merge. D2a and D3 have not started.
+- **Preserved:** accepted values/FX/source dates, all existing readiness and final-PDF gates, legacy recommendation effects, v6/v7 compatibility, #59 and agent requirements. All 25 IDs remain Planned.
 
 ## Working agreements
 

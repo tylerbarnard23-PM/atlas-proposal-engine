@@ -205,7 +205,7 @@ describe("review findings: native-only cash and allocation-neutral actions", () 
       reportingCurrency: "USD",
       rates: [],
     });
-    expect(result).toEqual({ holdings: before, unresolved: [] });
+    expect(result).toEqual({ holdings: before, unresolved: [], blocked: [] });
   });
 
   it("sale proceeds in an account with no cash line still fund a paydown", () => {

@@ -360,7 +360,9 @@ describe("legacy approved-and-rejected records (review fix)", () => {
     expect(row(desk(m), "equity").proposed).toBe(55_000);
 
     const v7 = JSON.parse(m.serializeBackup(m.createBackup(m.useAtlasStore.getState(), NOW)));
-    const { workingDraft: _d, ...engagement } = v7.engagement;
+    const { workingDraft: _d, alternatives: _alt, unresolvedFunding: _uf, ...engagement } = v7.engagement; // a v6 file has none of these (D2 adds alternatives and funding declarations)
+    void _alt;
+    void _uf;
     void _d;
     const parsed = m.parseBackup(JSON.stringify({ ...v7, workspaceVersion: 6, engagement }), { disclosureIds: m.DISCLOSURE_LIBRARY.map((d) => d.id) });
     if (!parsed.ok) throw new Error(parsed.errors.join("; "));
@@ -477,7 +479,7 @@ describe("store v7 migration", () => {
     st.setDraftTarget("equity", 50);
     st.addDraftEdit(edit(m, "h_story_equity", "reduce", 10_000));
     const draft = m.useAtlasStore.getState().workingDraft;
-    expect(JSON.parse(storage.getItem(KEY)!).version).toBe(7);
+    expect(JSON.parse(storage.getItem(KEY)!).version).toBe(8); // v8 (D2) keeps the v7 draft
     vi.resetModules();
     m = await load();
     await m.useAtlasStore.persist.rehydrate();
@@ -537,12 +539,14 @@ describe("backup and restore", () => {
     const st = m.useAtlasStore.getState();
     st.upsertRecommendation({ ...st.recommendations[0], approvedByAdvisor: true, status: "approved", includeInPdf: true });
     const v7 = JSON.parse(m.serializeBackup(m.createBackup(m.useAtlasStore.getState(), NOW)));
-    const { workingDraft: _d, ...engagement } = v7.engagement;
+    const { workingDraft: _d, alternatives: _alt, unresolvedFunding: _uf, ...engagement } = v7.engagement; // a v6 file has none of these (D2 adds alternatives and funding declarations)
+    void _alt;
+    void _uf;
     void _d;
     const v6 = { ...v7, workspaceVersion: 6, engagement };
     const parsed = m.parseBackup(JSON.stringify(v6), ids(m));
     if (!parsed.ok) throw new Error(parsed.errors.join("; "));
-    expect(parsed.backup.workspaceVersion).toBe(7);
+    expect(parsed.backup.workspaceVersion).toBe(8); // upgraded to the current version (D2: v8)
     expect(parsed.backup.engagement.workingDraft).toMatchObject({ memberIds: [st.recommendations[0].id], scopeAccountIds: null, targets: {}, inputBasis: null, createdAt: NOW.toISOString() });
     expect(parsed.backup.engagement.recommendations).toEqual(v7.engagement.recommendations);
     // Still strict: a v6 file carrying a draft (or anything unknown) is rejected, and so is v5.
