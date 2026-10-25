@@ -44,7 +44,7 @@ export interface Scenario {
 }
 
 export interface PreviewWarning {
-  kind: "missing_rate" | "unvalued" | "incomplete_import" | "currency_review" | "shortfall";
+  kind: "missing_rate" | "unvalued" | "funding" | "incomplete_import" | "currency_review" | "shortfall";
   message: string;
   /** Whether this keeps the final PDF blocked (now, or once approved and included). */
   blocksFinal: boolean;
@@ -209,6 +209,12 @@ export function previewRecommendation(input: {
   const current = holdings;
   const currentShortfalls = cashShortfallsOf(current, accounts, fx);
   const alone = applyRecommendationsToProposed(current, [rec], accounts, fx);
+  // Its account's funding rule can't fund it (D2): unapplied, for that reason.
+  const unfunded = alone.blocked.find((b) => b.recommendationIds.includes(rec.id));
+  if (unfunded) {
+    warnings.unshift({ kind: "funding", message: unfunded.reason, blocksFinal: true });
+    return { ...base, state: "cannot_apply", holding: holdingInfo, standalone: { applied: false, position: movement(linked, linked, () => holdingInfo.accountName), cash: [], shortfalls: [] }, combined: null, warnings };
+  }
   const unresolved = alone.unresolved.find((u) => u.recommendationId === rec.id);
   if (unresolved) {
     warnings.unshift({ kind: "missing_rate", message: unresolved.reason, blocksFinal: true });

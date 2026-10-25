@@ -266,11 +266,14 @@ function applyCore(
   }
 
   // Where an account's cash offsets land: its first cash line, else a new
-  // line in the account's base currency.
-  // An account's designated eligible cash line (D2), when it has one.
+  // line in the account's base currency. An account with an explicit funding
+  // rule (D2) uses its designated eligible cash only: never another line or a
+  // new one, even when the designated line is removed, reclassified or unvalued.
+  const ruled = (accountId: string) => !!accountById.get(accountId)?.funding;
   const cashLine = (accountId: string): MaybeNormalized | undefined => {
     const account = accountById.get(accountId);
-    return (account && eligibleCashOf(account, current)) ?? current.find((h) => h.accountId === accountId && h.assetClass === "cash" && !h.isLiability);
+    if (account?.funding) return eligibleCashOf(account, current);
+    return current.find((h) => h.accountId === accountId && h.assetClass === "cash" && !h.isLiability);
   };
   const cashCurrency = (accountId: string): CurrencyCode =>
     cashLine(accountId)?.currency ?? accountById.get(accountId)?.baseCurrency ?? fx.reportingCurrency;
@@ -279,14 +282,34 @@ function applyCore(
   // the currency it is valued in (a locked approved value's own currency);
   // a new line needs the rate for the account's base currency. A zero-valued
   // approved line can't be scaled, so its statement currency is needed too.
-  const offsetBlocker = (accountId: string): CurrencyCode | null => {
+  // An account with a funding rule whose designated cash can't take it says
+  // so as a funding problem, not a missing rate.
+  type OffsetBlock = { kind: "fx"; currency: CurrencyCode } | { kind: "funding"; reason: string };
+  const offsetBlocker = (accountId: string): OffsetBlock | null => {
     const line = cashLine(accountId);
-    if (!line) return rateToReporting(fx, cashCurrency(accountId)) == null ? cashCurrency(accountId) : null;
+    const account = accountById.get(accountId);
+    if (account?.funding) {
+      const problem = fundingProblem(account, current);
+      if (problem) {
+        return {
+          kind: "funding",
+          reason: `${account.name}'s eligible cash ${account.funding.cashHoldingId} ${problem === "removed" ? "was removed" : "is no longer a cash line in this account"}, so this action can't be funded. Choose its eligible cash again.`,
+        };
+      }
+      if (line && reportingValueOf(line, fx) == null) {
+        return { kind: "funding", reason: `${account.name}'s eligible cash ${line.assetName} can't be valued, so this action can't be funded from it.` };
+      }
+    }
+    if (!line) return rateToReporting(fx, cashCurrency(accountId)) == null ? { kind: "fx", currency: cashCurrency(accountId) } : null;
     const value = reportingValueOf(line, fx);
     const vc = valuationCurrencyOf(line);
-    if (value == null || rateToReporting(fx, vc) == null) return vc;
-    if (line.proposalApprovedValue && value === 0 && rateToReporting(fx, line.currency) == null) return line.currency;
+    if (value == null || rateToReporting(fx, vc) == null) return { kind: "fx", currency: vc };
+    if (line.proposalApprovedValue && value === 0 && rateToReporting(fx, line.currency) == null) return { kind: "fx", currency: line.currency };
     return null;
+  };
+  // Actions left unapplied because their account's funding rule can't fund them.
+  const fundingBlock = (recs: Recommendation[], accountId: string, reason: string) => {
+    for (const rec of recs) blockedCore.push({ unitId: unitIdOf(rec), recommendationIds: [rec.id], accountId, reason });
   };
 
   const unresolve = (recs: Recommendation[], h: Holding, currency: CurrencyCode) => {
@@ -367,8 +390,12 @@ function applyCore(
     // A zero-valued approved holding can't be scaled, so its statement currency is needed too.
     if (h.proposalApprovedValue && start === 0 && vc !== h.currency) needed.push(h.currency);
     const blocked = cashOffset !== 0 ? offsetBlocker(h.accountId) : null;
+    if (blocked?.kind === "funding") {
+      fundingBlock(recs, h.accountId, blocked.reason);
+      continue;
+    }
     if (blocked) {
-      unresolve(recs, h, blocked);
+      unresolve(recs, h, blocked.currency);
       continue;
     }
     const missing = needed.find((c) => rateToReporting(fx, c) == null);
@@ -393,6 +420,8 @@ function applyCore(
     const available = new Map<string, number>();
     for (const h of current) {
       if (h.isLiability || h.assetClass !== "cash") continue;
+      // An account with a funding rule offers its valid eligible cash only.
+      if (ruled(h.accountId) && cashLine(h.accountId)?.id !== h.id) continue;
       const v = reportingValueOf(h, fx);
       if (v == null || offsetBlocker(h.accountId)) continue;
       available.set(h.accountId, (available.get(h.accountId) ?? 0) + v);
@@ -413,7 +442,8 @@ function applyCore(
       const loanAccount = p.holding.accountId;
       const loanBlocked = remaining > 1e-9 ? offsetBlocker(loanAccount) : null;
       if (loanBlocked) {
-        unresolve(p.recs, p.holding, loanBlocked);
+        if (loanBlocked.kind === "funding") fundingBlock(p.recs, loanAccount, loanBlocked.reason);
+        else unresolve(p.recs, p.holding, loanBlocked.currency);
         newValueById.delete(p.holding.id);
         continue;
       }
@@ -632,7 +662,10 @@ function applyAtomically(current: Holding[], recs: Recommendation[], accounts: A
     const active = recs.filter((r) => !isUnit(r) || !drop.has(unitIdOf(r)));
     const core = applyCore(current, active, accounts, fx);
     const failed = new Map<string, string>();
-    for (const b of core.blocked) failed.set(b.unitId, b.reason);
+    // A legacy action the core couldn't fund (its account's funding rule) is
+    // simply unapplied and reported; only units are dropped and re-evaluated.
+    const legacyBlocked = core.blocked.filter((b) => !units.has(b.unitId));
+    for (const b of core.blocked) if (units.has(b.unitId)) failed.set(b.unitId, b.reason);
     for (const u of core.unresolved) {
       const r = recs.find((x) => x.id === u.recommendationId);
       if (r && isUnit(r) && !failed.has(unitIdOf(r))) failed.set(unitIdOf(r), u.reason);
@@ -656,10 +689,10 @@ function applyAtomically(current: Holding[], recs: Recommendation[], accounts: A
       block(offender, `${legs.length > 1 ? "Linked replacement" : "Purchase"} not applied: it would leave the eligible cash in ${b.accountName} at ${left}, below its ${b.currency ?? ""} ${amountText(b.reserve)} reserve.`, b.accountId);
       continue;
     }
-    return { holdings: core.holdings, unresolved: [...core.unresolved, ...extraUnresolved], blocked };
+    return { holdings: core.holdings, unresolved: [...core.unresolved, ...extraUnresolved], blocked: [...blocked, ...legacyBlocked] };
   }
   const core = applyCore(current, recs.filter((r) => !isUnit(r)), accounts, fx);
-  return { holdings: core.holdings, unresolved: [...core.unresolved, ...extraUnresolved], blocked };
+  return { holdings: core.holdings, unresolved: [...core.unresolved, ...extraUnresolved], blocked: [...blocked, ...core.blocked] };
 }
 
 

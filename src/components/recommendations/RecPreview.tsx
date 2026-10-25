@@ -49,7 +49,7 @@ export function RecPreview({ preview }: { preview: RecommendationPreview }) {
   const state = STATE_LABEL[preview.state];
   const s = preview.standalone;
   // The reason it can't be applied is already the headline.
-  const warnings = preview.warnings.filter((w) => !(preview.state === "cannot_apply" && (w.kind === "missing_rate" || w.kind === "unvalued")));
+  const warnings = preview.warnings.filter((w) => !(preview.state === "cannot_apply" && (w.kind === "missing_rate" || w.kind === "unvalued" || w.kind === "funding")));
   return (
     <section aria-label="Live preview" className="rounded-lg ring-1 ring-inset ring-navy-200 bg-white p-3 space-y-3" data-testid="rec-preview">
       <div className="flex items-center justify-between gap-2">

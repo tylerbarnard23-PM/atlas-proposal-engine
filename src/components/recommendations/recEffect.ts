@@ -62,7 +62,7 @@ export function summarizePreview(p: RecommendationPreview): PreviewSummary {
       return { headline: "The linked holding no longer exists, so this can't be applied.", tone: "warning", ...empty };
     case "cannot_apply":
       return {
-        headline: `Can't be applied: ${p.warnings.find((w) => w.kind === "missing_rate" || w.kind === "unvalued")?.message ?? "a rate is missing."}`,
+        headline: `Can't be applied: ${p.warnings.find((w) => w.kind === "missing_rate" || w.kind === "unvalued" || w.kind === "funding")?.message ?? "a rate is missing."}`,
         tone: "warning",
         ...empty,
       };

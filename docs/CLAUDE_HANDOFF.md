@@ -12,7 +12,7 @@
   - An oversized linked sale, measured against the position as it stands in the draft, is left out whole.
   - Eligible cash must still be a cash line in its account.
   - Copilot readiness receives the alternatives.
-- **Review fixes, round 2 (backup consistency):** the commit follows `b5c3e19` (see the PR for the exact head). Normal app actions could leave references that the export refused:
+- **Review fixes, round 2 (backup consistency, `9815c55`):** Normal app actions could leave references that the export refused:
   - removing the eligible cash line;
   - reclassifying it as an investment;
   - removing a proposed investment's destination account.
@@ -28,15 +28,26 @@
   - Recovery never re-approves anything.
   - The store contract is unchanged (no migration); v8 is unreleased, so only the v8 backup schema gains the fields.
   - Regressions are in `tests/backupConsistency.test.ts` (three new normal-workflow round trips and "D2 references the app can leave unresolved").
-- **Validation (round 2, local):** typecheck passed; 26 files, **456 passed, 0 skipped**; eval 2 of 2; build passed. CI runs on the pushed head; the 2 private-PDF tests are skipped there.
-- **Browser check (round 2):**
-  - The run used a fresh `atlas-review.localhost` origin, so the user's localhost workspace was never loaded.
-  - Steps, all through the UI: set eligible cash with a 25,000 reserve; remove that cash line; export (captured in-page, no download); restore; reload.
-  - Results:
-    - the store matched the exported file;
-    - readiness and the desk say the cash line was removed and the reserve is kept;
-    - Final PDF showed "5 to resolve" throughout.
+- **Review fixes, round 3 (explicit funding):** the commit follows `9815c55` (see the PR for the exact head).
+  - An account with a funding rule now uses its designated eligible cash only. When that line is removed, reclassified or unvalued, the engine never falls back to another cash line or creates a new one.
+  - Affected actions stay unapplied. Units are left out whole, and legacy actions are reported in `blocked` with a funding reason: `funding_reserves` blocks, not `fx_available`. The Recommendations preview says "can't be funded" rather than "missing rate".
+  - Household loan paydown draws only on an account's valid eligible cash; accounts without rules are unchanged.
+  - **Funding control:** an unresolved saved source stays selected and labelled ("Saved: … removed"), and Save can't overwrite it. "Remove funding rule" is a separate, labelled action. When the source currency is unknown, the reserve is shown without inventing one.
+  - Regressions are under "an explicit funding rule never falls back" in `tests/fundedAlternatives.test.ts`.
+- **Validation (round 3, local):** typecheck passed; 26 files, **463 passed, 0 skipped**; eval 2 of 2; build passed. CI runs on the pushed head; the 2 private-PDF tests are skipped there.
+- **Browser check (round 3):**
+  - The run used a fresh `atlas-funding.localhost` origin, so the user's localhost workspace was never loaded.
+  - Setup (synthetic): a second brokerage cash line was added to the stored seed.
+  - Steps and results, all through the UI:
+    - designate the first cash line (25,000 reserve), then remove it in Accounts & assets;
+    - a 10,000 Apple increase is left unapplied with the funding reason, and the second deposit isn't drawn;
+    - the control shows the saved source as removed, and Save doesn't change the rule;
+    - "Remove funding rule" removes it, after which legacy funding applies.
   - Afterwards the origin's storage was cleared and the server stopped.
+- **Round 2 evidence (`9815c55`):**
+  - local: 456 passed;
+  - CI run 40200538647: 454 passed, 2 skipped;
+  - browser: export → restore → reload with removed eligible cash.
 - **Round 1 browser check:** the desk refused an oversized sale. The localhost workspace was restored byte-identical (v6, hash `99aa0da7…`).
 - **Earlier evidence (`dc1be24`):** CI run 40139204916; synthetic story (10,001 blocked; 50/40/10; B 55/35/10 vs A 50/40/10; reload).
 - **Sequencing (approved):** D2 → **D2a** (model portfolios and manager sleeves) → D3 (presentation). The D2a plan is saved separately in PR #74 (tracking issue #73), unmerged. Before implementing D2a, reconcile that branch with D2's delivered contracts (store/backup v8, `Account.funding`, `Recommendation.destination`/`linked`, `alternatives`, `funding_reserves`/`approved_alternative`), preserving both branches' documentation.

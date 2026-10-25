@@ -465,7 +465,7 @@ describe("review boundaries (PR #75)", () => {
     m.useAtlasStore.getState().patchHolding("h_story_cash", { assetClass: "fixed_income" });
     m.useAtlasStore.getState().addDraftEdit(replace(m, 10_000, 10_001));
     const d = desk(m);
-    expect(d.blocked).toEqual([expect.objectContaining({ unitId: "grp_a", reason: expect.stringMatching(/eligible cash chosen for .* is no longer a cash line/) })]);
+    expect(d.blocked).toEqual([expect.objectContaining({ unitId: "grp_a", reason: expect.stringMatching(/eligible cash .* is no longer a cash line/) })]);
     expect(d.positions.some((x) => x.id === "dest_bond_b")).toBe(false);
     expect(d.reserves[0]).toMatchObject({ available: null, breached: true });
     // A backup can't name a non-cash line as eligible cash either.
@@ -500,5 +500,118 @@ describe("review boundaries (PR #75)", () => {
     m = await load();
     await m.useAtlasStore.persist.rehydrate();
     expect(state(m)).toEqual(before);
+  });
+});
+
+describe("an explicit funding rule never falls back to other cash (PR #75)", () => {
+  /** The story with a second, valued cash line in the investment account. */
+  function twoCash(m: M) {
+    story(m, 0);
+    const cash = m.useAtlasStore.getState().holdings.find((h) => h.id === "h_story_cash")!;
+    m.useAtlasStore.getState().upsertHolding({ ...cash, id: "h_story_cash2", assetName: "Second deposit", nativeMarketValue: 5_000 });
+  }
+  const increase = (m: M, amount = 1_000, id = "rec_inc") => {
+    const h = m.useAtlasStore.getState().holdings.find((x) => x.id === "h_story_equity")!;
+    m.useAtlasStore.getState().addDraftEdit(m.positionEditRecommendation({ holding: h, kind: "increase", amount, reportingCurrency: "USD", id, now: NOW.toISOString() }));
+  };
+  const at = (d: ReturnType<typeof desk>, id: string) => d.positions.find((p) => p.id === id)?.proposed ?? null;
+  const unchanged = (m: M, reason: RegExp) => {
+    const d = desk(m);
+    expect(at(d, "h_story_equity")).toBe(60_000);
+    expect(at(d, "h_story_cash2")).toBe(5_000);
+    expect(d.positions.some((p) => p.synthetic)).toBe(false);
+    expect(d.unresolved).toEqual([]); // not disguised as missing FX
+    expect(d.blocked).toEqual([expect.objectContaining({ recommendationIds: ["rec_inc"], accountId: "acc_story_invest", reason: expect.stringMatching(reason) })]);
+    approve(m, ["rec_inc"]);
+    expect(check(m, "funding_reserves")).toMatchObject({ passed: false, detail: expect.stringMatching(reason) });
+    expect(check(m, "fx_available").passed).toBe(true);
+  };
+
+  it("removed designated cash: an increase isn't funded from the other cash line or a new one", async () => {
+    const m = await load();
+    twoCash(m);
+    m.useAtlasStore.getState().removeHolding("h_story_cash");
+    increase(m);
+    unchanged(m, /eligible cash h_story_cash was removed/);
+  });
+
+  it("the Recommendations preview says the action can't be funded, not that a rate is missing", async () => {
+    const m = await load();
+    twoCash(m);
+    m.useAtlasStore.getState().removeHolding("h_story_cash");
+    increase(m);
+    const s = m.useAtlasStore.getState();
+    const { previewRecommendation } = await import("@/engines/recommendationPreview");
+    const p = previewRecommendation({ rec: s.recommendations.find((r) => r.id === "rec_inc")!, holdings: m.normalizeHoldings(s.holdings, s.fxRates, "USD"), recommendations: s.recommendations, accounts: s.accounts, fx: { reportingCurrency: "USD", rates: s.fxRates }, sourceDocuments: [] });
+    expect(p.state).toBe("cannot_apply");
+    expect(p.warnings[0]).toMatchObject({ kind: "funding", blocksFinal: true, message: expect.stringMatching(/was removed/) });
+  });
+
+  it("reclassified designated cash: the same", async () => {
+    const m = await load();
+    twoCash(m);
+    m.useAtlasStore.getState().patchHolding("h_story_cash", { assetClass: "fixed_income" });
+    increase(m);
+    unchanged(m, /eligible cash h_story_cash is no longer a cash line/);
+  });
+
+  it("designated cash that can't be valued doesn't authorize spending another valued line", async () => {
+    const m = await load();
+    twoCash(m);
+    m.useAtlasStore.getState().patchHolding("h_story_cash", { currency: "NOK" as Holding["currency"] });
+    increase(m);
+    unchanged(m, /eligible cash Cash can't be valued/);
+  });
+
+  it("a valid designated source alone funds the action and takes its proceeds", async () => {
+    const m = await load();
+    twoCash(m);
+    increase(m, 1_000);
+    let d = desk(m);
+    expect([at(d, "h_story_equity"), at(d, "h_story_cash"), at(d, "h_story_cash2")]).toEqual([61_000, 9_000, 5_000]);
+    m.useAtlasStore.getState().setDraftMember("rec_inc", false);
+    const h = m.useAtlasStore.getState().holdings.find((x) => x.id === "h_story_equity")!;
+    m.useAtlasStore.getState().addDraftEdit(m.positionEditRecommendation({ holding: h, kind: "reduce", amount: 2_000, reportingCurrency: "USD", id: "rec_red", now: NOW.toISOString() }));
+    d = desk(m);
+    expect([at(d, "h_story_equity"), at(d, "h_story_cash"), at(d, "h_story_cash2")]).toEqual([58_000, 12_000, 5_000]);
+    expect(d.blocked).toEqual([]);
+  });
+
+  it("without a funding rule, the first cash line funds it as before", async () => {
+    const m = await load();
+    twoCash(m);
+    m.useAtlasStore.getState().setAccountFunding("acc_story_invest", null);
+    m.useAtlasStore.getState().removeHolding("h_story_cash");
+    increase(m);
+    const d = desk(m);
+    expect([at(d, "h_story_equity"), at(d, "h_story_cash2")]).toEqual([61_000, 4_000]);
+    expect(d.blocked).toEqual([]);
+  });
+
+  it("household loan paydown draws only on an account's valid eligible cash; accounts without rules are unchanged", async () => {
+    const m = await load();
+    const st = m.useAtlasStore.getState();
+    const brokerageCash = st.holdings.find((h) => h.id === "h_cash_brokerage")!;
+    st.upsertHolding({ ...brokerageCash, id: "h_cash_brokerage2", assetName: "Second brokerage deposit", nativeMarketValue: 300_000 });
+    const pay = (amount = 100_000, s = m.useAtlasStore.getState()) => {
+      const rec = { ...s.recommendations.find((r) => r.id === "rec_pay_mortgage")!, actionAmount: amount, actionAmountUnit: "amount" as const };
+      const r = m.applyRecommendationsToProposed(m.normalizeHoldings(s.holdings, s.fxRates, "USD"), [rec], s.accounts, { reportingCurrency: "USD", rates: s.fxRates });
+      const v = (id: string) => r.holdings.find((h) => h.id === id)?.reportingMarketValue ?? null;
+      return { r, v };
+    };
+    // No rule: the largest cash line's account is drawn first (the existing behavior).
+    let { r, v } = pay();
+    expect(v("h_mortgage")).toBe(-1_385_000);
+    expect(v("h_cash_brokerage2")! + v("h_cash_brokerage")!).toBeCloseTo(184_200 + 300_000 - 100_000, 6);
+    // A valid rule: only the designated line is available (184,200 of a 250,000 paydown); the rest comes from other accounts.
+    m.useAtlasStore.getState().setAccountFunding("acc_brokerage_us", { cashHoldingId: "h_cash_brokerage", reserve: 0 });
+    ({ r, v } = pay(250_000));
+    expect([v("h_mortgage"), v("h_cash_brokerage"), v("h_cash_brokerage2")]).toEqual([-1_235_000, 0, 300_000]);
+    // The designated line removed: the brokerage account isn't drawn at all.
+    m.useAtlasStore.getState().removeHolding("h_cash_brokerage");
+    ({ r, v } = pay());
+    expect(v("h_cash_brokerage2")).toBe(300_000);
+    expect(v("h_mortgage")).toBe(-1_385_000);
+    expect(r.unresolved).toEqual([]);
   });
 });

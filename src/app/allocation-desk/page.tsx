@@ -302,7 +302,7 @@ function Desk() {
                           preview={(recs) => ({
                             draft: previewDraftEdit({ holdings, accounts, recommendations, draft, candidate: recs, fx }),
                             // Data warnings only (incomplete import, unvalued, currency review); funding comes from the draft above.
-                            warnings: previewRecommendation({ rec: recs.find((r) => r.relatedHoldingId) ?? recs[0], holdings, recommendations, accounts, fx, sourceDocuments }).warnings.filter((w) => w.kind !== "shortfall" && w.kind !== "missing_rate"),
+                            warnings: previewRecommendation({ rec: recs.find((r) => r.relatedHoldingId) ?? recs[0], holdings, recommendations, accounts, fx, sourceDocuments }).warnings.filter((w) => w.kind !== "shortfall" && w.kind !== "missing_rate" && w.kind !== "funding"),
                           })}
                         />
                       </td>
@@ -321,7 +321,14 @@ function Desk() {
           {d.scope.accountIds.map((id) => {
             const account = accounts.find((a) => a.id === id)!;
             const cashLines = holdings.filter((h) => h.accountId === id && h.assetClass === "cash" && !h.isLiability).map((h) => ({ id: h.id, name: h.assetName, currency: h.valuation.currency }));
-            return <FundingRow key={id} account={account} cashLines={cashLines} status={d.reserves.find((r) => r.accountId === id)} onSave={(f) => setFunding(id, f)} />;
+            // A saved source that no longer resolves stays visible as the saved choice.
+            const savedId = account.funding?.cashHoldingId;
+            const savedHolding = savedId ? holdings.find((h) => h.id === savedId) : undefined;
+            const unresolvedSource =
+              savedId && !cashLines.some((c) => c.id === savedId)
+                ? { id: savedId, label: savedHolding ? `${savedHolding.assetName}: no longer a cash line here` : `${savedId}: removed` }
+                : null;
+            return <FundingRow key={id} account={account} cashLines={cashLines} unresolvedSource={unresolvedSource} status={d.reserves.find((r) => r.accountId === id)} onSave={(f) => setFunding(id, f)} />;
           })}
           <p className="text-2xs text-ink-500 leading-relaxed">
             Only the chosen cash line funds new investments and replacements; cash-like fund slices and cash that can&apos;t be valued are never spent automatically. A purchase that would take eligible cash below its reserve is left out whole, here and in the final-PDF checks.
@@ -607,11 +614,14 @@ function PositionEditor({
 function FundingRow({
   account,
   cashLines,
+  unresolvedSource,
   status,
   onSave,
 }: {
   account: Account;
   cashLines: { id: string; name: string; currency: string }[];
+  /** The saved eligible cash when it was removed or is no longer a cash line in this account. */
+  unresolvedSource: { id: string; label: string } | null;
   status: ReserveStatus | undefined;
   onSave: (funding: { cashHoldingId: string; reserve: number } | null) => void;
 }) {
@@ -623,29 +633,41 @@ function FundingRow({
   }, [account.funding]);
   const r = Number(reserve.replace(/[,\s]/g, ""));
   const line = cashLines.find((c) => c.id === source);
-  const fmt = (n: number) => formatCurrency(n, status?.currency ?? line?.currency ?? "USD");
+  // The reserve is in its cash line's currency; when that is unknown, none is invented.
+  const currency = status?.currency ?? line?.currency ?? null;
+  const fmt = (n: number) => (currency ? formatCurrency(n, currency) : `${n.toLocaleString("en-US", { maximumFractionDigits: 2 })} (currency unknown)`);
+  const choosable = !!line && Number.isFinite(r) && r >= 0;
   return (
     <div className="space-y-1.5 border-b border-ink-100 pb-2 last:border-b-0">
       <div className="text-[13px] text-ink-900">{account.name}</div>
       <div className="flex flex-wrap items-center gap-2 text-[12px] text-ink-600">
         <select value={source} onChange={(e) => setSource(e.target.value)} aria-label={`Eligible cash for ${account.name}`} className="rounded border border-ink-200 px-2 py-1">
-          <option value="">No eligible cash chosen</option>
+          {!account.funding && <option value="">No eligible cash chosen</option>}
+          {unresolvedSource && <option value={unresolvedSource.id}>Saved: {unresolvedSource.label}</option>}
           {cashLines.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.currency})</option>)}
         </select>
         <label className="flex items-center gap-1.5">
           Reserve
           <input inputMode="decimal" value={reserve} onChange={(e) => setReserve(e.target.value)} aria-label={`Minimum reserve for ${account.name}`} className="w-24 rounded border border-ink-200 px-2 py-1 text-right tabular" />
         </label>
-        <Button size="sm" variant="secondary" disabled={!!source && !(Number.isFinite(r) && r >= 0)} onClick={() => onSave(source ? { cashHoldingId: source, reserve: r } : null)}>
-          Save
+        <Button size="sm" variant="secondary" disabled={!choosable} onClick={() => choosable && onSave({ cashHoldingId: source, reserve: r })}>
+          {account.funding ? "Save funding rule" : "Set funding rule"}
         </Button>
+        {account.funding && (
+          <Button size="sm" variant="ghost" onClick={() => onSave(null)} aria-label={`Remove the funding rule and reserve for ${account.name}`}>
+            Remove funding rule
+          </Button>
+        )}
       </div>
+      {unresolvedSource && source === unresolvedSource.id && (
+        <p className="text-2xs text-ink-500">Choose a valid cash line to fund this account, or remove the rule. Saving can&apos;t keep a source that no longer resolves.</p>
+      )}
       {status && (
         <p className={`text-2xs ${status.breached ? "text-negative-600" : "text-ink-500"}`}>
           {status.problem
-            ? `The chosen eligible cash ${status.cashHoldingId} ${status.problem === "removed" ? "was removed" : "is no longer a cash line in this account"}. Nothing is spent from this account until you choose its eligible cash again; the ${fmt(status.reserve)} reserve is kept.`
+            ? `The chosen eligible cash ${status.cashHoldingId} ${status.problem === "removed" ? "was removed" : "is no longer a cash line in this account"}. Nothing is spent from this account, and no other cash is used, until you choose its eligible cash again; the ${fmt(status.reserve)} reserve is kept.`
             : status.available == null
-            ? `Eligible cash can't be valued, so the ${fmt(status.reserve)} reserve can't be confirmed; nothing is spent from it.`
+            ? `Eligible cash can't be valued, so the ${fmt(status.reserve)} reserve can't be confirmed; nothing is spent from this account, and no other cash is used.`
             : `Eligible cash after this preview ${fmt(status.available)}; reserve ${fmt(status.reserve)}; headroom ${fmt(status.headroom ?? 0)}${status.breached ? " (below the reserve)" : ""}.`}
         </p>
       )}
