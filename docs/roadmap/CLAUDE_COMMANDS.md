@@ -20,7 +20,7 @@ Effort is a workflow choice, not a promise of token savings or a new app model s
 
 Every future implementation prompt names the package/subslice, effort, expected base (verify it), outcome and exclusions. It authorizes routine implementation/UX choices already within the approved plan, but does not authorize merge/deploy, paid evaluation, new vendors, real client data or a new project name unless explicitly stated. Read only the short active handoff, selected package/shared contracts and relevant code; do not load the historical handoff archive unless a specific regression needs it; do not reload every detailed plan or repeat broad competitor research.
 
-Inspect → make a short design/contract note in the issue/implementation PR → implement → focused regression tests → self-review/fix blocking findings together → final typecheck/full tests/eval/build/browser/PDF as applicable → include docs/checkpoint → open/update one PR → report exact evidence. Do not split off design-only or release-checkpoint PRs. A justified domain/migration split is allowed within a package; explain the dependency and keep it the same task, not 25 new prerequisites.
+Inspect → make a short design/contract note in the issue/implementation PR (for financial or persisted-state changes, the impact note in [CONTRACT_IMPACT_CHECKLIST.md](../CONTRACT_IMPACT_CHECKLIST.md)) → implement → focused regression tests → self-review/fix blocking findings together → final typecheck/full tests/eval/build/browser/PDF as applicable → include docs/checkpoint → open/update one PR → report exact evidence. Do not split off design-only or release-checkpoint PRs. A justified domain/migration split is allowed within a package; explain the dependency and keep it the same task, not 25 new prerequisites.
 
 <a id="next-implementation-d1"></a>
 
@@ -53,11 +53,13 @@ Stop for Codex review with exact head, checks, preview association, remaining li
 
 ## Active sequencing: D2 → D2a → D3 → D4 → D5
 
-D1 released as `0381db1` (PR #72). The D1 command above is historical; do not rerun it. Next is D2, followed by the owner-approved [D2a model/manager proposal slice](MODEL_AND_MANAGER_PROPOSALS.md), tracked in #73. D2a is planned, not implemented.
+D1 (PR #72, `0381db1`) and D2 (PR #75, `073049f`) are released; the D1 command above and the D1/D2 summaries below are historical, so do not rerun them. **Next implementation: D2a**, the owner-approved [model/manager proposal slice](MODEL_AND_MANAGER_PROPOSALS.md) tracked in #73, built on D2's delivered contracts and followed by D3–D5. D2a is planned, not implemented. The handoff holds the current checkpoint.
 
-## Subsequent package prompts
+## Package prompt summaries
 
-- **D2 — Opus 5.5 High:** use D1's delivered contracts; implement supported new destination/atomic replacement, explicit eligible funding/reserve enforcement and two independent named alternatives. Avoid a broad catalog, optimizer and unsupported transfer workflows. Stop at one reviewed package/justified split.
+D1 and D2 are delivered (historical, kept for reference). D2a is the next implementation. D3–D5 follow once D2a is released.
+
+- **D2 — delivered (PR #75), historical — Opus 5.5 High:** use D1's delivered contracts; implement supported new destination/atomic replacement, explicit eligible funding/reserve enforcement and two independent named alternatives. Avoid a broad catalog, optimizer and unsupported transfer workflows. Stop at one reviewed package/justified split.
 - **D2a — Opus 5.5 High:** after D2, implement [MODEL_AND_MANAGER_PROPOSALS.md](MODEL_AND_MANAGER_PROPOSALS.md): a small versioned model library, funded manager/strategy sleeves, known minimums/fees and explicit unknown exposure. Keep sleeve grouping separate from asset-class exposure; no double-counting or implicit trades. Use D2's delivered contracts (see the plan's "Delivered D2 contracts" section): designated eligible cash with no fallback, `reserveCurrency`, declared unresolved funding, atomic units and independent alternatives, plus real migrations and supported backup upgrades. Follow the committed synthetic fixtures and stop for Codex review; no manager feeds, execution or UMA administration.
 - **D3 — Opus 5.5 High:** capture the whole reviewed economic package, including D2a model/strategy revisions and sleeve/exposure/fee coverage and use it for local presentation/PDF. Preserve new-final-request server gates and old-version isolation. One template; known/unknown coverage, no remote sharing or financial forecast detour.
 - **D4 — Opus 5.5 High:** contextual engine-backed draft agent, real offline orchestration tests and a prepared capped synthetic live runner. No spend without explicit budget, no second provider, no public live key. Report offline/fake/browser/live evidence separately.
