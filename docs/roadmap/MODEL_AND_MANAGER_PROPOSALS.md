@@ -1,6 +1,6 @@
 # D2a — Model portfolios and manager-sleeve proposals
 
-Approved by Tyler on 24 October 2026. **Planned, not implemented.** Tracking [#73](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/73), part of #36, R03/#17 and R04/#39. Read with [delivery sequencing](DEMO_DELIVERY_PLAN.md) and [shared rules](IMPLEMENTATION_GUIDE.md).
+Approved by Tyler on 24 October 2026. **Implemented in PR #79, in review** (decisions and impact note on #73). Tracking [#73](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/73), part of #36, R03/#17 and R04/#39. Read with [delivery sequencing](DEMO_DELIVERY_PLAN.md) and [shared rules](IMPLEMENTATION_GUIDE.md).
 
 ## Purpose and boundary
 
@@ -39,7 +39,7 @@ D2 is released (store/backup v8). D2a extends these rather than adding parallel 
 - **Exposure:** manager/sleeve weights and asset-class exposures are separate views over the same value. Use only explicitly supplied supported mixes with provenance/date, never infer asset mix from a name. For the minimum implementation permit a flat supplied mix; no holdings-level feed or nested model graph. Unknown exposure remains an unknown bucket with count/value coverage, not zero.
 - **Funding and minimums:** reuse D2's shared evaluator, eligible cash, reserve, currency and atomic linked transitions. Fund only genuine intended allocations, not targets. Known strategy minimums apply to actual proposed commitment. Below-minimum/unsupported allocations cannot be presented as completed transitions; show blockers in UI and server final issuance. Unknown minimum/eligibility requires explicit review/qualification under a documented rule, not an assertion that eligibility passed.
 - **Fees:** separate known manager, platform/advisor and instrument components; label rates, bases, coverage and overlap. Do not sum an all-in fee with its embedded components or manufacture savings from missing data. Minimum slice can report fee inputs/coverage without a computed aggregate until supported.
-- **Isolation:** cloning alternatives remaps sleeve/action IDs and clears new approval; model or scenario edits never rewrite another alternative or approved history.
+- **Isolation:** cloning alternatives remaps action and linked-group IDs and clears approvals and sleeve minimum reviews; model or scenario edits never rewrite another alternative or approved history. As delivered (decision recorded on #73), a sleeve's destination ID stays stable per account and strategy revision across alternatives, following D2's proposed-instrument identity: it names the same proposed instrument, and no mutable sleeve record is shared because every sleeve's data lives in its own alternative's actions.
 - **Approval/output:** a selected model is not suitability assessment, investment agreement or advisor approval. D3 captures definition revisions, scope, target/funded sleeve allocation, exposures/unknowns, inputs/FX, funding, minimum exceptions and fee evidence with the approved version. D4 may explain/simulate these records, but cannot appoint managers, accept exceptions or approve.
 - **Persistence:** preserve current storage key/data; version any schema change, use idempotent migrations and upgrade every backup version currently supported. Reload/export/restore must retain definitions, references and blockers.
 

@@ -31,6 +31,7 @@ import {
   type PositionEditKind,
 } from "@/engines/allocationDesk";
 import { previewRecommendation, type PreviewWarning } from "@/engines/recommendationPreview";
+import { ModelsAndSleeves } from "@/components/desk/ModelsAndSleeves";
 import { formatCalendarDate, formatCurrency, formatTimestampDate, safeId } from "@/utils/formatting";
 
 // D1 — the working allocation desk. Every figure comes from engines/
@@ -336,6 +337,9 @@ function Desk() {
           </p>
         </CardBody>
       </Card>
+
+      <SectionDivider>Models and manager sleeves</SectionDivider>
+      <ModelsAndSleeves d={d} compared={compared} holdings={holdings} fx={fx} />
 
       <SectionDivider>Compare alternatives</SectionDivider>
       <Card>

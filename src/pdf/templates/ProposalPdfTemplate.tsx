@@ -17,6 +17,7 @@ import { PDF_BASE_CSS } from "../styles/pdfStyles";
 import { formatCalendarDate, formatCurrency, formatPercent, formatTimestampDate } from "@/utils/formatting";
 import { sumBy, groupBy } from "@/utils/numbers";
 import { applyRecommendationsToProposed, cashShortfallsOf, sectionLabel } from "@/engines/proposalEngine";
+import { sleeveRefs } from "@/engines/strategyProposals";
 import { basisBreakdown, describeBasisCounts, describeDateRange, describeValueDates, provenanceCounts, valueDateSummary, valueProvenance } from "@/engines/valuationProvenance";
 import { currentDisclosure } from "@/domain/disclosureLibrary";
 import { describeAmounts } from "@/engines/recommendationAmounts";
@@ -238,6 +239,12 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
   const unconverted = proposed.unresolved;
   const noConversion = !fxSources && nw.complete && unconverted.length === 0;
   const allocProposedClass = summarize(proposedHoldings, (h) => ASSET_CLASS_LABELS[h.assetClass] ?? "Other");
+  // D2a: proposed manager/strategy sleeves in this result. D3 owns their full
+  // presentation; until then the document says plainly how they are shown.
+  const sleeveNames = (() => {
+    const refs = sleeveRefs(proposedRecs);
+    return proposedHoldings.filter((h) => refs.has(h.id)).map((h) => `${refs.get(h.id)!.manager} — ${refs.get(h.id)!.name} (rev ${refs.get(h.id)!.revision})`);
+  })();
 
   // Align legend ordering with the current allocation so colors stay stable
   // across the Current → Proposed pair (a label keeps the same color even if
@@ -461,6 +468,11 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
         <p className="pdf-text">
           The proposed portfolio reflects the advisor-approved recommendations included in this document. Values shown apply the proposed action amounts to the corresponding current positions; all other holdings are presented unchanged. Implementation timing, tax considerations, and execution remain at the advisor's discretion.
         </p>
+        {sleeveNames.length > 0 && (
+          <p className="pdf-text">
+            Includes {sleeveNames.length} proposed manager/strategy sleeve{sleeveNames.length === 1 ? "" : "s"} ({sleeveNames.join("; ")}). Each is shown at its proposed balance as Other / unclassified; its underlying asset-class exposure is not broken out in this document. Manager, strategy, minimum and fee details are advisor-entered and are not a verified offering, appointment or eligibility determination.
+          </p>
+        )}
         <div className="pdf-grid-2" style={{ marginTop: 12 }}>
           <div className="pdf-card">
             <div className="pdf-stat-label">Recommendations included</div>

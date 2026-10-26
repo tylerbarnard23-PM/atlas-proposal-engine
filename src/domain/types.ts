@@ -502,6 +502,74 @@ export interface ProposedDestination {
   assetClass: AssetClass;
   accountId: string;
   currency: CurrencyCode;
+  /** D2a: a manager/strategy sleeve, pinned to one strategy revision. Its terms are copied from that immutable revision. */
+  strategy?: SleeveStrategyRef;
+}
+
+/**
+ * The strategy revision a proposed sleeve is pinned to (D2a), with the terms
+ * the engine and readiness need. The minimum is in the destination's currency;
+ * null means it wasn't supplied (never zero, never "eligible").
+ */
+export interface SleeveStrategyRef {
+  id: string;
+  revision: number;
+  manager: string;
+  name: string;
+  minimum: number | null;
+  /** The advisor's recorded review of an unsupplied minimum/eligibility; not a statement that eligibility passed. */
+  review?: { note: string; recordedAt: string };
+}
+
+/** A fee component of a strategy (D2a), as supplied. Components are listed, never summed into an all-in figure. */
+export interface StrategyFee {
+  kind: "manager" | "platform" | "advisor" | "instrument" | "all_in";
+  /** Annual rate in basis points. */
+  rateBps: number;
+  /** What the rate applies to, as supplied (e.g. "assets in the sleeve"). */
+  basis: string;
+}
+
+/**
+ * One immutable revision of a manager/strategy definition (D2a). Synthetic or
+ * advisor-entered; it is not a verified offering. Unknowns stay null/empty.
+ */
+export interface StrategyRevision {
+  id: string;
+  revision: number;
+  manager: string;
+  name: string;
+  /** e.g. "Separately managed account", "ETF model". */
+  strategyType: string;
+  currency: CurrencyCode;
+  /** Minimum commitment in `currency`, or null when not supplied. */
+  minimum: number | null;
+  /** Supplied fee components; empty when none were supplied. */
+  fees: StrategyFee[];
+  /** Supplied asset-class mix in percent, with its source and date, or null when unknown. Never inferred from a name. */
+  mix: { weights: Partial<Record<AssetClass, number>>; source: string; asOf: string } | null;
+  provenance: "synthetic" | "custom";
+  createdAt: string;
+}
+
+/**
+ * One immutable revision of a saved model (D2a): asset-class target weights,
+ * or a strategy allocation (strategy revisions plus cash). Percentages; the
+ * remainder up to 100 is explicitly unallocated. A model never creates trades.
+ */
+export interface ModelRevision {
+  id: string;
+  revision: number;
+  name: string;
+  kind: "asset_class" | "strategy";
+  /** asset_class models: weights by asset class. */
+  assetWeights?: Partial<Record<AssetClass, number>>;
+  /** strategy models: weights by pinned strategy revision. */
+  strategyWeights?: { strategyId: string; strategyRevision: number; weight: number }[];
+  /** strategy models: the weight held as eligible cash. */
+  cashWeight?: number;
+  provenance: "synthetic" | "custom";
+  createdAt: string;
 }
 
 // Saved workspaces before v5 calculated recommendation amounts in whatever
@@ -906,6 +974,8 @@ export interface WorkingDraft {
   /** Desired weights by asset class, in percent of the selected scope. A target never creates a trade. */
   targets: Partial<Record<AssetClass, number>>;
   inputBasis: DraftInputBasis | null;
+  /** D2a: the model revision this alternative is pinned to, or null. Newer revisions are never followed automatically. */
+  model?: { id: string; revision: number } | null;
   createdAt: string;
   updatedAt: string;
 }

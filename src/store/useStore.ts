@@ -16,11 +16,13 @@ import type {
   Holding,
   Insight,
   MarketDataResult,
+  ModelRevision,
   PdfGenerationJob,
   Proposal,
   ProposalSection,
   Recommendation,
   SourceDocument,
+  StrategyRevision,
   WorkingDraft,
 } from "@/domain/types";
 import { SEED_ACCOUNTS } from "@/data/seedAccounts";
@@ -40,10 +42,12 @@ import { deskActions, draftBasisInputs, legacyWorkingDraft, needsIntentRestateme
 import { LEGACY_SAMPLE_FIRM_NAME } from "@/domain/branding";
 import type { ImportedWorkspace } from "@/ingestion/documents/toWorkspace";
 import type { RestoredWorkspace } from "@/engines/workspaceBackup";
+import { findRevision, modelProblems, nextRevision, strategyProblems } from "@/engines/strategyProposals";
+import { UMA_MODELS, UMA_STRATEGIES } from "@/data/umaStory";
 
 /** The browser storage key every saved workspace lives under; never renamed. */
 export const STORAGE_KEY = "atlas-proposal-engine";
-export const STORE_VERSION = 8;
+export const STORE_VERSION = 9;
 
 export interface AtlasState {
   client: ClientProfile;
@@ -68,6 +72,9 @@ export interface AtlasState {
   workingDraft: WorkingDraft;
   /** D2: the other named alternatives (inactive drafts), each with its own actions. */
   alternatives: WorkingDraft[];
+  /** D2a: the library of immutable strategy and model revisions (append-only; kept when a new client starts). */
+  strategies: StrategyRevision[];
+  models: ModelRevision[];
   hasHydrated: boolean;
 }
 
@@ -147,6 +154,21 @@ export interface AtlasActions {
   /** Makes another alternative the active (editable) draft. */
   setActiveDraft: (id: string) => void;
   renameActiveDraft: (name: string) => void;
+  // D2a. The library is append-only: an edit saves the next revision of the same ID.
+  /** Saves a strategy (a new ID) or the next revision of `input.id`. Returns why it can't be saved, or [] when saved. */
+  saveStrategy: (input: Omit<StrategyRevision, "id" | "revision" | "createdAt"> & { id?: string }) => string[];
+  /** Saves a model (a new ID) or the next revision of `input.id`. Returns why it can't be saved, or [] when saved. */
+  saveModel: (input: Omit<ModelRevision, "id" | "revision" | "createdAt"> & { id?: string }) => string[];
+  /** Adds the synthetic example strategies and models that aren't already in the library. */
+  addSyntheticLibrary: () => void;
+  /**
+   * Pins the active alternative to a model revision (null unpins). An
+   * asset-class model sets the draft's targets; neither kind creates actions
+   * or approvals. A newer revision is never followed automatically.
+   */
+  pinModel: (model: { id: string; revision: number } | null) => void;
+  /** Records the advisor's review of a sleeve whose minimum wasn't supplied. A review, not verified eligibility. */
+  recordSleeveReview: (recommendationId: string, note: string) => void;
 }
 
 function initialProposal(): Proposal {
@@ -185,6 +207,8 @@ const seedState = (): AtlasState => ({
   fxConfirmation: null,
   workingDraft: newWorkingDraft(new Date().toISOString()),
   alternatives: [],
+  strategies: [],
+  models: [],
   hasHydrated: false,
 });
 
@@ -238,6 +262,8 @@ const blankState = (): AtlasState => {
     fxConfirmation: null,
     workingDraft: newWorkingDraft(now),
     alternatives: [],
+    strategies: [],
+    models: [],
     hasHydrated: true,
   };
 };
@@ -315,6 +341,12 @@ export function migrateAtlasState(persisted: unknown, version: number): AtlasSta
   // yet). Nothing existing changes. Idempotent.
   if (version < 8 && state && !Array.isArray(state.alternatives)) {
     state.alternatives = [];
+  }
+  // v9 (D2a): an empty strategy/model library; no alternative is pinned to a
+  // model (an absent pin reads as none). Nothing existing changes. Idempotent.
+  if (version < 9 && state) {
+    if (!Array.isArray(state.strategies)) state.strategies = [];
+    if (!Array.isArray(state.models)) state.models = [];
   }
   return state;
 }
@@ -507,7 +539,8 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
       startNewClient: () =>
         set((s) => {
           const fresh = blankState();
-          return { ...fresh, advisor: s.advisor, proposal: { ...fresh.proposal, advisorId: s.advisor.id } };
+          // The strategy/model library is the advisor's reference data, kept like the firm.
+          return { ...fresh, advisor: s.advisor, strategies: s.strategies, models: s.models, proposal: { ...fresh.proposal, advisorId: s.advisor.id } };
         }),
       loadImportedEngagement: (imported) =>
         set((s) => {
@@ -516,6 +549,8 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
           return {
             ...fresh,
             advisor: s.advisor,
+            strategies: s.strategies,
+            models: s.models,
             client: { ...fresh.client, fullName: name, householdName: name },
             accounts: imported.accounts,
             holdings: imported.holdings,
@@ -585,7 +620,10 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
           const groupIds = new Map<string, string>();
           const copies = source.map((r) => {
             const linked = r.linked ? { ...r.linked, groupId: groupIds.get(r.linked.groupId) ?? (groupIds.set(r.linked.groupId, safeId("grp")), groupIds.get(r.linked.groupId)!) } : undefined;
-            const copy: Recommendation = { ...r, id: safeId("rec"), status: "draft", approvedByAdvisor: false, includeInPdf: false, rejectionReason: undefined, rejectedAt: undefined, createdAt: now, updatedAt: now, ...(linked ? { linked } : {}) };
+            // D2a: a sleeve's recorded minimum review is this alternative's decision, like approval; the copy starts without it.
+            const strategy = r.destination?.strategy;
+            const destination = strategy?.review ? { ...r.destination!, strategy: { id: strategy.id, revision: strategy.revision, manager: strategy.manager, name: strategy.name, minimum: strategy.minimum } } : r.destination;
+            const copy: Recommendation = { ...r, id: safeId("rec"), status: "draft", approvedByAdvisor: false, includeInPdf: false, rejectionReason: undefined, rejectedAt: undefined, createdAt: now, updatedAt: now, ...(linked ? { linked } : {}), ...(destination ? { destination } : {}) };
             return copy;
           });
           const copy: WorkingDraft = { ...s.workingDraft, id: safeId("draft"), name: name.trim() || `Alternative ${s.alternatives.length + 2}`, memberIds: copies.map((r) => r.id), createdAt: now, updatedAt: now };
@@ -599,6 +637,49 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
           return { workingDraft: target, alternatives: [...s.alternatives.filter((d) => d.id !== id), s.workingDraft] };
         }),
       renameActiveDraft: (name) => set((s) => (name.trim() ? { workingDraft: { ...s.workingDraft, name: name.trim(), updatedAt: new Date().toISOString() } } : {})),
+      saveStrategy: (input) => {
+        const s = get();
+        if (input.id && !s.strategies.some((x) => x.id === input.id)) return [`Strategy ${input.id} isn't in the library.`];
+        const id = input.id ?? safeId("str");
+        const rev: StrategyRevision = { ...input, id, revision: nextRevision(s.strategies, id), createdAt: new Date().toISOString() };
+        const problems = strategyProblems(rev);
+        if (problems.length === 0) set({ strategies: [...s.strategies, rev] });
+        return problems;
+      },
+      saveModel: (input) => {
+        const s = get();
+        if (input.id && !s.models.some((x) => x.id === input.id)) return [`Model ${input.id} isn't in the library.`];
+        const id = input.id ?? safeId("mdl");
+        const rev: ModelRevision = { ...input, id, revision: nextRevision(s.models, id), createdAt: new Date().toISOString() };
+        const problems = modelProblems(rev, s.strategies);
+        if (problems.length === 0) set({ models: [...s.models, rev] });
+        return problems;
+      },
+      addSyntheticLibrary: () =>
+        set((s) => ({
+          strategies: [...s.strategies, ...UMA_STRATEGIES.filter((x) => !findRevision(s.strategies, x.id, x.revision))],
+          models: [...s.models, ...UMA_MODELS.filter((x) => !findRevision(s.models, x.id, x.revision))],
+        })),
+      pinModel: (model) =>
+        set((s) => {
+          if (!model) return draftChange(s, { model: null });
+          const m = findRevision(s.models, model.id, model.revision);
+          if (!m) return {};
+          return draftChange(s, { model: { id: m.id, revision: m.revision }, ...(m.kind === "asset_class" ? { targets: { ...m.assetWeights } } : {}) });
+        }),
+      recordSleeveReview: (recommendationId, note) =>
+        set((s) => {
+          const text = note.trim();
+          if (!text) return {};
+          const now = new Date().toISOString();
+          return {
+            recommendations: s.recommendations.map((r) =>
+              r.id === recommendationId && r.destination?.strategy && !r.relatedHoldingId
+                ? { ...r, destination: { ...r.destination, strategy: { ...r.destination.strategy, review: { note: text, recordedAt: now } } }, updatedAt: now }
+                : r
+            ),
+          };
+        }),
       recordDraftInputs: () => set((s) => draftChange(s, {})),
       restoreWorkspace: (next) => {
         const storage = typeof window !== "undefined" ? window.localStorage : undefined;

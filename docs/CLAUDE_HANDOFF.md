@@ -1,6 +1,6 @@
 # Handoff
 
-## Current checkpoint — 26 October 2026: D2 released; D2a plan reconciled and merged (PR #74); licensing notice merged (PR #77)
+## Current checkpoint — 26 October 2026: D2a implemented, in review (PR #79); D2 released
 
 - **D2 released:** PR #75 merged pinned to reviewed head `5b0f8b1082c87919542c8b67f08ac8e69f242b8c` as **`073049ff526a58b0ab14bc05a6bf640ab80c5cb8`**. Main CI run 40204437975 passed: 466 passed, 2 private-PDF skips (468), eval 2/2, build. GitHub records a successful Production deployment for `073049f`. A synthetic production smoke passed; it is recorded on [PR #75](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/75) and [#36](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/36), and the browser workspace was restored byte-identical. It checked:
   - 50/40/10 for a funded replacement;
@@ -18,7 +18,20 @@
   - v7/v6 backups upgrade strictly.
 - **Licensing:** PR #77 (merged `7e1c1c4`) added the historical MIT notice, the corrected README and a rights-verification checklist ([LICENSING.md](../LICENSING.md), [status](LICENSING_STATUS.md)). It makes no legal-clearance claim; the checklist is still open.
 - **Development models:** Sonnet 5.5 for routine work; Opus 5.5 at High effort for financial/domain, migration and security decisions. This is development guidance only, never Atlas's runtime model or API settings.
-- **Next:** implement **D2a model/manager proposals** (#73) at Opus 5.5 High from [MODEL_AND_MANAGER_PROPOSALS.md](roadmap/MODEL_AND_MANAGER_PROPOSALS.md), on the D2 contracts above, then D3 review/presentation, D4 agent evidence, D5 publication. Read the [delivery plan](roadmap/DEMO_DELIVERY_PLAN.md), the [command playbook](roadmap/CLAUDE_COMMANDS.md) and only the relevant contracts.
+- **D2a in review: PR #79** (`feat/d2a-model-manager-proposals`, built from main `9c99d63`). Not merged or deployed. The contract-impact note and decisions are on [#73](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/73#issuecomment-6417742543).
+  - **Library:** append-only `strategies` and `models`, each identified by `(id, revision)` and immutable. `WorkingDraft.model` pins one revision and never follows a newer one; an asset-class model sets targets.
+  - **Sleeves:** proposed-only destinations with `destination.strategy` pinned (asset class `custom`, balance only). A plan's funded purchases are one D2 linked unit from the designated cash, applied whole or blocked.
+  - **Minimums:** a known minimum is enforced in the engine. An unsupplied minimum blocks the new readiness check `strategy_terms` until the advisor records a review.
+  - **Views:** look-through exposure keeps unknown mixes unknown; fees are listed by component and never summed.
+  - **Persistence:** store and backup v9, with strict v8/v7/v6 upgrades.
+  - **Evidence:** in the PR.
+  - **Review fixes, round 1 (after `d1c530d`; see the PR for the exact head):**
+    - Sleeve amounts and minimums are compared in the sleeve's own currency, using the evaluator's `DeskPosition.proposedNative`. Preview cash is labelled in the reporting currency.
+    - A pending plan preview is bound to its alternative, model revision, account and amounts (`pendingPlanKey`), is recomputed from current inputs, and is set aside when stale. Revision forms are keyed per definition.
+    - Minimum reviews live in a pin-independent "Sleeve actions" list (`sleeveRows`) covering this alternative's and every approved sleeve.
+    - Purchase-only units are called "Linked purchase", not "Linked replacement".
+  - **Review fixes, round 2 (after `5d926f2`; see the PR for the exact head):** sleeve rows read the shared evaluator's result for the alternative that owns each action (the page's per-alternative draft results; the approved result only for approved actions in no alternative), never the page's Draft/Approved view, because destination IDs are shared. Purchases keep their own currency, the minimum is assessed only against the funded commitment, and left-out actions show their reason.
+- **Next:** Codex reviews PR #79; merge only on the owner's pinned approval. Then D3 (review once, present consistently), which captures the D2a revisions, sleeves and exposure coverage.
 - **D2a scope:** versioned model targets and funded manager/strategy sleeves, with known minimums and fees and explicit unknown exposures. Sleeves are funded through D2's eligible cash, reserves (in their stated currency) and atomic units. This is proposal design, not UMA operations or execution.
 - **Open follow-up:** #76 (a reserve breach caused by a legacy action can leave out and blame a cash-adding replacement). It is not part of D2a.
 - **Limitations carried forward:**
@@ -26,7 +39,8 @@
   - alternatives can't be deleted;
   - there is no reserve conversion helper;
   - the comparison has no history;
-  - approved snapshots and presentation are D3.
+  - approved snapshots and presentation are D3;
+  - D2a: no manager feeds or verified offerings, no automatic sales to fund a plan, no fee aggregation, no nested models, and library entries can't be deleted; sleeves show as Other / unclassified in the existing grid and PDF.
 
   All 25 R-plans remain Planned or partial; no scope issue closes.
 - **Preserved:** accepted values, FX and source dates, every readiness and final-PDF gate, legacy recommendation effects, #59 privacy, backup and agent requirements.

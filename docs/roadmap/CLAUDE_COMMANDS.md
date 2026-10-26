@@ -53,11 +53,11 @@ Stop for Codex review with exact head, checks, preview association, remaining li
 
 ## Active sequencing: D2 → D2a → D3 → D4 → D5
 
-D1 (PR #72, `0381db1`) and D2 (PR #75, `073049f`) are released; the D1 command above and the D1/D2 summaries below are historical, so do not rerun them. **Next implementation: D2a**, the owner-approved [model/manager proposal slice](MODEL_AND_MANAGER_PROPOSALS.md) tracked in #73, built on D2's delivered contracts and followed by D3–D5. D2a is planned, not implemented. The handoff holds the current checkpoint.
+D1 (PR #72, `0381db1`) and D2 (PR #75, `073049f`) are released; the D1 command above and the D1/D2 summaries below are historical, so do not rerun them. **D2a is in review (PR #79)**: the owner-approved [model/manager proposal slice](MODEL_AND_MANAGER_PROPOSALS.md) tracked in #73, built on D2's delivered contracts and followed by D3–D5. D3 is next after its review/release. The handoff holds the current checkpoint.
 
 ## Package prompt summaries
 
-D1 and D2 are delivered (historical, kept for reference). D2a is the next implementation. D3–D5 follow once D2a is released.
+D1 and D2 are delivered (historical, kept for reference). D2a is implemented and in review (PR #79). D3–D5 follow once D2a is released.
 
 - **D2 — delivered (PR #75), historical — Opus 5.5 High:** use D1's delivered contracts; implement supported new destination/atomic replacement, explicit eligible funding/reserve enforcement and two independent named alternatives. Avoid a broad catalog, optimizer and unsupported transfer workflows. Stop at one reviewed package/justified split.
 - **D2a — Opus 5.5 High:** after D2, implement [MODEL_AND_MANAGER_PROPOSALS.md](MODEL_AND_MANAGER_PROPOSALS.md): a small versioned model library, funded manager/strategy sleeves, known minimums/fees and explicit unknown exposure. Keep sleeve grouping separate from asset-class exposure; no double-counting or implicit trades. Use D2's delivered contracts (see the plan's "Delivered D2 contracts" section): designated eligible cash with no fallback, `reserveCurrency`, declared unresolved funding, atomic units and independent alternatives, plus real migrations and supported backup upgrades. Follow the committed synthetic fixtures and stop for Codex review; no manager feeds, execution or UMA administration.

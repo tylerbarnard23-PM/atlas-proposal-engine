@@ -167,9 +167,9 @@ describe("export", () => {
     richWorkspace(m);
     const b = JSON.parse(exportText(m));
     expect(Object.keys(b).sort()).toEqual(["engagement", "exportedAt", "firm", "format", "notice", "omitted", "schemaVersion", "workspaceVersion"]);
-    expect(b).toMatchObject({ format: "atlas-workspace-backup", schemaVersion: 1, workspaceVersion: 8, exportedAt: NOW.toISOString() });
+    expect(b).toMatchObject({ format: "atlas-workspace-backup", schemaVersion: 1, workspaceVersion: 9, exportedAt: NOW.toISOString() });
     expect(Object.keys(b.engagement).sort()).toEqual(
-      ["accounts", "client", "dismissedInsights", "fxConfirmation", "fxRates", "fxRefresh", "holdings", "pdfHistory", "proposal", "proposalSections", "recommendations", "sourceDocuments", "unresolvedLinks", "workingDraft", "alternatives", "unresolvedFunding"].sort()
+      ["accounts", "client", "dismissedInsights", "fxConfirmation", "fxRates", "fxRefresh", "holdings", "pdfHistory", "proposal", "proposalSections", "recommendations", "sourceDocuments", "unresolvedLinks", "workingDraft", "alternatives", "unresolvedFunding", "strategies", "models"].sort()
     );
     expect(b.engagement.unresolvedLinks).toEqual([]); // every recommendation link resolves in this workspace
     expect(Object.keys(b.firm)).toEqual(["advisor"]);
@@ -295,7 +295,7 @@ describe("round trip", () => {
     if (!parsed.ok) throw new Error(parsed.errors.join("; "));
     m.useAtlasStore.getState().restoreWorkspace(m.restoredState(parsed.backup, { advisor: m.useAtlasStore.getState().advisor, disclosures: m.DISCLOSURE_LIBRARY }, { replaceFirm: false }));
     const saved = JSON.parse(storage.getItem(KEY)!);
-    expect(saved.version).toBe(8); // the existing key and store version (v8: alternatives)
+    expect(saved.version).toBe(9); // the existing key and store version (v9: strategy/model library)
     // A fresh page: a new store module hydrates from the same key.
     vi.resetModules();
     const fresh = await load();
@@ -331,7 +331,7 @@ describe("restore is validated in full before anything is written", () => {
     reject(m, "{ not json", /isn't valid JSON/);
     reject(m, JSON.stringify({ hello: "world" }), /not an Atlas workspace backup/);
     reject(m, mutate(good, (b) => (b.schemaVersion = 2)), /newer version of Atlas/);
-    reject(m, mutate(good, (b) => (b.workspaceVersion = 9)), /newer version of Atlas/);
+    reject(m, mutate(good, (b) => (b.workspaceVersion = 10)), /newer version of Atlas/);
     reject(m, mutate(good, (b) => (b.workspaceVersion = 5)), /not supported/);
     reject(m, mutate(good, (b) => (b.schemaVersion = "1")), /not supported/);
     reject(m, " ".repeat(m.BACKUP_MAX_BYTES + 1), /larger than/);

@@ -468,7 +468,7 @@ describe("the sample workspace is unchanged when every rate is present", () => {
     const readiness = evaluateWorkspaceReadiness({ sourceDocuments: [], client: SEED_CLIENT, advisor: SEED_ADVISOR, accounts: SEED_ACCOUNTS, holdings, recommendations: approved, disclosures: DISCLOSURE_LIBRARY, fxRates: SEED_FX_RATES });
     // The checks added since (holdings_valued here, imports_complete in #29,
     // recommendation_currency in #24, recommendation_links in the PR #66 review) pass; every pre-existing check is unchanged.
-    const added = ["holdings_valued", "imports_complete", "recommendation_currency", "recommendation_links", "funding_reserves", "approved_alternative"]; // the last two: D2
+    const added = ["holdings_valued", "imports_complete", "recommendation_currency", "recommendation_links", "funding_reserves", "approved_alternative", "strategy_terms"]; // D2: funding_reserves and approved_alternative; D2a: strategy_terms
     expect(readiness.filter((c) => added.includes(c.code)).every((c) => c.passed)).toBe(true);
     // #26: "Exchange rates current" intentionally fails for the sample's stale rates in use.
     expect(readiness.find((c) => c.code === "fx_current")).toEqual({
