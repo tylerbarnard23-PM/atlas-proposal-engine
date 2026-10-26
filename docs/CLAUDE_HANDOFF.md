@@ -71,6 +71,10 @@
 - **Next step:** Codex re-reviews PR #75 at the review head before any owner-authorized merge. D2a and D3 have not started.
 - **Preserved:** accepted values/FX/source dates, all existing readiness and final-PDF gates, legacy recommendation effects, v6/v7 compatibility, #59 and agent requirements. All 25 IDs remain Planned.
 
+## Licensing documentation correction — 26 October 2026
+
+See [LICENSING.md](../LICENSING.md) and [rights-verification status](LICENSING_STATUS.md). Current blanket open-source wording is removed; historical MIT evidence/grants and third-party rights are preserved. Ownership/exclusivity verification remains open and requires qualified review; keep private supporting documents outside Git. No application behavior or delivery sequencing changed.
+
 ## Working agreements
 
 - One active implementation branch/coherent task. Preserve other files, the stash and existing work; do not reset or clean. If the previous R11 command already created work, reconcile/reuse it.
