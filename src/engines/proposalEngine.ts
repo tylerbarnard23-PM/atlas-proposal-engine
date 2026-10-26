@@ -686,6 +686,25 @@ function applyAtomically(current: Holding[], recs: Recommendation[], accounts: A
       }
       continue;
     }
+    // D2a: a sleeve's known minimum applies to its actual proposed commitment
+    // (the destination's value in its own currency). Below it, the latest unit
+    // buying into that sleeve is left out whole; never presented as completed.
+    const below = new Map<string, { name: string; minimum: number; value: number; currency: CurrencyCode }>();
+    for (const r of active) {
+      const s = r.destination?.strategy;
+      if (!s || r.relatedHoldingId || s.minimum == null || below.has(r.destination!.id)) continue;
+      const h = core.holdings.find((x) => x.id === r.destination!.id) as MaybeNormalized | undefined;
+      const value = h?.valuation?.status === "valued" ? h.valuation.amount : 0;
+      if (value + 0.005 < s.minimum) below.set(r.destination!.id, { name: `${s.manager} — ${s.name}`, minimum: s.minimum, value, currency: r.destination!.currency });
+    }
+    const intoBelow = (id: string) => units.get(id)!.some((r) => r.destination && below.has(r.destination.id));
+    const short = [...order].reverse().find((id) => !drop.has(id) && intoBelow(id));
+    if (short) {
+      const legs = units.get(short)!;
+      const m = below.get(legs.find((r) => r.destination && below.has(r.destination.id))!.destination!.id)!;
+      block(short, `${legs.length > 1 ? "Linked purchase" : "Purchase"} not applied: ${m.name} would hold ${m.currency} ${amountText(m.value)}, below its ${m.currency} ${amountText(m.minimum)} minimum.`, accountOf(legs[0]));
+      continue;
+    }
     const breaches = reserveStatus(core.holdings, accounts).filter((x) => x.breached);
     const draws = (id: string) => units.get(id)!.some((r) => PURCHASE.has(r.type) && breaches.some((b) => b.accountId === accountOf(r)));
     const offender = [...order].reverse().find((id) => !drop.has(id) && draws(id));

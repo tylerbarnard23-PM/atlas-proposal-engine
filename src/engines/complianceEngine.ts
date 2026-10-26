@@ -18,6 +18,7 @@ import { missingPairs, valuationSummary, type ValuationSummary } from "./valuati
 import { describeImportIssue, importIssues, type ImportIssue } from "./importCompleteness";
 import { openCurrencyReviews } from "./recommendationAmounts";
 import { describeFreshness, fxFreshness, type FxFreshness } from "./fxPolicy";
+import { unreviewedSleeveTerms } from "./strategyProposals";
 
 export interface ReadinessInputs {
   client: ClientProfile;
@@ -46,6 +47,8 @@ export interface ReadinessInputs {
   reserveBreaches?: ReserveStatus[];
   /** D2: names of the alternatives that hold approved actions, when more than one. */
   approvedAlternatives?: string[];
+  /** D2a: approved sleeve purchases whose minimum wasn't supplied and has no recorded advisor review. */
+  unreviewedSleeveTerms?: { title: string; manager: string; name: string }[];
 }
 
 export function evaluateReadiness(inp: ReadinessInputs): ComplianceCheck[] {
@@ -186,6 +189,18 @@ export function evaluateReadiness(inp: ReadinessInputs): ComplianceCheck[] {
     passed: mixed.length <= 1,
     detail: mixed.length > 1 ? `Approved actions are in ${mixed.join(", ")}. Approve one alternative's actions for the PDF.` : undefined,
   });
+  // D2a: an unsupplied strategy minimum is reviewed by the advisor before the
+  // final PDF; the review is recorded as such, never as verified eligibility.
+  const terms = inp.unreviewedSleeveTerms ?? [];
+  checks.push({
+    code: "strategy_terms",
+    label: "Strategy minimums supplied or reviewed",
+    passed: terms.length === 0,
+    detail:
+      terms.length > 0
+        ? `${terms.map((t) => `${t.manager} — ${t.name}`).join("; ")}: minimum not supplied. Record the advisor's review on the sleeve in the Allocation desk.`
+        : undefined,
+  });
   const unresolved = inp.unresolvedConversions ?? [];
   if (inp.fxFreshness) {
     checks.push({
@@ -281,6 +296,7 @@ export function evaluateWorkspaceReadiness(ws: WorkspaceReadinessInputs): Compli
     blockedUnits: proposed.blocked,
     reserveBreaches: reserveStatus(proposed.holdings, ws.accounts).filter((r) => r.breached),
     approvedAlternatives,
+    unreviewedSleeveTerms: unreviewedSleeveTerms(approved),
     cashShortfalls: cashShortfallsOf(proposed.holdings, ws.accounts, fx),
     unresolvedConversions: proposed.unresolved,
     valuation: valuationSummary(holdings),

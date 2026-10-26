@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AdvisorProfile, Disclosure, Holding, Recommendation, SourceDocument, WorkingDraft } from "@/domain/types";
+import type { AdvisorProfile, Disclosure, Holding, ModelRevision, Recommendation, SourceDocument, StrategyRevision, WorkingDraft } from "@/domain/types";
 import { checkLogoDataUrl, isValidAccentColor } from "@/domain/branding";
 import { normalizeHoldings } from "./normalizationEngine";
 import { valuationSummary } from "./valuationTotals";
@@ -7,6 +7,7 @@ import { fxFreshness } from "./fxPolicy";
 import { completenessOf } from "./importCompleteness";
 import { linksNeedingReview, unresolvedFundingOf, unresolvedRecommendationLinks } from "./recommendationLinks";
 import { legacyWorkingDraft } from "./allocationDesk";
+import { findRevision, modelProblems, strategyProblems } from "./strategyProposals";
 import { localCalendarDay } from "@/utils/formatting";
 
 // Workspace backup and restore (R23a, #55)
@@ -25,9 +26,9 @@ import { localCalendarDay } from "@/utils/formatting";
 export const BACKUP_FORMAT = "atlas-workspace-backup";
 export const BACKUP_SCHEMA_VERSION = 1;
 /** The saved-workspace schema (store version) the records follow. */
-export const BACKUP_WORKSPACE_VERSION = 8;
+export const BACKUP_WORKSPACE_VERSION = 9;
 /** Older workspace versions a backup may have, upgraded on restore. */
-export const SUPPORTED_OLDER_WORKSPACE_VERSIONS = [6, 7] as const;
+export const SUPPORTED_OLDER_WORKSPACE_VERSIONS = [6, 7, 8] as const;
 /** The application's backup limit (UTF-8 bytes of the file); it also bounds a file read before validation. */
 export const BACKUP_MAX_BYTES = 20 * 1024 * 1024;
 
@@ -254,8 +255,23 @@ function schemas(strict: boolean) {
     sourceInsightKey: text().optional(),
     rejectionReason: text().optional(),
     rejectedAt: date.optional(),
-    // v8 (D2): a proposed-only investment, and linked-replacement legs.
-    destination: obj({ id, name: text(), assetClass, accountId: id, currency }).optional(),
+    // v8 (D2): a proposed-only investment, and linked-replacement legs;
+    // v9 (D2a): a sleeve destination pins its strategy revision and terms.
+    destination: obj({
+      id,
+      name: text(),
+      assetClass,
+      accountId: id,
+      currency,
+      strategy: obj({
+        id,
+        revision: z.number().int().min(1),
+        manager: text(),
+        name: text(),
+        minimum: finite.min(0).nullable(),
+        review: obj({ note: text(), recordedAt: date }).optional(),
+      }).optional(),
+    }).optional(),
     linked: obj({ groupId: id, legs: z.number().int().min(1) }).optional(),
     createdAt: date,
     updatedAt: date,
@@ -387,7 +403,7 @@ function schemas(strict: boolean) {
   // v7 (D1): the working draft. Targets are percentages of the scope.
   const inputValue = obj({ holdingId: id, accountId: id, amount: finite, currency, sourceKind: text(), date: dateText.nullable() });
   const inputRate = obj({ base: currency, quote: currency, rate: finite, asOf: text(), source: text() });
-  const workingDraft = obj({
+  const workingDraftV8 = obj({
     id,
     name: text(),
     scopeAccountIds: z.array(id).nullable(),
@@ -397,14 +413,52 @@ function schemas(strict: boolean) {
     createdAt: date,
     updatedAt: date,
   });
+  // v9 (D2a): the model revision an alternative is pinned to.
+  const workingDraft = workingDraftV8.extend({ model: obj({ id, revision: z.number().int().min(1) }).nullable().optional() });
   // v8 (D2): inactive alternatives, each a working draft of its own actions.
-  const engagementV7 = engagement.extend({ workingDraft });
+  const engagementV7 = engagement.extend({ workingDraft: workingDraftV8 });
   // Removed or reclassified eligible cash and removed destination accounts
   // are declared like other removed links, so restore can tell them from corruption.
+  const recommendationV8 = recommendation.extend({ destination: obj({ id, name: text(), assetClass, accountId: id, currency }).optional() });
   const engagementV8 = engagementV7.extend({
-    alternatives: z.array(workingDraft),
+    recommendations: z.array(recommendationV8),
+    alternatives: z.array(workingDraftV8),
     unresolvedLinks: z.array(obj({ recommendationId: id, holdingId: id.optional(), accountId: id.optional(), destinationAccountId: id.optional() })),
     unresolvedFunding: z.array(obj({ accountId: id, cashHoldingId: id, reason: z.enum(["removed", "not_cash", "reserve_currency"]) })),
+  });
+  // v9 (D2a): the library of immutable strategy and model revisions.
+  const revision = z.number().int().min(1);
+  const provenance = z.enum(["synthetic", "custom"]);
+  const strategyRevision = obj({
+    id,
+    revision,
+    manager: text(),
+    name: text(),
+    strategyType: text(),
+    currency,
+    minimum: finite.min(0).nullable(),
+    fees: z.array(obj({ kind: z.enum(["manager", "platform", "advisor", "instrument", "all_in"]), rateBps: finite.min(0), basis: text() })),
+    mix: obj({ weights: z.record(assetClass, finite.min(0).max(100)), source: text(), asOf: text() }).nullable(),
+    provenance,
+    createdAt: date,
+  });
+  const modelRevision = obj({
+    id,
+    revision,
+    name: text(),
+    kind: z.enum(["asset_class", "strategy"]),
+    assetWeights: z.record(assetClass, finite.min(0).max(100)).optional(),
+    strategyWeights: z.array(obj({ strategyId: id, strategyRevision: revision, weight: finite.min(0).max(100) })).optional(),
+    cashWeight: finite.min(0).max(100).optional(),
+    provenance,
+    createdAt: date,
+  });
+  const engagementV9 = engagementV8.extend({
+    recommendations: z.array(recommendation),
+    workingDraft,
+    alternatives: z.array(workingDraft),
+    strategies: z.array(strategyRevision),
+    models: z.array(modelRevision),
   });
   const envelopeOf = <E extends z.ZodTypeAny, V extends number>(e: E, version: V) =>
     obj({
@@ -417,15 +471,16 @@ function schemas(strict: boolean) {
       engagement: e,
       firm: obj({ advisor }),
     });
-  // Older envelopes validate their own records strictly, so a v6/v7 file can't carry v8 fields.
+  // Older envelopes validate their own records strictly, so an older file can't carry newer fields.
   const accountV7 = account.omit({ funding: true });
   const recommendationV7 = recommendation.omit({ destination: true, linked: true });
   const olderEngagement = engagement.extend({ accounts: z.array(accountV7), recommendations: z.array(recommendationV7) });
   return {
-    envelope: envelopeOf(engagementV8, BACKUP_WORKSPACE_VERSION),
-    envelopeV7: envelopeOf(olderEngagement.extend({ workingDraft }), 7),
+    envelope: envelopeOf(engagementV9, BACKUP_WORKSPACE_VERSION),
+    envelopeV8: envelopeOf(engagementV8, 8),
+    envelopeV7: envelopeOf(olderEngagement.extend({ workingDraft: workingDraftV8 }), 7),
     envelopeV6: envelopeOf(olderEngagement, 6),
-    engagement: engagementV8,
+    engagement: engagementV9,
     advisor,
   };
 }
@@ -475,6 +530,8 @@ export interface WorkspaceData {
   fxConfirmation: BackupEngagement["fxConfirmation"];
   workingDraft: WorkingDraft;
   alternatives: WorkingDraft[];
+  strategies: StrategyRevision[];
+  models: ModelRevision[];
 }
 
 /** The backup of a workspace at `now`. */
@@ -510,6 +567,8 @@ export function createBackup(state: WorkspaceData, now: Date): WorkspaceBackup {
     // leaves the draft (in the app it is just ignored, so Undo can restore it).
     workingDraft: resolvable(state.workingDraft),
     alternatives: state.alternatives.map(resolvable),
+    strategies: state.strategies,
+    models: state.models,
   };
   return {
     format: BACKUP_FORMAT,
@@ -625,12 +684,17 @@ export function parseBackup(text: string, opts: { disclosureIds: string[] }): Pa
     const v6 = STRICT.envelopeV6.safeParse(raw);
     if (!v6.success) return issues(v6.error);
     const e = v6.data.engagement;
-    backup = { ...v6.data, workspaceVersion: BACKUP_WORKSPACE_VERSION, engagement: { ...e, workingDraft: legacyWorkingDraft(e.recommendations as Recommendation[], v6.data.exportedAt), alternatives: [], unresolvedFunding: [] } } as WorkspaceBackup;
+    backup = { ...v6.data, workspaceVersion: BACKUP_WORKSPACE_VERSION, engagement: { ...e, workingDraft: legacyWorkingDraft(e.recommendations as Recommendation[], v6.data.exportedAt), alternatives: [], unresolvedFunding: [], strategies: [], models: [] } } as WorkspaceBackup;
   } else if (head.workspaceVersion === 7) {
-    // v7 → v8: no other alternatives, no funding rules or D2 actions yet.
+    // v7 → v9: no other alternatives, no funding rules, D2 actions or library yet.
     const v7 = STRICT.envelopeV7.safeParse(raw);
     if (!v7.success) return issues(v7.error);
-    backup = { ...v7.data, workspaceVersion: BACKUP_WORKSPACE_VERSION, engagement: { ...v7.data.engagement, alternatives: [], unresolvedFunding: [] } } as WorkspaceBackup;
+    backup = { ...v7.data, workspaceVersion: BACKUP_WORKSPACE_VERSION, engagement: { ...v7.data.engagement, alternatives: [], unresolvedFunding: [], strategies: [], models: [] } } as WorkspaceBackup;
+  } else if (head.workspaceVersion === 8) {
+    // v8 → v9: an empty strategy/model library; no alternative is pinned to a model.
+    const v8 = STRICT.envelopeV8.safeParse(raw);
+    if (!v8.success) return issues(v8.error);
+    backup = { ...v8.data, workspaceVersion: BACKUP_WORKSPACE_VERSION, engagement: { ...v8.data.engagement, strategies: [], models: [] } } as WorkspaceBackup;
   } else {
     const parsed = STRICT.envelope.safeParse(raw);
     if (!parsed.success) return issues(parsed.error);
@@ -702,6 +766,22 @@ function referenceErrors(e: BackupEngagement, disclosureIds: Set<string>): strin
     }
     for (const a of d.scopeAccountIds ?? []) if (!accounts.has(a)) errors.push(`${label}'s scope includes account ${a}, which isn't in the backup.`);
   }
+  // D2a: library revisions are unique and valid; every pin and sleeve refers
+  // to an existing revision, and a sleeve's pinned terms match that revision.
+  unique("strategy revision", e.strategies.map((s) => `${s.id}@${s.revision}`));
+  unique("model revision", e.models.map((m) => `${m.id}@${m.revision}`));
+  for (const s of e.strategies) for (const p of strategyProblems(s as StrategyRevision)) errors.push(`Strategy ${s.id} revision ${s.revision}: ${p}`);
+  for (const m of e.models) for (const p of modelProblems(m as ModelRevision, e.strategies as StrategyRevision[])) errors.push(`Model ${m.id} revision ${m.revision}: ${p}`);
+  for (const d of drafts) if (d.model && !findRevision(e.models, d.model.id, d.model.revision)) errors.push(`${d.name} is pinned to model ${d.model.id} revision ${d.model.revision}, which isn't in the backup.`);
+  for (const r of e.recommendations) {
+    const s = r.destination?.strategy;
+    if (!s) continue;
+    const def = findRevision(e.strategies, s.id, s.revision);
+    if (!def) errors.push(`Recommendation ${r.id} funds strategy ${s.id} revision ${s.revision}, which isn't in the backup.`);
+    else if (def.minimum !== s.minimum || def.currency !== r.destination!.currency || def.manager !== s.manager || def.name !== s.name) {
+      errors.push(`Recommendation ${r.id}'s sleeve terms don't match strategy ${s.id} revision ${s.revision}.`);
+    }
+  }
   // An eligible-cash rule either resolves or is declared unresolved, with the
   // reason the workspace itself gives (removed, or no longer a cash line).
   unique("unresolved funding for account", e.unresolvedFunding.map((f) => f.accountId));
@@ -764,6 +844,8 @@ export function restoredState(
     fxConfirmation: e.fxConfirmation,
     workingDraft: e.workingDraft as WorkingDraft,
     alternatives: e.alternatives as WorkingDraft[],
+    strategies: e.strategies as StrategyRevision[],
+    models: e.models as ModelRevision[],
     disclosures: current.disclosures,
     insights: [],
     marketDataByIdentifier: {},
