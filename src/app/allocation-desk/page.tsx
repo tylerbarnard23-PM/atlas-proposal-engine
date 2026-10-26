@@ -339,7 +339,7 @@ function Desk() {
       </Card>
 
       <SectionDivider>Models and manager sleeves</SectionDivider>
-      <ModelsAndSleeves d={d} holdings={holdings} fx={fx} />
+      <ModelsAndSleeves d={d} compared={compared} holdings={holdings} fx={fx} />
 
       <SectionDivider>Compare alternatives</SectionDivider>
       <Card>

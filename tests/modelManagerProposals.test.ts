@@ -447,9 +447,11 @@ describe("review fixes (PR #79)", () => {
     m.useAtlasStore.getState().pinModel({ id: model.id, revision: model.revision });
     return { e, model };
   }
-  const rows = (m: M, d = desk(m)) => {
+  const rows = (m: M) => {
     const s = m.useAtlasStore.getState();
-    return m.sleeveRows({ recommendations: s.recommendations, positions: d.positions, activeMemberIds: s.workingDraft.memberIds, alternatives: s.alternatives });
+    const drafts = [s.workingDraft, ...s.alternatives];
+    const compared = m.compareAlternatives({ holdings: normalized(m), accounts: s.accounts, recommendations: s.recommendations, drafts, fx: fx(m) });
+    return m.sleeveRows({ recommendations: s.recommendations, activeId: s.workingDraft.id, alternatives: drafts, results: new Map(compared.map((c) => [c.draft.id, c.result])), approved: desk(m, "approved") });
   };
 
   it("a EUR sleeve in a USD report: the commitment and its minimum are compared in EUR (40,000 funded meets 25,000)", async () => {
@@ -463,7 +465,7 @@ describe("review fixes (PR #79)", () => {
     const pos = d.positions.find((x) => x.proposedOnly)!;
     expect(pos.proposed).toBe(20_000); // reporting (USD)
     expect(pos.proposedNative).toEqual({ amount: 40_000, currency: "EUR" });
-    expect(rows(m, d)).toEqual([expect.objectContaining({ currency: "EUR", funded: 40_000, status: { kind: "met", minimum: 25_000 } })]);
+    expect(rows(m)).toEqual([expect.objectContaining({ currency: "EUR", funded: { amount: 40_000, currency: "EUR" }, status: { kind: "met", minimum: 25_000 } })]);
   });
 
   it("a pending preview is bound to its alternative, model revision, account and plan amounts", async () => {
@@ -513,5 +515,45 @@ describe("review fixes (PR #79)", () => {
     // Approvals and revision references are unchanged.
     const recs = m.useAtlasStore.getState().recommendations.filter((r) => r.destination?.strategy && r.approvedByAdvisor);
     expect(recs.map((r) => [r.destination!.strategy!.id, r.destination!.strategy!.revision])).toEqual([["str_equity_a", 1], ["str_fixed_b", 1], ["str_etf_c", 1]]);
+  });
+});
+
+describe("sleeve displays follow their own amounts and results (PR #79, round 2)", () => {
+  const rowsOf = (m: M) => {
+    const s = m.useAtlasStore.getState();
+    const drafts = [s.workingDraft, ...s.alternatives];
+    const compared = m.compareAlternatives({ holdings: normalized(m), accounts: s.accounts, recommendations: s.recommendations, drafts, fx: fx(m) });
+    return m.sleeveRows({ recommendations: s.recommendations, activeId: s.workingDraft.id, alternatives: drafts, results: new Map(compared.map((c) => [c.draft.id, c.result])), approved: desk(m, "approved") });
+  };
+
+  it("a EUR 20,000 purchase at EUR/USD 2 funds USD 40,000 of a USD sleeve: shown as EUR 20,000, and it meets the USD 25,000 minimum", async () => {
+    const m = await load();
+    story(m);
+    m.useAtlasStore.setState({ fxRates: m.useAtlasStore.getState().fxRates.map((r) => (r.base === "EUR" && r.quote === "USD" ? { ...r, rate: 2 } : r)) });
+    m.useAtlasStore.getState().renameActiveDraft("A");
+    const legs = purchases(m).map((r) => (r.destination!.id === A ? { ...r, currency: "EUR" as Holding["currency"], actionAmount: 20_000 } : r));
+    m.useAtlasStore.getState().addDraftEdit(legs);
+    approveAll(m);
+    expect(desk(m).blocked).toEqual([]); // the engine converts and applies it
+    m.useAtlasStore.getState().duplicateDraft("B"); // A is now another alternative; its approved sleeve is still listed
+    const a = rowsOf(m).find((r) => r.owner === "A" && r.destinationId === A)!;
+    expect(a).toMatchObject({ purchase: { amount: 20_000, currency: "EUR" }, funded: { amount: 40_000, currency: "USD" }, status: { kind: "met", minimum: 25_000 } });
+  });
+
+  it("A's approved USD 40,000 is never attributed to B, whose USD 20,000 commitment is blocked by the minimum, in any view", async () => {
+    const m = await load();
+    story(m);
+    m.useAtlasStore.getState().renameActiveDraft("A");
+    m.useAtlasStore.getState().addDraftEdit(purchases(m));
+    approveAll(m);
+    m.useAtlasStore.getState().duplicateDraft("B");
+    const bLeg = m.useAtlasStore.getState().recommendations.find((r) => m.useAtlasStore.getState().workingDraft.memberIds.includes(r.id) && r.destination?.id === A)!;
+    m.useAtlasStore.getState().upsertRecommendation({ ...bLeg, actionAmount: 20_000 });
+    // The approved view (A's actions) does hold USD 40,000 at the shared destination ID.
+    expect(desk(m, "approved").positions.find((p) => p.id === A)?.proposed).toBe(40_000);
+    const r = rowsOf(m);
+    const b = r.find((x) => x.owner === null && x.destinationId === A)!;
+    expect(b).toMatchObject({ approved: false, funded: { amount: 0, currency: "USD" }, status: null, blockedReason: expect.stringMatching(/below its USD 25,000 minimum/) });
+    expect(r.find((x) => x.owner === "A" && x.destinationId === A)).toMatchObject({ approved: true, funded: { amount: 40_000, currency: "USD" }, status: { kind: "met", minimum: 25_000 } });
   });
 });

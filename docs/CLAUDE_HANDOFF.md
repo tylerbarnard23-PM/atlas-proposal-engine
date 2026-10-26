@@ -30,6 +30,7 @@
     - A pending plan preview is bound to its alternative, model revision, account and amounts (`pendingPlanKey`), is recomputed from current inputs, and is set aside when stale. Revision forms are keyed per definition.
     - Minimum reviews live in a pin-independent "Sleeve actions" list (`sleeveRows`) covering this alternative's and every approved sleeve.
     - Purchase-only units are called "Linked purchase", not "Linked replacement".
+  - **Review fixes, round 2 (after `5d926f2`; see the PR for the exact head):** sleeve rows read the shared evaluator's result for the alternative that owns each action (the page's per-alternative draft results; the approved result only for approved actions in no alternative), never the page's Draft/Approved view, because destination IDs are shared. Purchases keep their own currency, the minimum is assessed only against the funded commitment, and left-out actions show their reason.
 - **Next:** Codex reviews PR #79; merge only on the owner's pinned approval. Then D3 (review once, present consistently), which captures the D2a revisions, sleeves and exposure coverage.
 - **D2a scope:** versioned model targets and funded manager/strategy sleeves, with known minimums and fees and explicit unknown exposures. Sleeves are funded through D2's eligible cash, reserves (in their stated currency) and atomic units. This is proposal design, not UMA operations or execution.
 - **Open follow-up:** #76 (a reserve breach caused by a legacy action can leave out and blame a cash-adding replacement). It is not part of D2a.

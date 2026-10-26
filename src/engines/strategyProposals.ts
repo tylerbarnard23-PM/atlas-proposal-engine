@@ -289,61 +289,88 @@ export function unreviewedSleeveTerms(approved: Recommendation[]) {
     .map((r) => ({ recommendationId: r.id, title: r.title, manager: r.destination!.strategy!.manager, name: r.destination!.strategy!.name }));
 }
 
+type Money = { amount: number; currency: CurrencyCode };
+
+/** The evaluator's result a sleeve row reads: its positions (with native values) and the units it left out. */
+export interface SleeveResult {
+  positions: { id: string; proposedNative: Money | null }[];
+  blocked: { recommendationIds: string[]; reason: string }[];
+}
+
 export interface SleeveRow {
   recommendationId: string;
   destinationId: string;
   accountId: string;
   label: string;
-  /** The sleeve's own currency: its minimum, purchase and funded amounts are all in it. */
+  /** The sleeve's own currency: its minimum and funded commitment are in it. */
   currency: CurrencyCode;
-  /** The action's purchase amount, as entered. */
-  purchase: number | null;
-  /** The commitment in the active alternative's result, in `currency` (0 when left out); null when the action isn't in the active alternative. */
-  funded: number | null;
-  status: MinimumStatus;
+  /** This action's purchase as entered: amount and its own currency (which may differ from the sleeve's). */
+  purchase: Money | null;
+  /**
+   * The sleeve's total funded commitment in the result of the alternative that
+   * owns the action (0 when that result leaves it out); null when no result
+   * describes it. Never a purchase amount, never another alternative's result.
+   */
+  funded: Money | null;
+  /** The minimum against `funded`; null when nothing is funded (see `blockedReason`), never assessed from an unconverted purchase. */
+  status: MinimumStatus | null;
+  /** Why the owning result leaves this action out, if it does. */
+  blockedReason: string | null;
   /** Minimum not supplied and no recorded review: the final PDF waits for one once it is approved. */
   needsReview: boolean;
   approved: boolean;
-  /** The alternative the action belongs to when it isn't the active one, or null. */
+  /** The alternative that owns the action when it isn't the active one ("approved, in no alternative" when none does), or null for the active one. */
   owner: string | null;
 }
 
 /**
- * Every sleeve action the advisor may need to act on, independent of which
- * model is pinned: those in the active alternative and every approved one.
- * Commitments come from the evaluator's native value (never a reporting
- * amount), so a minimum is compared in the sleeve's own currency.
+ * Every sleeve action the advisor may need to act on, independent of the
+ * pinned model or the page's Draft/Approved view: the active alternative's and
+ * every approved one. Each row reads the shared evaluator's result for the
+ * alternative that owns its action (destination IDs are shared across
+ * alternatives, so a page-level result would mix them); an approved action in
+ * no alternative reads the approved result. Commitments are the evaluator's
+ * native values, so a minimum is compared in the sleeve's own currency.
  */
 export function sleeveRows(input: {
   recommendations: Recommendation[];
-  positions: { id: string; proposedNative: { amount: number; currency: CurrencyCode } | null }[];
-  activeMemberIds: string[];
-  alternatives: { name: string; memberIds: string[] }[];
+  activeId: string;
+  /** Every alternative, active included. */
+  alternatives: { id: string; name: string; memberIds: string[] }[];
+  /** The draft result of each alternative, by its ID. */
+  results: Map<string, SleeveResult>;
+  /** The approved result, for approved actions that belong to no alternative. */
+  approved: SleeveResult;
 }): SleeveRow[] {
-  const active = new Set(input.activeMemberIds);
-  return input.recommendations
-    .filter((r) => r.destination?.strategy && !r.relatedHoldingId && (active.has(r.id) || r.approvedByAdvisor))
-    .map((r) => {
-      const d = r.destination!;
-      const s = d.strategy!;
-      const inActive = active.has(r.id);
-      const native = inActive ? input.positions.find((p) => p.id === d.id)?.proposedNative ?? null : null;
-      const funded = !inActive ? null : native && native.currency === d.currency ? native.amount : 0;
-      const purchase = r.actionAmount ?? null;
-      return {
-        recommendationId: r.id,
-        destinationId: d.id,
-        accountId: d.accountId,
-        label: label(s),
-        currency: d.currency,
-        purchase,
-        funded,
-        status: minimumStatus(s.minimum, funded ?? purchase ?? 0, !!s.review),
-        needsReview: s.minimum == null && !s.review,
-        approved: r.approvedByAdvisor,
-        owner: inActive ? null : input.alternatives.find((a) => a.memberIds.includes(r.id))?.name ?? "no alternative",
-      };
+  const rows: SleeveRow[] = [];
+  for (const r of input.recommendations) {
+    const d = r.destination;
+    const s = d?.strategy;
+    if (!d || !s || r.relatedHoldingId) continue;
+    const owner = input.alternatives.find((a) => a.memberIds.includes(r.id));
+    const isActive = owner?.id === input.activeId;
+    if (!isActive && !r.approvedByAdvisor) continue;
+    const result = owner ? input.results.get(owner.id) : input.approved;
+    const blockedReason = result?.blocked.find((b) => b.recommendationIds.includes(r.id))?.reason ?? null;
+    const native = result?.positions.find((p) => p.id === d.id)?.proposedNative ?? null;
+    const funded: Money | null = !result ? null : { amount: !blockedReason && native && native.currency === d.currency ? native.amount : 0, currency: d.currency };
+    const status: MinimumStatus | null = s.minimum == null ? { kind: "not_supplied", reviewed: !!s.review } : funded && funded.amount > EPS ? minimumStatus(s.minimum, funded.amount, !!s.review) : null;
+    rows.push({
+      recommendationId: r.id,
+      destinationId: d.id,
+      accountId: d.accountId,
+      label: label(s),
+      currency: d.currency,
+      purchase: r.actionAmount != null ? { amount: r.actionAmount, currency: r.currency } : null,
+      funded,
+      status,
+      blockedReason,
+      needsReview: s.minimum == null && !s.review,
+      approved: r.approvedByAdvisor,
+      owner: isActive ? null : owner?.name ?? "approved, in no alternative",
     });
+  }
+  return rows;
 }
 
 /**

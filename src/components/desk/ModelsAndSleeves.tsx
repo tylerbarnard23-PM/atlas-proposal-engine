@@ -5,11 +5,11 @@ import { useAtlasStore } from "@/store/useStore";
 import { Card, CardBody } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import type { AssetClass, CurrencyCode, ModelRevision, Recommendation, StrategyFee, StrategyRevision } from "@/domain/types";
+import type { AssetClass, CurrencyCode, ModelRevision, Recommendation, StrategyFee, StrategyRevision, WorkingDraft } from "@/domain/types";
 import { ASSET_CLASS_LABELS } from "@/domain/assetTaxonomy";
 import type { NormalizedHolding } from "@/engines/normalizationEngine";
 import type { FxContext } from "@/engines/proposalEngine";
-import { previewDraftEdit, type DeskResult, type DraftEditPreview } from "@/engines/allocationDesk";
+import { evaluateDesk, previewDraftEdit, type DeskResult, type DraftEditPreview } from "@/engines/allocationDesk";
 import {
   accountBasis,
   exposureView,
@@ -26,6 +26,7 @@ import {
   sleeveRows,
   unallocatedWeight,
   type MinimumStatus,
+  type SleeveRow,
 } from "@/engines/strategyProposals";
 import { UMA_MODELS, UMA_STRATEGIES } from "@/data/umaStory";
 import { formatCurrency, safeId } from "@/utils/formatting";
@@ -39,7 +40,37 @@ const pct = (n: number) => `${Number(n.toFixed(2))}%`;
 const MIX_CLASSES: AssetClass[] = ["equity", "fixed_income", "cash", "custom"];
 const field = "rounded border border-ink-200 px-2 py-1 text-[12px]";
 
-export function ModelsAndSleeves({ d, holdings, fx }: { d: DeskResult; holdings: NormalizedHolding[]; fx: FxContext }) {
+type Compared = { draft: WorkingDraft; result: DeskResult }[];
+
+/**
+ * Sleeve rows read the shared evaluator's result for the alternative that
+ * owns each action (`compared`, the draft result of every alternative), and
+ * the approved result for approved actions in no alternative; never the
+ * page's Draft/Approved view, because destination IDs are shared.
+ */
+function useSleeveRows(compared: Compared, d: DeskResult, holdings: NormalizedHolding[], fx: FxContext): SleeveRow[] {
+  const recommendations = useAtlasStore((s) => s.recommendations);
+  const accounts = useAtlasStore((s) => s.accounts);
+  const draft = useAtlasStore((s) => s.workingDraft);
+  const alternatives = useAtlasStore((s) => s.alternatives);
+  const approved = React.useMemo(
+    () => (d.view === "approved" ? d : evaluateDesk({ holdings, accounts, recommendations, draft, fx, view: "approved" })),
+    [d, holdings, accounts, recommendations, draft, fx]
+  );
+  return React.useMemo(
+    () =>
+      sleeveRows({
+        recommendations,
+        activeId: draft.id,
+        alternatives: [draft, ...alternatives],
+        results: new Map(compared.map((c) => [c.draft.id, c.result])),
+        approved,
+      }),
+    [recommendations, draft, alternatives, compared, approved]
+  );
+}
+
+export function ModelsAndSleeves({ d, compared, holdings, fx }: { d: DeskResult; compared: Compared; holdings: NormalizedHolding[]; fx: FxContext }) {
   const strategies = useAtlasStore((s) => s.strategies);
   const models = useAtlasStore((s) => s.models);
   const draft = useAtlasStore((s) => s.workingDraft);
@@ -49,6 +80,8 @@ export function ModelsAndSleeves({ d, holdings, fx }: { d: DeskResult; holdings:
 
   const pinned = draft.model ? findRevision(models, draft.model.id, draft.model.revision) : undefined;
   const newest = draft.model ? latestRevision(models, draft.model.id) : undefined;
+  const rows = useSleeveRows(compared, d, holdings, fx);
+  const activeResult = compared.find((c) => c.draft.id === draft.id)?.result ?? d;
   const missingExamples = UMA_STRATEGIES.some((x) => !findRevision(strategies, x.id, x.revision)) || UMA_MODELS.some((x) => !findRevision(models, x.id, x.revision));
 
   return (
@@ -141,39 +174,41 @@ export function ModelsAndSleeves({ d, holdings, fx }: { d: DeskResult; holdings:
             {pinned.kind === "asset_class" ? (
               <p className="text-2xs text-ink-500">The model set this alternative&apos;s targets ({modelText(pinned, strategies)}). Targets create no trades; drift stays visible above until you add explicit actions.</p>
             ) : (
-              <SleevePlanPanel key={`${draft.id}:${pinned.id}:${pinned.revision}`} model={pinned} d={d} holdings={holdings} fx={fx} />
+              <SleevePlanPanel key={`${draft.id}:${pinned.id}:${pinned.revision}`} model={pinned} active={activeResult} rows={rows} holdings={holdings} fx={fx} />
             )}
           </CardBody>
         </Card>
       )}
 
-      <SleeveActions d={d} />
-      <ExposurePanel d={d} />
+      <SleeveActions rows={rows} />
+      <ExposurePanel d={d} name={draft.name} />
     </div>
   );
 }
 
-const statusText = (st: MinimumStatus, money: (n: number) => string, funded: boolean) =>
-  st.kind === "met"
-    ? `${funded ? "Meets" : "Purchase meets"} the ${money(st.minimum)} minimum`
-    : st.kind === "below"
-    ? `${funded ? "Below" : "Purchase is below"} the ${money(st.minimum)} minimum`
-    : st.reviewed
-    ? "Minimum not supplied; reviewed"
-    : "Minimum not supplied; review needed before the final PDF";
+/** A row's funded commitment and minimum, as text. Never assessed from a purchase amount. */
+function fundedText(r: SleeveRow): string {
+  const where = r.owner ? `in ${r.owner}` : "in this alternative";
+  if (!r.funded) return `No result for ${where}`;
+  if (r.funded.amount <= 0) return r.blockedReason ? `Left out ${where}: ${r.blockedReason}` : `Not funded ${where}`;
+  return `Funded ${formatCurrency(r.funded.amount, r.funded.currency)} ${where}`;
+}
+function minimumText(r: SleeveRow): string {
+  const st: MinimumStatus | null = r.status;
+  if (!st) return "Minimum not assessed (nothing funded)";
+  if (st.kind === "not_supplied") return st.reviewed ? "Minimum not supplied; reviewed" : "Minimum not supplied; review needed before the final PDF";
+  return `${st.kind === "met" ? "Meets" : "Below"} the ${formatCurrency(st.minimum, r.currency)} minimum`;
+}
 
 /**
  * Every sleeve action the advisor may need to act on (this alternative's and
  * every approved one), whatever model is pinned, with minimum reviews. All
  * amounts are in the sleeve's own currency, from the evaluator.
  */
-function SleeveActions({ d }: { d: DeskResult }) {
+function SleeveActions({ rows }: { rows: SleeveRow[] }) {
   const recommendations = useAtlasStore((s) => s.recommendations);
-  const draft = useAtlasStore((s) => s.workingDraft);
-  const alternatives = useAtlasStore((s) => s.alternatives);
   const recordReview = useAtlasStore((s) => s.recordSleeveReview);
   const [notes, setNotes] = React.useState<Record<string, string>>({});
-  const rows = sleeveRows({ recommendations, positions: d.positions, activeMemberIds: draft.memberIds, alternatives });
   if (rows.length === 0) return null;
   return (
     <Card>
@@ -182,7 +217,6 @@ function SleeveActions({ d }: { d: DeskResult }) {
         <table className="w-full">
           <tbody>
             {rows.map((r) => {
-              const money = (n: number) => formatCurrency(n, r.currency);
               const review = recommendations.find((x) => x.id === r.recommendationId)?.destination?.strategy?.review;
               return (
                 <tr key={r.recommendationId} className="border-t border-ink-100 align-top">
@@ -190,10 +224,10 @@ function SleeveActions({ d }: { d: DeskResult }) {
                     {r.label}
                     {r.owner && <span className="text-ink-500"> · in {r.owner}</span>} {r.approved ? <Badge tone="positive">Approved</Badge> : <Badge tone="neutral">Not approved</Badge>}
                   </td>
-                  <td className="py-1.5 pr-2 tabular">{r.purchase == null ? "—" : `Purchase ${money(r.purchase)}`}</td>
-                  <td className="py-1.5 pr-2 tabular">{r.funded == null ? "Not in this alternative" : r.funded > 0 ? `Funded ${money(r.funded)}` : "Not applied in this alternative"}</td>
+                  <td className="py-1.5 pr-2 tabular">{r.purchase ? `Purchase ${formatCurrency(r.purchase.amount, r.purchase.currency)}` : "—"}</td>
+                  <td className="py-1.5 pr-2">{fundedText(r)}</td>
                   <td className="py-1.5">
-                    <span className={r.status.kind === "below" || r.needsReview ? "text-warning-600" : ""}>{statusText(r.status, money, r.funded != null && r.funded > 0)}</span>
+                    <span className={r.status?.kind === "below" || r.needsReview ? "text-warning-600" : ""}>{minimumText(r)}</span>
                     {review && <span className="text-ink-500">: {review.note}</span>}
                     {r.needsReview && (
                       <span className="mt-1 flex flex-wrap items-center gap-1">
@@ -209,7 +243,9 @@ function SleeveActions({ d }: { d: DeskResult }) {
             })}
           </tbody>
         </table>
-        <p className="text-2xs text-ink-500">A review records that the advisor checked an unsupplied minimum; it is not a statement that eligibility passed.</p>
+        <p className="text-2xs text-ink-500">
+          Purchase is the action as entered, in its own currency. Funded is the sleeve&apos;s total commitment in the result of the alternative that owns the action, in the sleeve&apos;s currency; the minimum is assessed only against that. A review records that the advisor checked an unsupplied minimum; it is not a statement that eligibility passed.
+        </p>
       </CardBody>
     </Card>
   );
@@ -234,13 +270,13 @@ function modelText(m: ModelRevision, strategies: StrategyRevision[]) {
   return `${parts.join(" · ")}${rest > 0 ? ` · unallocated ${pct(rest)}` : ""}`;
 }
 
-function SleevePlanPanel({ model, d, holdings, fx }: { model: ModelRevision; d: DeskResult; holdings: NormalizedHolding[]; fx: FxContext }) {
+function SleevePlanPanel({ model, active, rows, holdings, fx }: { model: ModelRevision; active: DeskResult; rows: SleeveRow[]; holdings: NormalizedHolding[]; fx: FxContext }) {
   const accounts = useAtlasStore((s) => s.accounts);
   const strategies = useAtlasStore((s) => s.strategies);
   const recommendations = useAtlasStore((s) => s.recommendations);
   const draft = useAtlasStore((s) => s.workingDraft);
   const addEdit = useAtlasStore((s) => s.addDraftEdit);
-  const eligible = d.scope.accountIds.filter((id) => !accounts.find((a) => a.id === id)?.isLiabilityAccount);
+  const eligible = active.scope.accountIds.filter((id) => !accounts.find((a) => a.id === id)?.isLiabilityAccount);
   const [chosen, setChosen] = React.useState(eligible[0] ?? "");
   const accountId = eligible.includes(chosen) ? chosen : eligible[0] ?? "";
   const account = accounts.find((a) => a.id === accountId);
@@ -258,9 +294,8 @@ function SleevePlanPanel({ model, d, holdings, fx }: { model: ModelRevision; d: 
     [current, holdings, accounts, recommendations, draft, fx]
   );
   const stale = !!pending && !current;
-  const native = (destId: string) => d.positions.find((p) => p.id === destId)?.proposedNative ?? null;
-  const members = new Set(draft.memberIds);
-  const inDraft = (destId: string) => recommendations.some((r) => members.has(r.id) && r.destination?.id === destId && r.destination.strategy);
+  // This alternative's own sleeve rows (its draft result), whatever the page's Draft/Approved view.
+  const ownRow = (destId: string) => rows.find((r) => r.owner === null && r.destinationId === destId);
 
   const build = () => {
     const group = safeId("grp");
@@ -282,16 +317,15 @@ function SleevePlanPanel({ model, d, holdings, fx }: { model: ModelRevision; d: 
             <th className="py-1 font-medium">Sleeve</th>
             <th className="py-1 font-medium text-right">Weight</th>
             <th className="py-1 font-medium text-right">Target</th>
-            <th className="py-1 font-medium text-right">Funded in this alternative</th>
+            <th className="py-1 font-medium text-right">Funded in this alternative (draft)</th>
             <th className="py-1 font-medium">Minimum</th>
           </tr>
         </thead>
         <tbody>
           {plan.rows.map((r) => {
-            const destId = sleeveDestinationId(accountId, r.strategy);
-            const funded = inDraft(destId) ? native(destId) : null;
-            // Compared in the strategy's own currency; a value in another currency is never compared with its minimum.
-            const fundedHere = funded && funded.currency === r.strategy.currency ? funded.amount : null;
+            const row = ownRow(sleeveDestinationId(accountId, r.strategy));
+            const fundedHere = row?.funded && row.funded.amount > 0 ? row.funded.amount : null;
+            // The target is in the strategy's currency (the plan refuses any other), so it can be compared with the minimum before funding.
             const status = minimumStatus(r.strategy.minimum, fundedHere ?? r.target, false);
             const own = (n: number) => formatCurrency(n, r.strategy.currency);
             return (
@@ -299,7 +333,7 @@ function SleevePlanPanel({ model, d, holdings, fx }: { model: ModelRevision; d: 
                 <td className="py-1.5 pr-2 text-ink-900">{label(r.strategy)}</td>
                 <td className="py-1.5 pr-2 text-right tabular">{pct(r.weight)}</td>
                 <td className="py-1.5 pr-2 text-right tabular">{money(r.target)}</td>
-                <td className="py-1.5 pr-2 text-right tabular">{funded ? formatCurrency(funded.amount, funded.currency) : "Not funded"}</td>
+                <td className="py-1.5 pr-2 text-right tabular">{fundedHere != null ? own(fundedHere) : row?.blockedReason ? "Left out (see Sleeve actions)" : "Not funded"}</td>
                 <td className="py-1.5">
                   {status.kind === "not_supplied"
                     ? "Not supplied (see Sleeve actions)"
@@ -356,7 +390,7 @@ function SleevePlanPanel({ model, d, holdings, fx }: { model: ModelRevision; d: 
   );
 }
 
-function ExposurePanel({ d }: { d: DeskResult }) {
+function ExposurePanel({ d, name }: { d: DeskResult; name: string }) {
   const recommendations = useAtlasStore((s) => s.recommendations);
   const strategies = useAtlasStore((s) => s.strategies);
   const e = exposureView({ positions: d.positions, recommendations, strategies });
@@ -366,7 +400,9 @@ function ExposurePanel({ d }: { d: DeskResult }) {
     <Card>
       <CardBody className="grid gap-4 md:grid-cols-2 text-[12px]">
         <div>
-          <div className="text-2xs uppercase tracking-wider text-ink-500 mb-1">Look-through exposure ({money(e.total)})</div>
+          <div className="text-2xs uppercase tracking-wider text-ink-500 mb-1">
+            Look-through exposure ({money(e.total)}) · {d.view === "approved" ? "approved actions" : `${name}, draft`}
+          </div>
           <table className="w-full">
             <tbody>
               {e.rows.map((r) => (
