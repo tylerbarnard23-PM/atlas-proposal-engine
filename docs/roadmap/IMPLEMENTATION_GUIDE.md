@@ -123,7 +123,7 @@ Update ROADMAP.md, the issue and CLAUDE_HANDOFF.md at each stopping point. Repor
 
 ## Next-session prompt
 
-Use [CLAUDE_COMMANDS.md](CLAUDE_COMMANDS.md), starting with D1 at High effort on Opus 5.5. Read the latest checkpoint and selected package/contracts only; verify actual GitHub/local state and any in-flight work. The previous standalone R11-first and broad P0–P5 sequencing is superseded. Do not execute all packages or delete providers merely because they are in the backlog.
+Use [CLAUDE_COMMANDS.md](CLAUDE_COMMANDS.md). D1 and D2 are delivered; the next implementation is D2a at High effort on Opus 5.5 (see the handoff). Read the latest checkpoint and selected package/contracts only; verify actual GitHub/local state and any in-flight work. The previous standalone R11-first and broad P0–P5 sequencing is superseded. Do not execute all packages or delete providers merely because they are in the backlog.
 
 Each command completes inspect/design/code/test/self-review/save/PR for one coherent task. Keep docs in it, report actual heads/checks, stop for Codex review and merge only when owner-authorized. Save WIP precisely if session budget ends; do not create an unrelated tiny task or another release-checkpoint PR.
 

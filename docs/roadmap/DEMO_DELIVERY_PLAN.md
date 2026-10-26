@@ -45,7 +45,7 @@ This is a smaller first milestone, not a promise that AI can implement the full 
 
 Packages are coordinated slices, not new feature IDs. D1's early R03 view does not depend on a completed new-security catalog, full R05 history or all R06 transfer features. It does depend on the minimum scope, draft membership/intent and shared-evaluation contracts described below. D4 can add offline loop fixtures during D1–D3 without delaying those packages, but its contextual UI uses the delivered contracts. No concurrent writers on the same branch.
 
-### D1: build the workbench next
+### D1: the workbench (delivered in PR #72; historical design notes)
 
 - Reuse the existing import/reconciliation flow and recommendation preview. Create one focused portfolio-design route/panel, not a redesign of every navigation page. Show account scope and excluded/context wealth beside current/proposed/target asset-class values/weights and remaining drift.
 - Use the original observed holdings as the baseline. Capture the accepted values/source dates and FX/input revision for one active working draft (the minimum R19a record); do not call it an approved snapshot. Separate scenario membership, advisor approval and prose inclusion. Preserve existing recommendation IDs/order/effects and legacy evidence during migration.
@@ -57,7 +57,7 @@ Packages are coordinated slices, not new feature IDs. D1's early R03 view does n
 - Choose the smallest persisted representation after tracing the current store. If a schema version changes, ship a real versioned/idempotent migration and supported old-backup upgrade in the same implementation. Do not add speculative fields for all later packages.
 - If too coupled for one PR, the only default D1 split is (a) scope/draft/input contracts plus backup compatibility and engine behavior, then (b) the visible workbench/context flow. Show the whole planned task and the reason for the split before coding; no separate design-only approval loop for routine choices.
 
-### D2: only supported, funded alternatives
+### D2: only supported, funded alternatives (delivered in PR #75; historical design notes)
 
 Start with a dollar-based custom/synthetic destination and linked sell/buy group in a supported account. Keep destination identity distinct from current holdings; amounts retain currency. Enforce an explicit reserve on the chosen eligible cash source. Cash-like fund slices or unknown availability must not automatically become withdrawable cash. Unsupported new cross-account/owner/currency transfers remain unresolved; do not invent one or relax legacy financial safeguards. Preserve the already-tested legacy paydown behavior with regressions.
 
