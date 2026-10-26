@@ -19,10 +19,13 @@ import {
   latestRevision,
   latestRevisions,
   minimumStatus,
+  pendingPlanKey,
   sleeveDestinationId,
   sleevePlan,
   sleevePurchases,
+  sleeveRows,
   unallocatedWeight,
+  type MinimumStatus,
 } from "@/engines/strategyProposals";
 import { UMA_MODELS, UMA_STRATEGIES } from "@/data/umaStory";
 import { formatCurrency, safeId } from "@/utils/formatting";
@@ -60,8 +63,9 @@ export function ModelsAndSleeves({ d, holdings, fx }: { d: DeskResult; holdings:
               <Button size="sm" variant="secondary" onClick={() => setEditing({ kind: "model" })}>New model</Button>
             </span>
           </div>
-          {editing?.kind === "strategy" && <StrategyForm base={editing.base as StrategyRevision | undefined} onDone={() => setEditing(null)} />}
-          {editing?.kind === "model" && <ModelForm base={editing.base as ModelRevision | undefined} strategies={strategies} onDone={() => setEditing(null)} />}
+          {/* Keyed by the definition being revised, so switching starts that definition's own values. */}
+          {editing?.kind === "strategy" && <StrategyForm key={`s:${editing.base?.id ?? "new"}:${editing.base?.revision ?? 0}`} base={editing.base as StrategyRevision | undefined} onDone={() => setEditing(null)} />}
+          {editing?.kind === "model" && <ModelForm key={`m:${editing.base?.id ?? "new"}:${editing.base?.revision ?? 0}`} base={editing.base as ModelRevision | undefined} strategies={strategies} onDone={() => setEditing(null)} />}
           {strategies.length > 0 && (
             <table className="w-full text-[12px]">
               <thead>
@@ -137,14 +141,77 @@ export function ModelsAndSleeves({ d, holdings, fx }: { d: DeskResult; holdings:
             {pinned.kind === "asset_class" ? (
               <p className="text-2xs text-ink-500">The model set this alternative&apos;s targets ({modelText(pinned, strategies)}). Targets create no trades; drift stays visible above until you add explicit actions.</p>
             ) : (
-              <SleevePlanPanel model={pinned} d={d} holdings={holdings} fx={fx} />
+              <SleevePlanPanel key={`${draft.id}:${pinned.id}:${pinned.revision}`} model={pinned} d={d} holdings={holdings} fx={fx} />
             )}
           </CardBody>
         </Card>
       )}
 
+      <SleeveActions d={d} />
       <ExposurePanel d={d} />
     </div>
+  );
+}
+
+const statusText = (st: MinimumStatus, money: (n: number) => string, funded: boolean) =>
+  st.kind === "met"
+    ? `${funded ? "Meets" : "Purchase meets"} the ${money(st.minimum)} minimum`
+    : st.kind === "below"
+    ? `${funded ? "Below" : "Purchase is below"} the ${money(st.minimum)} minimum`
+    : st.reviewed
+    ? "Minimum not supplied; reviewed"
+    : "Minimum not supplied; review needed before the final PDF";
+
+/**
+ * Every sleeve action the advisor may need to act on (this alternative's and
+ * every approved one), whatever model is pinned, with minimum reviews. All
+ * amounts are in the sleeve's own currency, from the evaluator.
+ */
+function SleeveActions({ d }: { d: DeskResult }) {
+  const recommendations = useAtlasStore((s) => s.recommendations);
+  const draft = useAtlasStore((s) => s.workingDraft);
+  const alternatives = useAtlasStore((s) => s.alternatives);
+  const recordReview = useAtlasStore((s) => s.recordSleeveReview);
+  const [notes, setNotes] = React.useState<Record<string, string>>({});
+  const rows = sleeveRows({ recommendations, positions: d.positions, activeMemberIds: draft.memberIds, alternatives });
+  if (rows.length === 0) return null;
+  return (
+    <Card>
+      <CardBody className="space-y-1 text-[12px]">
+        <div className="text-2xs uppercase tracking-wider text-ink-500">Sleeve actions (this alternative and every approved one)</div>
+        <table className="w-full">
+          <tbody>
+            {rows.map((r) => {
+              const money = (n: number) => formatCurrency(n, r.currency);
+              const review = recommendations.find((x) => x.id === r.recommendationId)?.destination?.strategy?.review;
+              return (
+                <tr key={r.recommendationId} className="border-t border-ink-100 align-top">
+                  <td className="py-1.5 pr-2 text-ink-900">
+                    {r.label}
+                    {r.owner && <span className="text-ink-500"> · in {r.owner}</span>} {r.approved ? <Badge tone="positive">Approved</Badge> : <Badge tone="neutral">Not approved</Badge>}
+                  </td>
+                  <td className="py-1.5 pr-2 tabular">{r.purchase == null ? "—" : `Purchase ${money(r.purchase)}`}</td>
+                  <td className="py-1.5 pr-2 tabular">{r.funded == null ? "Not in this alternative" : r.funded > 0 ? `Funded ${money(r.funded)}` : "Not applied in this alternative"}</td>
+                  <td className="py-1.5">
+                    <span className={r.status.kind === "below" || r.needsReview ? "text-warning-600" : ""}>{statusText(r.status, money, r.funded != null && r.funded > 0)}</span>
+                    {review && <span className="text-ink-500">: {review.note}</span>}
+                    {r.needsReview && (
+                      <span className="mt-1 flex flex-wrap items-center gap-1">
+                        <input value={notes[r.recommendationId] ?? ""} onChange={(e) => setNotes({ ...notes, [r.recommendationId]: e.target.value })} placeholder="Review note" aria-label={`Review note for ${r.label}`} className={`w-48 ${field}`} />
+                        <Button size="sm" variant="secondary" disabled={!(notes[r.recommendationId] ?? "").trim()} onClick={() => recordReview(r.recommendationId, notes[r.recommendationId])}>
+                          Record review
+                        </Button>
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <p className="text-2xs text-ink-500">A review records that the advisor checked an unsupplied minimum; it is not a statement that eligibility passed.</p>
+      </CardBody>
+    </Card>
   );
 }
 
@@ -173,30 +240,38 @@ function SleevePlanPanel({ model, d, holdings, fx }: { model: ModelRevision; d: 
   const recommendations = useAtlasStore((s) => s.recommendations);
   const draft = useAtlasStore((s) => s.workingDraft);
   const addEdit = useAtlasStore((s) => s.addDraftEdit);
-  const recordReview = useAtlasStore((s) => s.recordSleeveReview);
   const eligible = d.scope.accountIds.filter((id) => !accounts.find((a) => a.id === id)?.isLiabilityAccount);
-  const [accountId, setAccountId] = React.useState(eligible[0] ?? "");
-  const [pending, setPending] = React.useState<{ legs: Recommendation[]; preview: DraftEditPreview } | null>(null);
-  const [notes, setNotes] = React.useState<Record<string, string>>({});
+  const [chosen, setChosen] = React.useState(eligible[0] ?? "");
+  const accountId = eligible.includes(chosen) ? chosen : eligible[0] ?? "";
   const account = accounts.find((a) => a.id === accountId);
   const plan = sleevePlan({ model, strategies, basis: accountBasis({ account, holdings, fx }) });
   const ccy = plan.basis.ok ? plan.basis.currency : null;
   const money = (n: number) => (ccy ? formatCurrency(n, ccy) : n.toLocaleString("en-US"));
-  const value = (id: string) => d.positions.find((p) => p.id === id)?.proposed ?? 0;
+  const reporting = (n: number) => formatCurrency(n, fx.reportingCurrency);
+  // A pending preview belongs to this alternative, model revision, account and plan amounts.
+  const key = pendingPlanKey({ draftId: draft.id, model, accountId, plan });
+  const [pending, setPending] = React.useState<{ key: string; legs: Recommendation[] } | null>(null);
+  const current = pending && pending.key === key ? pending : null;
+  // Recomputed from the current inputs on every render, so what Add adds is what is shown.
+  const preview: DraftEditPreview | null = React.useMemo(
+    () => (current ? previewDraftEdit({ holdings, accounts, recommendations, draft, candidate: current.legs, fx }) : null),
+    [current, holdings, accounts, recommendations, draft, fx]
+  );
+  const stale = !!pending && !current;
+  const native = (destId: string) => d.positions.find((p) => p.id === destId)?.proposedNative ?? null;
   const members = new Set(draft.memberIds);
-  const sleeveRec = (destId: string) => recommendations.find((r) => members.has(r.id) && r.destination?.id === destId && r.destination.strategy);
+  const inDraft = (destId: string) => recommendations.some((r) => members.has(r.id) && r.destination?.id === destId && r.destination.strategy);
 
-  const preview = () => {
+  const build = () => {
     const group = safeId("grp");
-    const legs = sleevePurchases({ plan, accountId, ids: { group, rec: () => safeId("rec") }, now: new Date().toISOString() });
-    setPending({ legs, preview: previewDraftEdit({ holdings, accounts, recommendations, draft, candidate: legs, fx }) });
+    setPending({ key, legs: sleevePurchases({ plan, accountId, ids: { group, rec: () => safeId("rec") }, now: new Date().toISOString() }) });
   };
 
   return (
     <div className="space-y-2">
       <label className="flex items-center gap-2 text-[12px] text-ink-600">
         Account
-        <select value={accountId} onChange={(e) => { setAccountId(e.target.value); setPending(null); }} aria-label="Account for the sleeve plan" className={field}>
+        <select value={accountId} onChange={(e) => setChosen(e.target.value)} aria-label="Account for the sleeve plan" className={field}>
           {eligible.map((id) => <option key={id} value={id}>{accounts.find((a) => a.id === id)?.name ?? id}</option>)}
         </select>
         <span>{plan.basis.ok ? `Basis: ${money(plan.basis.value)} (the account's current value)` : ""}</span>
@@ -214,30 +289,21 @@ function SleevePlanPanel({ model, d, holdings, fx }: { model: ModelRevision; d: 
         <tbody>
           {plan.rows.map((r) => {
             const destId = sleeveDestinationId(accountId, r.strategy);
-            const rec = sleeveRec(destId);
-            const funded = value(destId);
-            const status = minimumStatus(r.strategy.minimum, rec ? funded : r.target, !!rec?.destination?.strategy?.review);
+            const funded = inDraft(destId) ? native(destId) : null;
+            // Compared in the strategy's own currency; a value in another currency is never compared with its minimum.
+            const fundedHere = funded && funded.currency === r.strategy.currency ? funded.amount : null;
+            const status = minimumStatus(r.strategy.minimum, fundedHere ?? r.target, false);
+            const own = (n: number) => formatCurrency(n, r.strategy.currency);
             return (
               <tr key={r.strategy.id} className="border-t border-ink-100 align-top">
                 <td className="py-1.5 pr-2 text-ink-900">{label(r.strategy)}</td>
                 <td className="py-1.5 pr-2 text-right tabular">{pct(r.weight)}</td>
                 <td className="py-1.5 pr-2 text-right tabular">{money(r.target)}</td>
-                <td className="py-1.5 pr-2 text-right tabular">{funded ? money(funded) : "Not funded"}</td>
+                <td className="py-1.5 pr-2 text-right tabular">{funded ? formatCurrency(funded.amount, funded.currency) : "Not funded"}</td>
                 <td className="py-1.5">
-                  {status.kind === "met" && (rec ? `Meets the ${money(status.minimum)} minimum` : `Target meets the ${money(status.minimum)} minimum`)}
-                  {status.kind === "below" && <span className="text-negative-600">{rec ? "Below" : "Target is below"} the {money(status.minimum)} minimum</span>}
-                  {status.kind === "not_supplied" &&
-                    (status.reviewed ? (
-                      <span>Not supplied; reviewed: {rec?.destination?.strategy?.review?.note}</span>
-                    ) : rec ? (
-                      <span className="flex flex-wrap items-center gap-1">
-                        <span className="text-warning-600">Not supplied; review needed before the final PDF</span>
-                        <input value={notes[rec.id] ?? ""} onChange={(e) => setNotes({ ...notes, [rec.id]: e.target.value })} placeholder="Review note" aria-label={`Review note for ${label(r.strategy)}`} className={`w-44 ${field}`} />
-                        <Button size="sm" variant="secondary" disabled={!(notes[rec.id] ?? "").trim()} onClick={() => recordReview(rec.id, notes[rec.id])}>Record review</Button>
-                      </span>
-                    ) : (
-                      "Not supplied"
-                    ))}
+                  {status.kind === "not_supplied"
+                    ? "Not supplied (see Sleeve actions)"
+                    : `${fundedHere != null ? (status.kind === "met" ? "Meets" : "Is below") : status.kind === "met" ? "Target meets" : "Target is below"} the ${own(status.minimum)} minimum`}
                 </td>
               </tr>
             );
@@ -260,20 +326,28 @@ function SleevePlanPanel({ model, d, holdings, fx }: { model: ModelRevision; d: 
       </table>
       {plan.problems.map((p) => <p key={p} className="text-2xs text-negative-600">{p}</p>)}
       <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" variant="secondary" disabled={plan.problems.length > 0} onClick={preview}>Preview funded purchases</Button>
+        <Button size="sm" variant="secondary" disabled={plan.problems.length > 0} onClick={build}>Preview funded purchases</Button>
         <span className="text-2xs text-ink-500">Targets alone create nothing. The purchases join this alternative only when you add them, as one unit applied whole or left out; they are unapproved.</span>
       </div>
-      {pending && (
-        <div className="space-y-1 rounded border border-ink-100 p-2">
-          {pending.preview.applied ? (
-            <p className="text-[12px] text-ink-700">With the rest of this alternative, every sleeve purchase applies{pending.preview.cash.map((c) => `; ${c.name} ${money(c.before)} → ${money(c.after)}`).join("")}.</p>
+      {stale && (
+        <p className="text-2xs text-warning-600">
+          The earlier preview no longer matches this alternative, model, account or amounts, so it was set aside. Preview again before adding.
+        </p>
+      )}
+      {current && preview && (
+        <div className="space-y-1 rounded border border-ink-100 p-2" data-testid="sleeve-preview">
+          {preview.applied ? (
+            <p className="text-[12px] text-ink-700">
+              With the rest of this alternative, every sleeve purchase applies
+              {preview.cash.map((c) => `; ${c.name} ${reporting(c.before)} → ${reporting(c.after)}`).join("")} (in {fx.reportingCurrency}).
+            </p>
           ) : (
             <p className="text-[12px] text-negative-600">These purchases wouldn&apos;t apply:</p>
           )}
-          {pending.preview.blocked.map((b) => <p key={b.unitId} className="text-2xs text-negative-600">{b.reason}</p>)}
-          {pending.preview.unresolved.map((u) => <p key={u.recommendationId} className="text-2xs text-negative-600">{u.reason}</p>)}
+          {preview.blocked.map((b) => <p key={b.unitId} className="text-2xs text-negative-600">{b.reason}</p>)}
+          {preview.unresolved.map((u) => <p key={u.recommendationId} className="text-2xs text-negative-600">{u.reason}</p>)}
           <div className="flex gap-2">
-            <Button size="sm" onClick={() => { addEdit(pending.legs); setPending(null); }}>Add to draft</Button>
+            <Button size="sm" onClick={() => { addEdit(current.legs); setPending(null); }}>Add to draft</Button>
             <Button size="sm" variant="ghost" onClick={() => setPending(null)}>Cancel</Button>
           </div>
         </div>

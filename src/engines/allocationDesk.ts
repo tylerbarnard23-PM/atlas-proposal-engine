@@ -121,6 +121,8 @@ export interface DeskPosition {
   synthetic: boolean;
   /** A proposed investment not currently held (D2). */
   proposedOnly: boolean;
+  /** The evaluator's proposed value in the line's own valuation currency (`proposed` is in the reporting currency), or null when unvalued. */
+  proposedNative: { amount: number; currency: CurrencyCode } | null;
 }
 
 export interface DeskResult {
@@ -159,6 +161,8 @@ export interface DeskResult {
 type MaybeValued = Holding & { valuation?: NormalizedHolding["valuation"] };
 const valueOf = (h: MaybeValued): number | null =>
   h.valuation ? (h.valuation.status === "valued" ? h.reportingMarketValue ?? null : null) : h.reportingMarketValue ?? null;
+const nativeOf = (h: MaybeValued): DeskPosition["proposedNative"] =>
+  h.valuation?.status === "valued" ? { amount: h.valuation.amount, currency: h.valuation.currency } : null;
 const isLiabilityLine = (h: Holding) => !!h.isLiability || h.assetClass === "liability";
 const pct = (part: number, total: number) => (total > 0 ? (part / total) * 100 : null);
 
@@ -207,7 +211,7 @@ export function evaluateDesk(input: {
       continue;
     }
     const after = proposedById.has(h.id) ? valueOf(proposedById.get(h.id)!) : now;
-    positions.push({ id: h.id, name: h.assetName, accountId: h.accountId, accountName: accountName(h.accountId), assetClass: h.assetClass, current: now, proposed: after, synthetic: false, proposedOnly: false });
+    positions.push({ id: h.id, name: h.assetName, accountId: h.accountId, accountName: accountName(h.accountId), assetClass: h.assetClass, current: now, proposed: after, synthetic: false, proposedOnly: false, proposedNative: nativeOf((proposedById.get(h.id) ?? h) as MaybeValued) });
     if (now == null || after == null) {
       unvalued.push({ id: h.id, name: h.assetName });
       continue;
@@ -227,7 +231,7 @@ export function evaluateDesk(input: {
     if (currentIds.has(h.id) || !inScope.has(h.accountId) || isLiabilityLine(h)) continue;
     const after = valueOf(h);
     if (after == null) continue;
-    positions.push({ id: h.id, name: h.assetName, accountId: h.accountId, accountName: accountName(h.accountId), assetClass: h.assetClass, current: 0, proposed: after, synthetic: !h.proposedOnly, proposedOnly: !!h.proposedOnly });
+    positions.push({ id: h.id, name: h.assetName, accountId: h.accountId, accountName: accountName(h.accountId), assetClass: h.assetClass, current: 0, proposed: after, synthetic: !h.proposedOnly, proposedOnly: !!h.proposedOnly, proposedNative: nativeOf(h) });
     row(h.assetClass).proposed += after;
     acct(h.accountId).proposed += after;
     if (h.assetClass === "cash") cash(h.accountId).proposed += after;

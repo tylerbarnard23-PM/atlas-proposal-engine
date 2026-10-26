@@ -220,7 +220,7 @@ describe("minimums and reserves are enforced by the shared evaluator", () => {
     story(m, 10_000);
     m.useAtlasStore.getState().addDraftEdit(purchases(m));
     const d = desk(m);
-    expect(d.blocked).toEqual([expect.objectContaining({ reason: expect.stringMatching(/USD 5,000, below its USD 10,000 reserve/) })]);
+    expect(d.blocked).toEqual([expect.objectContaining({ reason: expect.stringMatching(/^Linked purchase not applied: .*USD 5,000, below its USD 10,000 reserve/) })]); // purchases alone are not a "replacement"
     expect(value(d, "h_uma_cash")).toBe(100_000);
   });
 
@@ -425,5 +425,93 @@ describe("output", () => {
     expect(text).toMatch(/underlying asset-class exposure is not broken out/);
     expect(text).toMatch(/not a verified offering, appointment or eligibility determination/);
     expect(text).toMatch(/Other \/ unclassified/);
+  });
+});
+
+describe("review fixes (PR #79)", () => {
+  /** A EUR managed account in a USD report at EUR/USD 0.50, with a EUR strategy (minimum EUR 25,000) at 40%. */
+  function eurStory(m: M) {
+    story(m);
+    const s0 = m.useAtlasStore.getState();
+    m.useAtlasStore.setState({
+      accounts: [{ ...m.UMA_ACCOUNT, baseCurrency: "EUR" as Holding["currency"] }],
+      holdings: [{ ...m.UMA_CASH, currency: "EUR" as Holding["currency"] }],
+      fxRates: s0.fxRates.map((r) => (r.base === "EUR" && r.quote === "USD" ? { ...r, rate: 0.5 } : r)),
+    });
+    const st = m.useAtlasStore.getState();
+    st.setAccountFunding(ACC, { cashHoldingId: "h_uma_cash", reserve: 0, reserveCurrency: "EUR" as Holding["currency"] });
+    expect(st.saveStrategy({ manager: "Euro Manager E", name: "Euro Core", strategyType: "SMA", currency: "EUR" as Holding["currency"], minimum: 25_000, fees: [], mix: null, provenance: "custom" })).toEqual([]);
+    const e = m.latestRevisions(m.useAtlasStore.getState().strategies).find((x) => x.manager === "Euro Manager E")!;
+    expect(m.useAtlasStore.getState().saveModel({ name: "Euro 40", kind: "strategy", strategyWeights: [{ strategyId: e.id, strategyRevision: e.revision, weight: 40 }], cashWeight: 60, provenance: "custom" })).toEqual([]);
+    const model = m.latestRevisions(m.useAtlasStore.getState().models).find((x) => x.name === "Euro 40")!;
+    m.useAtlasStore.getState().pinModel({ id: model.id, revision: model.revision });
+    return { e, model };
+  }
+  const rows = (m: M, d = desk(m)) => {
+    const s = m.useAtlasStore.getState();
+    return m.sleeveRows({ recommendations: s.recommendations, positions: d.positions, activeMemberIds: s.workingDraft.memberIds, alternatives: s.alternatives });
+  };
+
+  it("a EUR sleeve in a USD report: the commitment and its minimum are compared in EUR (40,000 funded meets 25,000)", async () => {
+    const m = await load();
+    const { model } = eurStory(m);
+    const p = plan(m, model);
+    expect(p.basis).toEqual({ ok: true, value: 100_000, currency: "EUR" });
+    m.useAtlasStore.getState().addDraftEdit(purchases(m, p));
+    const d = desk(m);
+    expect(d.blocked).toEqual([]); // the engine applies it
+    const pos = d.positions.find((x) => x.proposedOnly)!;
+    expect(pos.proposed).toBe(20_000); // reporting (USD)
+    expect(pos.proposedNative).toEqual({ amount: 40_000, currency: "EUR" });
+    expect(rows(m, d)).toEqual([expect.objectContaining({ currency: "EUR", funded: 40_000, status: { kind: "met", minimum: 25_000 } })]);
+  });
+
+  it("a pending preview is bound to its alternative, model revision, account and plan amounts", async () => {
+    const m = await load();
+    story(m);
+    m.useAtlasStore.getState().pinModel({ id: "mdl_uma_core", revision: 1 });
+    const key = () => {
+      const s = m.useAtlasStore.getState();
+      const model = m.findRevision(s.models, s.workingDraft.model!.id, s.workingDraft.model!.revision)!;
+      return m.pendingPlanKey({ draftId: s.workingDraft.id, model, accountId: ACC, plan: plan(m, model) });
+    };
+    const k0 = key();
+    expect(key()).toBe(k0);
+    // Another alternative, another model revision, or a changed basis invalidates it.
+    m.useAtlasStore.getState().duplicateDraft("B");
+    expect(key()).not.toBe(k0);
+    m.useAtlasStore.getState().setActiveDraft(m.useAtlasStore.getState().alternatives[0].id);
+    expect(key()).toBe(k0);
+    expect(m.useAtlasStore.getState().saveModel({ ...m.UMA_STRATEGY_MODEL, id: "mdl_uma_core", cashWeight: 4 })).toEqual([]);
+    m.useAtlasStore.getState().pinModel({ id: "mdl_uma_core", revision: 2 });
+    expect(key()).not.toBe(k0);
+    m.useAtlasStore.getState().pinModel({ id: "mdl_uma_core", revision: 1 });
+    expect(key()).toBe(k0);
+    m.useAtlasStore.setState({ holdings: [{ ...m.UMA_CASH, nativeMarketValue: 90_000 }] });
+    expect(key()).not.toBe(k0);
+  });
+
+  it("an approved sleeve needing a review stays reviewable when the model is unpinned or changed, and from another alternative", async () => {
+    const m = await load();
+    story(m);
+    m.useAtlasStore.getState().renameActiveDraft("A");
+    m.useAtlasStore.getState().pinModel({ id: "mdl_uma_core", revision: 1 });
+    m.useAtlasStore.getState().addDraftEdit(purchases(m));
+    approveAll(m);
+    m.useAtlasStore.getState().pinModel(null);
+    const needing = () => rows(m).filter((r) => r.needsReview);
+    expect(needing().map((r) => [r.label, r.owner])).toEqual([["ETF Model C — Balanced ETF Model (rev 1)", null]]);
+    expect(check(m, "strategy_terms").passed).toBe(false);
+    // From another alternative (with a different model pinned) it is still listed, labelled with its owner.
+    m.useAtlasStore.getState().duplicateDraft("B");
+    for (const id of m.useAtlasStore.getState().workingDraft.memberIds) m.useAtlasStore.getState().setDraftMember(id, false);
+    m.useAtlasStore.getState().pinModel({ id: "mdl_balanced", revision: 1 });
+    expect(needing().map((r) => [r.label, r.owner, r.approved])).toEqual([["ETF Model C — Balanced ETF Model (rev 1)", "A", true]]);
+    m.useAtlasStore.getState().recordSleeveReview(needing()[0].recommendationId, "Reviewed (synthetic).");
+    expect(needing()).toEqual([]);
+    expect(check(m, "strategy_terms").passed).toBe(true);
+    // Approvals and revision references are unchanged.
+    const recs = m.useAtlasStore.getState().recommendations.filter((r) => r.destination?.strategy && r.approvedByAdvisor);
+    expect(recs.map((r) => [r.destination!.strategy!.id, r.destination!.strategy!.revision])).toEqual([["str_equity_a", 1], ["str_fixed_b", 1], ["str_etf_c", 1]]);
   });
 });

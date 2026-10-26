@@ -25,6 +25,11 @@
   - **Views:** look-through exposure keeps unknown mixes unknown; fees are listed by component and never summed.
   - **Persistence:** store and backup v9, with strict v8/v7/v6 upgrades.
   - **Evidence:** in the PR.
+  - **Review fixes, round 1 (after `d1c530d`; see the PR for the exact head):**
+    - Sleeve amounts and minimums are compared in the sleeve's own currency, using the evaluator's `DeskPosition.proposedNative`. Preview cash is labelled in the reporting currency.
+    - A pending plan preview is bound to its alternative, model revision, account and amounts (`pendingPlanKey`), is recomputed from current inputs, and is set aside when stale. Revision forms are keyed per definition.
+    - Minimum reviews live in a pin-independent "Sleeve actions" list (`sleeveRows`) covering this alternative's and every approved sleeve.
+    - Purchase-only units are called "Linked purchase", not "Linked replacement".
 - **Next:** Codex reviews PR #79; merge only on the owner's pinned approval. Then D3 (review once, present consistently), which captures the D2a revisions, sleeves and exposure coverage.
 - **D2a scope:** versioned model targets and funded manager/strategy sleeves, with known minimums and fees and explicit unknown exposures. Sleeves are funded through D2's eligible cash, reserves (in their stated currency) and atomic units. This is proposal design, not UMA operations or execution.
 - **Open follow-up:** #76 (a reserve breach caused by a legacy action can leave out and blame a cash-adding replacement). It is not part of D2a.

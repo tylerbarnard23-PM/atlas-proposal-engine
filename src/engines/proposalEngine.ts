@@ -563,6 +563,8 @@ function applyCore(
 const unitIdOf = (r: Recommendation) => r.linked?.groupId ?? `unit:${r.id}`;
 const isUnit = (r: Recommendation) => !!r.linked || (!!r.destination && !r.relatedHoldingId);
 const PURCHASE = new Set<Recommendation["type"]>(["buy", "increase"]);
+// How a unit is named in its reason: a sale with purchases is a replacement; purchases alone are a purchase.
+const unitKind = (legs: Recommendation[]) => (legs.length === 1 ? "Purchase" : legs.some((r) => SALE.has(r.type)) ? "Linked replacement" : "Linked purchase");
 const SALE = new Set<Recommendation["type"]>(["sell", "raise_cash", "reduce", "reduce_concentration"]);
 
 /** Why a proposed-investment purchase can't be applied, or null (D2 rules). */
@@ -680,7 +682,7 @@ function applyAtomically(current: Holding[], recs: Recommendation[], accounts: A
     if (failed.size > 0) {
       for (const [id, reason] of failed) {
         const legs = units.get(id)!;
-        block(id, legs.length > 1 ? `Linked replacement not applied: ${reason}` : reason, accountOf(legs[0]));
+        block(id, legs.length > 1 ? `${unitKind(legs)} not applied: ${reason}` : reason, accountOf(legs[0]));
         // Keep missing-rate legs visible to the FX checks.
         for (const u of core.unresolved) if (legs.some((r) => r.id === u.recommendationId)) extraUnresolved.push(u);
       }
@@ -702,7 +704,7 @@ function applyAtomically(current: Holding[], recs: Recommendation[], accounts: A
     if (short) {
       const legs = units.get(short)!;
       const m = below.get(legs.find((r) => r.destination && below.has(r.destination.id))!.destination!.id)!;
-      block(short, `${legs.length > 1 ? "Linked purchase" : "Purchase"} not applied: ${m.name} would hold ${m.currency} ${amountText(m.value)}, below its ${m.currency} ${amountText(m.minimum)} minimum.`, accountOf(legs[0]));
+      block(short, `${unitKind(legs)} not applied: ${m.name} would hold ${m.currency} ${amountText(m.value)}, below its ${m.currency} ${amountText(m.minimum)} minimum.`, accountOf(legs[0]));
       continue;
     }
     const breaches = reserveStatus(core.holdings, accounts).filter((x) => x.breached);
@@ -712,7 +714,7 @@ function applyAtomically(current: Holding[], recs: Recommendation[], accounts: A
       const legs = units.get(offender)!;
       const b = breaches.find((x) => legs.some((r) => accountOf(r) === x.accountId))!;
       const left = b.available == null ? "an unknown amount" : `${b.currency} ${amountText(b.available)}`;
-      block(offender, `${legs.length > 1 ? "Linked replacement" : "Purchase"} not applied: it would leave the eligible cash in ${b.accountName} at ${left}, below its ${b.currency ?? ""} ${amountText(b.reserve)} reserve.`, b.accountId);
+      block(offender, `${unitKind(legs)} not applied: it would leave the eligible cash in ${b.accountName} at ${left}, below its ${b.currency ?? ""} ${amountText(b.reserve)} reserve.`, b.accountId);
       continue;
     }
     return { holdings: core.holdings, unresolved: [...core.unresolved, ...extraUnresolved], blocked: [...blocked, ...legacyBlocked] };

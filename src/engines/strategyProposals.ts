@@ -288,3 +288,78 @@ export function unreviewedSleeveTerms(approved: Recommendation[]) {
     .filter((r) => r.destination?.strategy && !r.relatedHoldingId && r.destination.strategy.minimum == null && !r.destination.strategy.review)
     .map((r) => ({ recommendationId: r.id, title: r.title, manager: r.destination!.strategy!.manager, name: r.destination!.strategy!.name }));
 }
+
+export interface SleeveRow {
+  recommendationId: string;
+  destinationId: string;
+  accountId: string;
+  label: string;
+  /** The sleeve's own currency: its minimum, purchase and funded amounts are all in it. */
+  currency: CurrencyCode;
+  /** The action's purchase amount, as entered. */
+  purchase: number | null;
+  /** The commitment in the active alternative's result, in `currency` (0 when left out); null when the action isn't in the active alternative. */
+  funded: number | null;
+  status: MinimumStatus;
+  /** Minimum not supplied and no recorded review: the final PDF waits for one once it is approved. */
+  needsReview: boolean;
+  approved: boolean;
+  /** The alternative the action belongs to when it isn't the active one, or null. */
+  owner: string | null;
+}
+
+/**
+ * Every sleeve action the advisor may need to act on, independent of which
+ * model is pinned: those in the active alternative and every approved one.
+ * Commitments come from the evaluator's native value (never a reporting
+ * amount), so a minimum is compared in the sleeve's own currency.
+ */
+export function sleeveRows(input: {
+  recommendations: Recommendation[];
+  positions: { id: string; proposedNative: { amount: number; currency: CurrencyCode } | null }[];
+  activeMemberIds: string[];
+  alternatives: { name: string; memberIds: string[] }[];
+}): SleeveRow[] {
+  const active = new Set(input.activeMemberIds);
+  return input.recommendations
+    .filter((r) => r.destination?.strategy && !r.relatedHoldingId && (active.has(r.id) || r.approvedByAdvisor))
+    .map((r) => {
+      const d = r.destination!;
+      const s = d.strategy!;
+      const inActive = active.has(r.id);
+      const native = inActive ? input.positions.find((p) => p.id === d.id)?.proposedNative ?? null : null;
+      const funded = !inActive ? null : native && native.currency === d.currency ? native.amount : 0;
+      const purchase = r.actionAmount ?? null;
+      return {
+        recommendationId: r.id,
+        destinationId: d.id,
+        accountId: d.accountId,
+        label: label(s),
+        currency: d.currency,
+        purchase,
+        funded,
+        status: minimumStatus(s.minimum, funded ?? purchase ?? 0, !!s.review),
+        needsReview: s.minimum == null && !s.review,
+        approved: r.approvedByAdvisor,
+        owner: inActive ? null : input.alternatives.find((a) => a.memberIds.includes(r.id))?.name ?? "no alternative",
+      };
+    });
+}
+
+/**
+ * What a pending plan preview was built for: the alternative, model revision,
+ * account and the plan's amounts. A preview whose key no longer matches is
+ * stale and must be rebuilt, so Add always matches what is shown.
+ */
+export function pendingPlanKey(input: { draftId: string; model: Pick<ModelRevision, "id" | "revision">; accountId: string; plan: SleevePlan }): string {
+  const { draftId, model, accountId, plan } = input;
+  return JSON.stringify([
+    draftId,
+    model.id,
+    model.revision,
+    accountId,
+    plan.basis.ok ? [plan.basis.value, plan.basis.currency] : plan.basis.reason,
+    plan.rows.map((r) => [r.strategy.id, r.strategy.revision, r.target]),
+    plan.problems,
+  ]);
+}
