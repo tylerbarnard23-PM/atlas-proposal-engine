@@ -1,6 +1,6 @@
 # Handoff
 
-## Current checkpoint — 25 October 2026: D2 released; D2a plan reconciled (PR #74)
+## Current checkpoint — 26 October 2026: D2 released; D2a plan reconciled and merged (PR #74); licensing notice merged (PR #77)
 
 - **D2 released:** PR #75 merged pinned to reviewed head `5b0f8b1082c87919542c8b67f08ac8e69f242b8c` as **`073049ff526a58b0ab14bc05a6bf640ab80c5cb8`**. Main CI run 40204437975 passed: 466 passed, 2 private-PDF skips (468), eval 2/2, build. GitHub records a successful Production deployment for `073049f`. A synthetic production smoke passed; it is recorded on [PR #75](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/75) and [#36](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/36), and the browser workspace was restored byte-identical. It checked:
   - 50/40/10 for a funded replacement;
@@ -16,7 +16,9 @@
   - Readiness checks `funding_reserves` and `approved_alternative`, shared by the desk, PDF route and Copilot.
   - Removed destination accounts are declared in `unresolvedLinks[].destinationAccountId`.
   - v7/v6 backups upgrade strictly.
-- **Next:** review and merge this planning PR (#74). Then implement **D2a model/manager proposals** (#73) at Opus 5.5 High from [MODEL_AND_MANAGER_PROPOSALS.md](roadmap/MODEL_AND_MANAGER_PROPOSALS.md), on the D2 contracts above, then D3 review/presentation, D4 agent evidence, D5 publication. Read the [delivery plan](roadmap/DEMO_DELIVERY_PLAN.md), the [command playbook](roadmap/CLAUDE_COMMANDS.md) and only the relevant contracts.
+- **Licensing:** PR #77 (merged `7e1c1c4`) added the historical MIT notice, the corrected README and a rights-verification checklist ([LICENSING.md](../LICENSING.md), [status](LICENSING_STATUS.md)). It makes no legal-clearance claim; the checklist is still open.
+- **Development models:** Sonnet 5.5 for routine work; Opus 5.5 at High effort for financial/domain, migration and security decisions. This is development guidance only, never Atlas's runtime model or API settings.
+- **Next:** implement **D2a model/manager proposals** (#73) at Opus 5.5 High from [MODEL_AND_MANAGER_PROPOSALS.md](roadmap/MODEL_AND_MANAGER_PROPOSALS.md), on the D2 contracts above, then D3 review/presentation, D4 agent evidence, D5 publication. Read the [delivery plan](roadmap/DEMO_DELIVERY_PLAN.md), the [command playbook](roadmap/CLAUDE_COMMANDS.md) and only the relevant contracts.
 - **D2a scope:** versioned model targets and funded manager/strategy sleeves, with known minimums and fees and explicit unknown exposures. Sleeves are funded through D2's eligible cash, reserves (in their stated currency) and atomic units. This is proposal design, not UMA operations or execution.
 - **Open follow-up:** #76 (a reserve breach caused by a legacy action can leave out and blame a cash-adding replacement). It is not part of D2a.
 - **Limitations carried forward:**
@@ -28,6 +30,10 @@
 
   All 25 R-plans remain Planned or partial; no scope issue closes.
 - **Preserved:** accepted values, FX and source dates, every readiness and final-PDF gate, legacy recommendation effects, #59 privacy, backup and agent requirements.
+
+## Licensing documentation correction — 26 October 2026
+
+See [LICENSING.md](../LICENSING.md) and [rights-verification status](LICENSING_STATUS.md). Current blanket open-source wording is removed; historical MIT evidence/grants and third-party rights are preserved. Ownership/exclusivity verification remains open and requires qualified review; keep private supporting documents outside Git. No application behavior or delivery sequencing changed.
 
 ## Working agreements
 

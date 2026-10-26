@@ -1,12 +1,10 @@
 # Atlas Proposal Engine
 
-**An open-source reference implementation of AI-assisted wealth-proposal tooling.** Atlas takes an advisor from a pile of messy client statements to a branded sample PDF proposal gated by a readiness checklist, with a Claude-powered Copilot that drafts recommendations and leaves every decision to the advisor.
+**A demonstration of AI-assisted wealth-proposal tooling.** Atlas takes an advisor from a pile of messy client statements to a branded sample PDF proposal gated by a readiness checklist, with a Claude-powered Copilot that drafts recommendations and leaves every decision to the advisor.
 
 [![CI](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/actions/workflows/ci.yml)
 
 **[Live demo →](https://atlas-proposal-engine.vercel.app/)** · runs on a sample family office, no sign-up, no API key needed
-
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Ftylerbarnard23-PM%2Fatlas-proposal-engine)
 
 > **Disclaimer.** Atlas is a demonstration project. It is not a registered investment adviser or broker-dealer and is not affiliated with, reviewed, or endorsed by the SEC, FINRA, or any regulator. Sample clients and advisors are fictional. Nothing here is investment, tax, or legal advice. Do not upload real client data.
 >
@@ -143,6 +141,8 @@ The financial-plan reader was built against a real 94-page planning report (Morg
 
 ## Quickstart
 
+These technical instructions do not grant a software license. Check the [licensing notice](LICENSING.md) for the version/material you intend to use; historical MIT grants are not withdrawn by this notice.
+
 Requires Node 24.
 
 ```bash
@@ -167,9 +167,9 @@ Atlas is white-label: clients see the adviser's firm, logo and colors, not Atlas
 
 Every PDF Atlas generates is marked as a sample: a SAMPLE watermark on final PDFs (DRAFT on drafts), a notice at the foot of every page, and a `SAMPLE_` filename prefix. The same disclaimer appears in the app footer. These markings are intentional and stay in this repository.
 
-> **The one Atlas mark on client documents.** The sample notice (`PDF_SAMPLE_NOTICE` in `src/domain/legal.ts`, the SAMPLE watermark and cover label, and the `SAMPLE_` filename prefix) is the only place Atlas appears on a client-facing PDF. A white-label adopter would remove it; doing so means taking responsibility for the output, as described below.
+> **The one Atlas mark on client documents.** The sample notice (`PDF_SAMPLE_NOTICE` in `src/domain/legal.ts`, the SAMPLE watermark and cover label, and the `SAMPLE_` filename prefix) is the only place Atlas appears on a client-facing PDF. An adopter with the necessary rights would need its own reviewed output policy; sample markings are not a licensing permission or a compliance approval.
 
-If you adapt it for real client work, removing the sample markings is your decision, and so is everything that comes with it: compliance review, books-and-records retention, supervision, data security and vendor due diligence are the responsibility of whoever deploys it.
+Any authorized adaptation for real client work also requires the relevant production controls and review before removing sample markings: compliance review, books-and-records retention, supervision, data security and vendor due diligence are the responsibility of whoever deploys it.
 
 ## Limitations and roadmap
 
@@ -188,4 +188,4 @@ Feedback and issues welcome.
 
 ## License
 
-Copyright (c) 2026 Tyler Barnard. All rights reserved. Third-party dependencies remain under their respective licenses.
+See [LICENSING.md](LICENSING.md) for current licensing intent and the historical MIT notice. The current project does not offer a new blanket open-source license. Historical grants and third-party licenses are preserved; rights verification is not represented as complete.

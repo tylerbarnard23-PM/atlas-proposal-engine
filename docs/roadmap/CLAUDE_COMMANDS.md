@@ -4,7 +4,9 @@ Approved workflow: 24 October 2026. Use with [DEMO_DELIVERY_PLAN.md](DEMO_DELIVE
 
 ## Model and effort
 
-Tyler's available development model is **Opus 5.5**; only effort can change. Do not recommend a Sonnet switch or assume a terminal client is required.
+Development models: **Sonnet 5.5** is fine for routine work (documentation, release and merge steps, bounded UI and wording fixes, mechanical updates, checking CI and evidence). Use **Opus 5.5 at High effort** for financial/domain contracts, state migrations and backup compatibility, security and privacy, readiness/approval semantics and difficult defect review. Effort (Low/Medium/High) still applies within a model. Never assume a terminal client is required.
+
+This is development guidance only. It never changes Atlas's runtime model, providers, API settings or live-AI configuration.
 
 | Work | Effort | Guidance |
 |---|---|---|

@@ -18,7 +18,7 @@ The public demo stays scripted/synthetic; a separately enabled local live-agent 
 - One Claude command owns inspect → implement → focused tests → self-review/fix → final validation → save/docs → open PR. One Codex review checkpoint follows a completed package or justified split. Fix all blocking findings together on the same PR.
 - Keep the active handoff short; previous notes are archived in [CLAUDE_HANDOFF_HISTORY_2026-10-24.md](../CLAUDE_HANDOFF_HISTORY_2026-10-24.md) and read only for a specific need. Do not load the whole archive or all 25 plans each session.
 - Keep documentation in the feature PR. Put merge/deployment evidence in that PR and the issue; refresh the handoff with the next substantive branch. No release-only checkpoint PR or repeated full-roadmap rewrite.
-- Low/Medium/High effort are the available controls for **Claude Code Desktop on Opus 5.5**. There is no assumed Sonnet switch. Development-assistant settings are separate from Atlas's API model/provider configuration.
+- Development models: Sonnet 5.5 for routine work (documentation, release steps, bounded fixes); Opus 5.5 at High effort for financial/domain contracts, migrations, security and difficult review (see [the command playbook](CLAUDE_COMMANDS.md)). Development-assistant settings are separate from Atlas's API model/provider configuration.
 
 This is a smaller first milestone, not a promise that AI can implement the full roadmap in days. The previous 4–6-week demo range is only an unmeasured planning hypothesis. Re-estimate after D1 and D2 using actual sessions, review loops and blockers; do not invent a new deadline or completion percentage. The immediate evidence of acceleration is a usable workbench, fewer handoffs and complete tasks per PR.
 
