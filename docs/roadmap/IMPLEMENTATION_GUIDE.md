@@ -4,7 +4,7 @@ Read [ROADMAP.md](../../ROADMAP.md) and the selected R01–R25 plan before codin
 
 ## Active delivery plan — 24 October 2026
 
-Use [DEMO_DELIVERY_PLAN.md](DEMO_DELIVERY_PLAN.md) and the [Claude command playbook](CLAUDE_COMMANDS.md). The active handoff is intentionally short; archived release notes are not automatic startup context. The next task is D1's usable allocation workspace, not another standalone cleanup. Original R01–R25 plans remain full backlog/contract references; implement their package minimums together rather than completing all feature dependencies serially. Provider deletion, advanced analytics and real-client infrastructure do not precede the synthetic demo.
+Use [DEMO_DELIVERY_PLAN.md](DEMO_DELIVERY_PLAN.md) and the [Claude command playbook](CLAUDE_COMMANDS.md). The active handoff is intentionally short; archived release notes are not automatic startup context. D1 is released as `0381db1` (PR #72). The active sequence is D2 funded alternatives → [D2a model/manager proposals](MODEL_AND_MANAGER_PROPOSALS.md) → D3 presentation → D4 agent evidence → D5 publication; do not repeat D1. Original R01–R25 plans remain full backlog/contract references; implement their package minimums together rather than completing all feature dependencies serially. Provider deletion, advanced analytics and real-client infrastructure do not precede the synthetic demo.
 
 Claude Code Desktop currently uses Opus 5.5 with effort as the available control: High for financial/domain/migration/agent boundary design, Medium for bounded implementation and release, Low for save/status/docs. Carry one coherent task through implementation, focused tests, self-review, final validation, docs and PR; do not stop for repeated routine design confirmations or create planning/release-only PRs. Owner merge/spend/privacy/name authority and real financial gates remain.
 
@@ -50,6 +50,7 @@ Direct uploads into Claude Desktop/Code are outside Atlas's redaction boundary a
 | Client objectives and constraints | R12 | Unassessed state, reserve currency/timeframe, restrictions, private versus client-visible fields |
 | Proposal scope | R02 | Included/held-away/context-only records, denominator, unknown coverage, revision |
 | Scenario and action intent | R05/R07 | Baseline revision, membership versus approval, explicit full exit, conflicting actions/order |
+| Model/strategy/sleeve proposal | R03/R04; D2a/#73 | Versioned definitions, target versus funded grouping, known minimums, fee/exposure coverage and no sleeve/component double counting; proposal-only authority |
 | Proposed instruments and linked groups | R04 | Stable IDs, supported identity data, atomic replacement behavior and migration of advisory legacy swaps |
 | Funding ledger | R06 | Reserves, selected cash lines, ownership/transfer prerequisites, external flows and missing FX |
 | Exposure/cost/tax/risk evidence | R14–R17 | Supported methods, source date, unknown versus zero, estimated versus verified |
@@ -63,7 +64,7 @@ Use the existing engines and clearly typed input/output contracts; the UI must n
 ## Migration sequence
 
 1. R23a adds schema-validated export/restore before substantial persisted-schema changes.
-2. Preserve the current v6 workspace/backup and supported legacy versions as migration fixtures; keep their actual currency/approval behavior. Existing PR #34 tests (merged) remain a baseline.
+2. Preserve the current v7 workspace/backup and every supported legacy version as migration fixtures; keep their actual currency/approval behavior. Existing PR #34 tests (merged) remain a baseline.
 3. Add the minimum scope, objective and explicit-intent contracts; do not silently reinterpret legacy monetary instructions.
 4. Migrate recommendations into an editable legacy scenario with equivalent effects. Flag ambiguous intent for restatement, without rewriting the historical evidence.
 5. Capture the R19a accepted input/FX-basis record after the minimum R02/R18 contracts; this is not final approval. Add proposed positions, funding and model targets against the scenario without requiring security quotes.

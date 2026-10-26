@@ -12,31 +12,33 @@ The public demo stays scripted/synthetic; a separately enabled local live-agent 
 
 ## What changes about the way we work
 
-- Build five coherent delivery packages, not all 25 feature plans serially. Start the allocation workspace next. The small R11 wording/identifier change is already delivered (PR #70 (merged `8b06b6a`)); do not repeat it.
+- Build the five original delivery packages plus the bounded D2a model/manager slice, not all 25 feature plans serially. Start the allocation workspace next. The small R11 wording/identifier change is already delivered (PR #70 (merged `8b06b6a`)); do not repeat it.
 - Implement the minimum required contracts alongside the first visible task that uses them. Do not finish every dependency's advanced UX before showing a useful workspace. An early grid is not permission to add separate UI arithmetic or bypass funding/approval rules.
-- Default to one reviewable PR per package. D1 may need two linked PRs (minimum persisted contracts/backup migration, then the visible workspace); split another package only for a concrete independently testable migration or financial contract, not for copy/docs separately. Do not put all five packages in one branch.
+- Default to one reviewable PR per package. D1 may need two linked PRs (minimum persisted contracts/backup migration, then the visible workspace); split another package only for a concrete independently testable migration or financial contract, not for copy/docs separately. Do not put all delivery packages in one branch.
 - One Claude command owns inspect → implement → focused tests → self-review/fix → final validation → save/docs → open PR. One Codex review checkpoint follows a completed package or justified split. Fix all blocking findings together on the same PR.
 - Keep the active handoff short; previous notes are archived in [CLAUDE_HANDOFF_HISTORY_2026-10-24.md](../CLAUDE_HANDOFF_HISTORY_2026-10-24.md) and read only for a specific need. Do not load the whole archive or all 25 plans each session.
 - Keep documentation in the feature PR. Put merge/deployment evidence in that PR and the issue; refresh the handoff with the next substantive branch. No release-only checkpoint PR or repeated full-roadmap rewrite.
-- Low/Medium/High effort are the available controls for **Claude Code Desktop on Opus 5.5**. There is no assumed Sonnet switch. Development-assistant settings are separate from Atlas's API model/provider configuration.
+- Development models: Sonnet 5.5 for routine work (documentation, release steps, bounded fixes); Opus 5.5 at High effort for financial/domain contracts, migrations, security and difficult review (see [the command playbook](CLAUDE_COMMANDS.md)). Development-assistant settings are separate from Atlas's API model/provider configuration.
 
 This is a smaller first milestone, not a promise that AI can implement the full roadmap in days. The previous 4–6-week demo range is only an unmeasured planning hypothesis. Re-estimate after D1 and D2 using actual sessions, review loops and blockers; do not invent a new deadline or completion percentage. The immediate evidence of acceleration is a usable workbench, fewer handoffs and complete tasks per PR.
 
 ## Current evidence and start point
 
 - **D1 released:** PR #72 merged `0381db1` (24 October 2026); release and production evidence on PR #72 and #36.
-- **D2 in review:** PR #75 (`feat/d2-funded-alternatives`, implementation `55b83e0`) built from main `0381db1`. Contract notes are in the PR. D3 starts only after D2's review/release.
+- **D2 released:** PR #75 merged pinned to `5b0f8b1` as `073049f` (25 October 2026; main CI run 40204437975, Production deployment for `073049f`); release and production smoke evidence on PR #75 and #36.
+- **D2a next:** implement the [model/manager proposal plan](MODEL_AND_MANAGER_PROPOSALS.md) (#73) on D2's delivered v8 contracts (`Account.funding.reserveCurrency`, declared unresolved funding, atomic units, alternatives, `funding_reserves`/`approved_alternative`). D3 follows D2a.
 - Observed main: `8b06b6a842d8b11adc1b96967c78aee9c0e12a6c` (PR #70, merged 24 October 2026; main CI run 40101245056: **402 passed, 2 skipped, 404 total**, eval 2/2, typecheck and build; GitHub Production deployment for that SHA). Before it: `7d5999fa01e15a1271bb81812cd8cabbbf58d095` (PR #69, R18 slice 1). PR #68's audit is merged as `298b719`; R23a is merged as `e56335e`.
 - PR #69 reviewed head: `7619327ca7093a3351760f826560e3c577a30faf`. Main CI run 40097812771 passed: **393 passed, 2 skipped, 395 total**, eval 2/2, typecheck and build. The two skips need the private UBS PDF; the reported local suite passed all 395.
 - Release evidence on [PR #69](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/69#issuecomment-6384766252) and [#51](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/51#issuecomment-6384766474) records production draft/final-control tests, 422 missing-FX/incomplete-import gates, New York/UTC approval-date parity and exact browser-workspace restoration. These are prior release observations, not tests performed by this plan.
 - [PR #70](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/70) (`feat/r18-r11-review-wording`) appeared while this plan was drafted. It was Codex-reviewed at `6449889bfbf9a07ff3a45c8446301e87693a8c4b` and merged pinned as `8b06b6a842d8b11adc1b96967c78aee9c0e12a6c`. Its cleanup counts toward D1 and must not be repeated. The prior standalone R11-first command is superseded for new work; **D1 is the next substantial feature**, not another cleanup PR. Recheck actual heads/status before starting.
 
-## Five packages, in order
+## Delivery sequence: D1 → D2 → D2a → D3 → D4 → D5
 
 | Package | Advisor-visible result | Minimum contributing plans | Exit evidence |
 |---|---|---|---|
 | **D1 — Working allocation desk** | One workspace shows selected investment scope, current/proposed/target mix, drift and a contextual holding edit. | R01/R02/R03/R05/R07/R08, minimum R06/R11/R12/R14/R19a/R25 contracts | Scope excludes context wealth without losing it; explicit draft actions use the shared evaluator; save/reload/backup work; current holdings/approvals do not change during preview. |
 | **D2 — Funded alternatives** | Replace into a new investment, preserve a cash reserve, duplicate and compare two named alternatives. | R04/R05/R06 with existing R02/R07/R08/R12/R14 | Real source/destination identities, atomic legs, correct FX and eligible funding; reserve breach blocks; two independent alternatives reconcile. |
+| **D2a — Model and manager proposals** | Select versioned target models and propose funded manager/strategy sleeves with explicit exposure and fee coverage. | R03/R04; bounded R05/R06/R14/R16/R19 contracts, [#73](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/73) | No sleeve/component double counting; unknown exposure stays unknown; minimums/reserves enforced; definition revisions and alternatives isolated. |
 | **D3 — Review once, present consistently** | Approve a complete version, then show that same version in a concise local presentation and PDF. | R19/R20/R21; concise R01/R12/R16 | The reviewed inputs/actions/FX and outputs are captured together; later edits make a new draft; amounts match every surface; unknown costs/tax/risk stay explicit. |
 | **D4 — Demonstrate the bounded agent** | From the active portfolio/scenario, investigate → simulate → draft with evidence, then explicit advisor review. | R22 and its existing evaluation plan | Real orchestration tested offline, no duplicate/unauthorized actions, numbers agree with tools; a capped opt-in local live run supplies evidence for any live-agent claim. |
 | **D5 — Package for LinkedIn** | A short, repeatable end-to-end demonstration with honest limits, accessible controls and screened visible branding. | R01/R25, naming #35, README/demo evidence | Golden-path and blocked-path checks, keyboard flow, actual evidence/limitations, name decision and preserved URLs/storage keys; no unearned production/usability claims. |
@@ -61,11 +63,15 @@ Start with a dollar-based custom/synthetic destination and linked sell/buy group
 
 Duplicate the active draft into two named alternatives with independent IDs/actions and cleared alternative approval. Compare using one shared evaluator. No broad model library, optimizer, external security search or rich undo/history is needed for this milestone.
 
+### D2a: models and manager-sleeve proposals
+
+After D2 and before D3 implement [MODEL_AND_MANAGER_PROPOSALS.md](MODEL_AND_MANAGER_PROPOSALS.md). Deliver a small versioned model library and explicit proposed manager/strategy allocations, using D2 funding rather than treating targets as funded investments. Keep sleeve values separate from underlying exposure and disclose unknown minimums/fees/mixes. This supports UMA-style proposals, not UMA administration. Full catalogs and automated rebalancing remain later. D3 must preserve the chosen revisions and sleeve/exposure distinction in the reviewed presentation/PDF; D4 uses the same definitions without expanded authority.
+
 ### D3: a real reviewed package, not a screenshot
 
 Capture the selected scope, accepted input/FX revision, current/proposed holdings, ordered actions/funding, explanations, disclosures, approval identity/time and supported assumptions. Use it for the local meeting view and PDF; changing inputs produces a new draft rather than rewriting the saved approved version. A new final-document request still obeys server readiness; historical viewing must not silently refresh rates or bypass current issuance gates.
 
-Reuse one existing template. Show known cost/income inputs with coverage or mark the comparison unavailable; no invented zero/savings, unsupported tax/risk calculations or external data purchase. Full fee schedules, IPS generation, template administration and remote sharing stay later. Snapshots remain local application records, not tamper-proof regulatory books and records.
+Reuse one existing template. Show known cost/income inputs with coverage or mark the comparison unavailable; no invented zero/savings, unsupported tax/risk calculations or external data purchase. Capture D2a model/strategy revisions, target versus funded sleeves, exposure coverage and minimum/fee evidence in that same version. Full fee schedules, IPS generation, template administration and remote sharing stay later. Snapshots remain local application records, not tamper-proof regulatory books and records.
 
 ### D4: prove agent behavior without a provider detour
 

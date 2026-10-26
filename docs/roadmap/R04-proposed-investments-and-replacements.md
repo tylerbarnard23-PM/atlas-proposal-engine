@@ -7,8 +7,12 @@ Canonical plan: [R04-proposed-investments-and-replacements.md](R04-proposed-inve
 
 ## Delivery routing — 24 October 2026
 
-**D2 — minimum slices only.** Follow [DEMO_DELIVERY_PLAN.md](DEMO_DELIVERY_PLAN.md) and [CLAUDE_COMMANDS.md](CLAUDE_COMMANDS.md); their package order supersedes the original phase queue. Minimum scope: One supported custom/synthetic destination and an atomic linked sell/buy replacement. Later scope: Broad security search/catalog, complex instrument and replacement variants. This does not implement or complete the full R-plan. Dependencies below mean the minimum required contract, not every advanced feature of the referenced plan. Preserve all financial, backup and privacy safeguards.
+**D2/D2a — minimum slices only.** Follow [DEMO_DELIVERY_PLAN.md](DEMO_DELIVERY_PLAN.md) and [CLAUDE_COMMANDS.md](CLAUDE_COMMANDS.md); their package order supersedes the original phase queue. Minimum scope: One supported custom/synthetic destination and an atomic linked sell/buy replacement. Later scope: Broad security search/catalog, complex instrument and replacement variants. This does not implement or complete the full R-plan. Dependencies below mean the minimum required contract, not every advanced feature of the referenced plan. Preserve all financial, backup and privacy safeguards.
 
+
+## Approved D2a extension — 24 October 2026
+
+After D2, before D3, deliver the bounded [model and manager proposal slice](MODEL_AND_MANAGER_PROPOSALS.md), tracking #73. It brings a small versioned model library and funded strategy sleeves into demo scope; full catalogs, automatic rebalancing and UMA operations remain later. Use shared funding/reserve evaluation, distinct sleeve and exposure views, explicit missing minimum/fee/mix coverage and backup migrations. This supersedes the earlier blanket deferral of saved models for this bounded slice only; no implementation is claimed.
 
 ## Advisor problem
 An unlinked recommendation is advisory-only, and the current replacement action leaves the original holding unchanged.

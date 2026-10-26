@@ -10,6 +10,10 @@ Canonical plan: [R16-cost-and-income-comparison.md](R16-cost-and-income-comparis
 **D3 — minimum slices only.** Follow [DEMO_DELIVERY_PLAN.md](DEMO_DELIVERY_PLAN.md) and [CLAUDE_COMMANDS.md](CLAUDE_COMMANDS.md); their package order supersedes the original phase queue. Minimum scope: Show reproducible known-input fees/income and coverage, or explicitly unavailable; no enrichment prerequisite. Later scope: Full fee schedule modeling, transition cost modeling and automatic data enrichment. This does not implement or complete the full R-plan. Dependencies below mean the minimum required contract, not every advanced feature of the referenced plan. Preserve all financial, backup and privacy safeguards.
 
 
+## Approved D2a contract routing — 24 October 2026
+
+The bounded [model and manager proposal slice](MODEL_AND_MANAGER_PROPOSALS.md), #73, follows D2 and precedes D3. Reuse this plan's minimum scenario/funding/exposure/fee/snapshot contracts as applicable. Keep strategy sleeves separate from underlying asset-class exposure and owned positions, disclose unknown data, preserve model revisions and use shared funding/reserve/approval gates. Full enrichment and UMA operations remain later; this note claims no implementation.
+
 ## Advisor problem
 Headline estimates from available expense/yield fields can appear more complete than the data, and do not explain replacement economics.
 
