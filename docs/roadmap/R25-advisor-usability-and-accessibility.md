@@ -10,6 +10,10 @@ Canonical plan: [R25-advisor-usability-and-accessibility.md](R25-advisor-usabili
 **D1/D5 — minimum slices only.** Follow [DEMO_DELIVERY_PLAN.md](DEMO_DELIVERY_PLAN.md) and [CLAUDE_COMMANDS.md](CLAUDE_COMMANDS.md); their package order supersedes the original phase queue. Minimum scope: Repeatable synthetic tasks, keyboard checks and honest launch evidence. Later scope: Consented 3–5-advisor study and measured competitor usability comparisons; run earlier if participants exist. This does not implement or complete the full R-plan. Dependencies below mean the minimum required contract, not every advanced feature of the referenced plan. Preserve all financial, backup and privacy safeguards.
 
 
+## D5 publication check — secrets and exposure
+
+Also follow [D5_SECRETS_EXPOSURE_REVIEW.md](D5_SECRETS_EXPOSURE_REVIEW.md), linked to #59. Before LinkedIn publication, retain a redacted assessment tied to the commit/build covering code/history, CI/build/environment settings, client bundles/maps and public API/agent exposure, with access gaps and verified blocker remediation/retests. Keep this evidence separate from advisor usability observations: neither replaces the other, and neither is a full security certification. Exposed usable credentials are escalated immediately at any stage, not deferred to publication. This is planned scope only; D3 remains next and #59 remains required before real-client use.
+
 ## Advisor problem
 Expert inspection cannot establish ease-of-use parity or reveal all advisor comprehension/accessibility failures.
 

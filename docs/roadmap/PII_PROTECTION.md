@@ -7,6 +7,10 @@ Tracking issue: [#59](https://github.com/tylerbarnard23-PM/atlas-proposal-engine
 
 _Status: Planned. Recorded 22 October 2026 after the owner asked how to secure client data. This is an addition to the accepted 25-item roadmap, not a renumbering or an implemented security control._
 
+## D5 publication exposure review — 27 October 2026
+
+The [bounded secrets and exposure review](D5_SECRETS_EXPOSURE_REVIEW.md) is a planned D5 publication check linked to this issue and R25/#57. It checks repository/history, build/CI/environment configuration, emitted browser bundles/maps and public API/agent boundaries, including uncontrolled paid-operation paths. Record redacted commit/build-bound evidence, access gaps and blocker retests. Exposed usable credentials require immediate owner notification and prioritized revocation/rotation; never publish their values. Preserve client-side processing when it avoids unnecessary data transmission. The report-only assessment authorizes no new services, key rotation, history rewrite or broad authentication/storage rebuild. It does not complete this issue or authorize real-client data. D3 remains next; this document records requirements, not a scan result.
+
 ## Product decision
 
 Keep the public application a synthetic/sample-data demonstration. Before real client information is processed, require a reviewed privacy/security design and evidence that the controls below work across every data path. Masking the UI, adding a login or encrypting a database alone does not meet this gate.
