@@ -181,12 +181,17 @@ export type SnapshotStatus = { kind: "matches" } | { kind: "changed"; parts: str
 
 /**
  * Whether the workspace still holds what a version froze. Compared on
- * contents; the input record's own timestamp is ignored. A change never
+ * contents; the derived input record is ignored. A change never
  * touches the version: the advisor approves a new one.
  */
 export function snapshotStatus(s: ApprovedSnapshot, ws: SnapshotSource, now: Date): SnapshotStatus {
   const live = capture(ws, now);
-  const comparable = (c: Captured) => ({ inputs: c.inputs, alternative: { ...c.alternative, inputBasis: c.alternative.inputBasis.fingerprint } });
+  // The input basis is derived from the holdings and rates compared below, so it isn't compared twice.
+  const comparable = (c: Captured) => {
+    const { inputBasis: _derived, ...alternative } = c.alternative;
+    void _derived;
+    return { inputs: c.inputs, alternative };
+  };
   const a = comparable(s);
   const b = comparable(live);
   if (contentHash(a) === contentHash(b)) return { kind: "matches" };

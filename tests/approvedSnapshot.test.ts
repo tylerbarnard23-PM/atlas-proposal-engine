@@ -127,7 +127,7 @@ const render = async (m: M, s: ApprovedSnapshot, presentation: "meeting" | "issu
 const text = (html: string) =>
   html.replace(/<style[\s\S]*?<\/style>/g, " ").replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/&#x27;|&#39;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, " ");
 
-async function post(m: M, body: object, variant: "draft" | "final" = "final") {
+async function post(body: object, variant: "draft" | "final" = "final") {
   const { POST } = await import("@/app/api/proposals/[id]/generate-pdf/route");
   const res = await POST(new Request(`http://localhost/api/proposals/p1/generate-pdf?variant=${variant}`, { method: "POST", body: JSON.stringify(body) }), { params: Promise.resolve({ id: "p1" }) });
   const out = { status: res.status, filename: res.headers.get("X-Filename"), error: "" as string, failing: [] as string[] };
@@ -245,6 +245,8 @@ describe("later edits never rewrite an approved version", () => {
     const v1 = json(approve(m));
     vi.setSystemTime(new Date(NOW.getTime() + 60_000));
     store(m).patchHolding("h_eur_fund", { nativeMarketValue: 12_000 });
+    // Each change is reported once: a value edit is "holdings", not also the alternative.
+    expect(m.snapshotStatus(store(m).snapshots[0], store(m), NOW)).toEqual({ kind: "changed", parts: ["holdings"] });
     const v2 = approve(m);
     expect(store(m).snapshots.map((x) => x.version)).toEqual([1, 2]);
     expect(json(store(m).snapshots[0])).toEqual(v1);
@@ -262,7 +264,7 @@ describe("one template: meeting view, issued PDF and draft copy agree", () => {
     vi.setSystemTime(new Date(NOW.getTime() + 3_600_000));
     // The workspace changes after approval; the document is from the version only.
     store(m).patchHolding("h_uma_cash", { nativeMarketValue: 1 });
-    const res = await post(m, { snapshot: store(m).snapshots[0], timeZone: "UTC" });
+    const res = await post({ snapshot: store(m).snapshots[0], timeZone: "UTC" });
     expect(res).toMatchObject({ status: 200, filename: "SAMPLE_Managed_Story_Household_Wealth_Proposal_v1_2026-10-26.pdf" });
     expect(m.fake.launches).toBe(1);
     const pdfBody = m.fake.html[0].slice(m.fake.html[0].indexOf("<body>") + 6, m.fake.html[0].lastIndexOf("</body>"));
@@ -333,12 +335,12 @@ describe("issuing a final PDF from a version", () => {
     const v1 = json(approve(m));
     const tamperedInput = structuredClone(v1);
     tamperedInput.inputs.holdings[0].nativeMarketValue = 999_999;
-    expect(await post(m, { snapshot: tamperedInput })).toMatchObject({ status: 422, error: expect.stringMatching(/don't match its fingerprint/) });
+    expect(await post({ snapshot: tamperedInput })).toMatchObject({ status: 422, error: expect.stringMatching(/don't match its fingerprint/) });
     const tamperedResult = structuredClone(v1);
     tamperedResult.results.proposed.total = 1;
-    expect(await post(m, { snapshot: tamperedResult })).toMatchObject({ status: 422, error: expect.stringMatching(/results don't match its inputs/) });
+    expect(await post({ snapshot: tamperedResult })).toMatchObject({ status: 422, error: expect.stringMatching(/results don't match its inputs/) });
     const extraField = { ...structuredClone(v1), extra: true };
-    expect(await post(m, { snapshot: extraField })).toMatchObject({ status: 422, error: expect.stringMatching(/Not a valid approved version/) });
+    expect(await post({ snapshot: extraField })).toMatchObject({ status: 422, error: expect.stringMatching(/Not a valid approved version/) });
     expect(m.fake.launches).toBe(0);
   });
 
@@ -347,10 +349,10 @@ describe("issuing a final PDF from a version", () => {
     approvedStory(m);
     const v1 = approve(m);
     vi.setSystemTime(new Date("2026-11-05T12:00:00Z")); // the EUR/USD rate is now 11 days old
-    const res = await post(m, { snapshot: v1 });
+    const res = await post({ snapshot: v1 });
     expect(res).toMatchObject({ status: 422, failing: ["Exchange rates current"], error: expect.stringMatching(/approve a new version/) });
     expect(m.fake.launches).toBe(0);
-    const draft = await post(m, { snapshot: v1, timeZone: "UTC" }, "draft");
+    const draft = await post({ snapshot: v1, timeZone: "UTC" }, "draft");
     expect(draft).toMatchObject({ status: 200, filename: "SAMPLE_Managed_Story_Household_Draft_Wealth_Proposal_v1_2026-11-05.pdf" });
     const t = text(m.fake.html[0]);
     expect(t).toMatch(/Draft copy of approved version 1 .* Not a final document\./);
@@ -363,7 +365,7 @@ describe("issuing a final PDF from a version", () => {
     approvedStory(m);
     const s = store(m);
     const state = { client: s.client, advisor: s.advisor, accounts: s.accounts, holdings: s.holdings, recommendations: s.recommendations, sections: s.proposal.sections, disclosures: s.disclosures.filter((d) => s.proposal.disclosureIds.includes(d.id)), proposal: s.proposal, fxRates: s.fxRates, sourceDocuments: [], fxConfirmation: null, workingDraft: s.workingDraft, alternatives: s.alternatives };
-    expect(await post(m, { state })).toMatchObject({ status: 200, filename: "SAMPLE_Managed_Story_Household_Wealth_Proposal_2026-10-26.pdf" });
+    expect(await post({ state })).toMatchObject({ status: 200, filename: "SAMPLE_Managed_Story_Household_Wealth_Proposal_2026-10-26.pdf" });
     expect(text(m.fake.html[0])).not.toMatch(/approved version/i);
   });
 });
