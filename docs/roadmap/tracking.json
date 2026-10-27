@@ -130,10 +130,13 @@
         },
         {
           "pr": 79,
-          "state": "open",
+          "state": "merged",
           "date": "2026-10-26",
           "milestone": "D2a",
-          "scope": "D2a minimum slice only (versioned strategy/model library, pinned revisions, funded sleeve purchases as atomic D2 units, engine-enforced minimums, strategy_terms readiness, look-through exposure with unknowns, fee coverage, store/backup v9); full feature not complete"
+          "scope": "D2a minimum slice only (versioned strategy/model library, pinned revisions, funded sleeve purchases as atomic D2 units, engine-enforced minimums, strategy_terms readiness, look-through exposure with unknowns, fee coverage, store/backup v9); full feature not complete",
+          "head": "402084e6943bca564eec4b667c5c2ec57ac1476c",
+          "mergeCommit": "c0ee4e95119e8b8879ff3a68b4201aefa824b832",
+          "ciRun": 40346074152
         }
       ]
     },
@@ -177,10 +180,13 @@
         },
         {
           "pr": 79,
-          "state": "open",
+          "state": "merged",
           "date": "2026-10-26",
           "milestone": "D2a",
-          "scope": "D2a minimum slice only (versioned strategy/model library, pinned revisions, funded sleeve purchases as atomic D2 units, engine-enforced minimums, strategy_terms readiness, look-through exposure with unknowns, fee coverage, store/backup v9); full feature not complete"
+          "scope": "D2a minimum slice only (versioned strategy/model library, pinned revisions, funded sleeve purchases as atomic D2 units, engine-enforced minimums, strategy_terms readiness, look-through exposure with unknowns, fee coverage, store/backup v9); full feature not complete",
+          "head": "402084e6943bca564eec4b667c5c2ec57ac1476c",
+          "mergeCommit": "c0ee4e95119e8b8879ff3a68b4201aefa824b832",
+          "ciRun": 40346074152
         }
       ]
     },
@@ -501,10 +507,13 @@
       "progress": [
         {
           "pr": 79,
-          "state": "open",
+          "state": "merged",
           "date": "2026-10-26",
           "milestone": "D2a",
-          "scope": "D2a minimum slice only (versioned strategy/model library, pinned revisions, funded sleeve purchases as atomic D2 units, engine-enforced minimums, strategy_terms readiness, look-through exposure with unknowns, fee coverage, store/backup v9); full feature not complete"
+          "scope": "D2a minimum slice only (versioned strategy/model library, pinned revisions, funded sleeve purchases as atomic D2 units, engine-enforced minimums, strategy_terms readiness, look-through exposure with unknowns, fee coverage, store/backup v9); full feature not complete",
+          "head": "402084e6943bca564eec4b667c5c2ec57ac1476c",
+          "mergeCommit": "c0ee4e95119e8b8879ff3a68b4201aefa824b832",
+          "ciRun": 40346074152
         }
       ]
     },
@@ -561,10 +570,20 @@
       "progress": [
         {
           "pr": 79,
-          "state": "open",
+          "state": "merged",
           "date": "2026-10-26",
           "milestone": "D2a",
-          "scope": "D2a minimum slice only (versioned strategy/model library, pinned revisions, funded sleeve purchases as atomic D2 units, engine-enforced minimums, strategy_terms readiness, look-through exposure with unknowns, fee coverage, store/backup v9); full feature not complete"
+          "scope": "D2a minimum slice only (versioned strategy/model library, pinned revisions, funded sleeve purchases as atomic D2 units, engine-enforced minimums, strategy_terms readiness, look-through exposure with unknowns, fee coverage, store/backup v9); full feature not complete",
+          "head": "402084e6943bca564eec4b667c5c2ec57ac1476c",
+          "mergeCommit": "c0ee4e95119e8b8879ff3a68b4201aefa824b832",
+          "ciRun": 40346074152
+        },
+        {
+          "pr": 81,
+          "state": "open",
+          "date": "2026-10-27",
+          "milestone": "D3",
+          "scope": "D3 minimum slice only (approved versions freezing the bounded economic package with later-edit isolation, Reviewed Package page and D2a sleeves section in the shared template, read-only meeting view, version-gated final PDF with server-clock re-check, known-input cost/income coverage, store/backup v10); full feature not complete"
         }
       ]
     },
@@ -733,6 +752,13 @@
           "head": "d6df4cf1ab69ea7d27a2c7156af4ea6c976a80f4",
           "mergeCommit": "0381db13a69b1b62d65019b89fc5d6da47e1b420",
           "ciRun": 40136036212
+        },
+        {
+          "pr": 81,
+          "state": "open",
+          "date": "2026-10-27",
+          "milestone": "D3",
+          "scope": "D3 minimum slice only (approved versions freezing the bounded economic package with later-edit isolation, Reviewed Package page and D2a sleeves section in the shared template, read-only meeting view, version-gated final PDF with server-clock re-check, known-input cost/income coverage, store/backup v10); full feature not complete"
         }
       ]
     },
@@ -757,7 +783,16 @@
         "minimumScope": "One concise presentation/PDF using the existing disclosure library and section keys.",
         "laterScope": "Multiple templates, audience/locale variants and configurable disclosure administration.",
         "fullFeatureComplete": false
-      }
+      },
+      "progress": [
+        {
+          "pr": 81,
+          "state": "open",
+          "date": "2026-10-27",
+          "milestone": "D3",
+          "scope": "D3 minimum slice only (approved versions freezing the bounded economic package with later-edit isolation, Reviewed Package page and D2a sleeves section in the shared template, read-only meeting view, version-gated final PDF with server-clock re-check, known-input cost/income coverage, store/backup v10); full feature not complete"
+        }
+      ]
     },
     {
       "id": "R21",
@@ -782,7 +817,16 @@
         "minimumScope": "Local read-only meeting view and matching PDF from the approved snapshot.",
         "laterScope": "Remote protected links, acknowledgement/e-signatures and server sharing infrastructure.",
         "fullFeatureComplete": false
-      }
+      },
+      "progress": [
+        {
+          "pr": 81,
+          "state": "open",
+          "date": "2026-10-27",
+          "milestone": "D3",
+          "scope": "D3 minimum slice only (approved versions freezing the bounded economic package with later-edit isolation, Reviewed Package page and D2a sleeves section in the shared template, read-only meeting view, version-gated final PDF with server-clock re-check, known-input cost/income coverage, store/backup v10); full feature not complete"
+        }
+      ]
     },
     {
       "id": "R22",
@@ -956,9 +1000,9 @@
     "status": "planned",
     "trackingIssue": 36,
     "mode": "synthetic-employer-demo-first",
-    "nextMilestone": "D2a review (PR #79), then D3–D5",
+    "nextMilestone": "D3 review (PR #81), then D4–D5",
     "supersedes": "Serial P0–P5 implementation and standalone R11-first cleanup command; original feature contracts retained",
-    "observedMain": "073049ff526a58b0ab14bc05a6bf640ab80c5cb8",
+    "observedMain": "c0ee4e95119e8b8879ff3a68b4201aefa824b832",
     "developmentAssistant": {
       "application": "Claude Code Desktop",
       "model": "Opus 5.5",
@@ -1023,7 +1067,7 @@
       {
         "id": "D2a",
         "title": "Model and manager proposals",
-        "status": "in_review",
+        "status": "released",
         "dependencies": [
           "D2"
         ],
@@ -1039,12 +1083,13 @@
         "trackingIssue": 73,
         "plan": "MODEL_AND_MANAGER_PROPOSALS.md",
         "effort": "high",
-        "pr": 79
+        "pr": 79,
+        "mergeCommit": "c0ee4e95119e8b8879ff3a68b4201aefa824b832"
       },
       {
         "id": "D3",
         "title": "Review once, present consistently",
-        "status": "planned",
+        "status": "in_review",
         "dependencies": [
           "D1",
           "D2",
@@ -1058,7 +1103,9 @@
           "R20",
           "R21"
         ],
-        "effort": "high"
+        "effort": "high",
+        "pr": 81,
+        "trackingIssue": 52
       },
       {
         "id": "D4",

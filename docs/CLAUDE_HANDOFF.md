@@ -1,6 +1,6 @@
 # Handoff
 
-## Current checkpoint — 27 October 2026: D3 implemented, in review; D2a released
+## Current checkpoint — 27 October 2026: D3 implemented, in review (PR #81); D2a released
 
 - **D2a released:** PR #79 merged pinned to reviewed head `402084e6943bca564eec4b667c5c2ec57ac1476c` as **`c0ee4e95119e8b8879ff3a68b4201aefa824b832`** (26 October 2026).
   - Main CI [run 40346074152](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/actions/runs/40346074152) passed: 487 passed, 2 private-PDF skips, eval 2/2, build.
@@ -10,7 +10,7 @@
   - Append-only `strategies` and `models`, immutable by `(id, revision)`; `WorkingDraft.model` pins one revision.
   - Sleeves are proposed-only destinations with `destination.strategy` (asset class `custom`). Minimums are enforced in the engine; readiness `strategy_terms` waits for a recorded review of an unsupplied minimum.
   - `exposureView` keeps unknown mixes unknown; fees are listed by component (`feeCoverage`), never summed.
-- **D3 in review** (`feat/d3-reviewed-package`, built from main `c0ee4e9`; see the PR for the exact head). Not merged or deployed. The contract-impact note is on [#52](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/52#issuecomment-6443440356).
+- **D3 in review: [PR #81](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/81)** (`feat/d3-reviewed-package`, built from main `c0ee4e9`; see the PR for the exact head). Not merged or deployed. The contract-impact note is on [#52](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/52#issuecomment-6443440356).
   - **Approved versions:** append-only `snapshots: ApprovedSnapshot[]` (`engines/approvedSnapshot.ts`). `approveVersion(note?)` runs only when the shared readiness passes and changes nothing else (action approvals, drafts and holdings stay as they are).
   - **What a version holds:** scope, targets and model pin; the accepted values and every rate in use (an input basis recorded at approval); the approved actions in saved order; accounts with funding and reserves; disclosures with their text frozen; the pinned model and every strategy revision used; results from the shared evaluator (`snapshotResults`); approval identity, time and note; and a 64-bit content fingerprint (`engines/snapshotRecord.ts`). Inputs pass through the backup allowlist (`projectSnapshotInputs`).
   - **Isolation:** later edits never rewrite a version. `snapshotStatus` reports what changed since (holdings, rates, actions, model, library and so on), each once.
@@ -21,7 +21,7 @@
   - **D2a in the document:** a "Manager and Strategy Sleeves" page shows the pinned model, target against funded per sleeve (in the sleeve's own currency), minimum status and recorded review, supplied fees, and look-through exposure with Unknown and its coverage.
   - **Persistence:** store and backup v10 (`snapshots`; `pdfHistory[].snapshotId` and `snapshotVersion`), with strict v9/v8/v7/v6 upgrades. Restore rejects a version whose fingerprint or results don't match, duplicate IDs or numbers, another client's version, or a PDF job naming a missing version. Starting a new client or importing clears versions; restore keeps them.
   - **Evidence:** in the PR.
-- **Next:** Codex reviews the D3 PR; merge only on the owner's pinned approval. Then D4.
+- **Next:** Codex reviews PR #81; merge only on the owner's pinned approval. Then D4.
 - **Open follow-up:** #76 (reserve-breach attribution for legacy actions), unchanged.
 - **Limitations carried forward:**
   - replacements stay within one account and its cash currency;
