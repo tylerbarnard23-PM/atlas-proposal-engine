@@ -21,7 +21,11 @@
   - **D2a in the document:** a "Manager and Strategy Sleeves" page shows the pinned model, target against funded per sleeve (in the sleeve's own currency), minimum status and recorded review, supplied fees, and look-through exposure with Unknown and its coverage.
   - **Persistence:** store and backup v10 (`snapshots`; `pdfHistory[].snapshotId` and `snapshotVersion`), with strict v9/v8/v7/v6 upgrades. Restore rejects a version whose fingerprint or results don't match, duplicate IDs or numbers, another client's version, or a PDF job naming a missing version. Starting a new client or importing clears versions; restore keeps them.
   - **Evidence:** in the PR.
-- **Next:** Codex reviews PR #81; merge only on the owner's pinned approval. Then D4.
+- **Status (27 October 2026):** D3 implemented; PR #81 open, unmerged, no merge approval. Codex review is incomplete. D4 and D5 are not started.
+  - **Evidence at `3fcf455`:** local typecheck clean; full tests 504 passed, 0 skipped (private fixture present); eval 2/2; build passed. CI (check "Typecheck, test, build") passed on this head per Codex and a single status read; CI counts expected 502 passed, 2 skipped. Isolated-origin browser check done; its storage cleared, server stopped, launch.json restored.
+  - **Open finding to reproduce first:** `snapshotResults` uses the selected-account scope, but the meeting view and PDF allocation and exposure calculations still include all holdings. The fixture has $100,000 in scope plus $11,000 outside (EUR fund). Keep household context separate, and verify scoped figures agree across desk, snapshot, meeting view and PDF.
+  - **Preserve:** PR #80 (D5 secrets/exposure plan) is open; keep it when reconciling docs.
+- **Next:** finish Codex review of D3 and reproduce the scope mismatch before any owner-authorized, pinned merge.
 - **Open follow-up:** #76 (reserve-breach attribution for legacy actions), unchanged.
 - **Limitations carried forward:**
   - replacements stay within one account and its cash currency;
