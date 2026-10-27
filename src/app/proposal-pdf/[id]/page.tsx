@@ -7,6 +7,7 @@ import { useNormalizedHoldings } from "@/hooks/useNormalizedHoldings";
 import { useFxNow } from "@/hooks/useFxNow";
 import { ProposalPdfTemplate } from "@/pdf/templates/ProposalPdfTemplate";
 import { ClientOnly } from "@/components/layout/ClientOnly";
+import { reviewedAlternative } from "@/engines/approvedSnapshot";
 
 // Live preview that mirrors the print template using the in-browser store.
 // Used inside the PDF Preview iframe. Server-side Puppeteer renders use /proposal-print/[jobId].
@@ -31,6 +32,13 @@ function Inner() {
   const disclosures = useAtlasStore((s) => s.disclosures);
   const fxRates = useAtlasStore((s) => s.fxRates);
   const fxConfirmation = useAtlasStore((s) => s.fxConfirmation);
+  const strategies = useAtlasStore((s) => s.strategies);
+  const models = useAtlasStore((s) => s.models);
+  const recs = useAtlasStore((s) => s.recommendations);
+  const workingDraft = useAtlasStore((s) => s.workingDraft);
+  const alternatives = useAtlasStore((s) => s.alternatives);
+  // D2a: the pin of the alternative whose approved actions the document shows.
+  const modelPin = React.useMemo(() => reviewedAlternative({ recommendations: recs, workingDraft, alternatives }).model ?? null, [recs, workingDraft, alternatives]);
   const now = useFxNow();
   const { holdings } = useNormalizedHoldings();
 
@@ -46,6 +54,9 @@ function Inner() {
       disclosures={disclosures.filter((d) => proposal.disclosureIds.includes(d.id) || d.required)}
       fxRates={fxRates}
       fxConfirmation={fxConfirmation}
+      strategies={strategies}
+      models={models}
+      modelPin={modelPin}
       now={now.toISOString()}
       variant={variant}
     />

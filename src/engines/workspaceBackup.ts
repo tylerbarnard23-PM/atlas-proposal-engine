@@ -966,6 +966,8 @@ export interface BackupPreview {
     valuation: ReturnType<typeof valuationSummary>;
     /** The FX confirmation as it stands now (re-evaluated, never renewed). */
     fxConfirmation: "none" | "valid" | "expired" | "changed" | "invalid";
+    /** D3: approved versions, restored exactly as approved. */
+    approvedVersions: number;
   };
   current: { clientName: string; accounts: number; holdings: number; recommendations: number; sourceDocuments: number; pdfHistory: number };
   firm: { keptFirmName: string; backupFirmName: string; differs: boolean };
@@ -993,6 +995,7 @@ export function backupPreview(backup: WorkspaceBackup, current: WorkspaceData, n
       sourceFilesNotIncluded: e.sourceDocuments.map((d) => d.fileName),
       valuation: valuationSummary(holdings),
       fxConfirmation: e.fxConfirmation ? fx.confirmation.state : "none",
+      approvedVersions: e.snapshots.length,
     },
     current: {
       clientName: name(current.client),
