@@ -10,8 +10,13 @@
 
 export const FAKE_PDF = new TextEncoder().encode("%PDF-1.7 fake");
 
-/** What reached the boundary since the last reset(). */
-export const chromium = {
+/**
+ * What reached the boundary since the last reset(). One record per test
+ * worker: a mocked module outlives vi.resetModules(), so every copy of this
+ * file reports the same boundary.
+ */
+const shared = globalThis as { __fakeChromium?: { launches: number; closed: number; html: string[]; reset(): void } };
+export const chromium = (shared.__fakeChromium ??= {
   launches: 0,
   closed: 0,
   /** The printable HTML each page was given. */
@@ -21,7 +26,7 @@ export const chromium = {
     this.closed = 0;
     this.html = [];
   },
-};
+});
 
 export const puppeteerModule = {
   default: {

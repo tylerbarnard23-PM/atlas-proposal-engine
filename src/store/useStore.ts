@@ -5,6 +5,7 @@ import { persist } from "zustand/middleware";
 import type {
   Account,
   AdvisorProfile,
+  ApprovedSnapshot,
   AssetClass,
   ClientProfile,
   CurrencyCode,
@@ -44,10 +45,11 @@ import type { ImportedWorkspace } from "@/ingestion/documents/toWorkspace";
 import type { RestoredWorkspace } from "@/engines/workspaceBackup";
 import { findRevision, modelProblems, nextRevision, strategyProblems } from "@/engines/strategyProposals";
 import { UMA_MODELS, UMA_STRATEGIES } from "@/data/umaStory";
+import { buildSnapshot } from "@/engines/approvedSnapshot";
 
 /** The browser storage key every saved workspace lives under; never renamed. */
 export const STORAGE_KEY = "atlas-proposal-engine";
-export const STORE_VERSION = 9;
+export const STORE_VERSION = 10;
 
 export interface AtlasState {
   client: ClientProfile;
@@ -75,6 +77,8 @@ export interface AtlasState {
   /** D2a: the library of immutable strategy and model revisions (append-only; kept when a new client starts). */
   strategies: StrategyRevision[];
   models: ModelRevision[];
+  /** D3: the engagement's approved versions, append-only; a later edit never rewrites one. */
+  snapshots: ApprovedSnapshot[];
   hasHydrated: boolean;
 }
 
@@ -169,6 +173,12 @@ export interface AtlasActions {
   pinModel: (model: { id: string; revision: number } | null) => void;
   /** Records the advisor's review of a sleeve whose minimum wasn't supplied. A review, not verified eligibility. */
   recordSleeveReview: (recommendationId: string, note: string) => void;
+  /**
+   * D3: approves the next version of the economic package, only when the
+   * shared readiness passes now. Appends it and changes nothing else: action
+   * approvals, drafts and holdings stay as they are.
+   */
+  approveVersion: (note?: string) => { ok: true; snapshot: ApprovedSnapshot } | { ok: false; failing: string[] };
 }
 
 function initialProposal(): Proposal {
@@ -209,6 +219,7 @@ const seedState = (): AtlasState => ({
   alternatives: [],
   strategies: [],
   models: [],
+  snapshots: [],
   hasHydrated: false,
 });
 
@@ -264,6 +275,7 @@ const blankState = (): AtlasState => {
     alternatives: [],
     strategies: [],
     models: [],
+    snapshots: [],
     hasHydrated: true,
   };
 };
@@ -347,6 +359,11 @@ export function migrateAtlasState(persisted: unknown, version: number): AtlasSta
   if (version < 9 && state) {
     if (!Array.isArray(state.strategies)) state.strategies = [];
     if (!Array.isArray(state.models)) state.models = [];
+  }
+  // v10 (D3): no approved versions yet; earlier documents name none.
+  // Nothing existing changes. Idempotent.
+  if (version < 10 && state && !Array.isArray(state.snapshots)) {
+    state.snapshots = [];
   }
   return state;
 }
@@ -681,6 +698,13 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
           };
         }),
       recordDraftInputs: () => set((s) => draftChange(s, {})),
+      approveVersion: (note) => {
+        const s = get();
+        // The on-screen clock, caught up: the gate and the record share one instant.
+        const result = buildSnapshot(s, { now: new Date(fxClock.now()), id: safeId("ver"), note });
+        if (result.ok) set({ snapshots: [...s.snapshots, result.snapshot] });
+        return result;
+      },
       restoreWorkspace: (next) => {
         const storage = typeof window !== "undefined" ? window.localStorage : undefined;
         const before = get();

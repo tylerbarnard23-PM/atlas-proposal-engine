@@ -524,6 +524,12 @@ describe("the sample workspace is unchanged when every rate is present", () => {
       [" Market Data Public market prices", " Delayed and EOD Quotes"],
       [" Where market data was unavailable from configured providers", " FX Rates"],
       [" A3 Appendix — Market Data Sources", PAGE_END],
+      // D3 (R16 minimum): costs and income state their coverage instead of
+      // counting missing data as zero; the tax page says no tax analysis is included.
+      [" Estimated weighted expense ratio", " Concentration risk count"],
+      [" Income and expense estimates are derived", PAGE_END],
+      [" Income and expense ratio figures are estimates", " The proposal does not model"],
+      [" Tax considerations", " The advisor will coordinate"],
     ];
     const newRegions: [string, string][] = [
       [" Values used: 18 statement values and 7 manual valuations.", " 6 advisor-approved recommendation(s)"],
@@ -534,6 +540,10 @@ describe("the sample workspace is unchanged when every rate is present", () => {
       [" Market Prices Security values in this proposal", " Delayed and EOD Quotes"],
       [" Mock or placeholder values may appear", " FX Rates"],
       [" A3 Appendix — Valuation & Exchange-Rate Sources", PAGE_END],
+      [" Weighted expense ratio, current", " Concentration risk count"],
+      [" Expense ratios and income use only", PAGE_END],
+      [" Income and expense ratio figures use only", " The proposal does not model"],
+      [" Tax considerations", " The advisor will coordinate"],
     ];
     const current = text.replace(block, "").replace(after, before);
     expect(cut(current, newRegions)).toBe(cut(baseline.pdfText, oldRegions));

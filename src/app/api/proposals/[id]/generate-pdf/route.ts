@@ -21,11 +21,21 @@ import type {
 import { evaluateWorkspaceReadiness, readinessOk } from "@/engines/complianceEngine";
 import { checkLogoDataUrl, isValidAccentColor } from "@/domain/branding";
 import { isValidTimeZone } from "@/utils/formatting";
+import { checkSnapshot } from "@/engines/workspaceBackup";
+import { snapshotFileName, snapshotReadiness, snapshotTemplateProps } from "@/engines/approvedSnapshot";
+import type { ProposalPdfTemplateProps } from "@/pdf/templates/ProposalPdfTemplate";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
 interface RequestBody {
+  /**
+   * D3: an approved version to render instead of `state`. Its fingerprint and
+   * results are recomputed here, and a final document re-runs the shared
+   * readiness on its own inputs with this server's clock: its inputs are
+   * never refreshed, so stale rates mean approving a new version.
+   */
+  snapshot?: unknown;
   state: {
     client: ClientProfile;
     advisor: AdvisorProfile;
@@ -58,6 +68,27 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const url = new URL(req.url);
   const variant = (url.searchParams.get("variant") as "draft" | "final") ?? "draft";
   const body = (await req.json()) as RequestBody;
+  const timeZone = isValidTimeZone(body?.timeZone) ? body.timeZone : undefined;
+
+  if (body?.snapshot !== undefined) {
+    const check = checkSnapshot(body.snapshot);
+    if (!check.ok) return NextResponse.json({ error: check.error }, { status: 422 });
+    const snapshot = check.snapshot;
+    const issuedAt = new Date();
+    if (variant === "final") {
+      const checks = snapshotReadiness(snapshot, issuedAt);
+      if (!readinessOk(checks)) {
+        const failing = checks.filter((c) => !c.passed).map((c) => c.label);
+        return NextResponse.json(
+          { error: `Final PDF blocked: approved version ${snapshot.version} no longer passes readiness checks now (${failing.join("; ")}). Its inputs aren't refreshed; approve a new version.`, failing },
+          { status: 422 }
+        );
+      }
+    }
+    const props = snapshotTemplateProps(snapshot, { variant, presentation: variant === "final" ? "issued" : "draft_copy", issuedAt: issuedAt.toISOString(), timeZone });
+    const { id } = await params;
+    return renderPdf(props, snapshotFileName(snapshot, variant, issuedAt), id);
+  }
 
   if (!body?.state?.client?.fullName) {
     return NextResponse.json({ error: "Invalid proposal state in request body." }, { status: 400 });
@@ -106,8 +137,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
   }
 
-  const timeZone = isValidTimeZone(body.timeZone) ? body.timeZone : undefined;
   const props = { ...body.state, fxRates: Array.isArray(body.state.fxRates) ? body.state.fxRates : [], fxConfirmation, now: now.toISOString(), timeZone, variant };
+  const safeName = (body.state.client.householdName ?? body.state.client.fullName)
+    .replace(/[^A-Za-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  const dateStamp = new Date().toISOString().slice(0, 10);
+  const { id } = await params;
+  return renderPdf(props, `SAMPLE_${safeName}_${variant === "draft" ? "Draft_" : ""}Wealth_Proposal_${dateStamp}.pdf`, id);
+}
+
+async function renderPdf(props: ProposalPdfTemplateProps, filename: string, id: string): Promise<Response> {
   // Dynamically load react-dom/server inside the handler so the App Router
   // doesn't statically reject the import. (Next.js disallows static
   // `react-dom/server` imports in API routes; dynamic import is allowed.)
@@ -173,12 +212,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       margin: { top: "0", bottom: "0", left: "0", right: "0" },
       preferCSSPageSize: false,
     });
-    const { id } = await params;
-    const safeName = (body.state.client.householdName ?? body.state.client.fullName)
-      .replace(/[^A-Za-z0-9]+/g, "_")
-      .replace(/^_+|_+$/g, "");
-    const dateStamp = new Date().toISOString().slice(0, 10);
-    const filename = `SAMPLE_${safeName}_${variant === "draft" ? "Draft_" : ""}Wealth_Proposal_${dateStamp}.pdf`;
     return new Response(pdf as unknown as BodyInit, {
       status: 200,
       headers: {

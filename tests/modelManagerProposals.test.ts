@@ -350,7 +350,7 @@ describe("Copilot and persistence", () => {
       return { strategies: s.strategies, models: s.models, draft: [s.workingDraft.model, s.workingDraft.memberIds], recs: s.recommendations, accounts: s.accounts, holdings: s.holdings, exposure: pctBy(exposure(mm)) };
     };
     const before = JSON.parse(JSON.stringify(snap(m)));
-    expect(JSON.parse(storage.getItem("atlas-proposal-engine")!).version).toBe(9);
+    expect(JSON.parse(storage.getItem("atlas-proposal-engine")!).version).toBe(10);
     vi.resetModules();
     m = await load();
     await m.useAtlasStore.persist.rehydrate();
@@ -360,7 +360,7 @@ describe("Copilot and persistence", () => {
     const exported = m.exportBackup(m.useAtlasStore.getState(), NOW, ids);
     if (!exported.ok) throw new Error(exported.errors.join("; "));
     const file = JSON.parse(exported.text);
-    expect(file.workspaceVersion).toBe(9);
+    expect(file.workspaceVersion).toBe(10);
     const parsed = m.parseBackup(exported.text, ids);
     if (!parsed.ok) throw new Error(parsed.errors.join("; "));
     m.useAtlasStore.getState().startNewClient();
@@ -384,7 +384,8 @@ describe("Copilot and persistence", () => {
     // A v8 file has no library, pins or sleeve terms; it upgrades with an empty library and can't carry them.
     const plain = (() => {
       const c = structuredClone(file);
-      const { strategies: _s, models: _m, ...e8 } = c.engagement;
+      const { strategies: _s, models: _m, snapshots: _v, ...e8 } = c.engagement;
+      void _v;
       void _s;
       void _m;
       e8.recommendations = e8.recommendations.filter((r: Recommendation) => !r.destination?.strategy);
@@ -394,7 +395,7 @@ describe("Copilot and persistence", () => {
     })();
     const p8 = m.parseBackup(JSON.stringify(plain), ids);
     if (!p8.ok) throw new Error(p8.errors.join("; "));
-    expect(p8.backup.workspaceVersion).toBe(9);
+    expect(p8.backup.workspaceVersion).toBe(10);
     expect([p8.backup.engagement.strategies, p8.backup.engagement.models]).toEqual([[], []]);
     expect(m.parseBackup(JSON.stringify({ ...plain, engagement: { ...plain.engagement, strategies: [] } }), ids).ok).toBe(false);
     expect(m.parseBackup(JSON.stringify({ ...file, workspaceVersion: 8 }), ids).ok).toBe(false);
@@ -422,7 +423,9 @@ describe("output", () => {
     const text = html.replace(/<style[\s\S]*?<\/style>/g, " ").replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/&#x27;|&#39;/g, "'").replace(/\s+/g, " ");
     expect(text).not.toMatch(/NaN|undefined/);
     expect(text).toMatch(/Includes 3 proposed manager\/strategy sleeves \(Equity Manager A — Core Equity \(rev 1\); Fixed Income Manager B — Core Bond \(rev 1\); ETF Model C — Balanced ETF Model \(rev 1\)\)/);
-    expect(text).toMatch(/underlying asset-class exposure is not broken out/);
+    // D3: exposure, targets, minimums and fees now have their own section.
+    expect(text).toMatch(/its look-through exposure, where a mix was supplied, and its target, funding, minimum and fees are under Manager and Strategy Sleeves/);
+    expect(text).toMatch(/Manager and Strategy Sleeves .* Look-through exposure of the proposed assets/);
     expect(text).toMatch(/not a verified offering, appointment or eligibility determination/);
     expect(text).toMatch(/Other \/ unclassified/);
   });
