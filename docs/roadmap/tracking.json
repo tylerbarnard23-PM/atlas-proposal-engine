@@ -130,10 +130,11 @@
         },
         {
           "pr": 79,
-          "state": "open",
+          "state": "merged",
           "date": "2026-10-26",
           "milestone": "D2a",
-          "scope": "D2a minimum slice only (versioned strategy/model library, pinned revisions, funded sleeve purchases as atomic D2 units, engine-enforced minimums, strategy_terms readiness, look-through exposure with unknowns, fee coverage, store/backup v9); full feature not complete"
+          "scope": "D2a minimum slice only (versioned strategy/model library, pinned revisions, funded sleeve purchases as atomic D2 units, engine-enforced minimums, strategy_terms readiness, look-through exposure with unknowns, fee coverage, store/backup v9); full feature not complete",
+          "mergeCommit": "c0ee4e95119e8b8879ff3a68b4201aefa824b832"
         }
       ]
     },
@@ -177,10 +178,11 @@
         },
         {
           "pr": 79,
-          "state": "open",
+          "state": "merged",
           "date": "2026-10-26",
           "milestone": "D2a",
-          "scope": "D2a minimum slice only (versioned strategy/model library, pinned revisions, funded sleeve purchases as atomic D2 units, engine-enforced minimums, strategy_terms readiness, look-through exposure with unknowns, fee coverage, store/backup v9); full feature not complete"
+          "scope": "D2a minimum slice only (versioned strategy/model library, pinned revisions, funded sleeve purchases as atomic D2 units, engine-enforced minimums, strategy_terms readiness, look-through exposure with unknowns, fee coverage, store/backup v9); full feature not complete",
+          "mergeCommit": "c0ee4e95119e8b8879ff3a68b4201aefa824b832"
         }
       ]
     },
@@ -501,10 +503,11 @@
       "progress": [
         {
           "pr": 79,
-          "state": "open",
+          "state": "merged",
           "date": "2026-10-26",
           "milestone": "D2a",
-          "scope": "D2a minimum slice only (versioned strategy/model library, pinned revisions, funded sleeve purchases as atomic D2 units, engine-enforced minimums, strategy_terms readiness, look-through exposure with unknowns, fee coverage, store/backup v9); full feature not complete"
+          "scope": "D2a minimum slice only (versioned strategy/model library, pinned revisions, funded sleeve purchases as atomic D2 units, engine-enforced minimums, strategy_terms readiness, look-through exposure with unknowns, fee coverage, store/backup v9); full feature not complete",
+          "mergeCommit": "c0ee4e95119e8b8879ff3a68b4201aefa824b832"
         }
       ]
     },
@@ -561,10 +564,11 @@
       "progress": [
         {
           "pr": 79,
-          "state": "open",
+          "state": "merged",
           "date": "2026-10-26",
           "milestone": "D2a",
-          "scope": "D2a minimum slice only (versioned strategy/model library, pinned revisions, funded sleeve purchases as atomic D2 units, engine-enforced minimums, strategy_terms readiness, look-through exposure with unknowns, fee coverage, store/backup v9); full feature not complete"
+          "scope": "D2a minimum slice only (versioned strategy/model library, pinned revisions, funded sleeve purchases as atomic D2 units, engine-enforced minimums, strategy_terms readiness, look-through exposure with unknowns, fee coverage, store/backup v9); full feature not complete",
+          "mergeCommit": "c0ee4e95119e8b8879ff3a68b4201aefa824b832"
         }
       ]
     },
@@ -916,7 +920,13 @@
         "R22",
         "R23"
       ],
-      "gate": "Required controls and evidence before any real-client pilot; public demo remains synthetic-only."
+      "gate": "Required controls and evidence before any real-client pilot; public demo remains synthetic-only.",
+      "demoPublicationReview": {
+        "milestone": "D5",
+        "plan": "D5_SECRETS_EXPOSURE_REVIEW.md",
+        "status": "planned",
+        "completesPrerequisite": false
+      }
     }
   ],
   "scopeDecision": {
@@ -956,9 +966,9 @@
     "status": "planned",
     "trackingIssue": 36,
     "mode": "synthetic-employer-demo-first",
-    "nextMilestone": "D2a review (PR #79), then D3–D5",
+    "nextMilestone": "D3, then D4–D5",
     "supersedes": "Serial P0–P5 implementation and standalone R11-first cleanup command; original feature contracts retained",
-    "observedMain": "073049ff526a58b0ab14bc05a6bf640ab80c5cb8",
+    "observedMain": "c0ee4e95119e8b8879ff3a68b4201aefa824b832",
     "developmentAssistant": {
       "application": "Claude Code Desktop",
       "model": "Opus 5.5",
@@ -1023,7 +1033,7 @@
       {
         "id": "D2a",
         "title": "Model and manager proposals",
-        "status": "in_review",
+        "status": "released",
         "dependencies": [
           "D2"
         ],
@@ -1039,7 +1049,8 @@
         "trackingIssue": 73,
         "plan": "MODEL_AND_MANAGER_PROPOSALS.md",
         "effort": "high",
-        "pr": 79
+        "pr": 79,
+        "mergeCommit": "c0ee4e95119e8b8879ff3a68b4201aefa824b832"
       },
       {
         "id": "D3",
@@ -1090,10 +1101,21 @@
           "R25"
         ],
         "supportingIssues": [
-          35
+          35,
+          59
         ],
         "effort": "medium",
-        "note": "A live-agent claim requires recorded live evidence; public deployment stays scripted/synthetic"
+        "note": "A live-agent claim requires recorded live evidence; public deployment stays scripted/synthetic",
+        "publicationExposureReview": {
+          "plan": "D5_SECRETS_EXPOSURE_REVIEW.md",
+          "status": "planned",
+          "developmentModel": "Opus 5.5",
+          "effort": "high",
+          "assessment": "report-only",
+          "gate": "Redacted commit/build-bound coverage, findings and retests; resolve verified blocking exposures before publication; unavailable critical checks remain explicit gaps",
+          "immediateEscalation": "Exposed usable credentials at any stage: notify owner and prioritize revocation/rotation",
+          "scopeBoundary": "No comprehensive security/compliance claim; no automatic server migration; #59 real-client prerequisites unchanged"
+        }
       }
     ],
     "laterRecommendations": [
@@ -1122,7 +1144,7 @@
     },
     "inflightWork": {
       "state": "none_observed_on_main",
-      "next": "Verify actual work before D2; D2a is planned after D2, no reset of any active implementation"
+      "next": "Verify actual work before D3; D2a is released, no reset of any active implementation"
     },
     "deliveredBeforeD1": {
       "pr": 70,

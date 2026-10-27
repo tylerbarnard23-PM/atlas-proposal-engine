@@ -1,6 +1,6 @@
 # D2a — Model portfolios and manager-sleeve proposals
 
-Approved by Tyler on 24 October 2026. **Implemented in PR #79, in review** (decisions and impact note on #73). Tracking [#73](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/73), part of #36, R03/#17 and R04/#39. Read with [delivery sequencing](DEMO_DELIVERY_PLAN.md) and [shared rules](IMPLEMENTATION_GUIDE.md).
+Approved by Tyler on 24 October 2026. **Released in PR #79 (merge `c0ee4e9`, 26 October 2026)** (decisions and impact note on #73). Tracking [#73](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/73), part of #36, R03/#17 and R04/#39. Read with [delivery sequencing](DEMO_DELIVERY_PLAN.md) and [shared rules](IMPLEMENTATION_GUIDE.md).
 
 ## Purpose and boundary
 
