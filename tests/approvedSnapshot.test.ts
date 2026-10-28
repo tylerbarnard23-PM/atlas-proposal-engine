@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Account, ApprovedSnapshot, FxRate, Holding } from "@/domain/types";
+import type { Account, ApprovedSnapshot, FxRate, Holding, Recommendation } from "@/domain/types";
 
 vi.mock("puppeteer-core", async () => (await import("./support/fakeChromium")).puppeteerModule);
 vi.mock("@/pdf/chromiumPath", async () => (await import("./support/fakeChromium")).chromiumPathModule);
@@ -61,6 +61,7 @@ async function load() {
     ...(await import("@/engines/approvedSnapshot")),
     ...(await import("@/engines/snapshotRecord")),
     ...(await import("@/engines/costIncome")),
+    ...(await import("@/engines/proposalEngine")),
     ...(await import("@/pdf/templates/ProposalPdfTemplate")),
     ...(await import("@/data/umaStory")),
     ...(await import("@/domain/disclosureLibrary")),
@@ -470,17 +471,101 @@ describe("costs and income use supplied data with coverage, never invented zeros
 
   it("reports unavailable, partial or full coverage", async () => {
     const m = await load();
-    const none = m.costIncomeCoverage([h("a", 100), h("b", 300)]);
+    const none = m.costIncomeCoverage([h("a", 100), h("b", 300)], new Set());
     expect(none.expense).toEqual({ value: null, coveredValue: 0, totalValue: 400, coveredCount: 0, totalCount: 2 });
     expect(m.describeCoverage(none.expense, (v) => `${v}%`)).toBe("Unavailable: not supplied for any of the 2 valued non-cash holdings");
-    const partial = m.costIncomeCoverage([h("a", 100, { expenseRatioPct: 0.5, incomeYieldPct: 2 }), h("b", 300), h("cash", 50, { assetClass: "cash" }), h("debt", 80, { isLiability: true, expenseRatioPct: 9 })]);
+    const partial = m.costIncomeCoverage([h("a", 100, { expenseRatioPct: 0.5, incomeYieldPct: 2 }), h("b", 300), h("cash", 50, { assetClass: "cash" }), h("debt", 80, { isLiability: true, expenseRatioPct: 9 })], new Set());
     expect(partial.expense).toMatchObject({ value: 0.5, coveredValue: 100, totalValue: 400, coveredCount: 1, totalCount: 2 });
     expect(partial.income.value).toBeCloseTo(2);
     expect(m.describeCoverage(partial.expense, (v) => `${v.toFixed(2)}%`)).toBe("0.50% across 25% of non-cash value (1 of 2 holdings); not supplied for the rest");
-    const full = m.costIncomeCoverage([h("a", 100, { expenseRatioPct: 0.5 }), h("b", 300, { expenseRatioPct: 0.1 }), h("s", 50, { proposedOnly: true } as never)]);
+    // Only a holding named as a manager/strategy sleeve is excluded; being proposed alone doesn't make one.
+    const full = m.costIncomeCoverage([h("a", 100, { expenseRatioPct: 0.5 }), h("b", 300, { expenseRatioPct: 0.1 }), h("s", 50, { proposedOnly: true } as never)], new Set(["s"]));
     expect(full.expense.value).toBeCloseTo(0.2);
     expect(full.sleevesExcluded).toBe(1);
     expect(m.describeCoverage(full.expense, (v) => `${v.toFixed(2)}%`)).toBe("0.20% across all non-cash value (2 of 2 holdings)");
+    // An explicit zero is a supplied value, not a gap.
+    const zero = m.costIncomeCoverage([h("z", 100, { expenseRatioPct: 0, incomeYieldPct: 0 })], new Set());
+    expect(zero.expense).toMatchObject({ value: 0, coveredCount: 1, totalCount: 1 });
+    expect(zero.income).toMatchObject({ value: 0, coveredCount: 1, totalCount: 1 });
+  });
+
+  // Through the real proposal engine: an existing ETF with supplied terms, and ordinary new investments (D2 destinations, no strategy).
+  const BROKERAGE: Account = { id: "acc_etf_story", name: "Brokerage (synthetic)", type: "brokerage", baseCurrency: "USD", country: "US", createdAt: "2026-10-01T00:00:00Z", updatedAt: "2026-10-01T00:00:00Z" };
+  const ETF_OLD: Holding = { ...EUR_FUND, id: "h_etf_old", accountId: BROKERAGE.id, assetName: "Core Bond ETF (synthetic)", assetType: "etf", assetClass: "fixed_income", country: "US", currency: "USD", nativeMarketValue: 100_000, expenseRatioPct: 0.1, incomeYieldPct: 2 };
+  const ETF_CASH: Holding = { ...EUR_FUND, id: "h_etf_cash", accountId: BROKERAGE.id, assetName: "Brokerage cash (synthetic)", assetType: "cash", assetClass: "cash", country: "US", currency: "USD", nativeMarketValue: 10_000, expenseRatioPct: undefined };
+  const replace = (m: M, sell: number, buy: number) =>
+    m.replacementRecommendations({ holding: ETF_OLD, sellAmount: sell, buyAmount: buy, destination: { id: "dest_new_etf", name: "New Equity ETF (synthetic)", assetClass: "equity" }, currency: "USD", ids: { sell: "rec_sell_old", buy: "rec_buy_new", group: "grp_new" }, now: NOW.toISOString() });
+  const approved = (recs: Recommendation[]) => recs.map((r) => ({ ...r, approvedByAdvisor: true, status: "approved" as const, includeInPdf: true }));
+  const coverageAfter = (m: M, recs: Recommendation[]) => {
+    const accounts = [{ ...BROKERAGE, funding: { cashHoldingId: ETF_CASH.id, reserve: 0, reserveCurrency: "USD" } }];
+    const p = m.applyRecommendationsToProposed(m.normalizeHoldings([ETF_OLD, ETF_CASH], [], "USD"), recs, accounts, { reportingCurrency: "USD", rates: [] });
+    expect(p.blocked).toEqual([]);
+    return m.costIncomeCoverage(p.holdings, new Set(m.sleeveRefs(recs).keys()));
+  };
+
+  it("an ordinary new investment without supplied terms stays in the denominator: 50% coverage, one of two holdings", async () => {
+    const m = await load();
+    const c = coverageAfter(m, approved(replace(m, 50_000, 50_000)));
+    expect(c.expense).toMatchObject({ coveredValue: 50_000, totalValue: 100_000, coveredCount: 1, totalCount: 2 });
+    expect(c.expense.value).toBeCloseTo(0.1);
+    expect(c.income).toMatchObject({ coveredValue: 50_000, totalValue: 100_000, coveredCount: 1, totalCount: 2 });
+    expect(c.income.value).toBeCloseTo(1_000);
+    expect(c.sleevesExcluded).toBe(0);
+    expect(m.describeCoverage(c.expense, (v) => `${v.toFixed(2)}%`)).toBe("0.10% across 50% of non-cash value (1 of 2 holdings); not supplied for the rest");
+  });
+
+  it("only an ordinary new investment with unknown terms: Unavailable, not Not applicable", async () => {
+    const m = await load();
+    const c = coverageAfter(m, approved(replace(m, 100_000, 100_000)));
+    expect(c.expense).toEqual({ value: null, coveredValue: 0, totalValue: 100_000, coveredCount: 0, totalCount: 1 });
+    expect(c.income.value).toBeNull();
+    expect(c.sleevesExcluded).toBe(0);
+    expect(m.describeCoverage(c.expense, (v) => `${v}%`)).toBe("Unavailable: not supplied for any of the 1 valued non-cash holding");
+  });
+
+  it("an actual manager sleeve keeps its separate supplied-fee treatment and is never counted twice", async () => {
+    const m = await load();
+    const [sell, buy] = approved(replace(m, 50_000, 25_000));
+    const sleeve: Recommendation = {
+      ...buy,
+      id: "rec_sleeve_x",
+      linked: undefined,
+      title: "Fund sleeve: buy USD 20,000 of Manager X — Core (rev 1)",
+      actionAmount: 20_000,
+      destination: { id: "sleeve_x", name: "Manager X — Core (rev 1)", assetClass: "custom", accountId: BROKERAGE.id, currency: "USD", strategy: { id: "str_x", revision: 1, manager: "Manager X", name: "Core", minimum: null } },
+    };
+    const c = coverageAfter(m, [sell, buy, sleeve]);
+    // ETF 50,000 (supplied) + new ETF 25,000 (not supplied); the 20,000 sleeve is outside both.
+    expect(c.expense).toMatchObject({ coveredValue: 50_000, totalValue: 75_000, coveredCount: 1, totalCount: 2 });
+    expect(c.sleevesExcluded).toBe(1);
+  });
+
+  it("the meeting view and the PDF of a scoped version show the ordinary new investment as uncovered, with no sleeve wording", async () => {
+    const m = await load();
+    store(m).startNewClient();
+    m.useAtlasStore.setState({
+      client: { ...store(m).client, fullName: "Brokerage Story Household", proposalOutputCurrency: "USD" },
+      accounts: [BROKERAGE, EUR_ACCOUNT],
+      holdings: [ETF_OLD, ETF_CASH, EUR_FUND],
+      recommendations: [],
+      fxRates: [EURUSD],
+    });
+    store(m).setDraftScope([BROKERAGE.id]);
+    store(m).setAccountFunding(BROKERAGE.id, { cashHoldingId: ETF_CASH.id, reserve: 0, reserveCurrency: "USD" });
+    store(m).addDraftEdit(replace(m, 50_000, 50_000));
+    for (const r of store(m).recommendations) store(m).upsertRecommendation({ ...r, approvedByAdvisor: true, status: "approved", includeInPdf: true });
+    const v1 = approve(m);
+    const meeting = text(await render(m, v1));
+    expect(await post({ snapshot: v1, timeZone: "UTC" })).toMatchObject({ status: 200 });
+    const pdf = text(m.fake.html[0]);
+    for (const t of [meeting, pdf]) {
+      expect(t).toMatch(/Weighted expense ratio, current \(investment scope\) 0\.10% across all non-cash value \(1 of 1 holding\)/);
+      expect(t).toMatch(/Weighted expense ratio, proposed \(investment scope\) 0\.10% across 50% of non-cash value \(1 of 2 holdings\); not supplied for the rest/);
+      expect(t).toMatch(/Estimated annual income, proposed \(investment scope\) \$1,000(\.0)? across 50% of non-cash value \(1 of 2 holdings\); not supplied for the rest/);
+      expect(t).not.toMatch(/manager\/strategy sleeves? (is|are) excluded/);
+      // The EUR fund (0.20%) is household context, outside the scope's figures.
+      expect(t).not.toMatch(/0\.20% across/);
+    }
   });
 
   it("the document states coverage, keeps sleeve fees separate and says no tax analysis is included", async () => {

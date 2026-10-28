@@ -1034,8 +1034,10 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
     const liqRows = summarize(investible, (h) => (h.liquidity ?? "unspecified").replace("_", " "));
     // Only supplied data counts: a holding without an expense ratio or yield
     // isn't treated as zero, and the coverage says how much is described.
-    const costNow = costIncomeCoverage(scopeHoldings);
-    const costProposed = costIncomeCoverage(scopeProposed);
+    // Only actual manager/strategy sleeves are set aside; an ordinary new investment counts, uncovered.
+    const sleeveIds = new Set(sleeveRefsById.keys());
+    const costNow = costIncomeCoverage(scopeHoldings, sleeveIds);
+    const costProposed = costIncomeCoverage(scopeProposed, sleeveIds);
     const pctText = (v: number) => formatPercent(v, 2);
     const moneyText = (v: number) => formatCurrency(v, reportingCurrency, { compact: true });
     pages.push(

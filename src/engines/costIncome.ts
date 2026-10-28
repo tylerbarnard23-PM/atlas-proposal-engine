@@ -23,17 +23,21 @@ export interface CostIncomeCoverage {
   sleevesExcluded: number;
 }
 
-type Valued = Holding & { reportingMarketValue?: number | null; proposedOnly?: boolean };
+type Valued = Holding & { reportingMarketValue?: number | null };
 const valueOf = (h: Valued) => reportingValue(h) as number;
 
 /**
  * Coverage over valued, non-cash, non-liability holdings (cash has no expense
- * ratio; a liability has neither). Proposed sleeves are excluded and counted.
+ * ratio; a liability has neither). `sleeveIds` names the actual
+ * manager/strategy sleeves (destinations pinned to a strategy revision, from
+ * `sleeveRefs`): they are excluded and counted. An ordinary proposed
+ * investment is not a sleeve: it stays in the denominator, uncovered unless
+ * its terms were supplied.
  */
-export function costIncomeCoverage(holdings: Valued[]): CostIncomeCoverage {
+export function costIncomeCoverage(holdings: Valued[], sleeveIds: ReadonlySet<string>): CostIncomeCoverage {
   const basis = holdings.filter((h) => !h.isLiability && h.assetClass !== "cash" && h.assetClass !== "liability" && (reportingValue(h) ?? 0) > 0);
-  const sleeves = basis.filter((h) => h.proposedOnly);
-  const own = basis.filter((h) => !h.proposedOnly);
+  const sleeves = basis.filter((h) => sleeveIds.has(h.id));
+  const own = basis.filter((h) => !sleeveIds.has(h.id));
   const totalValue = own.reduce((a, h) => a + valueOf(h), 0);
   const figure = (pick: (h: Valued) => number | undefined, weighted: boolean): CoverageFigure => {
     const covered = own.filter((h) => pick(h) != null && Number.isFinite(pick(h)));
