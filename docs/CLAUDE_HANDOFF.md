@@ -27,8 +27,13 @@
   - **Context:** `src/copilot/context.ts` (`inputRevision`). The route returns 409 `stale_context`, and `acceptAgentDrafts` re-checks the revision, is idempotent and adds unapproved members only.
   - **Tools:** `get_scope_overview` and `simulate_scope_change` (shared desk evaluator). A sized draft must be a draftable simulation. Simulations fail closed on scope, cash, missing values or FX, imports, blocked units, shortfalls, reserve breaches and duplicates.
   - **Loop:** `runAgent` with an injectable `MessagesClient`, bounds, explicit statuses, figure checks (`evidence.ts`), and labelled demo, test (`COPILOT_MODE=test`) and live modes. The model, effort and fallback are unchanged.
-  - **Evidence (offline, browser, live):** see the PR. Live evaluation is **not performed**; the proposed configuration and budget are in AGENT_EVALUATION.md and await the owner.
-  - **Next:** Codex review of D4, then the owner's budget decision for the live suite. Promotion and any live-agent claim stay gated on it.
+  - **Status (28 October 2026):** D4 is implemented in PR #82 and awaiting Codex review. It is unmerged and not deployed to production. D5 has not started.
+  - **Local validation at `20223e4`:** typecheck clean; 539 tests passed; extraction eval 2/2; build passed.
+  - **CI:** CI run 40712229577 and Vercel passed on `20223e4`. The CI test counts weren't read and aren't inferred from the local count.
+  - **Browser evidence** used the deterministic test provider, not a real model.
+  - **Live evaluation and real-model browser testing are unperformed.** The proposed budget in AGENT_EVALUATION.md is **not approved**; its pricing, spending safeguards and evaluation design still need review.
+  - **Cleanup:** task servers are stopped (ports 3107, 3108 and 3199 free), and the temporary seeds, tests and `public/` files are removed. `.claude/launch.json` is restored to its original entries. Saved browser workspaces and `stash@{0}` are preserved.
+  - **Next session:** Codex reviews PR #82, then the owner decides whether to authorize a specific live-evaluation configuration and budget.
 - **Preserve:** PR #80 (the D5 secrets/exposure plan) is open; keep its work when reconciling docs, and don't merge it as part of D4.
 - **Open follow-up:** #76 (reserve-breach attribution for legacy actions), unchanged.
 - **Limitations carried forward:**
