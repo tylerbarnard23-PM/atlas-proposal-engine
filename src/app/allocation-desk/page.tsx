@@ -98,6 +98,15 @@ function Desk() {
         eyebrow="Advisory"
         title="Allocation desk"
         description="Choose the investment scope, set target weights and preview explicit changes to positions you already hold. A preview never changes current holdings, approvals or the final PDF."
+        actions={
+          // D4: Copilot opens on this alternative with a question filled in; it doesn't run until asked.
+          <Link
+            href={`/copilot?q=${encodeURIComponent(`Review the "${draft.name}" alternative: what stands out in this scope, and what would you simulate first?`)}`}
+            className="text-[13px] underline whitespace-nowrap"
+          >
+            Ask Copilot about this alternative
+          </Link>
+        }
       />
 
       <Card className="mb-3">

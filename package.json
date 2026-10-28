@@ -12,7 +12,8 @@
     "start": "next start",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
-    "eval": "vitest run tests/extraction.eval.test.ts --silent=false"
+    "eval": "vitest run tests/extraction.eval.test.ts --silent=false",
+    "eval:agent:live": "vitest run --config vitest.agent-live.config.ts --silent=false"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",

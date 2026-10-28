@@ -38,6 +38,8 @@ import { DEFAULT_PROPOSAL_SECTIONS } from "@/engines/proposalEngine";
 import { confirmStaleRates } from "@/engines/fxPolicy";
 import { fxClock } from "@/engines/fxClock";
 import { cashBasisCurrency, markRemovedLinks } from "@/engines/recommendationLinks";
+import { contextMismatch, type AgentContext } from "@/copilot/context";
+import { forReadiness } from "@/engines/importCompleteness";
 import { migrateRecommendationCurrency, withApprovalRule } from "@/engines/recommendationAmounts";
 import { deskActions, draftBasisInputs, legacyWorkingDraft, needsIntentRestatement, newWorkingDraft, recordInputBasis } from "@/engines/allocationDesk";
 import { LEGACY_SAMPLE_FIRM_NAME } from "@/domain/branding";
@@ -147,6 +149,12 @@ export interface AtlasActions {
   setDraftTarget: (assetClass: AssetClass, pct: number | null) => void;
   /** Saves an explicit position edit (or a linked replacement's legs) as unapproved recommendations in the draft. */
   addDraftEdit: (rec: Recommendation | Recommendation[]) => void;
+  /**
+   * D4: accepts Copilot drafts into the active alternative as unapproved
+   * members, only if the answer's context still describes the workspace.
+   * Idempotent: a draft already in the workspace is skipped, never replaced.
+   */
+  acceptAgentDrafts: (drafts: Recommendation[], context: AgentContext) => { ok: true; added: string[]; skipped: string[] } | { ok: false; error: string };
   /** Records the current accepted values and rates as the draft's inputs. */
   recordDraftInputs: () => void;
   // D2. Funding rules live on the account, so every engine path sees them.
@@ -611,6 +619,19 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
           const next = { ...s, recommendations: [...s.recommendations.filter((r) => !ids.has(r.id)), ...recs.map((r) => guardApproval(undefined, r))] };
           return { recommendations: next.recommendations, ...draftChange(next, { memberIds: [...s.workingDraft.memberIds.filter((x) => !ids.has(x)), ...ids] }) };
         }),
+      acceptAgentDrafts: (drafts, context) => {
+        const s = get();
+        const existing = new Set(s.recommendations.map((r) => r.id));
+        const skipped = drafts.filter((d) => existing.has(d.id)).map((d) => d.id);
+        const fresh = drafts.filter((d) => !existing.has(d.id));
+        // A repeated accept (a retry or a second click) finds everything already there.
+        if (fresh.length === 0) return { ok: true, added: [], skipped };
+        const mismatch = contextMismatch(context, { ...s, sourceDocuments: s.sourceDocuments.map(forReadiness) });
+        if (mismatch) return { ok: false, error: mismatch };
+        // Whatever the draft says, it joins unapproved and out of the PDF.
+        get().addDraftEdit(fresh.map((d) => ({ ...d, status: "needs_review" as const, approvedByAdvisor: false, includeInPdf: false })));
+        return { ok: true, added: fresh.map((d) => d.id), skipped };
+      },
       setAccountFunding: (accountId, funding) =>
         set((s) => {
           const account = s.accounts.find((a) => a.id === accountId);

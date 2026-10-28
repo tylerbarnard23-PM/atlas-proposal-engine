@@ -44,19 +44,26 @@ The Copilot is a Claude agent (`claude-opus-5-5`) whose tools are Atlas's existi
 | `list_insights` | insight engine |
 | `get_holding` | normalized holding, data-quality issues, verification status |
 | `simulate_recommendation` | `applyRecToValue`, the same function behind the proposal's Before/After view |
+| `get_scope_overview` | the allocation desk's evaluator over the active alternative: scope totals and weights, household context, blocked actions, shortfalls, reserves, input revision (D4) |
+| `simulate_scope_change` | `previewDraftEdit` + `evaluateDesk`: one position change in the active alternative, before and after; reports blocks, new shortfalls and reserve breaches (D4) |
 | `check_proposal_readiness` | compliance readiness engine (same inputs as PDF Preview) |
-| `draft_recommendation` | creates a recommendation draft (the only write the agent can make) |
+| `draft_recommendation` | creates an unapproved draft (the only write the agent can make); a position change must be the exact action a scope simulation evaluated |
 
-**Two modes.** The public demo never calls a model.
+**Three labelled modes.** The public demo never calls a model, and the page shows which mode answered before and with every answer.
 
 - **Demo mode** (the default, and what the live site runs): a scripted planner calls *the same tools* in a fixed order and writes its answer and draft rationales from fixed templates filled with the values those tools return. It costs nothing to run and gives the tool layer a deterministic regression baseline. It also applies a few rules of its own: it won't draft a sale of an illiquid position (a primary residence, an LP interest), and it skips holdings that already have a recommendation.
-- **Live mode** (opt-in and intended for local use, because `/api/copilot` has no authentication; see Quickstart): Claude chooses which tools to call and writes the answer and the draft text itself.
+- **Test provider** (`COPILOT_MODE=test`): a deterministic scripted client runs through the *real* agent loop and tools. It is labelled "Test provider · not a model", makes no API calls and exists for end-to-end checks; it is never evidence of model behaviour.
+- **Live mode** (opt-in and intended for local use, because `/api/copilot` has no authentication; see Quickstart): Claude chooses which tools to call and writes the answer and the draft text itself. The page shows the requested and actual model (a server-side refusal fallback is shown as such).
 
 **Enforced in code** (both modes, covered by tests):
 
 - **Draft-only authority.** The only write the agent can make is `draft_recommendation`, which hard-codes `approvedByAdvisor: false`, `includeInPdf: false` and `status: "needs_review"`. Fields a model adds to try to approve its own draft are stripped by schema validation; a test sends them and checks they're ignored.
 - **Schema validation.** Requests and every tool input are validated with Zod; unknown holding ids and invalid values come back as tool errors.
-- **Execution limits.** At most 10 agent turns and 5 drafts per request; request bodies are capped at 1 MB. Live mode needs both `ANTHROPIC_API_KEY` and `COPILOT_MODE=live`.
+- **Execution limits.** At most 10 agent turns, 24 tool calls, 48,000 output tokens, 100 seconds, 2 retries of a failed request (tools never re-run) and 5 drafts per request; request bodies are capped at 1 MB. Every run ends with an explicit status (completed, refused, truncated, a limit, cancelled or failed) and discloses the drafts saved so far. Live mode needs both `ANTHROPIC_API_KEY` and `COPILOT_MODE=live`.
+- **Context-bound (D4).** Each request names the client, the active alternative, its scope and an input revision; the server rejects a mismatch (409), and accepting a draft re-checks the revision, so an answer about changed inputs or another alternative can't be accepted.
+- **Preview, then explicit acceptance (D4).** Drafts are a preview computed with the desk's evaluator; nothing is saved until the advisor accepts them into the active alternative as unapproved actions. Acceptance is idempotent (deterministic draft IDs) and never touches holdings, approvals or approved versions. Simulations fail closed on out-of-scope positions, cash, missing values or rates, incomplete imports, blocked units, new shortfalls, reserve breaches and duplicates. Tools to approve, finalize, share or execute don't exist; calls to them are refused and counted.
+- **Figures are checked.** Amounts and percentages in an answer and in draft rationales are matched against the numbers the tools returned in that run; unmatched figures are flagged, not presented as verified.
+- **Minimized and unlogged.** Model-bound tool data leaves out the client's name and identity; prompts, tool payloads, reasoning and keys are not logged.
 - **The engines do the math.** Tools compute every figure with the same deterministic engines as the Before/After view and the PDF, and the tools are read-only apart from creating drafts.
 - **Nothing is persisted server-side.** The workspace lives in the browser; each request sends the slice the agent needs.
 
@@ -107,8 +114,9 @@ tests/            unit tests + extraction eval
 ## Tests and evals
 
 ```bash
-npm test        # 512 tests in 28 files (2 need the private UBS PDF and are skipped without it, as in CI): proposal math and currency handling, calendar dates across time zones, workspace backup and restore, recommendation currencies and previews, cash flows, readiness, insights, CSV/Excel/PDF import, import completeness, Copilot tools (demo mode) + the extraction eval
+npm test        # 539 tests in 31 files (2 need the private UBS PDF and are skipped without it, as in CI): the Copilot agent loop with an injected fake provider (no key, no spend), proposal math and currency handling, calendar dates across time zones, workspace backup and restore, recommendation currencies and previews, cash flows, readiness, insights, CSV/Excel/PDF import, import completeness, Copilot tools (demo mode) + the extraction eval
 npm run eval    # statement-extraction accuracy scorecard
+npm run eval:agent:live   # opt-in PAID live agent evaluation; refuses to run without explicit flags, a key and a spend cap (see docs/roadmap/AGENT_EVALUATION.md)
 ```
 
 CI runs the type check, tests, eval and production build on every pull request.

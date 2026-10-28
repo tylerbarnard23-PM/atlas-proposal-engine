@@ -23,7 +23,12 @@
   - Scoped presentation, with household context outside every denominator.
   - Cost/income coverage over supplied data, with sleeves identified by strategy reference.
   - Superseded detail is in [CLAUDE_HANDOFF_HISTORY_2026-10-28.md](CLAUDE_HANDOFF_HISTORY_2026-10-28.md).
-- **D4 in progress:** `feat/d4-contextual-agent`, branched from `85b3910`. The contract-impact note is on #54. Live evaluation is unperformed until the owner approves a configuration and budget.
+- **D4 in review: PR #82** (`feat/d4-contextual-agent`, from `85b3910`; contract-impact note on [#54](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/54#issuecomment-6471919494)). Not merged or deployed.
+  - **Context:** `src/copilot/context.ts` (`inputRevision`). The route returns 409 `stale_context`, and `acceptAgentDrafts` re-checks the revision, is idempotent and adds unapproved members only.
+  - **Tools:** `get_scope_overview` and `simulate_scope_change` (shared desk evaluator). A sized draft must be a draftable simulation. Simulations fail closed on scope, cash, missing values or FX, imports, blocked units, shortfalls, reserve breaches and duplicates.
+  - **Loop:** `runAgent` with an injectable `MessagesClient`, bounds, explicit statuses, figure checks (`evidence.ts`), and labelled demo, test (`COPILOT_MODE=test`) and live modes. The model, effort and fallback are unchanged.
+  - **Evidence (offline, browser, live):** see the PR. Live evaluation is **not performed**; the proposed configuration and budget are in AGENT_EVALUATION.md and await the owner.
+  - **Next:** Codex review of D4, then the owner's budget decision for the live suite. Promotion and any live-agent claim stay gated on it.
 - **Preserve:** PR #80 (the D5 secrets/exposure plan) is open; keep its work when reconciling docs, and don't merge it as part of D4.
 - **Open follow-up:** #76 (reserve-breach attribution for legacy actions), unchanged.
 - **Limitations carried forward:**

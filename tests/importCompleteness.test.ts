@@ -107,11 +107,12 @@ describe("import completeness across the server boundary", () => {
 
   it("the Copilot request accepts source documents, and still accepts clients that don't send them", async () => {
     const { parseCopilotRequest } = await import("@/copilot/snapshot");
+    const { copilotRequest } = await import("./support/copilotRequest");
     const ws = await load(MISMATCH);
     const snap = workspace(ws.holdings, [ws.sourceDocument], ws.accounts);
-    expect(parseCopilotRequest({ question: "hi", snapshot: snap }).ok).toBe(true);
+    expect(parseCopilotRequest(copilotRequest("hi", snap)).ok).toBe(true);
     const { sourceDocuments: _omit, ...older } = snap;
-    expect(parseCopilotRequest({ question: "hi", snapshot: older }).ok).toBe(true);
+    expect(parseCopilotRequest(copilotRequest("hi", older)).ok).toBe(true);
   });
 
   it("advisory drafts (no value change) are still allowed while an import is incomplete", async () => {

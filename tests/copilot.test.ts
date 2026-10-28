@@ -8,6 +8,8 @@ import { SEED_ACCOUNTS } from "@/data/seedAccounts";
 import { SEED_ADVISOR, SEED_CLIENT } from "@/data/seedClient";
 import { SEED_RECOMMENDATIONS } from "@/data/seedRecommendations";
 import { DISCLOSURE_LIBRARY } from "@/domain/disclosureLibrary";
+import { newWorkingDraft } from "@/engines/allocationDesk";
+import { copilotRequest } from "./support/copilotRequest";
 
 const snapshot = (): CopilotSnapshot => ({
   client: SEED_CLIENT,
@@ -17,6 +19,7 @@ const snapshot = (): CopilotSnapshot => ({
   fxRates: SEED_FX_RATES,
   recommendations: SEED_RECOMMENDATIONS,
   disclosures: DISCLOSURE_LIBRARY,
+  workingDraft: newWorkingDraft("2026-10-01T00:00:00.000Z"),
 });
 
 const firstHoldingId = SEED_HOLDINGS.find((h) => !h.isLiability && h.assetClass !== "cash")!.id;
@@ -59,8 +62,11 @@ describe("copilot tools", () => {
 
   it("never lets the model approve a draft or put it in the PDF", () => {
     const ctx = new CopilotContext(snapshot());
+    // D4: a position-changing draft is the exact action a scope simulation evaluated.
+    const sim = JSON.parse(executeTool(ctx, "simulate_scope_change", { holding_id: firstHoldingId, change: "reduce", amount: 1_000 }).content);
+    expect(sim.draftable).toBe(true);
     const res = executeTool(ctx, "draft_recommendation", {
-      holding_id: firstHoldingId,
+      simulation_id: sim.simulation_id,
       type: "reduce",
       title: "Trim position",
       priority: "high",
@@ -77,14 +83,25 @@ describe("copilot tools", () => {
 
   it(`caps drafts at ${MAX_DRAFTS_PER_RUN} per request`, () => {
     const ctx = new CopilotContext(snapshot());
-    const draft = { type: "custom", title: "Advisory note", priority: "low", rationale: "Discuss estate plan at next review." };
-    for (let i = 0; i < MAX_DRAFTS_PER_RUN; i++) expect(executeTool(ctx, "draft_recommendation", draft).isError).toBe(false);
-    expect(executeTool(ctx, "draft_recommendation", draft).isError).toBe(true);
+    const draft = (i: number) => ({ type: "custom", title: `Advisory note ${i}`, priority: "low", rationale: "Discuss estate plan at next review." });
+    for (let i = 0; i < MAX_DRAFTS_PER_RUN; i++) expect(executeTool(ctx, "draft_recommendation", draft(i)).isError).toBe(false);
+    expect(executeTool(ctx, "draft_recommendation", draft(99)).isError).toBe(true);
     expect(ctx.drafts).toHaveLength(MAX_DRAFTS_PER_RUN);
   });
 });
 
 describe("demo copilot", () => {
+  it("states only figures its engine results support, including figures in insight and readiness wording (D4)", () => {
+    for (const question of ["Summarize this client", "Draft recommendations for the top risks", "Is this proposal ready?"]) {
+      for (const recommendations of [SEED_RECOMMENDATIONS, []]) {
+        const r = runDemoCopilot({ ...snapshot(), recommendations }, question);
+        expect(r.figures.claims, question).toBeGreaterThan(0);
+        expect(r.figures.unsupported, question).toEqual([]);
+        expect(r).toMatchObject({ mode: "demo", status: "completed" });
+      }
+    }
+  });
+
   it("routes questions by intent", () => {
     expect(classifyIntent("Is this ready to send?")).toBe("readiness");
     expect(classifyIntent("Draft recommendations for the top risks")).toBe("draft");
@@ -128,9 +145,17 @@ describe("demo copilot", () => {
 
 describe("request validation", () => {
   it("rejects an empty question", () => {
-    expect(parseCopilotRequest({ question: "  ", snapshot: snapshot() }).ok).toBe(false);
+    expect(parseCopilotRequest(copilotRequest("  ", snapshot())).ok).toBe(false);
   });
-  it("accepts the seed workspace", () => {
-    expect(parseCopilotRequest({ question: "hi", snapshot: snapshot() }).ok).toBe(true);
+  it("accepts the seed workspace with its context", () => {
+    expect(parseCopilotRequest(copilotRequest("hi", snapshot())).ok).toBe(true);
+  });
+  it("requires the context and the active alternative (D4)", () => {
+    const { context: _c, ...noContext } = copilotRequest("hi", snapshot());
+    void _c;
+    expect(parseCopilotRequest(noContext).ok).toBe(false);
+    const { workingDraft: _w, ...noDraft } = snapshot();
+    void _w;
+    expect(parseCopilotRequest({ question: "hi", snapshot: noDraft, context: copilotRequest("hi", snapshot()).context }).ok).toBe(false);
   });
 });
