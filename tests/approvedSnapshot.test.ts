@@ -296,8 +296,8 @@ describe("one template: meeting view, issued PDF and draft copy agree", () => {
     expect(t).toMatch(/Equity Manager A — Core Equity \(rev 1\) Managed Account Story \(synthetic\) \$40,000(\.00)? \(40\.0%\) \$40,000(\.00)? Met \(\$25,000(\.00)?\) manager 0\.45% of assets in the sleeve/);
     expect(t).toMatch(/ETF Model C — Balanced ETF Model \(rev 1\).*Not supplied; advisor review recorded: No published minimum/);
     expect(t).toMatch(/platform 0\.10% of assets in the sleeve; instrument 0\.08% of underlying ETF assets/);
-    expect(t).toMatch(/Look-through exposure of the proposed assets/);
-    expect(t).toMatch(/Coverage: 100\.0% of the proposed value has a known asset class/);
+    expect(t).toMatch(/Look-through exposure of the proposed assets \(investment scope\)/);
+    expect(t).toMatch(/Coverage: 100\.0% of the proposed investment-scope value has a known asset class/);
     expect(t).toMatch(/look-through exposure, where a mix was supplied, and its target, funding, minimum and fees are under Manager and Strategy Sleeves/);
   });
 
@@ -322,9 +322,104 @@ describe("one template: meeting view, issued PDF and draft copy agree", () => {
     const v = approve(m);
     expect(v.inputs.strategies.find((x) => x.id === c.id)).toMatchObject({ revision: 2, mix: null });
     const t = text(await render(m, v));
-    // 20,000 of 111,000 household proposed assets (100,000 + EUR 10,000 at 1.1).
-    expect(t).toMatch(/Unknown \(1 sleeve with no supplied mix\) 18\.0%/);
-    expect(t).toMatch(/Coverage: 82\.0% of the proposed value has a known asset class/);
+    // 20,000 of the scope's 100,000 proposed (the EUR account is context, outside the denominator).
+    expect(t).toMatch(/Unknown \(1 sleeve with no supplied mix\) 20\.0%/);
+    expect(t).toMatch(/Coverage: 80\.0% of the proposed investment-scope value has a known asset class/);
+  });
+});
+
+describe("scope: the desk, the version, the meeting view and the PDF agree", () => {
+  // In scope: the managed account, USD 100,000. Outside it: the EUR fund (EUR 10,000 at 1.10 = USD 11,000) and a USD 50,000 mortgage.
+  const LOAN_ACCOUNT: Account = { id: "acc_loan_story", name: "Mortgage (synthetic)", type: "individual", baseCurrency: "USD", country: "US", isLiabilityAccount: true, createdAt: "2026-10-01T00:00:00Z", updatedAt: "2026-10-01T00:00:00Z" };
+  const MORTGAGE: Holding = { ...EUR_FUND, id: "h_mortgage", accountId: LOAN_ACCOUNT.id, assetName: "Home mortgage (synthetic)", assetType: "mortgage_liability", assetClass: "liability", isLiability: true, country: "US", currency: "USD", nativeMarketValue: -50_000, expenseRatioPct: undefined };
+  const withContext = (m: M) => {
+    approvedStory(m);
+    m.useAtlasStore.setState({ accounts: [...store(m).accounts, LOAN_ACCOUNT], holdings: [...store(m).holdings, MORTGAGE] });
+  };
+  const liveDesk = (m: M) => {
+    const s = store(m);
+    return m.evaluateDesk({ holdings: m.normalizeHoldings(s.holdings, s.fxRates, "USD"), accounts: s.accounts, recommendations: s.recommendations, draft: s.workingDraft, fx: { reportingCurrency: "USD", rates: s.fxRates }, view: "approved" });
+  };
+
+  it("uses the USD 100,000 investment scope for amounts, weights and exposure, with the EUR 10,000 account and the mortgage as labelled context", async () => {
+    const m = await load();
+    withContext(m);
+    const desk = liveDesk(m);
+    expect(desk.totals).toEqual({ current: 100_000, proposed: 100_000 });
+    expect(desk.context.total).toBeCloseTo(11_000);
+    const v1 = approve(m);
+    expect(v1.results.current.total).toBe(100_000);
+    expect(v1.results.proposed.total).toBe(100_000);
+    // The version's evaluator rows are the desk's rows.
+    expect(v1.results.proposed.byClass).toEqual(desk.rows.filter((r) => Math.abs(r.proposed) > 1e-9).map((r) => ({ assetClass: r.assetClass, value: r.proposed })).sort((a, b) => a.assetClass.localeCompare(b.assetClass)));
+
+    const meeting = text(await render(m, v1));
+    const res = await post({ snapshot: v1, timeZone: "UTC" });
+    expect(res).toMatchObject({ status: 200, error: "" });
+    const pdf = text(m.fake.html[0]);
+    for (const t of [meeting, pdf]) {
+      // Before and after: the scope's 100,000, not the household's 111,000.
+      expect(t).toMatch(/Before Current portfolio \(investment scope\) \$100(\.0)?K/);
+      expect(t).toMatch(/After Proposed portfolio \(investment scope\) \$100(\.0)?K/);
+      expect(t).not.toMatch(/\$111(\.0)?K/);
+      // Weights over the scope: all cash today; 95% sleeves and 5% cash after.
+      expect(t).toMatch(/Allocation by Asset Class \(investment scope\) Cash & Equivalents 100\.0% \$100(\.0)?K/);
+      expect(t).toMatch(/Allocation by Currency \(investment scope\) USD 100\.0% \$100(\.0)?K/);
+      expect(t).not.toMatch(/EUR 9\.9%/);
+      // Look-through exposure is the desk's, over the scope.
+      const e = m.exposureView({ positions: desk.positions, recommendations: store(m).recommendations.filter((r) => r.approvedByAdvisor), strategies: store(m).strategies });
+      expect(e.total).toBeCloseTo(100_000);
+      expect(t).toMatch(/Look-through exposure of the proposed assets \(investment scope\)/);
+      for (const r of e.rows) expect(t).toContain(`${r.pct.toFixed(1)}%`);
+      expect(t).toMatch(/Coverage: 100\.0% of the proposed investment-scope value has a known asset class/);
+      // Costs and income are labelled with the scope: the EUR fund's 0.20% is context, not the scope's ratio.
+      expect(t).toMatch(/Weighted expense ratio, current \(investment scope\) Not applicable/);
+      // Household context: visible, labelled, outside every allocation denominator.
+      expect(t).toMatch(/Household context outside the investment scope/);
+      expect(t).toMatch(/Euro Account \(synthetic\) \$11(\.0)?K/);
+      expect(t).toMatch(/Home mortgage \(synthetic\) -?\$50(\.0)?K/);
+      expect(t).toMatch(/not included in any allocation weight/);
+      // Household totals stay available as context.
+      expect(t).toMatch(/Household net worth \$61(\.0)?K/);
+    }
+  });
+
+  it("a later scope change leaves v1 and its document as approved", async () => {
+    const m = await load();
+    withContext(m);
+    const v1 = approve(m);
+    const before = await render(m, v1);
+    store(m).setDraftScope([ACC, EUR_ACCOUNT.id]);
+    expect(m.snapshotStatus(store(m).snapshots[0], store(m), NOW)).toEqual({ kind: "changed", parts: ["alternative, scope or targets"] });
+    expect(await render(m, store(m).snapshots[0])).toBe(before);
+    // A version with the wider scope counts the EUR fund in its weights.
+    const v2 = approve(m);
+    expect(v2.results.current.total).toBeCloseTo(111_000);
+    expect(text(await render(m, v2))).toMatch(/Allocation by Currency \(investment scope\) USD 90\.1% \$100(\.0)?K EUR 9\.9% \$11(\.0)?K/);
+  });
+
+  it("an approved action on an account outside the scope is labelled as household context, and the scoped figures don't move", async () => {
+    const m = await load();
+    withContext(m);
+    store(m).addDraftEdit(m.positionEditRecommendation({ holding: EUR_FUND, kind: "reduce", amount: 1_100, reportingCurrency: "USD", id: "rec_eur_trim", now: NOW.toISOString() }));
+    const r = store(m).recommendations.find((x) => x.id === "rec_eur_trim")!;
+    store(m).upsertRecommendation({ ...r, approvedByAdvisor: true, status: "approved", includeInPdf: true });
+    const v1 = approve(m);
+    expect(v1.results.current.total).toBe(100_000);
+    expect(v1.results.proposed.total).toBe(100_000);
+    const t = text(await render(m, v1));
+    expect(t).toMatch(/Reduce Euro Equity Fund \(synthetic\) by USD 1,100 .*Applied outside the investment scope \(household context; not in the scoped figures\)/);
+    expect(t).toMatch(/After Proposed portfolio \(investment scope\) \$100(\.0)?K/);
+  });
+
+  it("narrowing the scope hides no readiness problem outside it: an unvalued context holding still blocks approval", async () => {
+    const m = await load();
+    withContext(m);
+    // The EUR account is outside the scope; its rate goes missing.
+    store(m).setFxRates([]);
+    const r = store(m).approveVersion();
+    expect(r.ok === false && r.failing.join("; ")).toMatch(/exchange rate|valu/i);
+    expect(store(m).snapshots).toEqual([]);
   });
 });
 
@@ -391,10 +486,15 @@ describe("costs and income use supplied data with coverage, never invented zeros
   it("the document states coverage, keeps sleeve fees separate and says no tax analysis is included", async () => {
     const m = await load();
     approvedStory(m);
+    // Outside the scope the EUR fund is context: the scope's figures have no non-cash holding.
+    const scoped = text(await render(m, approve(m)));
+    expect(scoped).toMatch(/Weighted expense ratio, current \(investment scope\) Not applicable \(no valued non-cash holdings\)/);
+    expect(scoped).not.toMatch(/0\.20% across/);
+    // With the EUR account in the scope, its fund supplies 0.20%; nothing supplies a yield.
+    store(m).setDraftScope([ACC, EUR_ACCOUNT.id]);
     const t = text(await render(m, approve(m)));
-    // Current: the EUR fund supplies 0.20%; nothing supplies a yield.
-    expect(t).toMatch(/Weighted expense ratio, current 0\.20% across all non-cash value \(1 of 1 holding\)/);
-    expect(t).toMatch(/Estimated annual income, current Unavailable: not supplied for any of the 1 valued non-cash holding/);
+    expect(t).toMatch(/Weighted expense ratio, current \(investment scope\) 0\.20% across all non-cash value \(1 of 1 holding\)/);
+    expect(t).toMatch(/Estimated annual income, current \(investment scope\) Unavailable: not supplied for any of the 1 valued non-cash holding/);
     expect(t).toMatch(/The 3 proposed manager\/strategy sleeves are excluded/);
     expect(t).toMatch(/No tax analysis is included in this proposal/);
     expect(t).not.toMatch(/Estimated weighted expense ratio 0\.00%/);
