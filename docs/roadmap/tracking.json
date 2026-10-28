@@ -580,10 +580,13 @@
         },
         {
           "pr": 81,
-          "state": "open",
+          "state": "merged",
           "date": "2026-10-27",
           "milestone": "D3",
-          "scope": "D3 minimum slice only (approved versions freezing the bounded economic package with later-edit isolation, Reviewed Package page and D2a sleeves section in the shared template, read-only meeting view, version-gated final PDF with server-clock re-check, known-input cost/income coverage, store/backup v10); full feature not complete"
+          "scope": "D3 minimum slice only (approved versions freezing the bounded economic package with later-edit isolation, Reviewed Package page and D2a sleeves section in the shared template, read-only meeting view, version-gated final PDF with server-clock re-check, known-input cost/income coverage, store/backup v10); full feature not complete",
+          "head": "316cbb7e6c3ddc0d9ece7d4a8495bb83ec05943c",
+          "mergeCommit": "85b3910bb9645c0c8f822755788bc11d96362a7d",
+          "ciRun": 40703946856
         }
       ]
     },
@@ -755,10 +758,13 @@
         },
         {
           "pr": 81,
-          "state": "open",
+          "state": "merged",
           "date": "2026-10-27",
           "milestone": "D3",
-          "scope": "D3 minimum slice only (approved versions freezing the bounded economic package with later-edit isolation, Reviewed Package page and D2a sleeves section in the shared template, read-only meeting view, version-gated final PDF with server-clock re-check, known-input cost/income coverage, store/backup v10); full feature not complete"
+          "scope": "D3 minimum slice only (approved versions freezing the bounded economic package with later-edit isolation, Reviewed Package page and D2a sleeves section in the shared template, read-only meeting view, version-gated final PDF with server-clock re-check, known-input cost/income coverage, store/backup v10); full feature not complete",
+          "head": "316cbb7e6c3ddc0d9ece7d4a8495bb83ec05943c",
+          "mergeCommit": "85b3910bb9645c0c8f822755788bc11d96362a7d",
+          "ciRun": 40703946856
         }
       ]
     },
@@ -787,10 +793,13 @@
       "progress": [
         {
           "pr": 81,
-          "state": "open",
+          "state": "merged",
           "date": "2026-10-27",
           "milestone": "D3",
-          "scope": "D3 minimum slice only (approved versions freezing the bounded economic package with later-edit isolation, Reviewed Package page and D2a sleeves section in the shared template, read-only meeting view, version-gated final PDF with server-clock re-check, known-input cost/income coverage, store/backup v10); full feature not complete"
+          "scope": "D3 minimum slice only (approved versions freezing the bounded economic package with later-edit isolation, Reviewed Package page and D2a sleeves section in the shared template, read-only meeting view, version-gated final PDF with server-clock re-check, known-input cost/income coverage, store/backup v10); full feature not complete",
+          "head": "316cbb7e6c3ddc0d9ece7d4a8495bb83ec05943c",
+          "mergeCommit": "85b3910bb9645c0c8f822755788bc11d96362a7d",
+          "ciRun": 40703946856
         }
       ]
     },
@@ -821,10 +830,13 @@
       "progress": [
         {
           "pr": 81,
-          "state": "open",
+          "state": "merged",
           "date": "2026-10-27",
           "milestone": "D3",
-          "scope": "D3 minimum slice only (approved versions freezing the bounded economic package with later-edit isolation, Reviewed Package page and D2a sleeves section in the shared template, read-only meeting view, version-gated final PDF with server-clock re-check, known-input cost/income coverage, store/backup v10); full feature not complete"
+          "scope": "D3 minimum slice only (approved versions freezing the bounded economic package with later-edit isolation, Reviewed Package page and D2a sleeves section in the shared template, read-only meeting view, version-gated final PDF with server-clock re-check, known-input cost/income coverage, store/backup v10); full feature not complete",
+          "head": "316cbb7e6c3ddc0d9ece7d4a8495bb83ec05943c",
+          "mergeCommit": "85b3910bb9645c0c8f822755788bc11d96362a7d",
+          "ciRun": 40703946856
         }
       ]
     },
@@ -1000,9 +1012,9 @@
     "status": "planned",
     "trackingIssue": 36,
     "mode": "synthetic-employer-demo-first",
-    "nextMilestone": "D3 review (PR #81), then D4–D5",
+    "nextMilestone": "D4 (in progress), then D5",
     "supersedes": "Serial P0–P5 implementation and standalone R11-first cleanup command; original feature contracts retained",
-    "observedMain": "c0ee4e95119e8b8879ff3a68b4201aefa824b832",
+    "observedMain": "85b3910bb9645c0c8f822755788bc11d96362a7d",
     "developmentAssistant": {
       "application": "Claude Code Desktop",
       "model": "Opus 5.5",
@@ -1089,7 +1101,7 @@
       {
         "id": "D3",
         "title": "Review once, present consistently",
-        "status": "in_review",
+        "status": "released",
         "dependencies": [
           "D1",
           "D2",
@@ -1105,12 +1117,14 @@
         ],
         "effort": "high",
         "pr": 81,
-        "trackingIssue": 52
+        "trackingIssue": 52,
+        "mergeCommit": "85b3910bb9645c0c8f822755788bc11d96362a7d",
+        "productionDeployment": 7387798168
       },
       {
         "id": "D4",
         "title": "Demonstrate the bounded agent",
-        "status": "planned",
+        "status": "in_progress",
         "dependencies": [
           "D1",
           "D2",
@@ -1120,7 +1134,9 @@
           "R22"
         ],
         "effort": "high",
-        "note": "Offline foundations may accompany D1–D3; live evaluations are opt-in and explicitly budgeted"
+        "note": "Offline foundations may accompany D1–D3; live evaluations are opt-in and explicitly budgeted",
+        "trackingIssue": 54,
+        "branch": "feat/d4-contextual-agent"
       },
       {
         "id": "D5",
@@ -1163,7 +1179,10 @@
     ],
     "contextPolicy": {
       "activeHandoff": "../CLAUDE_HANDOFF.md",
-      "history": "../CLAUDE_HANDOFF_HISTORY_2026-10-24.md",
+      "history": [
+        "../CLAUDE_HANDOFF_HISTORY_2026-10-24.md",
+        "../CLAUDE_HANDOFF_HISTORY_2026-10-28.md"
+      ],
       "automaticHistoryRead": false,
       "guidance": "Load latest checkpoint, selected package and relevant contracts only; keep active handoff roughly 100 lines or fewer"
     },

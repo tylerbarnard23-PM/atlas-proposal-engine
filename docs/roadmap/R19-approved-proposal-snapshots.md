@@ -1,6 +1,6 @@
 # R19 — Freeze approved proposal snapshots and clarify approval
 
-Accepted for planning: 22 October 2026. **Status: Planned; not implemented by this document.** **D3 minimum in review (PR #81):** approved versions freeze the bounded economic package with later-edit isolation and version-gated final issuance. Advanced version navigation, retention and institutional records guarantees remain later.
+Accepted for planning: 22 October 2026. **Status: Planned; not implemented by this document.** **D3 minimum released (PR #81, `85b3910`):** approved versions freeze the bounded economic package with later-edit isolation and version-gated final issuance. Advanced version navigation, retention and institutional records guarantees remain later.
 Tracking issue: #52. Parent roadmap: #36. Original review recommendation: **19 of 25**.
 Phase: P1 accepted input basis (R19a); P3/P4 full approved snapshots. Relative scope: L; no calendar estimate is committed.
 Canonical plan: [R19-approved-proposal-snapshots.md](R19-approved-proposal-snapshots.md).
