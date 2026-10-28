@@ -1,6 +1,6 @@
 # R16 — Compare current/proposed fees and income with data coverage
 
-Accepted for planning: 22 October 2026. **Status: Planned; not implemented by this document.**
+Accepted for planning: 22 October 2026. **Status: Planned; not implemented by this document.** **D3 minimum in review (PR #81):** known-input expense ratio and income, current and proposed, with value/count coverage or "Unavailable"; no invented zeros, savings or forecasts. Full fee schedules and enrichment remain later.
 Tracking issue: #14. Parent roadmap: #36. Original review recommendation: **16 of 25**.
 Phase: P3 known inputs; automatic enrichment deferred. Relative scope: L; no calendar estimate is committed.
 Canonical plan: [R16-cost-and-income-comparison.md](R16-cost-and-income-comparison.md).

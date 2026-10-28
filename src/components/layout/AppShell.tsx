@@ -9,8 +9,8 @@ import { DEMO_DISCLAIMER } from "@/domain/legal";
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   // PDF preview / print routes bypass the workstation chrome so Puppeteer and the
-  // iframe preview see only the proposal document.
-  if (pathname?.startsWith("/proposal-pdf") || pathname?.startsWith("/proposal-print")) {
+  // iframe preview see only the proposal document; so does the D3 meeting view.
+  if (pathname?.startsWith("/proposal-pdf") || pathname?.startsWith("/proposal-print") || pathname?.startsWith("/meeting/")) {
     return <>{children}</>;
   }
   return (

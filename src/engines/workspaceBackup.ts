@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AdvisorProfile, Disclosure, Holding, ModelRevision, Recommendation, SourceDocument, StrategyRevision, WorkingDraft } from "@/domain/types";
+import type { AdvisorProfile, ApprovedSnapshot, Disclosure, Holding, ModelRevision, Recommendation, SnapshotInputs, SourceDocument, StrategyRevision, WorkingDraft } from "@/domain/types";
 import { checkLogoDataUrl, isValidAccentColor } from "@/domain/branding";
 import { normalizeHoldings } from "./normalizationEngine";
 import { valuationSummary } from "./valuationTotals";
@@ -9,6 +9,7 @@ import { linksNeedingReview, unresolvedFundingOf, unresolvedRecommendationLinks 
 import { legacyWorkingDraft } from "./allocationDesk";
 import { findRevision, modelProblems, strategyProblems } from "./strategyProposals";
 import { localCalendarDay } from "@/utils/formatting";
+import { snapshotIntegrity } from "./snapshotRecord";
 
 // Workspace backup and restore (R23a, #55)
 // ----------------------------------------
@@ -26,9 +27,9 @@ import { localCalendarDay } from "@/utils/formatting";
 export const BACKUP_FORMAT = "atlas-workspace-backup";
 export const BACKUP_SCHEMA_VERSION = 1;
 /** The saved-workspace schema (store version) the records follow. */
-export const BACKUP_WORKSPACE_VERSION = 9;
+export const BACKUP_WORKSPACE_VERSION = 10;
 /** Older workspace versions a backup may have, upgraded on restore. */
-export const SUPPORTED_OLDER_WORKSPACE_VERSIONS = [6, 7, 8] as const;
+export const SUPPORTED_OLDER_WORKSPACE_VERSIONS = [6, 7, 8, 9] as const;
 /** The application's backup limit (UTF-8 bytes of the file); it also bounds a file read before validation. */
 export const BACKUP_MAX_BYTES = 20 * 1024 * 1024;
 
@@ -460,6 +461,57 @@ function schemas(strict: boolean) {
     strategies: z.array(strategyRevision),
     models: z.array(modelRevision),
   });
+  // v10 (D3): approved versions. Each freezes the records the evaluator and
+  // the template read, with the same schemas, so restore checks them as
+  // strictly as the live workspace (and recomputes their fingerprints).
+  const disclosure = obj({
+    id,
+    jurisdiction: text().optional(),
+    category: z.enum([
+      "general", "no_guarantee", "tax_legal", "data_source", "valuation", "market_data", "delayed_quote", "mock_fallback", "fx", "alternatives",
+      "illiquid", "crypto", "cross_border", "advisor_approval", "ocr_extraction", "statement_data", "fees", "conflicts", "not_an_offer",
+      "client_information", "held_away",
+    ]),
+    title: text(),
+    body: text(),
+    required: z.boolean(),
+  });
+  const classTotals = obj({ total: finite.nullable(), byClass: z.array(obj({ assetClass, value: finite })) });
+  const snapshot = obj({
+    id,
+    version: z.number().int().min(1),
+    approvedAt: date,
+    approvedBy: obj({ advisorId: id, name: text() }),
+    note: text().optional(),
+    alternative: obj({
+      id,
+      name: text(),
+      scopeAccountIds: z.array(id).nullable(),
+      targets: z.record(assetClass, finite.min(0).max(100)),
+      model: obj({ id, revision }).nullable(),
+      inputBasis: obj({ recordedAt: date, reportingCurrency: currency, fingerprint: text(), values: z.array(inputValue), rates: z.array(inputRate) }),
+    }),
+    inputs: obj({
+      client,
+      advisor,
+      accounts: z.array(account),
+      holdings: z.array(holding),
+      recommendations: z.array(recommendation),
+      proposal,
+      sections: z.array(section),
+      disclosures: z.array(disclosure),
+      fxRates: z.array(fxRate),
+      fxConfirmation: fxConfirmation.nullable(),
+      sourceDocuments: z.array(sourceDocument),
+      models: z.array(modelRevision),
+      strategies: z.array(strategyRevision),
+    }),
+    results: obj({ reportingCurrency: currency, current: classTotals, proposed: classTotals, blocked: z.number().int().min(0), unresolved: z.number().int().min(0) }),
+    fingerprint: text(),
+  });
+  // A document generated from a version names it.
+  const pdfJobV10 = pdfJob.extend({ snapshotId: id.optional(), snapshotVersion: z.number().int().min(1).optional() });
+  const engagementV10 = engagementV9.extend({ pdfHistory: z.array(pdfJobV10), snapshots: z.array(snapshot) });
   const envelopeOf = <E extends z.ZodTypeAny, V extends number>(e: E, version: V) =>
     obj({
       format: z.literal(BACKUP_FORMAT),
@@ -476,12 +528,15 @@ function schemas(strict: boolean) {
   const recommendationV7 = recommendation.omit({ destination: true, linked: true });
   const olderEngagement = engagement.extend({ accounts: z.array(accountV7), recommendations: z.array(recommendationV7) });
   return {
-    envelope: envelopeOf(engagementV9, BACKUP_WORKSPACE_VERSION),
+    envelope: envelopeOf(engagementV10, BACKUP_WORKSPACE_VERSION),
+    envelopeV9: envelopeOf(engagementV9, 9),
     envelopeV8: envelopeOf(engagementV8, 8),
     envelopeV7: envelopeOf(olderEngagement.extend({ workingDraft: workingDraftV8 }), 7),
     envelopeV6: envelopeOf(olderEngagement, 6),
-    engagement: engagementV9,
+    engagement: engagementV10,
     advisor,
+    snapshot,
+    snapshotInputs: snapshot.shape.inputs,
   };
 }
 
@@ -532,6 +587,29 @@ export interface WorkspaceData {
   alternatives: WorkingDraft[];
   strategies: StrategyRevision[];
   models: ModelRevision[];
+  /** D3: the engagement's approved versions (append-only). */
+  snapshots: ApprovedSnapshot[];
+}
+
+/**
+ * D3: an approved version's inputs through the backup's own allowlist, so the
+ * frozen record holds exactly what a backup keeps and restores byte-identical.
+ */
+export const projectSnapshotInputs = (inputs: SnapshotInputs): SnapshotInputs => structuredClone(allowlisted(ALLOW.snapshotInputs, inputs)) as SnapshotInputs;
+
+export type SnapshotCheck = { ok: true; snapshot: ApprovedSnapshot } | { ok: false; error: string };
+
+/**
+ * D3: a version received from a browser (the final-PDF route): its shape,
+ * checked strictly like a restore, then its fingerprint and results
+ * recomputed from its own inputs. Never throws.
+ */
+export function checkSnapshot(raw: unknown): SnapshotCheck {
+  const parsed = STRICT.snapshot.safeParse(raw);
+  if (!parsed.success) return { ok: false, error: `Not a valid approved version: ${parsed.error.issues.slice(0, 3).map((i) => `${i.path.join(".") || "version"}: ${i.message}`).join("; ")}.` };
+  const snapshot = parsed.data as ApprovedSnapshot;
+  const problem = snapshotIntegrity(snapshot);
+  return problem ? { ok: false, error: `${problem} It may have been changed outside Atlas.` } : { ok: true, snapshot };
 }
 
 /** The backup of a workspace at `now`. */
@@ -569,6 +647,7 @@ export function createBackup(state: WorkspaceData, now: Date): WorkspaceBackup {
     alternatives: state.alternatives.map(resolvable),
     strategies: state.strategies,
     models: state.models,
+    snapshots: state.snapshots,
   };
   return {
     format: BACKUP_FORMAT,
@@ -678,23 +757,28 @@ export function parseBackup(text: string, opts: { disclosureIds: string[] }): Pa
   let backup: WorkspaceBackup;
   if (head.workspaceVersion === 6) {
     // A v6 backup is validated as v6 (unknown fields still rejected), then
-    // upgraded like the store's v7 and v8 migrations: its draft holds the
+    // upgraded like the store's v7–v10 migrations: its draft holds the
     // approved recommendations in saved order, with no other alternatives.
     // Deterministic: dated by the export.
     const v6 = STRICT.envelopeV6.safeParse(raw);
     if (!v6.success) return issues(v6.error);
     const e = v6.data.engagement;
-    backup = { ...v6.data, workspaceVersion: BACKUP_WORKSPACE_VERSION, engagement: { ...e, workingDraft: legacyWorkingDraft(e.recommendations as Recommendation[], v6.data.exportedAt), alternatives: [], unresolvedFunding: [], strategies: [], models: [] } } as WorkspaceBackup;
+    backup = { ...v6.data, workspaceVersion: BACKUP_WORKSPACE_VERSION, engagement: { ...e, workingDraft: legacyWorkingDraft(e.recommendations as Recommendation[], v6.data.exportedAt), alternatives: [], unresolvedFunding: [], strategies: [], models: [], snapshots: [] } } as WorkspaceBackup;
   } else if (head.workspaceVersion === 7) {
-    // v7 → v9: no other alternatives, no funding rules, D2 actions or library yet.
+    // v7 → v10: no other alternatives, no funding rules, D2 actions, library or approved versions yet.
     const v7 = STRICT.envelopeV7.safeParse(raw);
     if (!v7.success) return issues(v7.error);
-    backup = { ...v7.data, workspaceVersion: BACKUP_WORKSPACE_VERSION, engagement: { ...v7.data.engagement, alternatives: [], unresolvedFunding: [], strategies: [], models: [] } } as WorkspaceBackup;
+    backup = { ...v7.data, workspaceVersion: BACKUP_WORKSPACE_VERSION, engagement: { ...v7.data.engagement, alternatives: [], unresolvedFunding: [], strategies: [], models: [], snapshots: [] } } as WorkspaceBackup;
   } else if (head.workspaceVersion === 8) {
-    // v8 → v9: an empty strategy/model library; no alternative is pinned to a model.
+    // v8 → v10: an empty strategy/model library; no alternative is pinned to a model; no approved versions.
     const v8 = STRICT.envelopeV8.safeParse(raw);
     if (!v8.success) return issues(v8.error);
-    backup = { ...v8.data, workspaceVersion: BACKUP_WORKSPACE_VERSION, engagement: { ...v8.data.engagement, strategies: [], models: [] } } as WorkspaceBackup;
+    backup = { ...v8.data, workspaceVersion: BACKUP_WORKSPACE_VERSION, engagement: { ...v8.data.engagement, strategies: [], models: [], snapshots: [] } } as WorkspaceBackup;
+  } else if (head.workspaceVersion === 9) {
+    // v9 → v10: no approved versions yet; earlier documents name none.
+    const v9 = STRICT.envelopeV9.safeParse(raw);
+    if (!v9.success) return issues(v9.error);
+    backup = { ...v9.data, workspaceVersion: BACKUP_WORKSPACE_VERSION, engagement: { ...v9.data.engagement, snapshots: [] } } as WorkspaceBackup;
   } else {
     const parsed = STRICT.envelope.safeParse(raw);
     if (!parsed.success) return issues(parsed.error);
@@ -800,6 +884,18 @@ function referenceErrors(e: BackupEngagement, disclosureIds: Set<string>): strin
     }
   }
   for (const d of e.unresolvedFunding) if (!actual.has(d.accountId)) errors.push(`The backup lists account ${d.accountId}'s eligible cash as unresolved, but it isn't.`);
+  // D3: approved versions are this engagement's, numbered once each, and
+  // each still matches its own fingerprint and results.
+  const snapshotIds = unique("approved version ID", e.snapshots.map((x) => x.id));
+  unique("approved version number", e.snapshots.map((x) => String(x.version)));
+  for (const x of e.snapshots) {
+    if (x.inputs.client.id !== e.client.id) errors.push(`Approved version ${x.version} belongs to client ${x.inputs.client.id}, not the backup's client ${e.client.id}.`);
+    const problem = snapshotIntegrity(x as ApprovedSnapshot);
+    if (problem) errors.push(problem);
+  }
+  for (const j of e.pdfHistory) {
+    if (j.snapshotId && !snapshotIds.has(j.snapshotId)) errors.push(`PDF job ${j.id} was generated from approved version ${j.snapshotId}, which isn't in the backup.`);
+  }
   return errors;
 }
 
@@ -846,6 +942,7 @@ export function restoredState(
     alternatives: e.alternatives as WorkingDraft[],
     strategies: e.strategies as StrategyRevision[],
     models: e.models as ModelRevision[],
+    snapshots: e.snapshots as ApprovedSnapshot[],
     disclosures: current.disclosures,
     insights: [],
     marketDataByIdentifier: {},
@@ -869,6 +966,8 @@ export interface BackupPreview {
     valuation: ReturnType<typeof valuationSummary>;
     /** The FX confirmation as it stands now (re-evaluated, never renewed). */
     fxConfirmation: "none" | "valid" | "expired" | "changed" | "invalid";
+    /** D3: approved versions, restored exactly as approved. */
+    approvedVersions: number;
   };
   current: { clientName: string; accounts: number; holdings: number; recommendations: number; sourceDocuments: number; pdfHistory: number };
   firm: { keptFirmName: string; backupFirmName: string; differs: boolean };
@@ -896,6 +995,7 @@ export function backupPreview(backup: WorkspaceBackup, current: WorkspaceData, n
       sourceFilesNotIncluded: e.sourceDocuments.map((d) => d.fileName),
       valuation: valuationSummary(holdings),
       fxConfirmation: e.fxConfirmation ? fx.confirmation.state : "none",
+      approvedVersions: e.snapshots.length,
     },
     current: {
       clientName: name(current.client),

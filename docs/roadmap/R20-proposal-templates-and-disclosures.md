@@ -1,6 +1,6 @@
 # R20 — Create concise proposal templates and contextual disclosures
 
-Accepted for planning: 22 October 2026. **Status: Planned; not implemented by this document.**
+Accepted for planning: 22 October 2026. **Status: Planned; not implemented by this document.** **D3 minimum in review (PR #81):** the existing template presents an approved version with a Reviewed Package page and frozen disclosure text. Template administration remains later.
 Tracking issue: #53. Parent roadmap: #36. Original review recommendation: **20 of 25**.
 Phase: P4. Relative scope: M; no calendar estimate is committed.
 Canonical plan: [R20-proposal-templates-and-disclosures.md](R20-proposal-templates-and-disclosures.md).

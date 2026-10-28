@@ -186,6 +186,8 @@ describe("conversion: entered currency into the reporting currency, exactly once
         fxRates: RATES,
         proposal: { id: "p" } as never,
         variant: "draft",
+        // A fixed clock: the 2026-10-20 rate is current on this date, whatever day the suite runs.
+        now: "2026-10-21T12:00:00Z",
       })
     );
     const text = html.replace(/<style[\s\S]*?<\/style>/g, " ").replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ");

@@ -1007,6 +1007,73 @@ export interface PdfGenerationJob {
   filename?: string;
   errorMessage?: string;
   warnings?: string[];
+  /** D3: the approved version this document was rendered from, when it was. */
+  snapshotId?: string;
+  snapshotVersion?: number;
+}
+
+/**
+ * D3: everything the shared evaluator and the proposal template read, frozen
+ * when a version is approved. Projected through the backup allow-list, so a
+ * restored snapshot is byte-identical. Later edits never rewrite it.
+ */
+export interface SnapshotInputs {
+  client: ClientProfile;
+  advisor: AdvisorProfile;
+  accounts: Account[];
+  /** Holdings as stored (the template values them itself). */
+  holdings: Holding[];
+  /** The approved actions, in saved order. */
+  recommendations: Recommendation[];
+  proposal: Proposal;
+  sections: ProposalSection[];
+  /** The disclosures included, with their text as it was. */
+  disclosures: Disclosure[];
+  fxRates: FxRate[];
+  fxConfirmation: FxConfirmation | null;
+  /** Each import's completeness (forReadiness projection), for the issuance gate. */
+  sourceDocuments: SourceDocument[];
+  /** The pinned model revision (if any) and every strategy revision the approved sleeves or that model use. */
+  models: ModelRevision[];
+  strategies: StrategyRevision[];
+}
+
+/** D3: results computed at approval with the shared evaluator (and recomputable from the inputs). */
+export interface SnapshotResults {
+  reportingCurrency: CurrencyCode;
+  current: { total: number | null; byClass: { assetClass: AssetClass; value: number }[] };
+  proposed: { total: number | null; byClass: { assetClass: AssetClass; value: number }[] };
+  /** Units the evaluator left out, and actions it couldn't convert. */
+  blocked: number;
+  unresolved: number;
+}
+
+/**
+ * D3: one approved version of the proposal's economic package. Append-only:
+ * approving again creates the next version. Approving a version is distinct
+ * from approving actions and from draft membership. A local application
+ * record, not a tamper-proof book of record.
+ */
+export interface ApprovedSnapshot {
+  id: string;
+  version: number;
+  approvedAt: string;
+  approvedBy: { advisorId: string; name: string };
+  note?: string;
+  /** The alternative reviewed: its identity, scope, model pin and input basis. */
+  alternative: {
+    id: string;
+    name: string;
+    scopeAccountIds: string[] | null;
+    targets: Partial<Record<AssetClass, number>>;
+    model: { id: string; revision: number } | null;
+    /** The accepted values and every rate the approved actions use, recorded at approval. */
+    inputBasis: DraftInputBasis;
+  };
+  inputs: SnapshotInputs;
+  results: SnapshotResults;
+  /** Identifies `alternative` and `inputs` (canonical JSON hash); not a security measure. */
+  fingerprint: string;
 }
 
 export interface CountryConfig {

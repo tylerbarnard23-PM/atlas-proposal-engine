@@ -80,15 +80,15 @@ export function ReadinessBanner({
         <div className="flex-1 min-w-[220px]">
           <div className="font-serif text-lg text-ink-900">Ready for final generation</div>
           <div className="text-[13px] text-ink-600">
-            All {checks.length} readiness checks pass. The final PDF is unlocked.
+            All {checks.length} readiness checks pass. Approve a version to issue the final PDF.
           </div>
         </div>
         {readyAction ?? (
           <Link
-            href="/pdf-preview"
+            href="/review"
             className="inline-flex items-center gap-1.5 rounded-md bg-positive-600 text-white px-4 h-9 text-[13px] font-medium hover:bg-positive-500"
           >
-            Generate final PDF <ArrowRight className="h-4 w-4" />
+            Approve and issue <ArrowRight className="h-4 w-4" />
           </Link>
         )}
       </div>

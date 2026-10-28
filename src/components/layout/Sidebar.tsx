@@ -19,6 +19,7 @@ import {
   Bot,
   Building2,
   PieChart,
+  BadgeCheck,
 } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { useAtlasStore } from "@/store/useStore";
@@ -47,6 +48,7 @@ const NAV: NavItem[] = [
   { label: "Proposal Copilot", href: "/copilot", icon: <Bot className="h-4 w-4" />, group: "Advisory" },
   { label: "Proposal Builder", href: "/proposal-builder", icon: <FileText className="h-4 w-4" />, group: "Proposal" },
   { label: "PDF Preview", href: "/pdf-preview", icon: <Eye className="h-4 w-4" />, group: "Proposal" },
+  { label: "Review & present", href: "/review", icon: <BadgeCheck className="h-4 w-4" />, group: "Proposal" },
   { label: "Assumptions & Disclosures", href: "/assumptions-disclosures", icon: <ScrollText className="h-4 w-4" />, group: "Proposal" },
   { label: "Settings", href: "/settings", icon: <Settings className="h-4 w-4" />, group: "Workspace" },
 ];

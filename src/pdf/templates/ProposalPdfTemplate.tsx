@@ -4,20 +4,25 @@ import type {
   Account,
   AdvisorProfile,
   ClientProfile,
+  ComplianceCheck,
   Disclosure,
+  DraftInputBasis,
   Holding,
+  ModelRevision,
   Proposal,
   ProposalSection,
   Recommendation,
   FxRate,
+  StrategyRevision,
 } from "@/domain/types";
 import { ASSET_CLASS_LABELS } from "@/domain/assetTaxonomy";
 import { ACCOUNT_TYPE_LABELS } from "@/domain/accountTaxonomy";
 import { PDF_BASE_CSS } from "../styles/pdfStyles";
-import { formatCalendarDate, formatCurrency, formatPercent, formatTimestampDate } from "@/utils/formatting";
-import { sumBy, groupBy } from "@/utils/numbers";
-import { applyRecommendationsToProposed, cashShortfallsOf, sectionLabel } from "@/engines/proposalEngine";
-import { sleeveRefs } from "@/engines/strategyProposals";
+import { formatCalendarDate, formatCurrency, formatDateTime, formatPercent, formatTimestampDate } from "@/utils/formatting";
+import { applyRecommendationsToProposed, cashShortfallsOf, reserveStatus, sectionLabel } from "@/engines/proposalEngine";
+import { accountBasis, exposureView, feeCoverage, findRevision, label as strategyLabel, minimumStatus, sleevePlan, sleeveRefs } from "@/engines/strategyProposals";
+import { costIncomeCoverage, describeCoverage } from "@/engines/costIncome";
+import { evaluateDesk } from "@/engines/allocationDesk";
 import { basisBreakdown, describeBasisCounts, describeDateRange, describeValueDates, provenanceCounts, valueDateSummary, valueProvenance } from "@/engines/valuationProvenance";
 import { currentDisclosure } from "@/domain/disclosureLibrary";
 import { describeAmounts } from "@/engines/recommendationAmounts";
@@ -158,6 +163,44 @@ export interface ProposalPdfTemplateProps {
   now?: string;
   /** The advisor's time zone, for timestamps such as the prepared date (#28). Calendar dates don't depend on it. Defaults to the runtime's. */
   timeZone?: string;
+  /** D2a: the strategy revisions the sleeves use and the pinned model revision, for the sleeves section. */
+  strategies?: StrategyRevision[];
+  models?: ModelRevision[];
+  modelPin?: { id: string; revision: number } | null;
+  /** D3: the approved version this document presents, when it presents one. */
+  snapshot?: SnapshotMeta;
+}
+
+/**
+ * How a version is being shown: the read-only meeting view (viewing, not
+ * issuing), a final document issued from it, or a watermarked draft copy.
+ */
+export type SnapshotPresentation = "meeting" | "issued" | "draft_copy";
+
+export interface SnapshotMeta {
+  id: string;
+  version: number;
+  approvedAt: string;
+  approvedBy: { advisorId: string; name: string };
+  note?: string;
+  fingerprint: string;
+  alternativeName: string;
+  scopeAccountIds: string[] | null;
+  inputBasis: DraftInputBasis;
+  /** The shared readiness on the version's inputs at its approval time. */
+  readiness: ComplianceCheck[];
+  presentation: SnapshotPresentation;
+  /** When a document was issued from the version (issued and draft copies). */
+  issuedAt?: string;
+}
+
+/** The one line that says which version this is and how it is being shown. */
+export function snapshotMarker(m: SnapshotMeta, timeZone?: string): string {
+  const approved = `approved ${formatDateTime(m.approvedAt, { timeZone })} by ${m.approvedBy.name || "the advisor"}`;
+  if (m.presentation === "meeting") return `Viewing approved version ${m.version} (${approved}). Read-only meeting view: not an issued document.`;
+  const issued = m.issuedAt ? formatDateTime(m.issuedAt, { timeZone }) : "";
+  if (m.presentation === "draft_copy") return `Draft copy of approved version ${m.version} (${approved}), generated ${issued}. Not a final document.`;
+  return `Issued ${issued} from approved version ${m.version} (${approved}). Figures are as approved; nothing was refreshed.`;
 }
 
 function summarize(holdings: Holding[], group: (h: Holding) => string) {
@@ -192,6 +235,7 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
   // server-rendered PDF and the in-app preview agree (#28).
   const today = formatTimestampDate(props.now ?? new Date().toISOString(), { timeZone: props.timeZone, month: "long", locale: client.locale ?? "en-US" });
   const isDraft = variant === "draft";
+  const snap = props.snapshot;
   // Branding is re-validated here so an invalid value can never reach the
   // document, whichever caller rendered it.
   const logo = advisor.logoDataUrl && checkLogoDataUrl(advisor.logoDataUrl).ok ? advisor.logoDataUrl : undefined;
@@ -208,20 +252,6 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
   const approvedRecs = recommendations.filter((r) => r.approvedByAdvisor && r.includeInPdf);
   const remainingRecs = recommendations.filter((r) => !r.approvedByAdvisor && r.includeInPdf);
 
-  const nw = valuationSummary(holdings);
-  // Partial or unavailable totals are labeled; charts describe valued holdings only.
-  const valuedOnly = nw.complete ? "" : " (valued holdings only)";
-  const unvaluedNote = describeUnvalued(nw, reportingCurrency);
-  const allocClass = summarize(holdings, (h) => ASSET_CLASS_LABELS[h.assetClass] ?? "Other");
-  const allocCurrency = summarize(holdings, (h) => h.currency);
-  const allocCountry = summarize(holdings, (h) => h.country ?? "Unknown");
-  const investible = holdings.filter((h) => !h.isLiability);
-  const investibleTotal = valuationTotal(investible);
-  // Denominator for the valued subset's percentages (see `valuedOnly`).
-  const totalInvestible = investibleTotal.value ?? 0;
-  const valuedInvestible = investible.filter((h) => reportingValue(h) != null);
-  const liabilitiesLabel = nw.liabilities.value == null ? "Unavailable" : formatCurrency(Math.abs(nw.liabilities.value), reportingCurrency, { compact: true });
-
   // Proposed allocation reflects every advisor-approved recommendation,
   // independent of whether it's included in the PDF prose. Each rec's
   // intent is interpreted by applyRecommendationsToProposed (sell zeroes,
@@ -237,14 +267,89 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
   const cashShortfalls = cashShortfallsOf(proposedHoldings, accounts, fx);
   // Approved recommendations left out of the proposed view for lack of an FX rate.
   const unconverted = proposed.unresolved;
+
+  // D3: a version presents its investment scope. Its amounts, weights and
+  // exposure come from the shared evaluator over that scope (the desk's
+  // approved view, as the version's results do); assets outside the scope and
+  // every liability are household context, kept out of the denominators.
+  // Readiness, valuation and FX warnings stay household-wide. A document with
+  // no version keeps its household-wide figures.
+  const desk = snap
+    ? evaluateDesk({
+        holdings,
+        accounts,
+        recommendations: proposedRecs,
+        draft: { id: snap.id, name: snap.alternativeName, scopeAccountIds: snap.scopeAccountIds, memberIds: proposedRecs.map((r) => r.id), targets: {}, inputBasis: snap.inputBasis, model: props.modelPin ?? null, createdAt: snap.approvedAt, updatedAt: snap.approvedAt },
+        fx,
+        view: "approved",
+      })
+    : null;
+  const inScope = desk ? new Set(desk.scope.accountIds) : null;
+  const scoped = <T extends Holding>(hs: T[]): T[] => (inScope ? hs.filter((h) => inScope.has(h.accountId) && !h.isLiability && h.assetClass !== "liability") : hs);
+  const scopeTag = desk ? " (investment scope)" : "";
+  const scopeHoldings = scoped(holdings);
+  const scopeProposed = scoped(proposedHoldings);
+  const deskSlices = (k: "current" | "proposed") =>
+    desk!.rows
+      .filter((r) => Math.abs(r[k]) > 1e-9)
+      .map((r) => ({ label: r.label, value: r[k], pct: (k === "current" ? r.currentPct : r.proposedPct) ?? 0 }))
+      .sort((a, b) => b.value - a.value);
+
+  const nw = valuationSummary(holdings);
+  // Partial or unavailable totals are labeled; charts describe valued holdings only.
+  const valuedOnly = nw.complete ? "" : " (valued holdings only)";
+  const unvaluedNote = describeUnvalued(nw, reportingCurrency);
+  const allocClass = desk ? deskSlices("current") : summarize(holdings, (h) => ASSET_CLASS_LABELS[h.assetClass] ?? "Other");
+  const allocCurrency = summarize(scopeHoldings, (h) => h.currency);
+  const allocCountry = summarize(scopeHoldings, (h) => h.country ?? "Unknown");
+  const investible = scopeHoldings.filter((h) => !h.isLiability);
+  const investibleTotal = valuationTotal(investible);
+  // Denominator for the valued subset's percentages (see `valuedOnly`).
+  const totalInvestible = investibleTotal.value ?? 0;
+  const valuedInvestible = investible.filter((h) => reportingValue(h) != null);
+  const liabilitiesLabel = nw.liabilities.value == null ? "Unavailable" : formatCurrency(Math.abs(nw.liabilities.value), reportingCurrency, { compact: true });
   const noConversion = !fxSources && nw.complete && unconverted.length === 0;
-  const allocProposedClass = summarize(proposedHoldings, (h) => ASSET_CLASS_LABELS[h.assetClass] ?? "Other");
-  // D2a: proposed manager/strategy sleeves in this result. D3 owns their full
-  // presentation; until then the document says plainly how they are shown.
-  const sleeveNames = (() => {
-    const refs = sleeveRefs(proposedRecs);
-    return proposedHoldings.filter((h) => refs.has(h.id)).map((h) => `${refs.get(h.id)!.manager} — ${refs.get(h.id)!.name} (rev ${refs.get(h.id)!.revision})`);
-  })();
+  const netWorthLabel = desk ? "Household net worth" : "Net Worth";
+  const investibleLabel = desk ? "Investment scope" : "Investible Assets";
+  const liabilitiesTitle = desk ? "Household liabilities" : "Liabilities";
+  const scopeNote = desk ? " Figures cover the investment scope only; assets outside it and liabilities are household context, listed under Reviewed Package." : "";
+  const allocProposedClass = desk ? deskSlices("proposed") : summarize(proposedHoldings, (h) => ASSET_CLASS_LABELS[h.assetClass] ?? "Other");
+  // D2a: proposed manager/strategy sleeves in this result, shown in their own
+  // section: target (from the pinned model) against funded (the evaluator's
+  // result, in the sleeve's currency), minimum, fees and look-through exposure.
+  const strategies = props.strategies ?? [];
+  const sleeveRefsById = sleeveRefs(proposedRecs);
+  const sleeveHoldings = proposedHoldings.filter((h) => sleeveRefsById.has(h.id));
+  const sleeveNames = sleeveHoldings.map((h) => strategyLabel(sleeveRefsById.get(h.id)!));
+  const pinnedModel = props.modelPin ? findRevision(props.models ?? [], props.modelPin.id, props.modelPin.revision) ?? null : null;
+  const sleeveRows = [...new Map(proposedRecs.filter((r) => r.destination?.strategy && !r.relatedHoldingId).map((r) => [r.destination!.id, r] as const)).values()].map((r) => {
+    const d = r.destination!;
+    const ref = d.strategy!;
+    const def = findRevision(strategies, ref.id, ref.revision);
+    const left = proposed.blocked.find((b) => b.recommendationIds.includes(r.id));
+    const position = proposedHoldings.find((h) => h.id === d.id);
+    const funded = left || !position ? 0 : position.nativeMarketValue;
+    const plan = pinnedModel?.kind === "strategy" ? sleevePlan({ model: pinnedModel, strategies, basis: accountBasis({ account: accounts.find((a) => a.id === d.accountId), holdings, fx }) }) : null;
+    const target = plan?.basis.ok ? plan.rows.find((x) => x.strategy.id === ref.id && x.strategy.revision === ref.revision) : undefined;
+    return {
+      id: d.id,
+      label: strategyLabel(ref),
+      account: accounts.find((a) => a.id === d.accountId)?.name ?? d.accountId,
+      currency: d.currency,
+      target: target ? { amount: target.target, weight: target.weight } : null,
+      funded,
+      blocked: left?.reason ?? null,
+      minimum: minimumStatus(ref.minimum, funded, !!ref.review),
+      review: ref.review?.note ?? null,
+      fees: def ? feeCoverage(def.fees) : "Strategy revision not included",
+    };
+  });
+  // A version's exposure is the desk's, over its scope's positions.
+  const exposure = exposureView({
+    positions: desk ? desk.positions : proposedHoldings.filter((h) => !h.isLiability).map((h) => ({ id: h.id, assetClass: h.assetClass, proposed: reportingValue(h), accountId: h.accountId })),
+    recommendations: proposedRecs,
+    strategies,
+  });
 
   // Align legend ordering with the current allocation so colors stay stable
   // across the Current → Proposed pair (a label keeps the same color even if
@@ -305,6 +410,11 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
             <span className="pdf-pill warn" style={{ background: "rgba(255,255,255,0.12)", color: "#F1E7C7", borderColor: "rgba(255,255,255,0.25)" }}>DRAFT — for advisor review</span>
           )}
         </div>
+        {snap && (
+          <div className="pdf-cover-meta pdf-snapshot-marker" style={{ marginTop: "0.2in" }}>
+            {snapshotMarker(snap, props.timeZone)} Fingerprint {snap.fingerprint}.
+          </div>
+        )}
       </div>
     </div>
   );
@@ -330,10 +440,151 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
         <div style={{ position: "relative", zIndex: 1 }}>{children}</div>
         <div className="pdf-sample-notice">{PDF_SAMPLE_NOTICE}</div>
         <div className="pdf-footer">
-          <span>{advisor.firmName} · Prepared {today}</span>
+          <span>{advisor.firmName} · Prepared {today}{snap ? ` · Approved version ${snap.version}` : ""}</span>
           <span>{pageNumber(num)}</span>
         </div>
       </div>
+    );
+  }
+
+  // ---------- REVIEWED PACKAGE (D3: an approved version) ----------
+  // Always present for a version, whatever the section toggles: the version's
+  // identity and basis, and every approved action that changes the numbers,
+  // in saved order, even one whose prose is left out.
+  if (snap) {
+    const scopeNames = snap.scopeAccountIds == null ? "Every investment account" : snap.scopeAccountIds.map((id) => accounts.find((a) => a.id === id)?.name ?? id).join(", ") || "None";
+    const reserves = reserveStatus(proposedHoldings, accounts);
+    // An approved action on an account outside the scope changes household context, not the scoped figures.
+    const actionAccount = (r: Recommendation) => r.destination?.accountId ?? holdings.find((h) => h.id === r.relatedHoldingId)?.accountId ?? r.relatedAccountId;
+    const notApplied = (r: Recommendation) =>
+      proposed.blocked.find((b) => b.recommendationIds.includes(r.id))?.reason ??
+      (unconverted.some((u) => u.recommendationId === r.id) ? "Not applied: exchange rate missing" : null) ??
+      (inScope && actionAccount(r) && !inScope.has(actionAccount(r)!) ? "Applied outside the investment scope (household context; not in the scoped figures)" : null);
+    const money = (v: number | null) => (v == null ? `Not valued in ${reportingCurrency}` : formatCurrency(v, reportingCurrency, { compact: true }));
+    const passed = snap.readiness.filter((c) => c.passed).length;
+    pages.push(
+      <PageWrap key="package" title="Reviewed Package" eyebrow="00">
+        <p className="pdf-text">{snapshotMarker(snap, props.timeZone)}</p>
+        <div className="pdf-grid-2" style={{ marginTop: 10 }}>
+          <div className="pdf-card">
+            <div className="pdf-stat-label">Approved version</div>
+            <dl className="pdf-kv" style={{ marginTop: 8 }}>
+              <dt>Version</dt><dd>{snap.version}</dd>
+              <dt>Approved</dt><dd>{formatDateTime(snap.approvedAt, { timeZone: props.timeZone })}</dd>
+              <dt>Approved by</dt><dd>{snap.approvedBy.name || "—"}</dd>
+              {snap.note && (<><dt>Note</dt><dd>{snap.note}</dd></>)}
+              <dt>Fingerprint</dt><dd>{snap.fingerprint}</dd>
+            </dl>
+          </div>
+          <div className="pdf-card">
+            <div className="pdf-stat-label">Scope and basis</div>
+            <dl className="pdf-kv" style={{ marginTop: 8 }}>
+              <dt>Alternative</dt><dd>{snap.alternativeName}</dd>
+              <dt>Scope</dt><dd>{scopeNames}</dd>
+              <dt>Model</dt><dd>{pinnedModel ? `${pinnedModel.name} (rev ${pinnedModel.revision})` : props.modelPin ? `${props.modelPin.id} (rev ${props.modelPin.revision})` : "None pinned"}</dd>
+              <dt>Values</dt><dd>{snap.inputBasis.values.length} accepted value{snap.inputBasis.values.length === 1 ? "" : "s"} in {snap.inputBasis.reportingCurrency}; input basis {snap.inputBasis.fingerprint}</dd>
+              <dt>Exchange rates</dt>
+              <dd>{snap.inputBasis.rates.length === 0 ? "None used" : snap.inputBasis.rates.map((r) => `${r.base}/${r.quote} ${r.rate} (${r.source}, ${utcDate(r.asOf)})`).join("; ")}</dd>
+            </dl>
+          </div>
+        </div>
+        {desk && (
+          <>
+            <h3 style={{ fontFamily: "Georgia, serif", fontSize: "13pt", margin: "18pt 0 6pt" }}>Investment scope and household context</h3>
+            <table className="pdf-table">
+              <thead>
+                <tr>
+                  <th>Account or line</th>
+                  <th className="right">Current value</th>
+                  <th>Role in this document</th>
+                </tr>
+              </thead>
+              <tbody>
+                {desk.scope.accounts.map((a) => (
+                  <tr key={`s_${a.id}`}>
+                    <td>{a.name}</td>
+                    <td className="right">{money(a.current)}</td>
+                    <td>Investment scope: in every allocation, exposure, cost and income figure</td>
+                  </tr>
+                ))}
+                {desk.context.accounts.map((a) => (
+                  <tr key={`c_${a.id}`}>
+                    <td>{a.name}</td>
+                    <td className="right">{money(a.value)}</td>
+                    <td>Household context outside the investment scope</td>
+                  </tr>
+                ))}
+                {desk.liabilities.lines.map((l) => (
+                  <tr key={`l_${l.id}`}>
+                    <td>{l.name}</td>
+                    <td className="right">{money(l.value)}</td>
+                    <td>Liability ({l.accountName}): household context</td>
+                  </tr>
+                ))}
+                {desk.unvaluedOutside.filter((u) => !u.liability).map((u) => (
+                  <tr key={`u_${u.id}`}>
+                    <td>{u.name}</td>
+                    <td className="right">{money(null)}</td>
+                    <td>Household context ({u.accountName}); left out of the context total</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="pdf-text" style={{ marginTop: 8 }}>
+              Household context outside the investment scope: {money(desk.context.total)} of other assets and {money(desk.liabilities.total)} of liabilities (valued items only). They are shown for context and are not included in any allocation weight, exposure, cost or income figure in this document. Readiness, valuation and exchange-rate checks cover the whole household.
+            </p>
+          </>
+        )}
+        <h3 style={{ fontFamily: "Georgia, serif", fontSize: "13pt", margin: "18pt 0 6pt" }}>Approved actions, in order</h3>
+        {proposedRecs.length === 0 ? (
+          <p className="pdf-text">No approved actions.</p>
+        ) : (
+          <table className="pdf-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Action</th>
+                <th>Amount</th>
+                <th>Effect</th>
+                <th>Prose in document</th>
+              </tr>
+            </thead>
+            <tbody>
+              {proposedRecs.map((r, idx) => (
+                <tr key={r.id}>
+                  <td>{idx + 1}</td>
+                  <td>
+                    <div>{r.title}</div>
+                    <div className="pdf-source-tag">{r.rationale}</div>
+                  </td>
+                  <td>{describeAmounts(r, fx) ?? (r.actionAmount != null ? (r.actionAmountUnit === "percent" ? `${r.actionAmount}%` : formatCurrency(r.actionAmount, r.currency)) : "Advisory (no amount)")}</td>
+                  <td>{notApplied(r) ?? "Applied"}</td>
+                  <td>{r.includeInPdf ? "Included" : "Not included (listed here only)"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <h3 style={{ fontFamily: "Georgia, serif", fontSize: "13pt", margin: "18pt 0 6pt" }}>Funding and reserves</h3>
+        {reserves.length === 0 ? (
+          <p className="pdf-text">No account has an eligible-cash rule.</p>
+        ) : (
+          <ul style={{ paddingLeft: 18, fontSize: "9.5pt", lineHeight: 1.6 }}>
+            {reserves.map((r) => (
+              <li key={r.accountId}>
+                {r.accountName}: eligible cash {r.cashName ?? r.cashHoldingId}, reserve {r.reserveCurrency ? formatCurrency(r.reserve, r.reserveCurrency) : `${r.reserve} (currency unknown)`};
+                {" "}after the approved actions {r.available == null || !r.currency ? "unknown" : formatCurrency(r.available, r.currency)}{r.breached ? " (below the reserve)" : ""}.
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="pdf-text" style={{ marginTop: 10 }}>
+          Readiness at approval: {passed} of {snap.readiness.length} checks passed{passed === snap.readiness.length ? "." : `; not passed: ${snap.readiness.filter((c) => !c.passed).map((c) => c.label).join("; ")}.`}
+        </p>
+        <p className="pdf-text">
+          This version is a local Atlas record: later edits to the workspace or library don&apos;t change it, and a changed proposal needs a new approved version. It is not a tamper-proof record, and it records no client acknowledgement or implementation.
+        </p>
+      </PageWrap>
     );
   }
 
@@ -354,20 +605,20 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
           </div>
         )}
         <div className="pdf-grid-4" style={{ marginBottom: 18 }}>
-          <Stat label={`Net Worth${valuedOnly}`} value={formatTotal(nw.net, reportingCurrency, { compact: true })} hint="Reporting currency" />
-          <Stat label={`Investible Assets${valuedOnly}`} value={formatTotal(investibleTotal, reportingCurrency, { compact: true })} hint={nw.complete ? `${investible.length} holdings` : `${investibleTotal.valuedCount} of ${investible.length} holdings valued`} />
-          <Stat label="Liabilities" value={liabilitiesLabel} hint="Mortgage, debt" />
+          <Stat label={`${netWorthLabel}${valuedOnly}`} value={formatTotal(nw.net, reportingCurrency, { compact: true })} hint="Reporting currency" />
+          <Stat label={`${investibleLabel}${valuedOnly}`} value={formatTotal(investibleTotal, reportingCurrency, { compact: true })} hint={nw.complete ? `${investible.length} holdings` : `${investibleTotal.valuedCount} of ${investible.length} holdings valued`} />
+          <Stat label={liabilitiesTitle} value={liabilitiesLabel} hint="Mortgage, debt" />
           <Stat label="Data Quality Score" value={`${dq}`} hint={`${approvedRecs.length} advisor recs included`} />
         </div>
         <div className="pdf-grid-2">
           <div className="pdf-card">
-            <div className="pdf-stat-label">Allocation by Asset Class{valuedOnly}</div>
+            <div className="pdf-stat-label">Allocation by Asset Class{scopeTag}{valuedOnly}</div>
             <div style={{ marginTop: 8 }}>
               <AllocationList rows={allocClass.slice(0, 6)} currency={reportingCurrency} />
             </div>
           </div>
           <div className="pdf-card">
-            <div className="pdf-stat-label">Allocation by Currency{valuedOnly}</div>
+            <div className="pdf-stat-label">Allocation by Currency{scopeTag}{valuedOnly}</div>
             <div style={{ marginTop: 8 }}>
               <AllocationList rows={allocCurrency.slice(0, 6)} currency={reportingCurrency} />
             </div>
@@ -443,17 +694,17 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
     pages.push(
       <PageWrap key="current" title="Current Portfolio" eyebrow="03">
         <div className="pdf-grid-3" style={{ marginBottom: 14 }}>
-          <Stat label={`Investible Assets${valuedOnly}`} value={formatTotal(investibleTotal, reportingCurrency, { compact: true })} hint={`${investible.length} holdings · ${accounts.length} accounts`} />
-          <Stat label="Liabilities" value={liabilitiesLabel} hint="On schedule" />
-          <Stat label={`Net Worth${valuedOnly}`} value={formatTotal(nw.net, reportingCurrency, { compact: true })} hint="Reporting currency" />
+          <Stat label={`${investibleLabel}${valuedOnly}`} value={formatTotal(investibleTotal, reportingCurrency, { compact: true })} hint={`${investible.length} holdings · ${desk ? `${desk.scope.accountIds.length} of ${accounts.length}` : accounts.length} accounts`} />
+          <Stat label={liabilitiesTitle} value={liabilitiesLabel} hint="On schedule" />
+          <Stat label={`${netWorthLabel}${valuedOnly}`} value={formatTotal(nw.net, reportingCurrency, { compact: true })} hint="Reporting currency" />
         </div>
         <div className="pdf-grid-2">
           <div>
-            <div className="pdf-section-eyebrow"><span className="pdf-eyebrow">By Asset Class</span></div>
+            <div className="pdf-section-eyebrow"><span className="pdf-eyebrow">By Asset Class{scopeTag}</span></div>
             <AllocationList rows={allocClass} currency={reportingCurrency} />
           </div>
           <div>
-            <div className="pdf-section-eyebrow"><span className="pdf-eyebrow">By Country</span></div>
+            <div className="pdf-section-eyebrow"><span className="pdf-eyebrow">By Country{scopeTag}</span></div>
             <AllocationList rows={allocCountry} currency={reportingCurrency} />
           </div>
         </div>
@@ -470,7 +721,7 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
         </p>
         {sleeveNames.length > 0 && (
           <p className="pdf-text">
-            Includes {sleeveNames.length} proposed manager/strategy sleeve{sleeveNames.length === 1 ? "" : "s"} ({sleeveNames.join("; ")}). Each is shown at its proposed balance as Other / unclassified; its underlying asset-class exposure is not broken out in this document. Manager, strategy, minimum and fee details are advisor-entered and are not a verified offering, appointment or eligibility determination.
+            Includes {sleeveNames.length} proposed manager/strategy sleeve{sleeveNames.length === 1 ? "" : "s"} ({sleeveNames.join("; ")}). In the allocation charts each is shown at its proposed balance as Other / unclassified; its look-through exposure, where a mix was supplied, and its target, funding, minimum and fees are under Manager and Strategy Sleeves. Manager, strategy, minimum and fee details are advisor-entered and are not a verified offering, appointment or eligibility determination.
           </p>
         )}
         <div className="pdf-grid-2" style={{ marginTop: 12 }}>
@@ -491,6 +742,82 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
           <li>Where applicable, sequence taxable events to align with the household's tax-loss harvesting calendar.</li>
           <li>Confirm cross-border tax and reporting implications for non-US holdings.</li>
         </ul>
+      </PageWrap>
+    );
+  }
+
+  // ---------- MANAGER AND STRATEGY SLEEVES (D2a) ----------
+  if (enabled("proposed_portfolio") && sleeveRows.length > 0) {
+    pages.push(
+      <PageWrap key="sleeves" title="Manager and Strategy Sleeves" eyebrow="04b">
+        <p className="pdf-text">
+          {pinnedModel
+            ? `Pinned model: ${pinnedModel.name} (rev ${pinnedModel.revision}). Targets are the model's weights on the account's value before any action; funded amounts are what the approved actions commit.`
+            : "No model is pinned, so no sleeve has a model target; funded amounts are what the approved actions commit."}{" "}
+          Amounts are in each sleeve&apos;s own currency.
+        </p>
+        <table className="pdf-table" style={{ marginTop: 8 }}>
+          <thead>
+            <tr>
+              <th>Sleeve</th>
+              <th className="right">Target</th>
+              <th className="right">Funded</th>
+              <th>Minimum</th>
+              <th>Fees (supplied)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sleeveRows.map((r) => (
+              <tr key={r.id}>
+                <td>
+                  <div>{r.label}</div>
+                  <div className="pdf-source-tag">{r.account}</div>
+                </td>
+                <td className="right">{r.target ? `${formatCurrency(r.target.amount, r.currency)} (${formatPercent(r.target.weight, 1)})` : "No model target"}</td>
+                <td className="right">{r.blocked ? `Not funded: ${r.blocked}` : formatCurrency(r.funded, r.currency)}</td>
+                <td>
+                  {r.minimum.kind === "met"
+                    ? `Met (${formatCurrency(r.minimum.minimum, r.currency)})`
+                    : r.minimum.kind === "below"
+                    ? `Below (${formatCurrency(r.minimum.minimum, r.currency)})`
+                    : r.review
+                    ? `Not supplied; advisor review recorded: ${r.review}`
+                    : "Not supplied; not reviewed"}
+                </td>
+                <td>{r.fees}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <h3 style={{ fontFamily: "Georgia, serif", fontSize: "13pt", margin: "18pt 0 6pt" }}>Look-through exposure of the proposed assets{scopeTag}</h3>
+        <table className="pdf-table">
+          <thead>
+            <tr>
+              <th>Asset class</th>
+              <th className="right">Share</th>
+              <th className="right">{reportingCurrency}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {exposure.rows.map((r) => (
+              <tr key={r.assetClass}>
+                <td>{ASSET_CLASS_LABELS[r.assetClass] ?? r.assetClass}</td>
+                <td className="right">{formatPercent(r.pct, 1)}</td>
+                <td className="right">{formatCurrency(r.value, reportingCurrency, { compact: true })}</td>
+              </tr>
+            ))}
+            {exposure.unknown.value > 0 && (
+              <tr>
+                <td>Unknown ({exposure.unknown.sleeves} sleeve{exposure.unknown.sleeves === 1 ? "" : "s"} with no supplied mix)</td>
+                <td className="right">{formatPercent(exposure.unknown.pct, 1)}</td>
+                <td className="right">{formatCurrency(exposure.unknown.value, reportingCurrency, { compact: true })}</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+        <p className="pdf-text" style={{ marginTop: 8 }}>
+          Coverage: {formatPercent(100 - exposure.unknown.pct, 1)} of the proposed {desk ? "investment-scope " : ""}value has a known asset class (direct holdings, or a sleeve&apos;s supplied mix); the rest is shown as Unknown and is not spread across the known classes. Mixes are advisor-entered as of their stated dates, not verified holdings, and fees are listed as supplied, not added together or compared.
+        </p>
       </PageWrap>
     );
   }
@@ -531,8 +858,7 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
 
   // ---------- BEFORE / AFTER ALLOCATION ----------
   if (enabled("before_after_allocation")) {
-    const proposedTotal = valuationTotal(proposedHoldings.filter((h) => !h.isLiability));
-    const currentTotal = totalInvestible;
+    const proposedTotal = valuationTotal(scopeProposed.filter((h) => !h.isLiability));
     // Compute per-asset-class percentage-point shifts between current and proposed.
     const currentByLabel = new Map(allocClass.map((s) => [s.label, s.pct]));
     const proposedByLabel = new Map(allocProposedClass.map((s) => [s.label, s.pct]));
@@ -555,7 +881,7 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
           <div className="pdf-card pdf-avoid-break">
             <div className="pdf-ba-head">
               <span className="pdf-ba-tag">Before</span>
-              <span className="pdf-ba-title">Current portfolio</span>
+              <span className="pdf-ba-title">Current portfolio{scopeTag}</span>
             </div>
             <div className="pdf-stat-value" style={{ fontSize: "16pt", marginTop: 2 }}>
               {formatTotal(investibleTotal, reportingCurrency, { compact: true })}
@@ -573,7 +899,7 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
           <div className="pdf-card pdf-avoid-break">
             <div className="pdf-ba-head after">
               <span className="pdf-ba-tag">After</span>
-              <span className="pdf-ba-title">Proposed portfolio</span>
+              <span className="pdf-ba-title">Proposed portfolio{scopeTag}</span>
             </div>
             <div className="pdf-stat-value" style={{ fontSize: "16pt", marginTop: 2 }}>
               {formatTotal(proposedTotal, reportingCurrency, { compact: true })}
@@ -675,7 +1001,7 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
             : noConversion
             ? `all already in ${reportingCurrency}, so no currency conversion was needed.`
             : `but no usable exchange rate is stored to convert them to ${reportingCurrency}.`}{" "}
-          Hedging positions, if any, are presented separately in the appendix.
+          Hedging positions, if any, are presented separately in the appendix.{scopeNote}
         </p>
       </PageWrap>
     );
@@ -697,7 +1023,7 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
           <AllocationList rows={allocCountry} currency={reportingCurrency} />
         </div>
         <p className="pdf-text" style={{ marginTop: 14 }}>
-          Country exposure reflects each holding's primary country of issuance, not the underlying revenue or operational footprint. Cross-border tax, reporting, and succession considerations may apply.
+          Country exposure reflects each holding's primary country of issuance, not the underlying revenue or operational footprint. Cross-border tax, reporting, and succession considerations may apply.{scopeNote}
         </p>
       </PageWrap>
     );
@@ -706,17 +1032,19 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
   // ---------- RISK / LIQUIDITY / FEE / INCOME ----------
   if (enabled("risk_review") || enabled("liquidity") || enabled("fee_analysis") || enabled("income_analysis")) {
     const liqRows = summarize(investible, (h) => (h.liquidity ?? "unspecified").replace("_", " "));
-    const expenseRatioWeighted = totalInvestible > 0
-      ? sumBy(valuedInvestible, (h) => ((h.expenseRatioPct ?? 0) / 100) * reportingValue(h)!) / totalInvestible
-      : 0;
-    const incomeWeighted = totalInvestible > 0
-      ? sumBy(valuedInvestible, (h) => ((h.incomeYieldPct ?? 0) / 100) * reportingValue(h)!)
-      : 0;
+    // Only supplied data counts: a holding without an expense ratio or yield
+    // isn't treated as zero, and the coverage says how much is described.
+    // Only actual manager/strategy sleeves are set aside; an ordinary new investment counts, uncovered.
+    const sleeveIds = new Set(sleeveRefsById.keys());
+    const costNow = costIncomeCoverage(scopeHoldings, sleeveIds);
+    const costProposed = costIncomeCoverage(scopeProposed, sleeveIds);
+    const pctText = (v: number) => formatPercent(v, 2);
+    const moneyText = (v: number) => formatCurrency(v, reportingCurrency, { compact: true });
     pages.push(
       <PageWrap key="risk" title="Risk, Liquidity, Fees & Income" eyebrow="09">
         <div className="pdf-grid-2">
           <div>
-            <div className="pdf-eyebrow">Liquidity Profile{valuedOnly}</div>
+            <div className="pdf-eyebrow">Liquidity Profile{scopeTag}{valuedOnly}</div>
             <div style={{ marginTop: 8 }}>
               <AllocationList rows={liqRows} currency={reportingCurrency} />
             </div>
@@ -724,11 +1052,15 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
           <div>
             <div className="pdf-eyebrow">Headline Estimates</div>
             <dl className="pdf-kv" style={{ marginTop: 8 }}>
-              <dt>Estimated weighted expense ratio</dt>
-              <dd>{formatPercent(expenseRatioWeighted * 100, 2)}</dd>
-              <dt>Estimated annual income</dt>
-              <dd>{formatCurrency(incomeWeighted, reportingCurrency, { compact: true })}</dd>
-              <dt>Concentration risk count</dt>
+              <dt>Weighted expense ratio, current{scopeTag}</dt>
+              <dd>{describeCoverage(costNow.expense, pctText)}</dd>
+              <dt>Weighted expense ratio, proposed{scopeTag}</dt>
+              <dd>{describeCoverage(costProposed.expense, pctText)}</dd>
+              <dt>Estimated annual income, current{scopeTag}</dt>
+              <dd>{describeCoverage(costNow.income, moneyText)}</dd>
+              <dt>Estimated annual income, proposed{scopeTag}</dt>
+              <dd>{describeCoverage(costProposed.income, moneyText)}</dd>
+              <dt>Concentration risk count{scopeTag}</dt>
               <dd>{nw.complete ? valuedInvestible.filter((h) => reportingValue(h)! / Math.max(1, totalInvestible) > 0.08).length : "Not assessed (valuation incomplete)"}</dd>
               <dt>Manually valued holdings</dt>
               <dd>{manualCount}</dd>
@@ -736,7 +1068,7 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
           </div>
         </div>
         <p className="pdf-text" style={{ marginTop: 14 }}>
-          Income and expense estimates are derived from advisor-entered yields and expense ratios where available. They are estimates only and do not reflect actual realized cash flows.
+          Expense ratios and income use only the yields and expense ratios supplied for each holding, over the share of value stated; holdings without them are not counted as zero, and nothing is extrapolated to them. They are estimates, not realized cash flows, and no saving or forecast is derived.{scopeNote}{costProposed.sleevesExcluded > 0 ? ` The ${costProposed.sleevesExcluded} proposed manager/strategy sleeve${costProposed.sleevesExcluded === 1 ? " is" : "s are"} excluded: their supplied fees are listed under Manager and Strategy Sleeves and are not combined with holding expense ratios.` : ""}
         </p>
       </PageWrap>
     );
@@ -748,7 +1080,7 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
       <PageWrap key="tax" title="Tax Considerations & Implementation" eyebrow="10">
         <h3 style={{ fontFamily: "Georgia, serif", fontSize: "13pt", margin: "0 0 6pt" }}>Tax considerations</h3>
         <p className="pdf-text">
-          The advisor will coordinate implementation with the client's CPA and tax counsel. Items with potential tax impact include realization of capital gains in taxable accounts, asset location reviews between taxable and tax-advantaged accounts, and cross-border tax considerations for non-US holdings.
+          No tax analysis is included in this proposal: it calculates no realized gains, tax costs or after-tax results. The advisor will coordinate implementation with the client's CPA and tax counsel. Items with potential tax impact include realization of capital gains in taxable accounts, asset location reviews between taxable and tax-advantaged accounts, and cross-border tax considerations for non-US holdings.
         </p>
         <h3 style={{ fontFamily: "Georgia, serif", fontSize: "13pt", margin: "18pt 0 6pt" }}>Implementation plan</h3>
         <ol style={{ paddingLeft: 18, fontSize: "10pt", lineHeight: 1.6 }}>
@@ -854,7 +1186,7 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
           </li>
           <li>Holding values are the statement, advisor-entered, override or approved values listed with their recorded dates under {titleOf("market_data_sources")}; they are not live market prices.</li>
           <li>Manually valued or sponsor-reported values are advisor estimates and may not represent realizable values.</li>
-          <li>Income and expense ratio figures are estimates derived from advisor-entered fields where available.</li>
+          <li>Income and expense ratio figures use only the advisor-entered yields and expense ratios supplied, with their coverage stated; missing values are not treated as zero.</li>
           <li>The proposal does not model trading costs, custodian fees, market impact, taxes, or after-tax outcomes unless explicitly stated.</li>
         </ul>
         <FxRatesUsed status={fxStatus} reportingCurrency={reportingCurrency} rates={fxRates} holdings={props.holdings} recommendations={recommendations} />
@@ -866,7 +1198,8 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
   if (enabled("disclosures")) {
     pages.push(
       <PageWrap key="disclosures" title="Disclosures" eyebrow="14">
-        {disclosures.map(currentDisclosure).map((d) => (
+        {/* A version's disclosures are frozen with their text; the live preview shows the library's current text. */}
+        {(snap ? disclosures : disclosures.map(currentDisclosure)).map((d) => (
           <div className="pdf-disclosure" key={d.id}>
             <h4>{d.title}</h4>
             <div>{resolveFirmPlaceholder(d.body, advisor)}</div>

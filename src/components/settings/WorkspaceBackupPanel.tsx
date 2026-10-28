@@ -197,6 +197,12 @@ export function WorkspaceBackupPanel() {
                   {!p.incoming.valuation.complete && ` (${p.incoming.valuation.holdingsValued} of ${p.incoming.valuation.holdingsTotal} holdings valued)`}
                 </div>
                 <div>FX confirmation: {CONFIRMATION_LABEL[p.incoming.fxConfirmation]}</div>
+                {p.incoming.approvedVersions > 0 && (
+                  <div>
+                    {p.incoming.approvedVersions} approved version{p.incoming.approvedVersions === 1 ? "" : "s"}, restored exactly as approved (each checked against its
+                    fingerprint)
+                  </div>
+                )}
                 {p.incoming.recommendationsNeedingReview > 0 && (
                   <div>
                     {p.incoming.recommendationsNeedingReview} recommendation{p.incoming.recommendationsNeedingReview === 1 ? "" : "s"} marked for review: the linked
