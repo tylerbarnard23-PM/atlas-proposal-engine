@@ -1,40 +1,60 @@
 # Handoff
 
-## Current checkpoint — 27 October 2026: D3 implemented, in review (PR #81); D2a released
+## Current checkpoint — 28 October 2026: D3 released; D4 in progress
 
-- **D2a released:** PR #79 merged pinned to reviewed head `402084e6943bca564eec4b667c5c2ec57ac1476c` as **`c0ee4e95119e8b8879ff3a68b4201aefa824b832`** (26 October 2026).
-  - Main CI [run 40346074152](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/actions/runs/40346074152) passed: 487 passed, 2 private-PDF skips, eval 2/2, build.
-  - GitHub records Production deployment 7335446932 for `c0ee4e9` (success).
-  - A synthetic production smoke passed and is recorded on [PR #79](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/79). It covered pinning with no actions, 40/35/20 funded sleeves with a 5,000 reserve, a known-minimum failure left out whole, purchase currency and attribution, review access after unpinning, and a v9 backup cycle. The browser workspace was restored byte-identical. #73 stays open.
-- **D2a contracts (store/backup v9):**
-  - Append-only `strategies` and `models`, immutable by `(id, revision)`; `WorkingDraft.model` pins one revision.
-  - Sleeves are proposed-only destinations with `destination.strategy` (asset class `custom`). Minimums are enforced in the engine; readiness `strategy_terms` waits for a recorded review of an unsupplied minimum.
-  - `exposureView` keeps unknown mixes unknown; fees are listed by component (`feeCoverage`), never summed.
-- **D3 in review: [PR #81](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/81)** (`feat/d3-reviewed-package`, built from main `c0ee4e9`; see the PR for the exact head). Not merged or deployed. The contract-impact note is on [#52](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/52#issuecomment-6443440356).
-  - **Approved versions:** append-only `snapshots: ApprovedSnapshot[]` (`engines/approvedSnapshot.ts`). `approveVersion(note?)` runs only when the shared readiness passes and changes nothing else (action approvals, drafts and holdings stay as they are).
-  - **What a version holds:** scope, targets and model pin; the accepted values and every rate in use (an input basis recorded at approval); the approved actions in saved order; accounts with funding and reserves; disclosures with their text frozen; the pinned model and every strategy revision used; results from the shared evaluator (`snapshotResults`); approval identity, time and note; and a 64-bit content fingerprint (`engines/snapshotRecord.ts`). Inputs pass through the backup allowlist (`projectSnapshotInputs`).
-  - **Isolation:** later edits never rewrite a version. `snapshotStatus` reports what changed since (holdings, rates, actions, model, library and so on), each once.
-  - **One template:** the meeting view (`/meeting/[id]`, read-only, shell-less) and every PDF from a version render `ProposalPdfTemplate` from the version's inputs at its approval time. A version adds a "Reviewed Package" page (identity, scope, input and FX basis, every approved action in order with its effect and prose status, funding and reserves, readiness at approval). A line on the cover and that page says whether it is the meeting view, an issued final or a draft copy.
-  - **Issuing:** `POST /api/proposals/[id]/generate-pdf` accepts `{ snapshot }`. It validates the version strictly, recomputes its fingerprint and results (422 on a mismatch), and for a final document re-runs readiness on the version's own inputs with the server clock. Nothing is refreshed: stale rates mean approving a new version. The live `{ state }` path is unchanged.
-  - **UI:** a "Review & present" page (`/review`) approves versions, lists them with their status, opens the meeting view and issues a final PDF or draft copy. PDF Preview now makes drafts only and points final issuance to Review. PDF history records `snapshotId` and `snapshotVersion`.
-  - **Costs and income (R16 minimum):** `engines/costIncome.ts` reports the weighted expense ratio and income over supplied data only, current and proposed, with value and count coverage, or "Unavailable". The template no longer counts missing data as zero. Sleeves are excluded from holding ratios, and their fees are listed separately. The tax page says no tax analysis is included.
-  - **D2a in the document:** a "Manager and Strategy Sleeves" page shows the pinned model, target against funded per sleeve (in the sleeve's own currency), minimum status and recorded review, supplied fees, and look-through exposure with Unknown and its coverage.
-  - **Persistence:** store and backup v10 (`snapshots`; `pdfHistory[].snapshotId` and `snapshotVersion`), with strict v9/v8/v7/v6 upgrades. Restore rejects a version whose fingerprint or results don't match, duplicate IDs or numbers, another client's version, or a PDF job naming a missing version. Starting a new client or importing clears versions; restore keeps them.
-  - **Evidence:** in the PR.
-- **Status (28 October 2026):** D3 implemented; PR #81 open, unmerged, no merge approval. Codex review is incomplete. D4 and D5 are not started.
-  - **Scope finding fixed (reproduced first):** a version's meeting view and PDF showed household-wide allocation and exposure (Before $111.0K, USD 90.1% / EUR 9.9%) while its results used the selected USD 100,000 scope. For a version, the template now takes amounts, weights and look-through exposure from the shared evaluator (`evaluateDesk`, approved view, the version's scope), and currency, country, liquidity, cost/income and concentration from in-scope holdings, each labelled "(investment scope)". Out-of-scope accounts and every liability appear as labelled household context on the Reviewed Package page and in household stats, outside every denominator. An approved action on an out-of-scope account is labelled as household context. Readiness, valuation and FX checks stay household-wide. No persisted shape, fingerprint or result changed; the live (no-version) PDF path is unchanged.
-  - **Also fixed:** `recommendationCurrency` "PDF applies the converted amount once" depended on the wall clock (its 2026-10-20 rate turned stale on 28 October); the test now passes a fixed `now`.
-  - **Cost/income coverage fixed (regressions first):** `costIncomeCoverage(holdings, sleeveIds)` excluded every `proposedOnly` holding as a "sleeve", which also dropped ordinary new investments (D2 destinations) from the denominator and could show "Not applicable" instead of "Unavailable". Sleeves are now only destinations pinned to a strategy revision (`sleeveRefs`); an ordinary new investment stays in the denominator, uncovered (no fee/yield fields exist for it). An explicit zero counts as supplied. The PDF's exclusion count and wording name actual sleeves only.
-  - **Evidence:** see PR #81 (local typecheck, 512 passed / 0 skipped with the private fixture, eval 2/2, build; isolated `d3.localhost` browser checks of UI-approved versions, their meeting views and server PDFs; later edits left v1 byte-identical). CI for the pushed head is reported on the PR.
-  - **Preserve:** PR #80 (D5 secrets/exposure plan) is open; keep it when reconciling docs.
-- **Next:** finish Codex review of D3 (including the scope fix) before any owner-authorized, pinned merge.
-- **Open follow-up:** #76 (reserve-breach attribution for legacy actions), unchanged.
+- **D3 released:** PR #81 merged pinned to the reviewed head `316cbb7e6c3ddc0d9ece7d4a8495bb83ec05943c` as **`85b3910bb9645c0c8f822755788bc11d96362a7d`** (28 October 2026, 14:14 UTC).
+  - Main CI [run 40703946856](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/actions/runs/40703946856) passed: 510 passed, 2 private-PDF skips, eval 2/2, build.
+  - GitHub records Production deployment 7387798168 for `85b3910` (success).
+  - The synthetic production smoke passed; it is recorded on [PR #81](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/81#issuecomment-6471553112) and [#52](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/52#issuecomment-6471553950):
+    - Scope: a USD 100,000 investment scope with an EUR 10,000 fund and a USD 50,000 mortgage as context. The meeting view and PDF showed $100.0K denominators and the labelled context table.
+    - Coverage: an ordinary new ETF with unknown terms reduced fee/income coverage (56%, 1 of 2 holdings) instead of disappearing.
+    - Isolation: a later holding edit left v1 and its meeting view unchanged ("changed since: holdings").
+    - Issuing: the real "Issue final PDF" button produced a 277 KB PDF, captured in memory, with a succeeded history record linked to v1.
+    - Refusals: an altered snapshot got 422, and a stale-rate final got 422 while its draft copy got 200.
+    - The saved production browser workspace was restored byte-identical.
+  - Smoke limitations:
+    - The button's own blob wasn't read page by page; the pages were read from a route replay of the same version.
+    - The stale-rate case used a locally built, validly fingerprinted copy, because the server clock can't be aged.
+    - The scenario was loaded through the Settings restore control.
+- **Delivered contracts to build on (store/backup v10):**
+  - Scope, alternatives and the shared desk evaluator (D1/D2).
+  - Versioned models and strategy sleeves (D2a).
+  - Append-only approved versions (`snapshots`) with fingerprints, one template for the meeting view and PDF, and server re-gating of final issuance (D3).
+  - Scoped presentation, with household context outside every denominator.
+  - Cost/income coverage over supplied data, with sleeves identified by strategy reference.
+  - Superseded detail is in [CLAUDE_HANDOFF_HISTORY_2026-10-28.md](CLAUDE_HANDOFF_HISTORY_2026-10-28.md).
+- **D4 in review: PR #82** (`feat/d4-contextual-agent`, from `85b3910`; contract-impact note on [#54](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/54#issuecomment-6471919494)). Not merged or deployed.
+  - **Context:** `src/copilot/context.ts` (`inputRevision`). The route returns 409 `stale_context`, and `acceptAgentDrafts` re-checks the revision, is idempotent and adds unapproved members only.
+  - **Tools:** `get_scope_overview` and `simulate_scope_change` (shared desk evaluator). A sized draft must be a draftable simulation. Simulations fail closed on scope, cash, missing values or FX, imports, blocked units, shortfalls, reserve breaches and duplicates.
+  - **Loop:** `runAgent` with an injectable `MessagesClient`, bounds, explicit statuses, figure checks (`evidence.ts`), and labelled demo, test (`COPILOT_MODE=test`) and live modes. The model, effort and fallback are unchanged.
+  - **Status (28 October 2026):** D4 is implemented in PR #82 and awaiting Codex review. It is unmerged and not deployed to production. Of D5, only the bounded usability slice below is done.
+  - **Local validation at `20223e4`:** typecheck clean; 539 tests passed; extraction eval 2/2; build passed.
+  - **CI:** CI run 40712229577 and Vercel passed on `20223e4`. The CI test counts weren't read and aren't inferred from the local count.
+  - **Browser evidence** used the deterministic test provider, not a real model.
+  - **Live evaluation and real-model browser testing are unperformed.** The proposed budget in AGENT_EVALUATION.md is **not approved**; its pricing, spending safeguards and evaluation design still need review.
+  - **Cleanup:** task servers are stopped (ports 3107, 3108 and 3199 free), and the temporary seeds, tests and `public/` files are removed. `.claude/launch.json` is restored to its original entries. Saved browser workspaces and `stash@{0}` are preserved.
+  - **D4 review rounds 1–3 (29 October 2026):** 11 + 4 + 1 confirmed defects, each reproduced first (`tests/agentReview*.test.ts`) and fixed on PR #82; details in [the history file](CLAUDE_HANDOFF_HISTORY_2026-10-28.md#d4-review-rounds-29-october-2026) and the PR. Runtime model and fallback configuration unchanged.
+  - **D5 usability slice on PR #82 (29 October 2026):** the owner-approved proposal-flow simplification. A bounded D5 slice, **not D5 completion**. Impact note: [PR #82 comment](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/82#issuecomment-6506681351). Presentation only: store/backup v10, engines, context/staleness checks, acceptance safeguards, tools, agent prompt, model, effort, fallback and spend controls are unchanged.
+    - **Copilot beside the desk:** "Ask Copilot" opens a panel (a column at ≥1280px, a full-height panel below) built on `CopilotWorkspace` and `copilotRequest`, shared with the standalone page. Opening runs nothing. It shows the active alternative and the account scope.
+    - **Preview state:** "Preview only — nothing added." with Add to working draft and Discard beside it; afterwards "Added to working draft — awaiting approval." with a link that highlights the action on Recommendations. Scripted demo and test-provider answers no longer say "saved" before acceptance; live answers aren't rewritten. Figure warnings and blocking reasons stay visible; the trace and IDs are behind Details.
+    - **Desk:** "Draft changes (n)" and "Approved changes (m)" (`deskViewCounts`), highlighted dollar changes, and a scope summary (count and names) with a collapsed account editor. **Recommendations:** "Current draft (n)" and "All recommendations (m)" (`draftMembership`), with notes for recommendations, approvals and unresolved items outside the draft.
+    - **Evidence:** `tests/proposalFlow.test.ts` (9 tests). Local final checks: typecheck clean, 576 passed and 0 skipped (35 files, private fixture present), eval 2/2, build. Browser, with the test provider (not a model) on `flow.localhost:3107` and the synthetic seed: scope → preview → discard → preview → add → Draft/Approved compare (saved workspace byte-identical) → reload → repeat (no duplicate) → highlighted on Recommendations. Also a stale refusal after a scope change, keyboard operation (open, ask, Escape, view switching) and 375px and 1440px viewports. No usability study and no real-model validation.
+    - **Separate:** the owner completed a free-provider smoke before this slice (owner-reported; not repeated or re-recorded here).
+    - **Cleanup:** the task server is stopped, the test origins' storage cleared, and `.claude/launch.json` restored (sha256 `7b4ae74b…`). The owner's `127.0.0.1:3210` server was left alone.
+  - **Checkpoint (29 October 2026):** PR #82 is open, unmerged and not deployed. CI [run 40945699075](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/actions/runs/40945699075) passed on code head `97b65e3`: 574 passed and 2 private-PDF skips (576 total), extraction eval 2/2; build and Vercel passed.
+  - **Open: four Codex UX findings on the usability slice, to fix together next session** (not implemented yet):
+    1. **Hidden new record.** New recommendation → Save from the Current draft view creates a record that the filter immediately hides. Reveal and highlight the saved record and say where it was saved, without changing its membership or approval.
+    2. **Outdated "Added" message.** Copilot still says "Added to working draft" after the action has left that draft. Reconcile the message with actual membership, status and owning alternative, and tell "was added" apart from "is in the draft now". Never re-add or re-approve anything automatically.
+    3. **Same-page link.** "See it in the allocation desk" is a same-page hash link that leaves the narrow overlay open. Close the overlay and reveal and focus the action; keep normal navigation from the standalone page.
+    4. **Modal semantics.** The narrow panel needs modal semantics, Tab/Shift+Tab containment, isolation of the page behind it and correct focus restoration. The wide side column stays nonmodal. Cover cleanup when resizing between the two modes.
+  - **Next session:** run the "D4/D5 usability review-fix" command in [CLAUDE_COMMANDS.md](roadmap/CLAUDE_COMMANDS.md#next-command-d4d5-usability-review-fix), then stop for Codex review. The live-evaluation budget is still not approved, and reconciling PR #80's security plan comes later.
+- **Preserve:** PR #80 (the D5 secrets/exposure plan) is open; keep its work when reconciling docs, and don't merge it as part of D4.
+- **Open follow-ups:** #76 (reserve-breach attribution for legacy actions), unchanged. **Zod audit warning:** `npm audit` reports GHSA-mrhx-c7xc-m3w5 (high) for zod <4.6.6, and its only offered fix is a breaking upgrade (`--force` installs zod 4.6.7). It needs a separate, tested dependency change; don't run `npm audit fix --force`.
 - **Limitations carried forward:**
-  - replacements stay within one account and its cash currency;
-  - alternatives and library entries can't be deleted;
-  - there is no reserve conversion helper;
-  - D2a: no manager feeds or verified offerings, no automatic sales to fund a plan, no fee aggregation, no nested models;
-  - D3: versions are local application records, not tamper-proof books and records. There is no remote sharing, link, client acknowledgement, signature or implementation status, and no version comparison beyond "changed since". The meeting view reads this browser's workspace only. Costs and income cover supplied holding data only: no fee schedules, savings, forecasts, tax or risk precision. Readiness doesn't block an approved action outside the version's scope (it is labelled, not refused), and the holdings and accounts appendices list the whole household without a scope column.
+  - Replacements stay within one account and its cash currency; alternatives and library entries can't be deleted; there is no reserve conversion helper.
+  - D2a has no manager feeds, verified offerings, automatic funding sales, fee aggregation or nested models.
+  - D3 versions are local application records, not tamper-proof books and records. There is no remote sharing, client acknowledgement or signature.
+  - Readiness labels, but doesn't refuse, an approved action outside a version's scope.
 
   All 25 R-plans remain Planned or partial; no scope issue closes.
 - **Preserved:** accepted values, FX and source dates, every readiness and final-PDF gate, legacy recommendation effects, #59 privacy, backup and agent requirements.
@@ -51,6 +71,6 @@
 
 ## Context budget and history
 
-Keep this file to the latest checkpoint, rules and next command (roughly 100 lines or fewer). Move superseded notes to a same-directory history file when needed rather than appending every release forever. The complete earlier handoff is preserved in [CLAUDE_HANDOFF_HISTORY_2026-10-24.md](CLAUDE_HANDOFF_HISTORY_2026-10-24.md); the D2 release record is on [PR #75](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/75) and the licensing correction in [LICENSING.md](../LICENSING.md). Do not load them automatically.
+Keep this file to the latest checkpoint, rules and next command (roughly 100 lines or fewer). Move superseded notes to a same-directory history file when needed rather than appending every release forever. Earlier checkpoints are preserved in [CLAUDE_HANDOFF_HISTORY_2026-10-24.md](CLAUDE_HANDOFF_HISTORY_2026-10-24.md) and [CLAUDE_HANDOFF_HISTORY_2026-10-28.md](CLAUDE_HANDOFF_HISTORY_2026-10-28.md); the D2 release record is on [PR #75](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/75) and the licensing correction in [LICENSING.md](../LICENSING.md). Do not load them automatically.
 
-D4 starts only after D3's review and an owner-authorized release. Then read [the delivery plan](roadmap/DEMO_DELIVERY_PLAN.md), [the command playbook](roadmap/CLAUDE_COMMANDS.md), the shared implementation rules and only the needed plan/code contracts. Start from [CLAUDE.md](../CLAUDE.md); for financial or persisted-state changes use the [contract impact checklist](CONTRACT_IMPACT_CHECKLIST.md). All 25 plans remain linked from [ROADMAP.md](../ROADMAP.md), not prerequisites to read in full each session.
+For the next package read [the delivery plan](roadmap/DEMO_DELIVERY_PLAN.md), [the command playbook](roadmap/CLAUDE_COMMANDS.md), the shared implementation rules and only the needed plan/code contracts. Start from [CLAUDE.md](../CLAUDE.md); for financial or persisted-state changes use the [contract impact checklist](CONTRACT_IMPACT_CHECKLIST.md). All 25 plans remain linked from [ROADMAP.md](../ROADMAP.md), not prerequisites to read in full each session.
