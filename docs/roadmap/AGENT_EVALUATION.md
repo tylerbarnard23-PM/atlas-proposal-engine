@@ -40,7 +40,8 @@ Follow [VALUATION_SCOPE.md](VALUATION_SCOPE.md). Evaluation tools use the accept
 - **Modes.** Scripted demo (default), test provider (`COPILOT_MODE=test`, a deterministic client through the real loop, labelled not a model) and live (`COPILOT_MODE=live` plus a key). Requested and actual models are recorded, and a fallback is shown as such.
 - **Bounds and statuses.**
   - Limits: turns, tool calls, per-response and cumulative output tokens, a deadline, bounded retries (tools never re-run) and an answer cap.
-  - The cumulative output limit is hard: each request's `max_tokens` is the remainder.
+  - Each request's `max_tokens` is what is left of the run's output limit. Every attempt counts, fallbacks included. A refusal fallback re-runs a request, so one request can exceed the remainder: this is **not a hard combined ceiling**.
+  - After every response, before it counts as a final answer or any of its tools run, the loop checks cancellation, the deadline and the cumulative output, and stops past any of them.
   - A timeout at the deadline reports the time limit.
   - An unexpected tool error becomes a safe error result instead of a crash.
   - Usage sums every attempt in `usage.iterations`.
@@ -49,7 +50,11 @@ Follow [VALUATION_SCOPE.md](VALUATION_SCOPE.md). Evaluation tools use the accept
   - Provider errors are mapped without payloads.
 - **Context.** `inputRevision` binds each answer to its client, alternative, scope and inputs. The route returns 409 on a mismatch, and acceptance re-checks it.
 - **Tools.** `get_scope_overview` and `simulate_scope_change` run on the shared desk evaluator. A position-changing draft must be a draftable simulation. Draft IDs are deterministic, acceptance is idempotent, and no authority tools exist.
-- **Evidence.** Figures in answers and rationales are checked against this run's tool results, including figures the engines state in their own wording. Version constants: `PROMPT_VERSION` and `TOOLS_VERSION` `d4-2026-10-28`.
+- **Evidence (typed, revised in review round 2).** Each tool figure carries its unit (money, percent, fraction, other), its currency, and whether it is a signed change.
+  - A money claim needs money in the same currency. A percentage needs a percentage or a fraction. A written + or − needs a change of that sign, or a level that is itself negative.
+  - **Unchecked** claims are reported explicitly, never as matched: a bare number, or an unsigned amount the engine has only as a negative change.
+  - Figures inside workspace text are neither evidence nor claims.
+  - The UI says "all matched" only when nothing is unsupported or unchecked. Version constants: `PROMPT_VERSION` and `TOOLS_VERSION` `d4-2026-10-28`.
 - **Layer A (offline, in CI).**
   - `tests/agentLoop.test.ts` covers:
     - multi-turn pairing and numbers equal to the desk;
@@ -64,6 +69,13 @@ Follow [VALUATION_SCOPE.md](VALUATION_SCOPE.md). Evaluation tools use the accept
   - `tests/agentEval.test.ts` covers the case manifest, the grader, the config guard and the budget wrapper.
 - **Layer C (browser, synthetic, test provider).** Performed on an isolated origin for this PR: contextual entry, mode and context display, cancel, discard, 409, accept, reload, and the approved version preserved. The real-provider browser smoke remains outstanding.
 - **Layer B (live).** Prepared, **not performed**.
+  - **Runner (`src/copilot/eval/runner.ts`, revised in review round 2):**
+    - The case selection must name known cases, and at least one.
+    - The trial count must be a whole number.
+    - The verdict passes only when every selected trial completed and none had a critical failure. Zero coverage, interrupted coverage, critical failures and unexpected errors all fail it.
+    - A passing selection smaller than all 9 cases × 3 trials is labelled a subset, never the full suite.
+    - The sanitized report is written before the verdict is asserted, so a failing run keeps it.
+    - The spend guard's input-size estimate carries across trials.
   - Suite `2026-10-28.1`: 9 synthetic cases in `src/copilot/eval/cases.ts` with code-based graders.
   - Runner: `npm run eval:agent:live`, with an exact request limit and an estimate-based spend guard (`src/copilot/eval/budget.ts`); not a guaranteed spend ceiling.
   - No paid call has been made. Any release gate that depends on live evidence (a live-agent claim, prompt or tool promotion) is outstanding.
@@ -75,7 +87,7 @@ Revised 29 October 2026 after the D4 review. The pricing was checked against the
 - **Configuration:** `claude-opus-5-5` (unchanged default), `effort: "medium"`, server-side refusal fallback on (recorded per run), prompt and tools `d4-2026-10-28`, suite `2026-10-28.1`.
 - **Runs:** 9 cases × 3 trials = 27 runs, sequential, run locally by the owner with their own key; never in CI.
 - **Limits:** `AGENT_EVAL_MAX_USD=25`, `AGENT_EVAL_CONFIRM_SPEND=25`, `AGENT_EVAL_MAX_REQUESTS=200`.
-  - Each run uses the loop's normal limits: 10 turns, 48,000 output tokens (hard, because each request asks only for what is left), and 100 seconds.
+  - Each run uses the loop's normal limits: 10 turns, 48,000 output tokens (checked after every response; a fallback re-run can pass it within one request), and 100 seconds.
   - **The request limit is exact; the spend cap is a guard on an estimate, not a guaranteed ceiling.** Before every request the wrapper prices a conservative worst case and refuses the request if that could cross the cap. The worst case is:
     - the largest input seen so far plus 30,000 tokens, billed at the 5-minute cache-write price;
     - the full `max_tokens` of output;

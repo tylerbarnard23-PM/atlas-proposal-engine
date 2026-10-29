@@ -97,6 +97,7 @@ describe("demo copilot", () => {
         const r = runDemoCopilot({ ...snapshot(), recommendations }, question);
         expect(r.figures.claims, question).toBeGreaterThan(0);
         expect(r.figures.unsupported, question).toEqual([]);
+        expect(r.figures.unchecked, question).toEqual([]);
         expect(r).toMatchObject({ mode: "demo", status: "completed" });
       }
     }

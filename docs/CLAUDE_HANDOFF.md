@@ -46,7 +46,18 @@
     - **Spend accounting:** the guard priced fallbacks at Opus 5.5 rates and checked no fallback re-run. The docs no longer call it a hard ceiling.
 
     Evidence is in PR #82.
-  - **Next session:** Codex reviews PR #82, then the owner decides whether to authorize a specific live-evaluation configuration and budget. That budget is not approved, and its safeguards changed in this review.
+  - **D4 review round 2 (Codex findings, 29 October 2026):** four findings, reproduced first in `tests/agentReview2.test.ts` and fixed together. The eleven round-1 fixes are kept.
+    1. **Live-evaluation runner** (`eval/runner.ts`):
+       - unknown or empty case selections and non-integer trial counts are rejected;
+       - the verdict fails on critical failures, zero coverage or interrupted coverage, and reports are written first;
+       - a subset is labelled apart from the full 27-trial suite;
+       - the guard's input-size estimate now carries across trials (found while testing).
+    2. **Typed evidence:** currency, unit and change sign are checked, and unchecked claims are explicit in the loop, the UI and the grader.
+    3. **Advisory classification:** uses the engine preview's half-cent `no_change` rule instead of a $1 threshold.
+    4. **Terminal checks:** cancellation, deadline and output (fallback attempts included) are checked after every response, before success or any tool. The docs no longer claim a hard combined output ceiling.
+
+    Runtime model and fallback configuration are unchanged.
+  - **Next session:** Codex reviews PR #82, then the owner decides whether to authorize a specific live-evaluation configuration and budget. That budget is not approved, and its safeguards changed in both review rounds.
 - **Preserve:** PR #80 (the D5 secrets/exposure plan) is open; keep its work when reconciling docs, and don't merge it as part of D4.
 - **Open follow-up:** #76 (reserve-breach attribution for legacy actions), unchanged.
 - **Limitations carried forward:**

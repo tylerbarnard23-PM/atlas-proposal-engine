@@ -253,16 +253,7 @@ function Inner() {
               </CardHeader>
               <CardBody className="space-y-3">
                 <MiniMarkdown text={result.answer} />
-                {result.figures.unsupported.length > 0 ? (
-                  <div role="status" className="rounded-md bg-warning-50 ring-1 ring-inset ring-warning-500/40 px-3 py-2 text-[13px] text-ink-800" data-testid="copilot-figures">
-                    {result.figures.unsupported.length} figure{result.figures.unsupported.length === 1 ? "" : "s"} in this answer didn&apos;t match any engine result and aren&apos;t verified:{" "}
-                    {result.figures.unsupported.join(", ")}.
-                  </div>
-                ) : (
-                  <p className="text-2xs text-ink-500" data-testid="copilot-figures">
-                    {result.figures.claims} figure{result.figures.claims === 1 ? "" : "s"} checked against this run&apos;s engine results; all matched.
-                  </p>
-                )}
+                <FigureStatus figures={result.figures} />
                 {result.forbiddenAttempts > 0 && (
                   <p className="text-[13px] text-ink-700">
                     Refused {result.forbiddenAttempts} attempt{result.forbiddenAttempts === 1 ? "" : "s"} to approve, finalize, share or execute: Copilot has no such authority.
@@ -334,6 +325,37 @@ function Inner() {
         </div>
       )}
     </>
+  );
+}
+
+// What the figure check found: unsupported and unchecked figures are named,
+// and "all matched" appears only when every figure matched a typed engine
+// result (value, unit, currency and any written sign).
+function FigureStatus({ figures }: { figures: CopilotResult["figures"] }) {
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+  if (figures.unsupported.length === 0 && figures.unchecked.length === 0) {
+    return (
+      <p className="text-2xs text-ink-500" data-testid="copilot-figures">
+        {figures.claims === 0 ? "No figures to check in this answer." : `${plural(figures.claims, "figure")} checked against this run's engine results by value, unit, currency and sign; all matched.`}
+      </p>
+    );
+  }
+  return (
+    <div role="status" className="rounded-md bg-warning-50 ring-1 ring-inset ring-warning-500/40 px-3 py-2 text-[13px] text-ink-800 space-y-1" data-testid="copilot-figures">
+      <div>
+        {figures.matched} of {plural(figures.claims, "figure")} matched this run&apos;s engine results.
+      </div>
+      {figures.unsupported.length > 0 && (
+        <div data-testid="copilot-figures-unsupported">
+          Not supported by any engine result (value, unit, currency or sign), so not verified: {figures.unsupported.join(", ")}.
+        </div>
+      )}
+      {figures.unchecked.length > 0 && (
+        <div data-testid="copilot-figures-unchecked">
+          Couldn&apos;t be checked (no unit, or a direction only the wording states): {figures.unchecked.join(", ")}.
+        </div>
+      )}
+    </div>
   );
 }
 

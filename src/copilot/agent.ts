@@ -72,7 +72,12 @@ export interface AgentLimits {
   maxToolCalls: number;
   /** max_tokens for each response. */
   maxTokensPerResponse: number;
-  /** Output tokens across the run; past it, no further tool runs or requests. */
+  /**
+   * Output tokens across the run, every attempt counted. Each request asks
+   * for at most what is left, but a refusal fallback re-runs the request, so
+   * one request can exceed the remainder. Past the limit nothing further runs
+   * or is requested. Not a hard ceiling on a single request's attempts.
+   */
   maxOutputTokens: number;
   /** Wall-clock budget for the run, in milliseconds. */
   deadlineMs: number;
@@ -173,7 +178,7 @@ export async function runAgent(snapshot: CopilotSnapshot, question: string, opts
     if (opts.signal?.aborted) return finish("cancelled", lastText);
     const remaining = limits.deadlineMs - (clock() - started);
     if (remaining <= 0) return finish("deadline", lastText);
-    // The run's output limit is hard: a response may use only what is left of it.
+    // Each request asks for at most what is left of the run's output (a refusal fallback may still re-run it).
     const outputLeft = limits.maxOutputTokens - usage.outputTokens;
     if (outputLeft <= 0) return finish("budget_exceeded", lastText);
 
@@ -227,7 +232,13 @@ export async function runAgent(snapshot: CopilotSnapshot, question: string, opts
     if (text) lastText = text;
     const stop = response.stop_reason ?? undefined;
 
+    // Checked after every response, before it counts as a final answer or any
+    // of its tools run: a cancel or the deadline that arrived while it was in
+    // flight, and the run's output (every attempt, fallbacks included).
+    if (opts.signal?.aborted) return finish("cancelled", text, stop);
+    if (clock() - started >= limits.deadlineMs) return finish("deadline", text, stop);
     if (stop === "refusal") return finish("refused", text, stop);
+    if (usage.outputTokens > limits.maxOutputTokens) return finish("budget_exceeded", text, stop);
     if (stop === "pause_turn") {
       messages.push({ role: "assistant", content: response.content });
       continue;
@@ -239,8 +250,6 @@ export async function runAgent(snapshot: CopilotSnapshot, question: string, opts
     }
     // A tool input cut off at max_tokens may parse as a partial object; never run it.
     if (stop === "max_tokens") return finish("truncated", text, stop);
-    // Defensive: a response past what was asked for gets none of its tool calls run.
-    if (usage.outputTokens > limits.maxOutputTokens) return finish("budget_exceeded", text, stop);
     if (toolCalls + toolUses.length > limits.maxToolCalls) return finish("tool_limit", text, stop);
 
     messages.push({ role: "assistant", content: response.content });

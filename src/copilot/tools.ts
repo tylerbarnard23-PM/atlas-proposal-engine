@@ -3,7 +3,6 @@ import { z } from "zod";
 import type { Recommendation, RecommendationType, WorkingDraft } from "@/domain/types";
 import { normalizeHoldings, type NormalizedHolding } from "@/engines/normalizationEngine";
 import { generateInsights, summarizeAllocation } from "@/engines/insightEngine";
-import { applyRecToValue } from "@/engines/proposalEngine";
 import { previewRecommendation } from "@/engines/recommendationPreview";
 import { candidateProblems, evaluateDesk, newWorkingDraft, positionEditRecommendation, previewDraftEdit, type DeskResult } from "@/engines/allocationDesk";
 import { contentHash } from "@/engines/snapshotRecord";
@@ -14,7 +13,7 @@ import { evaluateWorkspaceReadiness, readinessOk } from "@/engines/complianceEng
 import { todayIso } from "@/utils/formatting";
 import { describeImportIssue, importIssues, type ImportIssue } from "@/engines/importCompleteness";
 import { agentContextOf, type AgentContext } from "./context";
-import { figuresIn } from "./evidence";
+import { figuresIn, type EvidenceValue } from "./evidence";
 import type { CopilotSnapshot } from "./snapshot";
 
 // Every tool here is a thin, read-only wrapper over the deterministic engines.
@@ -31,7 +30,8 @@ export interface EvidenceRecord {
   id: string;
   tool: string;
   summary: string;
-  numbers: number[];
+  /** Typed figures (value, unit, currency, sign) for checking the figures an answer states. */
+  numbers: EvidenceValue[];
 }
 
 /** A scope simulation the run may draft from: the exact candidate the shared evaluator ran. */
@@ -99,7 +99,7 @@ export class CopilotContext {
   /** Keeps a tool result as evidence and returns its reference. */
   record(tool: string, result: unknown, summary: string): string {
     const id = `ev_${this.evidence.length + 1}`;
-    this.evidence.push({ id, tool, summary, numbers: numbersIn(result, (s) => this.withoutUntrusted(s)) });
+    this.evidence.push({ id, tool, summary, numbers: evidenceIn(result, (s) => this.withoutUntrusted(s), this.reportingCurrency) });
     return id;
   }
 
@@ -417,13 +417,11 @@ function toolAmounts(ctx: CopilotContext, input: { type: Recommendation["type"];
   return r.amounts;
 }
 
-function simulate(ctx: CopilotContext, input: z.infer<typeof SimulateInput>) {
-  const h = ctx.holding(input.holding_id);
-  if (!h) throw new ToolInputError(`No holding with id ${input.holding_id}`);
-  // The same isolated engine simulation as the editor's live preview: actual
-  // cash offsets, household funding, missing rates and shortfalls. Tool
-  // amounts are in the reporting currency. Nothing is saved.
-  const preview = previewRecommendation({
+// The same isolated engine simulation as the editor's live preview: actual
+// cash offsets, household funding, missing rates and shortfalls. Tool amounts
+// are in the reporting currency. Nothing is saved.
+function enginePreview(ctx: CopilotContext, h: NormalizedHolding, input: { type: Recommendation["type"]; action_amount?: number; action_amount_unit?: "amount" | "percent"; proposed_value?: number }) {
+  return previewRecommendation({
     rec: {
       id: "copilot_simulation",
       title: "Simulation",
@@ -448,6 +446,12 @@ function simulate(ctx: CopilotContext, input: z.infer<typeof SimulateInput>) {
     fx: { reportingCurrency: ctx.reportingCurrency, rates: ctx.snapshot.fxRates },
     sourceDocuments: ctx.snapshot.sourceDocuments ?? [],
   });
+}
+
+function simulate(ctx: CopilotContext, input: z.infer<typeof SimulateInput>) {
+  const h = ctx.holding(input.holding_id);
+  if (!h) throw new ToolInputError(`No holding with id ${input.holding_id}`);
+  const preview = enginePreview(ctx, h, input);
   const position = preview.standalone?.applied ? preview.standalone.position : null;
   if (!position) {
     return {
@@ -585,7 +589,7 @@ function scopeOverview(ctx: CopilotContext) {
     unvalued_in_scope: d.unvalued.map((u) => ({ holding_id: u.id, name: u.name })),
     blocked: d.blocked.map((b) => ({ reason: b.reason, actions: b.recommendationIds.length })),
     shortfalls: d.shortfalls.map((s) => ({ account: s.accountName, shortfall: cents(s.shortfall) })),
-    reserves: d.reserves.map((r) => ({ account: r.accountName, reserve: r.reserve, reserve_currency: r.reserveCurrency, available: r.available == null ? null : cents(r.available), breached: r.breached })),
+    reserves: d.reserves.map((r) => ({ account: r.accountName, reserve: r.reserve, reserve_currency: r.reserveCurrency, available: r.available == null ? null : cents(r.available), currency: r.currency, breached: r.breached })),
     completeness: completenessNote(ctx),
     note: d.scope.chosen ? "Weights and totals cover the selected investment scope only; household context is listed separately and is never in a denominator." : undefined,
   };
@@ -647,7 +651,7 @@ function simulateScopeChange(ctx: CopilotContext, input: z.infer<typeof ScopeCha
     cash: preview.cash.map((c) => ({ holding: c.name, account: c.accountName, before: cents(c.before), after: cents(c.after) })),
     blocked: preview.blocked.map((b) => b.reason),
     new_shortfalls: newShortfalls.map((s) => ({ account: s.accountName, shortfall: cents(s.shortfall) })),
-    reserve_breaches: reserveBreaches.map((r) => ({ account: r.accountName, reserve: r.reserve, available: r.available == null ? null : cents(r.available) })),
+    reserve_breaches: reserveBreaches.map((r) => ({ account: r.accountName, reserve: r.reserve, reserve_currency: r.reserveCurrency, available: r.available == null ? null : cents(r.available), currency: r.currency })),
     drafts_already_included: prior.map((d) => d.title),
     scope_before: scopeSummary(start),
     scope_after: scopeSummary(after),
@@ -687,10 +691,11 @@ function draftRecommendation(ctx: CopilotContext, input: z.infer<typeof DraftInp
     // be sized honestly. Otherwise a position-changing draft must be the
     // exact action a scope simulation evaluated. Advisory drafts (no value
     // change) still go through.
+    // Advisory only when the shared engine finds no effect at all: its preview
+    // treats a half-cent move of the position or any cash line as a change.
     const h = ctx.holding(input.holding_id)!;
-    const before = reportingValue(h);
-    const rec = toolAmounts(ctx, input);
-    const changes = before == null || input.proposed_value != null || Math.abs(applyRecToValue(before, rec, !!h.isLiability) - before) >= 1;
+    toolAmounts(ctx, input);
+    const changes = enginePreview(ctx, h, input).state !== "no_change";
     if (changes) {
       const blocked = sizingBlocked(ctx);
       if (blocked) throw new ToolInputError(blocked);
@@ -878,16 +883,48 @@ export interface ToolCallRecord {
   forbidden?: boolean;
 }
 
+// What each numeric field of a tool result measures, by its key. Money in the
+// reporting currency unless the field is in its own currency (stated in a
+// sibling field); percentages; fractions; anything else (rates, counts, days,
+// IDs) supports no money or percentage claim.
+const PERCENT_KEYS = new Set(["pct", "pct_of_investible", "pct_of_investible_before", "pct_of_investible_after", "current_pct", "proposed_pct", "target_pct", "drift_pts", "expense_ratio_pct"]);
+const RATIO_KEYS = new Set(["pct_change"]);
+/** Signed changes, not levels or sizes: the only fields that support a written "+" or "-". */
+const CHANGE_KEYS = new Set(["delta", "change", "drift_pts", "pct_change"]);
+const MONEY_REPORTING_KEYS = new Set([
+  "value", "current", "proposed", "before", "after", "delta", "change", "shortfall", "gross_assets", "liabilities", "net",
+  "outside_scope_total", "liabilities_total", "reporting_value", "action_amount_in_reporting", "proposed_value_in_reporting", "amount", "position_after",
+]);
+/** Money in its own currency, named by this sibling field. */
+const MONEY_OWN_KEYS: Record<string, string> = { native_value: "currency", action_amount: "currency", proposed_value: "currency", cost_basis: "currency", reserve: "reserve_currency", available: "currency" };
+
+function classify(value: number, key: string | undefined, parent: Record<string, unknown> | undefined, reporting: string): EvidenceValue {
+  const typed = classifyUnit(value, key, parent, reporting);
+  return key && CHANGE_KEYS.has(key) ? { ...typed, change: true } : typed;
+}
+
+function classifyUnit(value: number, key: string | undefined, parent: Record<string, unknown> | undefined, reporting: string): EvidenceValue {
+  if (key && RATIO_KEYS.has(key)) return { value, unit: "ratio" };
+  if (key && PERCENT_KEYS.has(key)) return { value, unit: "percent" };
+  if (key === "action_amount" && parent?.action_amount_unit === "percent") return { value, unit: "percent" };
+  if (key && key in MONEY_OWN_KEYS) {
+    const currency = parent?.[MONEY_OWN_KEYS[key]];
+    return typeof currency === "string" ? { value, unit: "money", currency } : { value, unit: "other" };
+  }
+  if (key && MONEY_REPORTING_KEYS.has(key)) return { value, unit: "money", currency: reporting };
+  return { value, unit: "other" };
+}
+
 /**
- * Every finite number in a tool result, and every figure in its engine-written
- * text once untrusted workspace text is removed (`clean`), for checking the
- * figures an answer states.
+ * The typed figures in a tool result: each numeric field by what its key
+ * measures (signs kept), and the figures in engine-written text once
+ * untrusted workspace text is removed (`clean`).
  */
-export function numbersIn(value: unknown, clean: (s: string) => string, out: number[] = []): number[] {
-  if (typeof value === "number" && Number.isFinite(value)) out.push(value);
+export function evidenceIn(value: unknown, clean: (s: string) => string, reporting: string, key?: string, parent?: Record<string, unknown>, out: EvidenceValue[] = []): EvidenceValue[] {
+  if (typeof value === "number" && Number.isFinite(value)) out.push(classify(value, key, parent, reporting));
   else if (typeof value === "string") out.push(...figuresIn(clean(value)));
-  else if (Array.isArray(value)) for (const v of value) numbersIn(v, clean, out);
-  else if (value && typeof value === "object") for (const v of Object.values(value)) numbersIn(v, clean, out);
+  else if (Array.isArray(value)) for (const v of value) evidenceIn(v, clean, reporting, key, parent, out);
+  else if (value && typeof value === "object") for (const [k, v] of Object.entries(value)) evidenceIn(v, clean, reporting, k, value as Record<string, unknown>, out);
   return out;
 }
 

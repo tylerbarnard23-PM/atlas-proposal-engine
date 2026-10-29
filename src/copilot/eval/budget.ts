@@ -1,5 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { COPILOT_MODEL, usageEntries, type MessagesClient } from "@/copilot/agent";
+import { AGENT_EVAL_CASES } from "./cases";
 
 // D4: limits for the opt-in live evaluation. A paid run needs explicit flags,
 // a key, a request limit and a spend cap no higher than the code ceilings.
@@ -39,7 +40,7 @@ export interface LiveEvalConfig {
 }
 
 /** The validated configuration, or why a live run must not start. Fails closed. */
-export function liveEvalConfig(env: Record<string, string | undefined>): { ok: true; config: LiveEvalConfig } | { ok: false; errors: string[] } {
+export function liveEvalConfig(env: Record<string, string | undefined>, knownCases: string[] = AGENT_EVAL_CASES.map((c) => c.id)): { ok: true; config: LiveEvalConfig } | { ok: false; errors: string[] } {
   const errors: string[] = [];
   if (env.ATLAS_AGENT_LIVE_EVAL !== "1") errors.push("Set ATLAS_AGENT_LIVE_EVAL=1 to opt in to a paid live evaluation.");
   if (!env.ANTHROPIC_API_KEY) errors.push("ANTHROPIC_API_KEY is not set.");
@@ -54,9 +55,18 @@ export function liveEvalConfig(env: Record<string, string | undefined>): { ok: t
   const maxUsd = num("AGENT_EVAL_MAX_USD", HARD_CEILINGS.maxUsd);
   const maxRequests = num("AGENT_EVAL_MAX_REQUESTS", HARD_CEILINGS.maxRequests);
   const trials = env.AGENT_EVAL_TRIALS ? num("AGENT_EVAL_TRIALS", HARD_CEILINGS.maxTrials) : 3;
+  if (env.AGENT_EVAL_TRIALS && Number.isFinite(trials) && !Number.isInteger(trials)) errors.push(`AGENT_EVAL_TRIALS=${env.AGENT_EVAL_TRIALS} must be a whole number of trials.`);
   if (env.AGENT_EVAL_CONFIRM_SPEND !== env.AGENT_EVAL_MAX_USD) errors.push("Set AGENT_EVAL_CONFIRM_SPEND to the same value as AGENT_EVAL_MAX_USD to confirm the spend.");
-  const cases = env.AGENT_EVAL_CASES ? env.AGENT_EVAL_CASES.split(",").map((s) => s.trim()).filter(Boolean) : null;
-  return errors.length ? { ok: false, errors } : { ok: true, config: { model, maxUsd, maxRequests, trials: Math.floor(trials), cases } };
+  // A case selection names known cases only, and at least one; unset means the whole suite.
+  let cases: string[] | null = null;
+  if (env.AGENT_EVAL_CASES !== undefined) {
+    cases = [...new Set(env.AGENT_EVAL_CASES.split(",").map((s) => s.trim()).filter(Boolean))];
+    const known = new Set(knownCases);
+    const unknown = cases.filter((c) => !known.has(c));
+    if (cases.length === 0) errors.push("AGENT_EVAL_CASES selects no case; unset it to run the whole suite.");
+    if (unknown.length) errors.push(`Unknown case ID in AGENT_EVAL_CASES: ${unknown.join(", ")} (known: ${knownCases.join(", ")}).`);
+  }
+  return errors.length ? { ok: false, errors } : { ok: true, config: { model, maxUsd, maxRequests, trials, cases } };
 }
 
 export class BudgetExceeded extends Error {}
@@ -108,15 +118,21 @@ export function worstRequestCost(model: string, inputTokens: number, maxTokens: 
  * run as "failed"; nothing is retried past it. Failed requests carry no usage
  * and are counted as unbilled.
  */
-export function budgetedClient(inner: MessagesClient, cfg: Pick<LiveEvalConfig, "model" | "maxUsd" | "maxRequests">, spend: Spend, opts: { inputHeadroom?: number; onRequest?: (params: Anthropic.Beta.Messages.MessageCreateParamsNonStreaming) => void } = {}): MessagesClient {
-  let largestInput = 20_000;
+export function budgetedClient(
+  inner: MessagesClient,
+  cfg: Pick<LiveEvalConfig, "model" | "maxUsd" | "maxRequests">,
+  spend: Spend,
+  opts: { inputHeadroom?: number; onRequest?: (params: Anthropic.Beta.Messages.MessageCreateParamsNonStreaming) => void; sizing?: { largestInput: number } } = {}
+): MessagesClient {
+  // The largest input seen; shared across a suite's trials (pass `sizing`) so a new trial doesn't start from the low default.
+  const sizing = opts.sizing ?? { largestInput: 20_000 };
   const headroom = opts.inputHeadroom ?? 30_000;
   return {
     beta: {
       messages: {
         async create(params, options) {
           if (params.model !== cfg.model) throw new BudgetExceeded(`Requested model ${params.model} isn't the configured ${cfg.model}.`);
-          const worst = worstRequestCost(cfg.model, largestInput + headroom, params.max_tokens, (params as { fallbacks?: unknown }).fallbacks != null);
+          const worst = worstRequestCost(cfg.model, sizing.largestInput + headroom, params.max_tokens, (params as { fallbacks?: unknown }).fallbacks != null);
           if (spend.requests + 1 > cfg.maxRequests) throw new BudgetExceeded(`Request limit ${cfg.maxRequests} reached.`);
           if (spend.usd + worst > cfg.maxUsd) throw new BudgetExceeded(`Spend cap USD ${cfg.maxUsd} would be at risk (spent ${spend.usd.toFixed(4)}, next request up to ${worst.toFixed(4)}).`);
           opts.onRequest?.(params);
@@ -128,7 +144,7 @@ export function budgetedClient(inner: MessagesClient, cfg: Pick<LiveEvalConfig, 
             spend.cacheReadTokens += u.cache_read_input_tokens ?? 0;
             spend.cacheWriteTokens += u.cache_creation_input_tokens ?? 0;
             spend.usd += costOf(u.model, u);
-            largestInput = Math.max(largestInput, (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0));
+            sizing.largestInput = Math.max(sizing.largestInput, (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0));
           }
           return res;
         },
