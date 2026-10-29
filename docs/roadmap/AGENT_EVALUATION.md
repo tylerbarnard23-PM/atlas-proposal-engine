@@ -52,6 +52,7 @@ Follow [VALUATION_SCOPE.md](VALUATION_SCOPE.md). Evaluation tools use the accept
 - **Tools.** `get_scope_overview` and `simulate_scope_change` run on the shared desk evaluator. A position-changing draft must be a draftable simulation. Draft IDs are deterministic, acceptance is idempotent, and no authority tools exist.
 - **Evidence (typed, revised in review round 2).** Each tool figure carries its unit (money, percent, fraction, other), its currency, and whether it is a signed change.
   - A money claim needs money in the same currency. A percentage needs a percentage or a fraction. A written + or − needs a change of that sign, or a level that is itself negative.
+  - Percentage fields are all percentage points, as their producers return them (including `pct_change`, corrected in review round 3). No tool returns a fraction today.
   - **Unchecked** claims are reported explicitly, never as matched: a bare number, or an unsigned amount the engine has only as a negative change.
   - Figures inside workspace text are neither evidence nor claims.
   - The UI says "all matched" only when nothing is unsupported or unchecked. Version constants: `PROMPT_VERSION` and `TOOLS_VERSION` `d4-2026-10-28`.

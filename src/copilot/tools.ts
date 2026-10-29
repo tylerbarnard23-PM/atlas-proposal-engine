@@ -887,8 +887,14 @@ export interface ToolCallRecord {
 // reporting currency unless the field is in its own currency (stated in a
 // sibling field); percentages; fractions; anything else (rates, counts, days,
 // IDs) supports no money or percentage claim.
-const PERCENT_KEYS = new Set(["pct", "pct_of_investible", "pct_of_investible_before", "pct_of_investible_after", "current_pct", "proposed_pct", "target_pct", "drift_pts", "expense_ratio_pct"]);
-const RATIO_KEYS = new Set(["pct_change"]);
+// Every percentage below is in percentage points, as its producer returns it:
+// pct (summarizeAllocation, ×100), pct_of_investible* (this file's pct helper),
+// current/proposed_pct and drift_pts (evaluateDesk rows), target_pct (draft
+// targets, 0-100), expense_ratio_pct (the holding's ratio in percent), and
+// pct_change (recommendationPreview's pctChange: 60,000 → 54,000 is -10).
+const PERCENT_KEYS = new Set(["pct", "pct_of_investible", "pct_of_investible_before", "pct_of_investible_after", "current_pct", "proposed_pct", "target_pct", "drift_pts", "expense_ratio_pct", "pct_change"]);
+/** Fractions (0.1 = 10%). No tool returns one today; the checker still reads a fraction as its percentage. */
+const RATIO_KEYS = new Set<string>();
 /** Signed changes, not levels or sizes: the only fields that support a written "+" or "-". */
 const CHANGE_KEYS = new Set(["delta", "change", "drift_pts", "pct_change"]);
 const MONEY_REPORTING_KEYS = new Set([

@@ -57,6 +57,10 @@
     4. **Terminal checks:** cancellation, deadline and output (fallback attempts included) are checked after every response, before success or any tool. The docs no longer claim a hard combined output ceiling.
 
     Runtime model and fallback configuration are unchanged.
+  - **D4 review round 3 (29 October 2026):** `simulate_recommendation`'s `pct_change` is `recommendationPreview`'s `pctChange`, in percentage points (60,000 → 54,000 is -10). Evidence had classed it as a fraction, so the checker rejected -10% and accepted -1,000%. It is now a percentage.
+    - Reproduced first in `tests/agentReview3.test.ts`: decrease, increase and zero change through the real preview, tool, evidence, checker, loop and grader.
+    - Every other percent field was audited against its producer; all are percentage points. No tool returns a fraction today.
+    - Engine, editor and PDF values are unchanged.
   - **Next session:** Codex reviews PR #82, then the owner decides whether to authorize a specific live-evaluation configuration and budget. That budget is not approved, and its safeguards changed in both review rounds.
 - **Preserve:** PR #80 (the D5 secrets/exposure plan) is open; keep its work when reconciling docs, and don't merge it as part of D4.
 - **Open follow-up:** #76 (reserve-breach attribution for legacy actions), unchanged.
