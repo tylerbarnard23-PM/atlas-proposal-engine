@@ -55,6 +55,23 @@ Stop for Codex review with exact head, checks, preview association, remaining li
 
 D1 (PR #72, `0381db1`), D2 (PR #75, `073049f`), D2a (PR #79, `c0ee4e9`) and D3 (PR #81, `85b3910`) are released; the D1 command above and the D1–D3 summaries below are historical, so do not rerun them. **D4 is in review (PR #82).** D5 follows its review/release. PR #82 also carries one bounded, owner-approved D5 usability slice (the proposal-flow simplification); it doesn't complete D5. The handoff holds the current checkpoint.
 
+### Next command: D4/D5 usability review-fix
+
+Use **Opus 5.5 High**. On `feat/d4-contextual-agent` (PR #82; the last passing code head is `97b65e3`), verify local and GitHub heads, the working tree and the stash first. Then fix the four open Codex UX findings listed in the [handoff](../CLAUDE_HANDOFF.md) as one batch: the new record hidden from the Current draft view, the outdated "Added to working draft" message, the same-page desk link leaving the narrow overlay open, and modal semantics for the narrow panel (the wide column stays nonmodal; cover resize cleanup).
+
+- Write meaningful regression coverage and do actual UI checks.
+- Preserve the financial engines, context and acceptance safeguards, store/backup v10, and the runtime model, prompt, fallback and spending settings.
+- Never re-add, re-approve or change membership automatically.
+- After the code settles, run typecheck, full tests, extraction eval and build. In the browser, check desktop, the narrow layout, keyboard cycling, resizing and same-page navigation, on an isolated `*.localhost` origin with synthetic data.
+- Push, read CI once, and stop for Codex review.
+
+Gates stay as they are:
+- No paid live evaluation or real-model browser test; the budget is not approved.
+- PR #80 is untouched.
+- The zod advisory needs a separate tested dependency change; never run `npm audit fix --force`.
+- D5 is incomplete.
+- No merge or deployment without explicit owner authorization.
+
 ## Package prompt summaries
 
 D1, D2, D2a and D3 are delivered (historical, kept for reference). D4 is in review (PR #82); D5 follows once D4 is released.
