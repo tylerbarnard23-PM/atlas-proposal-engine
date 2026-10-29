@@ -143,7 +143,8 @@ export async function runAgent(snapshot: CopilotSnapshot, question: string, opts
   const usage: CopilotUsage = { requests: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
   const requestedModel = opts.model ?? COPILOT_MODEL;
   const actualModels = new Set<string>();
-  const messages: Anthropic.Beta.BetaMessageParam[] = [{ role: "user", content: question }];
+  // Identity is removed from everything the model receives, the question included (#59).
+  const messages: Anthropic.Beta.BetaMessageParam[] = [{ role: "user", content: ctx.redact(question) }];
   let toolCalls = 0;
   let lastText = "";
 
@@ -159,7 +160,7 @@ export async function runAgent(snapshot: CopilotSnapshot, question: string, opts
       drafts: ctx.drafts,
       trace,
       evidence: ctx.evidence.map(({ id, tool, summary }) => ({ id, tool, summary })),
-      figures: checkFigures([answer, ...ctx.drafts.map((d) => d.rationale)], ctx.evidence.map((e) => e.numbers)),
+      figures: checkFigures([answer, ...ctx.drafts.map((d) => d.rationale)].map((t) => ctx.withoutUntrusted(t)), ctx.evidence.map((e) => e.numbers)),
       context: ctx.context,
       forbiddenAttempts: ctx.forbiddenAttempts,
       provider: { name: opts.provider, requestedModel, actualModels: [...actualModels], fallbackUsed: [...actualModels].some((m) => m !== requestedModel), promptVersion: PROMPT_VERSION, toolsVersion: TOOLS_VERSION },
@@ -172,6 +173,9 @@ export async function runAgent(snapshot: CopilotSnapshot, question: string, opts
     if (opts.signal?.aborted) return finish("cancelled", lastText);
     const remaining = limits.deadlineMs - (clock() - started);
     if (remaining <= 0) return finish("deadline", lastText);
+    // The run's output limit is hard: a response may use only what is left of it.
+    const outputLeft = limits.maxOutputTokens - usage.outputTokens;
+    if (outputLeft <= 0) return finish("budget_exceeded", lastText);
 
     let response: Anthropic.Beta.BetaMessage | undefined;
     for (let attempt = 0; response === undefined; attempt++) {
@@ -180,7 +184,7 @@ export async function runAgent(snapshot: CopilotSnapshot, question: string, opts
         response = await opts.client.beta.messages.create(
           {
             model: requestedModel,
-            max_tokens: limits.maxTokensPerResponse,
+            max_tokens: Math.min(limits.maxTokensPerResponse, outputLeft),
             output_config: { effort: "medium" },
             // Re-runs a refused request on a fallback model chosen by refusal category; the actual model is recorded.
             betas: ["server-side-fallback-2026-07-01"],
@@ -194,6 +198,8 @@ export async function runAgent(snapshot: CopilotSnapshot, question: string, opts
         );
       } catch (err) {
         if (opts.signal?.aborted || err instanceof Anthropic.APIUserAbortError) return finish("cancelled", lastText);
+        // A request that timed out at the run's deadline is the time limit, not a provider failure.
+        if (clock() - started >= limits.deadlineMs) return finish("deadline", lastText);
         const waitMs = 500 * 2 ** attempt;
         if (retryable(err) && attempt < limits.maxRetries && clock() - started + waitMs < limits.deadlineMs) {
           await sleep(waitMs);
@@ -204,11 +210,14 @@ export async function runAgent(snapshot: CopilotSnapshot, question: string, opts
     }
 
     actualModels.add(response.model);
-    const u = response.usage;
-    usage.inputTokens += u?.input_tokens ?? 0;
-    usage.outputTokens += u?.output_tokens ?? 0;
-    usage.cacheReadTokens += u?.cache_read_input_tokens ?? 0;
-    usage.cacheWriteTokens += u?.cache_creation_input_tokens ?? 0;
+    // Top-level usage covers only the attempt that produced the message; with a
+    // refusal fallback, usage.iterations lists every attempt, the declined one included.
+    for (const u of usageEntries(response)) {
+      usage.inputTokens += u.input_tokens ?? 0;
+      usage.outputTokens += u.output_tokens ?? 0;
+      usage.cacheReadTokens += u.cache_read_input_tokens ?? 0;
+      usage.cacheWriteTokens += u.cache_creation_input_tokens ?? 0;
+    }
 
     const text = response.content
       .filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === "text")
@@ -230,6 +239,7 @@ export async function runAgent(snapshot: CopilotSnapshot, question: string, opts
     }
     // A tool input cut off at max_tokens may parse as a partial object; never run it.
     if (stop === "max_tokens") return finish("truncated", text, stop);
+    // Defensive: a response past what was asked for gets none of its tool calls run.
     if (usage.outputTokens > limits.maxOutputTokens) return finish("budget_exceeded", text, stop);
     if (toolCalls + toolUses.length > limits.maxToolCalls) return finish("tool_limit", text, stop);
 
@@ -238,7 +248,7 @@ export async function runAgent(snapshot: CopilotSnapshot, question: string, opts
       toolCalls += 1;
       const { content, isError, evidenceId, forbidden } = executeTool(ctx, tu.name, tu.input);
       trace.push({ name: tu.name, input: tu.input, ok: !isError, summary: isError ? content.slice(0, 200) : `${content.length.toLocaleString()} chars of engine output`, evidenceId, forbidden });
-      return { type: "tool_result", tool_use_id: tu.id, content, is_error: isError };
+      return { type: "tool_result", tool_use_id: tu.id, content: ctx.redact(content, !isError), is_error: isError };
     });
     messages.push({ role: "user", content: results });
   }
@@ -248,6 +258,14 @@ export async function runAgent(snapshot: CopilotSnapshot, question: string, opts
 /** The live Anthropic loop, as before: the SDK's own retries are off because the loop bounds them. */
 export function runLiveCopilot(snapshot: CopilotSnapshot, question: string, opts: Partial<AgentRunOptions> = {}): Promise<CopilotResult> {
   return runAgent(snapshot, question, { mode: "live", provider: "anthropic", client: new Anthropic({ maxRetries: 0 }), ...opts });
+}
+
+type UsageEntry = { model?: string; input_tokens?: number | null; output_tokens?: number | null; cache_read_input_tokens?: number | null; cache_creation_input_tokens?: number | null };
+
+/** Every attempt's usage in a response: usage.iterations when present (a refusal fallback lists the declined attempt there), else the top-level usage. */
+export function usageEntries(response: { model: string; usage?: unknown }): UsageEntry[] {
+  const u = (response.usage ?? {}) as UsageEntry & { iterations?: UsageEntry[] | null };
+  return Array.isArray(u.iterations) && u.iterations.length > 0 ? u.iterations : [{ ...u, model: response.model }];
 }
 
 function retryable(err: unknown): boolean {

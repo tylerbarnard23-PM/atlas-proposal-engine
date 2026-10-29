@@ -191,7 +191,7 @@ function result(ctx: CopilotContext, trace: ToolCallRecord[], answer: string): C
     trace,
     evidence: ctx.evidence.map(({ id, tool, summary }) => ({ id, tool, summary })),
     // The scripted prose is checked the same way as a model's.
-    figures: checkFigures([answer, ...ctx.drafts.map((d) => d.rationale)], ctx.evidence.map((e) => e.numbers)),
+    figures: checkFigures([answer, ...ctx.drafts.map((d) => d.rationale)].map((t) => ctx.withoutUntrusted(t)), ctx.evidence.map((e) => e.numbers)),
     context: ctx.context,
     forbiddenAttempts: ctx.forbiddenAttempts,
   };

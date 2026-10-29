@@ -33,7 +33,20 @@
   - **Browser evidence** used the deterministic test provider, not a real model.
   - **Live evaluation and real-model browser testing are unperformed.** The proposed budget in AGENT_EVALUATION.md is **not approved**; its pricing, spending safeguards and evaluation design still need review.
   - **Cleanup:** task servers are stopped (ports 3107, 3108 and 3199 free), and the temporary seeds, tests and `public/` files are removed. `.claude/launch.json` is restored to its original entries. Saved browser workspaces and `stash@{0}` are preserved.
-  - **Next session:** Codex reviews PR #82, then the owner decides whether to authorize a specific live-evaluation configuration and budget.
+  - **D4 review (29 October 2026):** a focused review confirmed 11 defects. Each was reproduced first in `tests/agentReview.test.ts`, then fixed together on PR #82:
+    - **Untrusted figures:** figures inside holding, account and file names, notes and titles counted as engine evidence. Now they're neither evidence nor claims.
+    - **Deeper reserve breach:** a purchase into an account already below its reserve was draftable.
+    - **Combined effect:** simulations in a run ignored drafts already saved, and acceptance didn't check the selection together. Both now use the shared `candidateProblems` gate in `allocationDesk.ts` (store, tool and page).
+    - **Stale profile:** a client-profile change didn't invalidate a pending answer.
+    - **Tool crash:** an unexpected tool error crashed the run, and an unreadable workspace gave an unhandled 500 (now 422).
+    - **Output limit:** the cumulative output limit could be overshot.
+    - **Timeout status:** a timeout at the deadline reported a generic failure.
+    - **Usage:** usage ignored the declined attempt before a fallback.
+    - **Identity:** the client's name, household name and import file names reached the model inside account names, notes and the question.
+    - **Spend accounting:** the guard priced fallbacks at Opus 5.5 rates and checked no fallback re-run. The docs no longer call it a hard ceiling.
+
+    Evidence is in PR #82.
+  - **Next session:** Codex reviews PR #82, then the owner decides whether to authorize a specific live-evaluation configuration and budget. That budget is not approved, and its safeguards changed in this review.
 - **Preserve:** PR #80 (the D5 secrets/exposure plan) is open; keep its work when reconciling docs, and don't merge it as part of D4.
 - **Open follow-up:** #76 (reserve-breach attribution for legacy actions), unchanged.
 - **Limitations carried forward:**

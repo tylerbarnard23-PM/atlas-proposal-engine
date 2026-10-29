@@ -3,9 +3,10 @@ import { contentHash } from "@/engines/snapshotRecord";
 
 // D4: what a Copilot answer is about. The browser sends it with each request
 // and the server recomputes it from the workspace it received; accepting a
-// draft recomputes it from the live workspace. Any edit to the inputs the
-// evaluator reads (holdings, rates, actions, the alternative's scope, members,
-// targets or model) changes the revision, so a stale preview can't be accepted.
+// draft recomputes it from the live workspace. Any edit to the client profile
+// or the inputs the evaluator reads (holdings, rates, actions, the
+// alternative's scope, members, targets or model) changes the revision, so a
+// stale preview can't be accepted.
 
 export interface AgentContext {
   clientId: string;
@@ -32,8 +33,8 @@ export interface ContextSource {
 export function inputRevisionOf(ws: ContextSource): string {
   const d = ws.workingDraft;
   return contentHash({
-    clientId: ws.client.id,
-    reportingCurrency: ws.client.proposalOutputCurrency,
+    // The whole profile: restrictions, risk, liquidity, income and tax needs shape the advice.
+    client: ws.client,
     accounts: ws.accounts,
     holdings: ws.holdings,
     recommendations: ws.recommendations,
@@ -55,6 +56,6 @@ export function contextMismatch(ref: AgentContext, ws: ContextSource): string | 
   const now = agentContextOf(ws);
   if (ref.clientId !== now.clientId) return "This answer is about another client.";
   if (ref.alternativeId !== now.alternativeId) return `This answer is about the alternative "${ref.alternativeName}", which is no longer the active one.`;
-  if (ref.inputRevision !== now.inputRevision) return "The workspace changed after this answer (holdings, rates, actions or the alternative's scope or targets). Ask again for a current preview.";
+  if (ref.inputRevision !== now.inputRevision) return "The workspace changed after this answer (client profile, holdings, rates, actions or the alternative's scope or targets). Ask again for a current preview.";
   return null;
 }

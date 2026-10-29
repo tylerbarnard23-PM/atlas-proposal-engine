@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { Bot, Check, CircleAlert, Send, Square, Wrench, X } from "lucide-react";
 import { forReadiness } from "@/engines/importCompleteness";
-import { evaluateDesk } from "@/engines/allocationDesk";
+import { candidateProblems, evaluateDesk } from "@/engines/allocationDesk";
 import { normalizeHoldings } from "@/engines/normalizationEngine";
 import { agentContextOf, type AgentContext } from "@/copilot/context";
 import { useAtlasStore } from "@/store/useStore";
@@ -364,7 +364,9 @@ function DraftPreview(props: {
       recommendations: [...s.recommendations, ...picked],
       draft: { ...s.workingDraft, memberIds: [...s.workingDraft.memberIds, ...picked.map((d) => d.id)] },
     });
-    return { before, after, picked };
+    // The same gate the store applies on accept: the selection together.
+    const problems = picked.length ? candidateProblems({ holdings, accounts: s.accounts, recommendations: s.recommendations, draft: s.workingDraft, candidates: picked, fx }) : [];
+    return { before, after, picked, problems };
   }, [s.holdings, s.fxRates, s.accounts, s.recommendations, s.workingDraft, ccy, result.drafts, selected]);
   const money = (n: number) => formatCurrency(n, ccy, { compact: true });
   const position = (d: Recommendation, which: "before" | "after") =>
@@ -409,12 +411,15 @@ function DraftPreview(props: {
         {preview.picked.length > 0 && (
           <p className="text-[13px] text-ink-700">
             Scope after the selected drafts: {money(preview.before.totals.proposed)} → {money(preview.after.totals.proposed)}
-            {preview.after.blocked.length > preview.before.blocked.length ? "; a selected draft would be left out (blocked)" : ""}
-            {preview.after.shortfalls.length > preview.before.shortfalls.length ? "; it would leave a cash shortfall" : ""}.
           </p>
         )}
+        {preview.problems.length > 0 && !stale && (
+          <div role="alert" className="rounded-md bg-warning-50 ring-1 ring-inset ring-warning-500/40 px-3 py-2 text-[13px] text-ink-800" data-testid="copilot-accept-problems">
+            This selection can&apos;t be accepted together: {preview.problems.join(" ")}
+          </div>
+        )}
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" onClick={props.onAccept} disabled={stale || preview.picked.length === 0} iconLeft={<Check className="h-4 w-4" />}>
+          <Button size="sm" onClick={props.onAccept} disabled={stale || preview.picked.length === 0 || preview.problems.length > 0} iconLeft={<Check className="h-4 w-4" />}>
             Accept selected into &quot;{result.context.alternativeName}&quot; (unapproved)
           </Button>
           <Button size="sm" variant="ghost" onClick={props.onDiscard} iconLeft={<X className="h-4 w-4" />}>

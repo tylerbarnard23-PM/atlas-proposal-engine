@@ -5,7 +5,7 @@ import { normalizeHoldings, type NormalizedHolding } from "@/engines/normalizati
 import { generateInsights, summarizeAllocation } from "@/engines/insightEngine";
 import { applyRecToValue } from "@/engines/proposalEngine";
 import { previewRecommendation } from "@/engines/recommendationPreview";
-import { evaluateDesk, newWorkingDraft, positionEditRecommendation, previewDraftEdit, type DeskResult } from "@/engines/allocationDesk";
+import { candidateProblems, evaluateDesk, newWorkingDraft, positionEditRecommendation, previewDraftEdit, type DeskResult } from "@/engines/allocationDesk";
 import { contentHash } from "@/engines/snapshotRecord";
 import { describeLeg, fxFreshness, utcDate, utcMinute, type FxFreshness } from "@/engines/fxPolicy";
 import { amountsInReporting, describeConversion } from "@/engines/recommendationAmounts";
@@ -99,8 +99,62 @@ export class CopilotContext {
   /** Keeps a tool result as evidence and returns its reference. */
   record(tool: string, result: unknown, summary: string): string {
     const id = `ev_${this.evidence.length + 1}`;
-    this.evidence.push({ id, tool, summary, numbers: numbersIn(result) });
+    this.evidence.push({ id, tool, summary, numbers: numbersIn(result, (s) => this.withoutUntrusted(s)) });
     return id;
+  }
+
+  // Text that comes from the workspace, not the engines: names, notes, titles
+  // and rationales anyone (or an imported statement) could have written.
+  // Engine wording can quote it ("Bond ETF A is 30% of ..."); figures inside
+  // it are never evidence. Longest first, so a name inside a longer one goes too.
+  private untrustedCache: string[] | null = null;
+  private get untrusted(): string[] {
+    if (!this.untrustedCache) {
+      const s = this.snapshot;
+      const texts = [
+        ...s.holdings.flatMap((h) => [h.assetName, h.identifier?.value, h.advisorNotes, h.subAssetClass]),
+        ...s.accounts.flatMap((a) => [a.name, a.institution]),
+        ...(s.sourceDocuments ?? []).map((d) => d.fileName),
+        ...s.recommendations.flatMap((r) => [r.title, r.rationale, r.clientBenefit, r.riskTradeoff, r.taxNote, r.implementationStep, r.complianceNote, r.destination?.name]),
+        s.client.fullName,
+        s.client.householdName,
+        s.client.investmentObjective,
+        s.client.specialInstructions,
+        ...(s.client.restrictedSecurities ?? []),
+      ];
+      this.untrustedCache = [...new Set(texts.filter((t): t is string => typeof t === "string" && t.trim().length > 0))].sort((a, b) => b.length - a.length);
+    }
+    return this.untrustedCache;
+  }
+
+  withoutUntrusted(text: string): string {
+    let out = text;
+    for (const t of this.untrusted) if (out.includes(t)) out = out.split(t).join(" ");
+    return out;
+  }
+
+  /**
+   * Model-bound text with identity removed (#59): the client's and household's
+   * names, the advisor's name and email, and import file names (which often
+   * carry a client's name) are replaced, wherever they appear, including
+   * inside account names, notes and the advisor's question. Applied to the
+   * JSON a tool returns, so names are matched in their escaped form.
+   */
+  redact(text: string, json = false): string {
+    const s = this.snapshot;
+    const pairs: [string | undefined, string][] = [
+      [s.client.householdName, "[client household]"],
+      [s.client.fullName, "[client]"],
+      [s.advisor.email, "[advisor email]"],
+      [s.advisor.name, "[advisor]"],
+      ...(s.sourceDocuments ?? []).map((d, i) => [d.fileName, `[import ${i + 1}]`] as [string, string]),
+    ];
+    let out = text;
+    for (const [raw, label] of pairs.filter(([r]) => typeof r === "string" && r.trim().length >= 3).sort((a, b) => b[0]!.length - a[0]!.length)) {
+      const needle = json ? JSON.stringify(raw).slice(1, -1) : raw!;
+      out = out.split(needle).join(label);
+    }
+    return out;
   }
 
   /** Age and confirmation of the rates in use (#26). Reported, never a reason to refuse a draft. */
@@ -562,26 +616,25 @@ function simulateScopeChange(ctx: CopilotContext, input: z.infer<typeof ScopeCha
   } catch (err) {
     throw new ToolInputError((err as Error).message);
   }
-  const preview = previewDraftEdit({ holdings: ctx.holdings, accounts: ctx.snapshot.accounts, recommendations: ctx.snapshot.recommendations, draft: ctx.draft, candidate, fx: ctx.fxContext });
-  const after = ctx.desk([candidate]);
-  const shortfallBefore = new Map(before.shortfalls.map((s) => [s.accountId, s.shortfall] as const));
-  const newShortfalls = preview.shortfalls.filter((s) => s.shortfall > (shortfallBefore.get(s.accountId) ?? 0) + 0.005);
-  // The engine leaves an ordinary position edit applied and reports the reserve
-  // it breaches (only atomic units are dropped); a draft must not create one.
-  const breachedBefore = new Set(before.reserves.filter((r) => r.breached).map((r) => r.accountId));
-  const newBreaches = after.reserves.filter((r) => r.breached && !breachedBefore.has(r.accountId));
+  // Drafts already saved in this run that change a position: each simulation
+  // builds on them, as accepting them together would.
+  const prior = ctx.drafts.filter((d) => d.relatedHoldingId && (d.actionAmount != null || d.proposedValue != null));
+  const base = { recommendations: [...ctx.snapshot.recommendations, ...prior], draft: { ...ctx.draft, memberIds: [...ctx.draft.memberIds, ...prior.map((d) => d.id)] } };
+  const start = ctx.desk(prior);
+  const preview = previewDraftEdit({ holdings: ctx.holdings, accounts: ctx.snapshot.accounts, ...base, candidate, fx: ctx.fxContext });
+  const after = ctx.desk([...prior, candidate]);
+  // The same gate acceptance applies: blocked or unconverted, a new or deeper
+  // shortfall, or eligible cash below its reserve (a purchase into an account
+  // already below it included).
+  const problems = candidateProblems({ holdings: ctx.holdings, accounts: ctx.snapshot.accounts, ...base, candidates: [candidate], fx: ctx.fxContext });
+  const shortfallBefore = new Map(start.shortfalls.map((s) => [s.accountId, s.shortfall] as const));
+  const newShortfalls = after.shortfalls.filter((s) => s.shortfall > (shortfallBefore.get(s.accountId) ?? 0) + 0.005);
+  const breachedBefore = new Set(start.reserves.filter((r) => r.breached).map((r) => r.accountId));
+  const reserveBreaches = after.reserves.filter((r) => r.breached && (!breachedBefore.has(r.accountId) || (candidate.type === "increase" && r.accountId === h.accountId)));
   const duplicate = ctx.snapshot.recommendations.find(
     (r) => r.status !== "excluded" && r.relatedHoldingId === h.id && r.type === candidate.type && r.actionAmountUnit === candidate.actionAmountUnit && r.actionAmount === candidate.actionAmount
   );
-  const reason = !preview.applied
-    ? preview.blocked[0]?.reason ?? "The evaluator couldn't apply this change (a required exchange rate is missing)."
-    : newShortfalls.length > 0
-    ? `It would leave a cash shortfall in ${newShortfalls.map((s) => s.accountName).join(", ")}.`
-    : newBreaches.length > 0
-    ? `It would leave the eligible cash in ${newBreaches.map((r) => `${r.accountName} at ${r.available == null ? "an unknown amount" : cents(r.available)}, below its ${r.reserveCurrency ?? ""} ${r.reserve} reserve`).join("; ")}.`
-    : duplicate
-    ? `The same action is already on file ("${duplicate.title}").`
-    : null;
+  const reason = problems.length > 0 ? problems.join(" ") : duplicate ? `The same action is already on file ("${duplicate.title}").` : null;
   const simulationId = `sim_${contentHash(key)}`;
   ctx.simulations.set(simulationId, { candidate, draftable: reason == null, reason });
   return {
@@ -594,8 +647,9 @@ function simulateScopeChange(ctx: CopilotContext, input: z.infer<typeof ScopeCha
     cash: preview.cash.map((c) => ({ holding: c.name, account: c.accountName, before: cents(c.before), after: cents(c.after) })),
     blocked: preview.blocked.map((b) => b.reason),
     new_shortfalls: newShortfalls.map((s) => ({ account: s.accountName, shortfall: cents(s.shortfall) })),
-    new_reserve_breaches: newBreaches.map((r) => ({ account: r.accountName, reserve: r.reserve, available: r.available == null ? null : cents(r.available) })),
-    scope_before: scopeSummary(before),
+    reserve_breaches: reserveBreaches.map((r) => ({ account: r.accountName, reserve: r.reserve, available: r.available == null ? null : cents(r.available) })),
+    drafts_already_included: prior.map((d) => d.title),
+    scope_before: scopeSummary(start),
     scope_after: scopeSummary(after),
     draftable: reason == null,
     not_draftable_reason: reason,
@@ -824,12 +878,16 @@ export interface ToolCallRecord {
   forbidden?: boolean;
 }
 
-/** Every finite number in a tool result, and every figure its engine-written text states, for checking the figures an answer states. */
-export function numbersIn(value: unknown, out: number[] = []): number[] {
+/**
+ * Every finite number in a tool result, and every figure in its engine-written
+ * text once untrusted workspace text is removed (`clean`), for checking the
+ * figures an answer states.
+ */
+export function numbersIn(value: unknown, clean: (s: string) => string, out: number[] = []): number[] {
   if (typeof value === "number" && Number.isFinite(value)) out.push(value);
-  else if (typeof value === "string") out.push(...figuresIn(value));
-  else if (Array.isArray(value)) for (const v of value) numbersIn(v, out);
-  else if (value && typeof value === "object") for (const v of Object.values(value)) numbersIn(v, out);
+  else if (typeof value === "string") out.push(...figuresIn(clean(value)));
+  else if (Array.isArray(value)) for (const v of value) numbersIn(v, clean, out);
+  else if (value && typeof value === "object") for (const v of Object.values(value)) numbersIn(v, clean, out);
   return out;
 }
 
@@ -859,6 +917,8 @@ export function executeTool(ctx: CopilotContext, name: string, input: unknown): 
       return { content: `Invalid input: ${err.issues.map((i) => `${i.path.join(".")} ${i.message}`).join("; ")}`, isError: true };
     }
     if (err instanceof ToolInputError) return { content: err.message, isError: true };
-    throw err;
+    // Anything else (a workspace record the engines can't read) is reported,
+    // without its message or stack, and the run carries on truthfully.
+    return { content: `The ${name} tool failed unexpectedly: Atlas couldn't read part of the workspace for it. Nothing was changed; tell the advisor rather than estimating.`, isError: true };
   }
 }

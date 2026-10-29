@@ -62,8 +62,8 @@ The Copilot is a Claude agent (`claude-opus-5-5`) whose tools are Atlas's existi
 - **Execution limits.** At most 10 agent turns, 24 tool calls, 48,000 output tokens, 100 seconds, 2 retries of a failed request (tools never re-run) and 5 drafts per request; request bodies are capped at 1 MB. Every run ends with an explicit status (completed, refused, truncated, a limit, cancelled or failed) and discloses the drafts saved so far. Live mode needs both `ANTHROPIC_API_KEY` and `COPILOT_MODE=live`.
 - **Context-bound (D4).** Each request names the client, the active alternative, its scope and an input revision; the server rejects a mismatch (409), and accepting a draft re-checks the revision, so an answer about changed inputs or another alternative can't be accepted.
 - **Preview, then explicit acceptance (D4).** Drafts are a preview computed with the desk's evaluator; nothing is saved until the advisor accepts them into the active alternative as unapproved actions. Acceptance is idempotent (deterministic draft IDs) and never touches holdings, approvals or approved versions. Simulations fail closed on out-of-scope positions, cash, missing values or rates, incomplete imports, blocked units, new shortfalls, reserve breaches and duplicates. Tools to approve, finalize, share or execute don't exist; calls to them are refused and counted.
-- **Figures are checked.** Amounts and percentages in an answer and in draft rationales are matched against the numbers the tools returned in that run; unmatched figures are flagged, not presented as verified.
-- **Minimized and unlogged.** Model-bound tool data leaves out the client's name and identity; prompts, tool payloads, reasoning and keys are not logged.
+- **Figures are checked.** Amounts and percentages in an answer and in draft rationales are matched against the numbers the tools returned in that run. Figures inside workspace text (holding, account and file names, notes, titles, rationales) are neither evidence nor claims. Unmatched figures are flagged, not presented as verified.
+- **Minimized and unlogged.** The client's and household's names, the advisor's name and email, and import file names are replaced wherever they appear in model-bound text, the question included. Prompts, tool payloads, reasoning and keys are not logged.
 - **The engines do the math.** Tools compute every figure with the same deterministic engines as the Before/After view and the PDF, and the tools are read-only apart from creating drafts.
 - **Nothing is persisted server-side.** The workspace lives in the browser; each request sends the slice the agent needs.
 
@@ -114,9 +114,9 @@ tests/            unit tests + extraction eval
 ## Tests and evals
 
 ```bash
-npm test        # 539 tests in 31 files (2 need the private UBS PDF and are skipped without it, as in CI): the Copilot agent loop with an injected fake provider (no key, no spend), proposal math and currency handling, calendar dates across time zones, workspace backup and restore, recommendation currencies and previews, cash flows, readiness, insights, CSV/Excel/PDF import, import completeness, Copilot tools (demo mode) + the extraction eval
+npm test        # 551 tests in 32 files (2 need the private UBS PDF and are skipped without it, as in CI): the Copilot agent loop with an injected fake provider (no key, no spend), proposal math and currency handling, calendar dates across time zones, workspace backup and restore, recommendation currencies and previews, cash flows, readiness, insights, CSV/Excel/PDF import, import completeness, Copilot tools (demo mode) + the extraction eval
 npm run eval    # statement-extraction accuracy scorecard
-npm run eval:agent:live   # opt-in PAID live agent evaluation; refuses to run without explicit flags, a key and a spend cap (see docs/roadmap/AGENT_EVALUATION.md)
+npm run eval:agent:live   # opt-in PAID live agent evaluation; refuses to run without explicit flags, a key and a spend cap. The cap is an estimate-based guard, not a guaranteed ceiling (see docs/roadmap/AGENT_EVALUATION.md)
 ```
 
 CI runs the type check, tests, eval and production build on every pull request.

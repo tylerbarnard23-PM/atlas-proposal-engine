@@ -41,7 +41,8 @@ import { cashBasisCurrency, markRemovedLinks } from "@/engines/recommendationLin
 import { contextMismatch, type AgentContext } from "@/copilot/context";
 import { forReadiness } from "@/engines/importCompleteness";
 import { migrateRecommendationCurrency, withApprovalRule } from "@/engines/recommendationAmounts";
-import { deskActions, draftBasisInputs, legacyWorkingDraft, needsIntentRestatement, newWorkingDraft, recordInputBasis } from "@/engines/allocationDesk";
+import { candidateProblems, deskActions, draftBasisInputs, legacyWorkingDraft, needsIntentRestatement, newWorkingDraft, recordInputBasis } from "@/engines/allocationDesk";
+import { normalizeHoldings } from "@/engines/normalizationEngine";
 import { LEGACY_SAMPLE_FIRM_NAME } from "@/domain/branding";
 import type { ImportedWorkspace } from "@/ingestion/documents/toWorkspace";
 import type { RestoredWorkspace } from "@/engines/workspaceBackup";
@@ -628,6 +629,18 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
         if (fresh.length === 0) return { ok: true, added: [], skipped };
         const mismatch = contextMismatch(context, { ...s, sourceDocuments: s.sourceDocuments.map(forReadiness) });
         if (mismatch) return { ok: false, error: mismatch };
+        // The selection together, as it would join the alternative: each draft was
+        // simulated on its own run's path, not necessarily alongside the others chosen.
+        const ccy = s.client.proposalOutputCurrency;
+        const problems = candidateProblems({
+          holdings: normalizeHoldings(s.holdings, s.fxRates, ccy),
+          accounts: s.accounts,
+          recommendations: s.recommendations,
+          draft: s.workingDraft,
+          candidates: fresh,
+          fx: { reportingCurrency: ccy, rates: s.fxRates },
+        });
+        if (problems.length > 0) return { ok: false, error: `Not accepted: ${problems.join(" ")}` };
         // Whatever the draft says, it joins unapproved and out of the PDF.
         get().addDraftEdit(fresh.map((d) => ({ ...d, status: "needs_review" as const, approvedByAdvisor: false, includeInPdf: false })));
         return { ok: true, added: fresh.map((d) => d.id), skipped };

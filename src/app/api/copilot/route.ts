@@ -46,15 +46,21 @@ export async function POST(req: Request) {
   if (mismatch) return NextResponse.json({ error: mismatch, code: "stale_context" }, { status: 409 });
 
   const mode = copilotMode();
-  if (mode === "demo") return NextResponse.json(runDemoCopilot(snapshot, question));
-  const result = await runAgent(snapshot, question, {
-    mode,
-    provider: mode === "live" ? "anthropic" : "test",
-    // The test provider is requested by its own name, so it is never reported as a fallback.
-    model: mode === "live" ? COPILOT_MODEL : TEST_PROVIDER_MODEL,
-    // The loop bounds retries itself, so the SDK's are off.
-    client: mode === "live" ? new Anthropic({ maxRetries: 0 }) : createTestProvider(),
-    signal: req.signal,
-  });
-  return NextResponse.json(result);
+  try {
+    if (mode === "demo") return NextResponse.json(runDemoCopilot(snapshot, question));
+    const result = await runAgent(snapshot, question, {
+      mode,
+      provider: mode === "live" ? "anthropic" : "test",
+      // The test provider is requested by its own name, so it is never reported as a fallback.
+      model: mode === "live" ? COPILOT_MODEL : TEST_PROVIDER_MODEL,
+      // The loop bounds retries itself, so the SDK's are off.
+      client: mode === "live" ? new Anthropic({ maxRetries: 0 }) : createTestProvider(),
+      signal: req.signal,
+    });
+    return NextResponse.json(result);
+  } catch {
+    // A workspace record the engines can't read: say so, without the error's
+    // message or any of the workspace. Nothing was saved.
+    return NextResponse.json({ error: "Copilot couldn't read this workspace (a record is malformed). Nothing was changed." }, { status: 422 });
+  }
 }

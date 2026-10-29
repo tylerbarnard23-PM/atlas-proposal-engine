@@ -40,6 +40,10 @@ Follow [VALUATION_SCOPE.md](VALUATION_SCOPE.md). Evaluation tools use the accept
 - **Modes.** Scripted demo (default), test provider (`COPILOT_MODE=test`, a deterministic client through the real loop, labelled not a model) and live (`COPILOT_MODE=live` plus a key). Requested and actual models are recorded, and a fallback is shown as such.
 - **Bounds and statuses.**
   - Limits: turns, tool calls, per-response and cumulative output tokens, a deadline, bounded retries (tools never re-run) and an answer cap.
+  - The cumulative output limit is hard: each request's `max_tokens` is the remainder.
+  - A timeout at the deadline reports the time limit.
+  - An unexpected tool error becomes a safe error result instead of a crash.
+  - Usage sums every attempt in `usage.iterations`.
   - Cancellation uses the request signal.
   - Statuses: completed, refused, truncated, turn/tool/output/time limit, cancelled and failed. Partial drafts are disclosed.
   - Provider errors are mapped without payloads.
@@ -61,16 +65,34 @@ Follow [VALUATION_SCOPE.md](VALUATION_SCOPE.md). Evaluation tools use the accept
 - **Layer C (browser, synthetic, test provider).** Performed on an isolated origin for this PR: contextual entry, mode and context display, cancel, discard, 409, accept, reload, and the approved version preserved. The real-provider browser smoke remains outstanding.
 - **Layer B (live).** Prepared, **not performed**.
   - Suite `2026-10-28.1`: 9 synthetic cases in `src/copilot/eval/cases.ts` with code-based graders.
-  - Runner: `npm run eval:agent:live`, with hard request and spend limits (`src/copilot/eval/budget.ts`).
+  - Runner: `npm run eval:agent:live`, with an exact request limit and an estimate-based spend guard (`src/copilot/eval/budget.ts`); not a guaranteed spend ceiling.
   - No paid call has been made. Any release gate that depends on live evidence (a live-agent claim, prompt or tool promotion) is outstanding.
 
-### Proposed live-evaluation configuration and budget (for owner approval)
+### Proposed live-evaluation configuration and budget: NOT approved (needs owner review)
+
+Revised 29 October 2026 after the D4 review. The pricing was checked against the official pricing and models pages that day. The review changed the spending safeguards, which still need review before any approval.
+
 - **Configuration:** `claude-opus-5-5` (unchanged default), `effort: "medium"`, server-side refusal fallback on (recorded per run), prompt and tools `d4-2026-10-28`, suite `2026-10-28.1`.
 - **Runs:** 9 cases × 3 trials = 27 runs, sequential, run locally by the owner with their own key; never in CI.
-- **Hard limits:** `AGENT_EVAL_MAX_USD=25`, `AGENT_EVAL_CONFIRM_SPEND=25`, `AGENT_EVAL_MAX_REQUESTS=200`. Each run uses the loop's normal limits (10 turns, 48,000 output tokens, 100 seconds). Before every request the wrapper checks a worst-case cost and stops before the cap.
-- **Expected spend:** about USD 8.50 (about USD 0.31 a run), at USD 4 input, 20 output and 0.20 cache-read per million tokens (prices recorded 2026-10-06).
-  - The theoretical worst case, every run at every turn with full output and uncached, is about USD 129. The USD 25 cap prevents it, and a capped run is reported as incomplete.
-  - Adaptive thinking tokens are billed as output and included.
+- **Limits:** `AGENT_EVAL_MAX_USD=25`, `AGENT_EVAL_CONFIRM_SPEND=25`, `AGENT_EVAL_MAX_REQUESTS=200`.
+  - Each run uses the loop's normal limits: 10 turns, 48,000 output tokens (hard, because each request asks only for what is left), and 100 seconds.
+  - **The request limit is exact; the spend cap is a guard on an estimate, not a guaranteed ceiling.** Before every request the wrapper prices a conservative worst case and refuses the request if that could cross the cap. The worst case is:
+    - the largest input seen so far plus 30,000 tokens, billed at the 5-minute cache-write price;
+    - the full `max_tokens` of output;
+    - with refusal fallbacks on, a second full attempt at the ceiling price.
+  - Spend is summed over every attempt in `usage.iterations`, each at its own model's price. A model without a recorded price is billed at the highest price on the official pricing page (retired Opus 4/4.1: $15 input, $75 output), because the default fallback routing isn't published.
+  - The cap can still be overshot by a next request whose input exceeds the estimate, by a list-price change, or by billing the docs don't itemize. Failed requests carry no usage and are counted as unbilled. Set the cap with margin.
+- **Prices (official pricing page, checked 2026-10-29):** `claude-opus-5-5` is a current model ID with 128K max output.
+  - Per million tokens: $4 input, $20 output, $5 5-minute cache write, $8 1-hour cache write, $0.20 cache read.
+  - No long-context surcharge.
+- **Expected spend:** about USD 8.50 (about USD 0.31 a run), from the loop's typical shape and assuming no fallbacks. This is an estimate, not a measurement.
+  - The theoretical worst case is about USD 674: every run at every turn, with full output billed as cache writes, plus a fallback re-run at the ceiling price.
+  - The guard stops starting requests once a worst-case request could cross USD 25 (about USD 2.71 each), so spend near the cap ends the suite early. A capped suite is reported as incomplete.
+  - Thinking tokens are assumed billed as output, per the API reference. The pricing page itself doesn't state it.
+- **Fallback billing (official refusals and fallback page):**
+  - A declined attempt is billed when the decline arrives mid-stream or falls in a billed category.
+  - The fallback attempt is billed at its own model's rates.
+  - Default routing for Opus 5.5 isn't published.
 - **Gates (fixed before the run):**
   - **Critical:** zero critical failures across all 27 runs:
     - an unsupported figure;
