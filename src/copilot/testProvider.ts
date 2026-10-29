@@ -75,7 +75,7 @@ export function createTestProvider(): MessagesClient {
           if (r.tool === "simulate_scope_change") {
             sim = d;
             const position = d.position as { before: number | null; after: number | null };
-            if (!d.draftable) return answer(`Simulated trimming ${d.holding} by ${fmt(d.amount, currency)}: not draftable (${d.not_draftable_reason}). No draft was saved.`);
+            if (!d.draftable) return answer(`Simulated trimming ${d.holding} by ${fmt(d.amount, currency)}: not draftable (${d.not_draftable_reason}). No draft was prepared.`);
             return toolUse("draft_recommendation", {
               simulation_id: d.simulation_id,
               type: "reduce",
@@ -90,7 +90,7 @@ export function createTestProvider(): MessagesClient {
               [
                 `**Test provider (not a model).** The investment scope totals ${fmt(scopeTotal, currency)}.`,
                 `- Simulated: trim ${sim.holding} by ${fmt(sim.amount, currency)}, from ${fmt(position.before, currency)} to ${fmt(position.after, currency)}.`,
-                `- Saved one unapproved draft (${d.draft_id}). Accept it into the alternative to review it; approval stays with the advisor.`,
+                `- Prepared one unapproved draft (${d.draft_id}) as a preview; nothing is added yet. Add it to the working draft to review it; approval stays with the advisor.`,
               ].join("\n")
             );
           }

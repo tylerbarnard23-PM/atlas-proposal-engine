@@ -27,43 +27,23 @@
   - **Context:** `src/copilot/context.ts` (`inputRevision`). The route returns 409 `stale_context`, and `acceptAgentDrafts` re-checks the revision, is idempotent and adds unapproved members only.
   - **Tools:** `get_scope_overview` and `simulate_scope_change` (shared desk evaluator). A sized draft must be a draftable simulation. Simulations fail closed on scope, cash, missing values or FX, imports, blocked units, shortfalls, reserve breaches and duplicates.
   - **Loop:** `runAgent` with an injectable `MessagesClient`, bounds, explicit statuses, figure checks (`evidence.ts`), and labelled demo, test (`COPILOT_MODE=test`) and live modes. The model, effort and fallback are unchanged.
-  - **Status (28 October 2026):** D4 is implemented in PR #82 and awaiting Codex review. It is unmerged and not deployed to production. D5 has not started.
+  - **Status (28 October 2026):** D4 is implemented in PR #82 and awaiting Codex review. It is unmerged and not deployed to production. Of D5, only the bounded usability slice below is done.
   - **Local validation at `20223e4`:** typecheck clean; 539 tests passed; extraction eval 2/2; build passed.
   - **CI:** CI run 40712229577 and Vercel passed on `20223e4`. The CI test counts weren't read and aren't inferred from the local count.
   - **Browser evidence** used the deterministic test provider, not a real model.
   - **Live evaluation and real-model browser testing are unperformed.** The proposed budget in AGENT_EVALUATION.md is **not approved**; its pricing, spending safeguards and evaluation design still need review.
   - **Cleanup:** task servers are stopped (ports 3107, 3108 and 3199 free), and the temporary seeds, tests and `public/` files are removed. `.claude/launch.json` is restored to its original entries. Saved browser workspaces and `stash@{0}` are preserved.
-  - **D4 review (29 October 2026):** a focused review confirmed 11 defects. Each was reproduced first in `tests/agentReview.test.ts`, then fixed together on PR #82:
-    - **Untrusted figures:** figures inside holding, account and file names, notes and titles counted as engine evidence. Now they're neither evidence nor claims.
-    - **Deeper reserve breach:** a purchase into an account already below its reserve was draftable.
-    - **Combined effect:** simulations in a run ignored drafts already saved, and acceptance didn't check the selection together. Both now use the shared `candidateProblems` gate in `allocationDesk.ts` (store, tool and page).
-    - **Stale profile:** a client-profile change didn't invalidate a pending answer.
-    - **Tool crash:** an unexpected tool error crashed the run, and an unreadable workspace gave an unhandled 500 (now 422).
-    - **Output limit:** the cumulative output limit could be overshot.
-    - **Timeout status:** a timeout at the deadline reported a generic failure.
-    - **Usage:** usage ignored the declined attempt before a fallback.
-    - **Identity:** the client's name, household name and import file names reached the model inside account names, notes and the question.
-    - **Spend accounting:** the guard priced fallbacks at Opus 5.5 rates and checked no fallback re-run. The docs no longer call it a hard ceiling.
-
-    Evidence is in PR #82.
-  - **D4 review round 2 (Codex findings, 29 October 2026):** four findings, reproduced first in `tests/agentReview2.test.ts` and fixed together. The eleven round-1 fixes are kept.
-    1. **Live-evaluation runner** (`eval/runner.ts`):
-       - unknown or empty case selections and non-integer trial counts are rejected;
-       - the verdict fails on critical failures, zero coverage or interrupted coverage, and reports are written first;
-       - a subset is labelled apart from the full 27-trial suite;
-       - the guard's input-size estimate now carries across trials (found while testing).
-    2. **Typed evidence:** currency, unit and change sign are checked, and unchecked claims are explicit in the loop, the UI and the grader.
-    3. **Advisory classification:** uses the engine preview's half-cent `no_change` rule instead of a $1 threshold.
-    4. **Terminal checks:** cancellation, deadline and output (fallback attempts included) are checked after every response, before success or any tool. The docs no longer claim a hard combined output ceiling.
-
-    Runtime model and fallback configuration are unchanged.
-  - **D4 review round 3 (29 October 2026):** `simulate_recommendation`'s `pct_change` is `recommendationPreview`'s `pctChange`, in percentage points (60,000 → 54,000 is -10). Evidence had classed it as a fraction, so the checker rejected -10% and accepted -1,000%. It is now a percentage.
-    - Reproduced first in `tests/agentReview3.test.ts`: decrease, increase and zero change through the real preview, tool, evidence, checker, loop and grader.
-    - Every other percent field was audited against its producer; all are percentage points. No tool returns a fraction today.
-    - Engine, editor and PDF values are unchanged.
-  - **Next session:** Codex reviews PR #82, then the owner decides whether to authorize a specific live-evaluation configuration and budget. That budget is not approved, and its safeguards changed in both review rounds.
+  - **D4 review rounds 1–3 (29 October 2026):** 11 + 4 + 1 confirmed defects, each reproduced first (`tests/agentReview*.test.ts`) and fixed on PR #82; details in [the history file](CLAUDE_HANDOFF_HISTORY_2026-10-28.md#d4-review-rounds-29-october-2026) and the PR. Runtime model and fallback configuration unchanged.
+  - **D5 usability slice on PR #82 (29 October 2026):** the owner-approved proposal-flow simplification. A bounded D5 slice, **not D5 completion**. Impact note: [PR #82 comment](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/82#issuecomment-6506681351). Presentation only: store/backup v10, engines, context/staleness checks, acceptance safeguards, tools, agent prompt, model, effort, fallback and spend controls are unchanged.
+    - **Copilot beside the desk:** "Ask Copilot" opens a panel (a column at ≥1280px, a full-height panel below) built on `CopilotWorkspace` and `copilotRequest`, shared with the standalone page. Opening runs nothing. It shows the active alternative and the account scope.
+    - **Preview state:** "Preview only — nothing added." with Add to working draft and Discard beside it; afterwards "Added to working draft — awaiting approval." with a link that highlights the action on Recommendations. Scripted demo and test-provider answers no longer say "saved" before acceptance; live answers aren't rewritten. Figure warnings and blocking reasons stay visible; the trace and IDs are behind Details.
+    - **Desk:** "Draft changes (n)" and "Approved changes (m)" (`deskViewCounts`), highlighted dollar changes, and a scope summary (count and names) with a collapsed account editor. **Recommendations:** "Current draft (n)" and "All recommendations (m)" (`draftMembership`), with notes for recommendations, approvals and unresolved items outside the draft.
+    - **Evidence:** `tests/proposalFlow.test.ts` (9 tests). Local final checks: typecheck clean, 576 passed and 0 skipped (35 files, private fixture present), eval 2/2, build. Browser, with the test provider (not a model) on `flow.localhost:3107` and the synthetic seed: scope → preview → discard → preview → add → Draft/Approved compare (saved workspace byte-identical) → reload → repeat (no duplicate) → highlighted on Recommendations. Also a stale refusal after a scope change, keyboard operation (open, ask, Escape, view switching) and 375px and 1440px viewports. No usability study and no real-model validation.
+    - **Separate:** the owner completed a free-provider smoke before this slice (owner-reported; not repeated or re-recorded here).
+    - **Cleanup:** the task server is stopped, the test origins' storage cleared, and `.claude/launch.json` restored (sha256 `7b4ae74b…`). The owner's `127.0.0.1:3210` server was left alone.
+  - **Next session:** Codex reviews PR #82 (D4 and the usability slice), then the owner decides whether to authorize a specific live-evaluation configuration and budget. That budget is not approved. Reconciling PR #80's security plan comes later.
 - **Preserve:** PR #80 (the D5 secrets/exposure plan) is open; keep its work when reconciling docs, and don't merge it as part of D4.
-- **Open follow-up:** #76 (reserve-breach attribution for legacy actions), unchanged.
+- **Open follow-ups:** #76 (reserve-breach attribution for legacy actions), unchanged. **Zod audit warning:** `npm audit` reports GHSA-mrhx-c7xc-m3w5 (high) for zod <4.6.6, and its only offered fix is a breaking upgrade (`--force` installs zod 4.6.7). It needs a separate, tested dependency change; don't run `npm audit fix --force`.
 - **Limitations carried forward:**
   - Replacements stay within one account and its cash currency; alternatives and library entries can't be deleted; there is no reserve conversion helper.
   - D2a has no manager feeds, verified offerings, automatic funding sales, fee aggregation or nested models.

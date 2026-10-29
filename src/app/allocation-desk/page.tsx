@@ -15,6 +15,7 @@ import type { ReserveStatus } from "@/engines/proposalEngine";
 import { ASSET_CLASS_LABELS } from "@/domain/assetTaxonomy";
 import {
   compareAlternatives,
+  deskViewCounts,
   draftBasisInputs,
   evaluateDesk,
   pendingReserveText,
@@ -32,6 +33,10 @@ import {
 } from "@/engines/allocationDesk";
 import { previewRecommendation, type PreviewWarning } from "@/engines/recommendationPreview";
 import { ModelsAndSleeves } from "@/components/desk/ModelsAndSleeves";
+import { CopilotPanel } from "@/components/copilot/CopilotPanel";
+import { scopeLabel } from "@/copilot/request";
+import { Bot, Pencil } from "lucide-react";
+import { cn } from "@/utils/cn";
 import { formatCalendarDate, formatCurrency, formatTimestampDate, safeId } from "@/utils/formatting";
 
 // D1 — the working allocation desk. Every figure comes from engines/
@@ -49,6 +54,17 @@ export default function AllocationDeskPage() {
 
 const pctText = (n: number | null) => (n == null ? "—" : `${n.toFixed(1)}%`);
 const signed = (n: number, f: (x: number) => string) => (Math.abs(n) < 0.005 ? f(0) : `${n > 0 ? "+" : "−"}${f(Math.abs(n))}`);
+
+/** A proposed dollar change, highlighted; nothing when the amount doesn't move. */
+function ChangeChip({ from, to, money }: { from: number | null; to: number | null; money: (n: number) => string }) {
+  if (from == null || to == null || Math.abs(to - from) < 0.005) return null;
+  const up = to > from;
+  return (
+    <span className={cn("ml-1.5 inline-block rounded px-1.5 py-px text-[12px] font-medium tabular", up ? "bg-navy-50 text-navy-700" : "bg-gold-50 text-gold-600")} data-testid="desk-change">
+      {signed(to - from, money)}
+    </span>
+  );
+}
 
 function Desk() {
   const { holdings, reportingCurrency } = useNormalizedHoldings();
@@ -71,6 +87,15 @@ function Desk() {
   const now = useFxNow();
   const [view, setView] = React.useState<DeskView>("draft");
   const [editing, setEditing] = React.useState<DeskPosition | null>(null);
+  // D5 usability slice: Copilot beside the desk, the collapsed scope editor and the actions just added.
+  const [copilotOpen, setCopilotOpen] = React.useState(false);
+  const [scopeOpen, setScopeOpen] = React.useState(false);
+  const [justAdded, setJustAdded] = React.useState<Set<string>>(new Set());
+  const askButton = React.useRef<HTMLButtonElement>(null);
+  const closeCopilot = React.useCallback(() => {
+    setCopilotOpen(false);
+    askButton.current?.focus();
+  }, []);
 
   const fx = React.useMemo(() => ({ reportingCurrency, rates: fxRates, now }), [reportingCurrency, fxRates, now]);
   const d = React.useMemo(() => evaluateDesk({ holdings, accounts, recommendations, draft, fx, view }), [holdings, accounts, recommendations, draft, fx, view]);
@@ -79,6 +104,9 @@ function Desk() {
   const candidates = scopeCandidates(accounts);
   const inScope = new Set(d.scope.accountIds);
   const toggleScope = (id: string) => setScope(inScope.has(id) ? d.scope.accountIds.filter((x) => x !== id) : [...d.scope.accountIds, id]);
+  const scope = scopeLabel(accounts, draft);
+  // Counted from the evaluator's own selection; switching views changes no action.
+  const counts = deskViewCounts(recommendations, draft);
   // Rejected ones are left out, except a legacy record still approved: the PDF applies it.
   const live = recommendations.filter((r) => r.status !== "excluded" || r.approvedByAdvisor);
   const members = new Set(draft.memberIds);
@@ -99,15 +127,15 @@ function Desk() {
         title="Allocation desk"
         description="Choose the investment scope, set target weights and preview explicit changes to positions you already hold. A preview never changes current holdings, approvals or the final PDF."
         actions={
-          // D4: Copilot opens on this alternative with a question filled in; it doesn't run until asked.
-          <Link
-            href={`/copilot?q=${encodeURIComponent(`Review the "${draft.name}" alternative: what stands out in this scope, and what would you simulate first?`)}`}
-            className="text-[13px] underline whitespace-nowrap"
-          >
-            Ask Copilot about this alternative
-          </Link>
+          // Copilot opens beside the desk on this alternative with a question filled in; it doesn't run until asked.
+          <Button ref={askButton} variant={copilotOpen ? "secondary" : "primary"} iconLeft={<Bot className="h-4 w-4" />} aria-expanded={copilotOpen} aria-controls="copilot-panel" onClick={() => (copilotOpen ? closeCopilot() : setCopilotOpen(true))}>
+            {copilotOpen ? "Close Copilot" : "Ask Copilot"}
+          </Button>
         }
       />
+
+      <div className={cn(copilotOpen && "xl:grid xl:grid-cols-[minmax(0,1fr)_420px] xl:items-start xl:gap-5")}>
+      <div className="min-w-0">
 
       <Card className="mb-3">
         <CardBody className="flex flex-wrap items-center gap-3 text-[13px]">
@@ -129,31 +157,62 @@ function Desk() {
             <Button size="sm" variant="secondary" onClick={() => { duplicate(copyName); setCopyName(""); }}>Duplicate as a new alternative</Button>
           </span>
           <span className="w-full text-2xs text-ink-500">A duplicate copies this alternative&apos;s actions with new IDs and no approvals; editing one alternative never changes another or current holdings.</span>
+          <div className="w-full border-t border-ink-100 pt-3">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span className="text-ink-500">Account scope</span>
+              <span className="text-ink-900" data-testid="desk-scope-summary" title={scope.text}>{scope.short}</span>
+              <Button size="sm" variant="secondary" iconLeft={<Pencil className="h-3.5 w-3.5" />} aria-expanded={scopeOpen} aria-controls="desk-scope-editor" onClick={() => setScopeOpen((o) => !o)}>
+                {scopeOpen ? "Done" : "Edit accounts"}
+              </Button>
+              {d.scope.chosen && (
+                <Button size="sm" variant="ghost" onClick={() => setScope(null)}>Reset to every account</Button>
+              )}
+            </div>
+            {!d.scope.chosen && <p className="mt-1 text-2xs text-warning-600">Scope not chosen yet: every non-liability account is in the weights. Edit accounts to leave some as context.</p>}
+            {scopeOpen && (
+              <fieldset id="desk-scope-editor" className="mt-2 grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+                <legend className="sr-only">Accounts in the allocation scope</legend>
+                {candidates.map((a) => {
+                  const v = d.scope.accounts.find((x) => x.id === a.id)?.current ?? d.context.accounts.find((x) => x.id === a.id)?.value ?? 0;
+                  return (
+                    <label key={a.id} className="flex items-center justify-between gap-2 rounded border border-ink-100 px-2 py-1">
+                      <span className="flex items-center gap-2 min-w-0">
+                        <input type="checkbox" checked={inScope.has(a.id)} onChange={() => toggleScope(a.id)} aria-label={`Include ${a.name} in the allocation scope`} />
+                        <span className={cn("truncate", inScope.has(a.id) ? "text-ink-900" : "text-ink-500")}>{a.name}</span>
+                      </span>
+                      <span className="tabular text-ink-700">{money(v)}</span>
+                    </label>
+                  );
+                })}
+              </fieldset>
+            )}
+          </div>
         </CardBody>
       </Card>
 
       <Card className="mb-5">
         <CardBody className="flex flex-wrap items-center justify-between gap-3">
-          <div className="text-[13px] text-ink-700 leading-relaxed max-w-3xl">
+          <div className="text-[13px] text-ink-700 leading-relaxed max-w-3xl" data-testid="desk-view-explainer">
             {view === "draft" ? (
               <>
-                Previewing the <strong>working draft</strong>: {d.actions.length} action{d.actions.length === 1 ? "" : "s"}
-                {d.unapprovedInDraft.length > 0 && <>, {d.unapprovedInDraft.length} not yet approved (not in the final PDF)</>}.
+                Showing <strong>draft changes</strong>: every action in &ldquo;{draft.name}&rdquo;, approved or not ({d.actions.length}
+                {d.unapprovedInDraft.length > 0 && <>, {d.unapprovedInDraft.length} awaiting approval and not in the final PDF</>}).
               </>
             ) : (
               <>
-                Previewing the <strong>approved subset</strong>: the {d.actions.length} approved action{d.actions.length === 1 ? "" : "s"} the final PDF uses.
+                Showing <strong>approved changes</strong>: only the {d.actions.length} approved action{d.actions.length === 1 ? "" : "s"}, from any alternative. This is what the final PDF uses.
               </>
             )}{" "}
+            Switching views changes no action.{" "}
             {view === "draft" && d.approvedOutsideDraft.length > 0 && (
               <span className="text-warning-600">
                 {d.approvedOutsideDraft.length} approved action{d.approvedOutsideDraft.length === 1 ? " isn't" : "s aren't"} in this draft; the final PDF still includes {d.approvedOutsideDraft.length === 1 ? "it" : "them"}.
               </span>
             )}
           </div>
-          <div role="group" aria-label="Preview" className="flex gap-1">
-            <Button size="sm" variant={view === "draft" ? "primary" : "secondary"} aria-pressed={view === "draft"} onClick={() => setView("draft")}>Working draft</Button>
-            <Button size="sm" variant={view === "approved" ? "primary" : "secondary"} aria-pressed={view === "approved"} onClick={() => setView("approved")}>Approved subset</Button>
+          <div role="group" aria-label="Which changes to show" className="flex gap-1">
+            <Button size="sm" variant={view === "draft" ? "primary" : "secondary"} aria-pressed={view === "draft"} onClick={() => setView("draft")}>Draft changes ({counts.draft})</Button>
+            <Button size="sm" variant={view === "approved" ? "primary" : "secondary"} aria-pressed={view === "approved"} onClick={() => setView("approved")}>Approved changes ({counts.approved})</Button>
           </div>
         </CardBody>
       </Card>
@@ -183,7 +242,10 @@ function Desk() {
                   <tr key={r.assetClass} className="border-t border-ink-100">
                     <td className="px-4 py-2 text-ink-900">{r.label}</td>
                     <td className="px-3 py-2 text-right tabular">{money(r.current)} <span className="text-ink-500">· {pctText(r.currentPct)}</span></td>
-                    <td className="px-3 py-2 text-right tabular">{money(r.proposed)} <span className="text-ink-500">· {pctText(r.proposedPct)}</span></td>
+                    <td className="px-3 py-2 text-right tabular">
+                      {money(r.proposed)} <span className="text-ink-500">· {pctText(r.proposedPct)}</span>
+                      <ChangeChip from={r.current} to={r.proposed} money={money} />
+                    </td>
                     <td className="px-3 py-2 text-right">
                       <TargetInput assetClass={r.assetClass} value={r.targetPct} onChange={setTarget} />
                     </td>
@@ -207,28 +269,19 @@ function Desk() {
           <Card>
             <CardHeader><CardTitle>Investment scope</CardTitle></CardHeader>
             <CardBody className="space-y-2 text-[13px]">
-              {!d.scope.chosen && <p className="text-2xs text-warning-600">Scope not chosen yet: every non-liability account is shown. Untick accounts to leave them as context.</p>}
-              {candidates.map((a) => {
-                const v = d.scope.accounts.find((x) => x.id === a.id)?.current ?? d.context.accounts.find((x) => x.id === a.id)?.value ?? 0;
-                return (
-                  <label key={a.id} className="flex items-center justify-between gap-2">
-                    <span className="flex items-center gap-2">
-                      <input type="checkbox" checked={inScope.has(a.id)} onChange={() => toggleScope(a.id)} aria-label={`Include ${a.name} in the allocation scope`} />
-                      <span className={inScope.has(a.id) ? "text-ink-900" : "text-ink-500"}>{a.name}</span>
-                    </span>
-                    <span className="tabular text-ink-700">{money(v)}</span>
-                  </label>
-                );
-              })}
+              {d.scope.accountIds.map((id) => (
+                <div key={id} className="flex items-center justify-between gap-2">
+                  <span className="text-ink-900">{accounts.find((a) => a.id === id)?.name ?? id}</span>
+                  <span className="tabular text-ink-700">{money(d.scope.accounts.find((x) => x.id === id)?.current ?? 0)}</span>
+                </div>
+              ))}
+              {d.scope.accountIds.length === 0 && <p className="text-2xs text-warning-600">No account is in scope. Edit accounts above to add one.</p>}
               <div className="border-t border-ink-100 pt-2 text-2xs text-ink-500 space-y-1">
                 <div className="flex justify-between"><span>In scope (denominator)</span><span className="tabular">{money(d.totals.current)}</span></div>
                 <div className="flex justify-between"><span>Context only, not in the weights{d.unvaluedOutside.length > 0 ? " (valued only)" : ""}</span><span className="tabular">{money(d.context.total)}</span></div>
                 <div className="flex justify-between"><span>Household assets</span><span className="tabular">{money(d.householdAssets)}</span></div>
                 <div className="flex justify-between"><span>Liabilities (kept separate)</span><span className="tabular">{money(d.liabilities.total)}</span></div>
               </div>
-              {d.scope.chosen && (
-                <Button size="sm" variant="ghost" onClick={() => setScope(null)}>Reset to every account</Button>
-              )}
             </CardBody>
           </Card>
 
@@ -276,6 +329,7 @@ function Desk() {
                 <th className="px-3 py-2 font-medium">Asset class</th>
                 <th className="px-3 py-2 font-medium text-right">Current</th>
                 <th className="px-3 py-2 font-medium text-right">Proposed</th>
+                <th className="px-3 py-2 font-medium text-right">Change</th>
                 <th className="px-4 py-2 font-medium" />
               </tr>
             </thead>
@@ -290,6 +344,9 @@ function Desk() {
                     <td className="px-3 py-2 text-ink-700">{ASSET_CLASS_LABELS[p.assetClass] ?? p.assetClass}</td>
                     <td className="px-3 py-2 text-right tabular">{p.current == null ? "Not valued" : money(p.current)}</td>
                     <td className="px-3 py-2 text-right tabular">{p.proposed == null ? "Not valued" : money(p.proposed)}</td>
+                    <td className="px-3 py-2 text-right">
+                      <ChangeChip from={p.current ?? (p.proposedOnly ? 0 : null)} to={p.proposed} money={money} />
+                    </td>
                     <td className="px-4 py-2 text-right">
                       {editablePosition(p) && (
                         <Button size="sm" variant="secondary" onClick={() => setEditing(editing?.id === p.id ? null : p)} aria-expanded={editing?.id === p.id}>
@@ -300,7 +357,7 @@ function Desk() {
                   </tr>
                   {editing?.id === p.id && (
                     <tr className="bg-slatey-50">
-                      <td colSpan={5} className="px-4 py-3">
+                      <td colSpan={6} className="px-4 py-3">
                         <PositionEditor
                           position={p}
                           reportingCurrency={reportingCurrency}
@@ -390,11 +447,11 @@ function Desk() {
       </Card>
 
       <SectionDivider>Draft actions</SectionDivider>
-      <Card>
+      <Card id="desk-actions" className="scroll-mt-4">
         <CardBody className="space-y-2">
           {live.length === 0 && <p className="text-[13px] text-ink-500">No recommendations yet. Edit a position above to add an explicit action to the draft.</p>}
           {live.map((r) => (
-            <ActionRow key={r.id} rec={r} member={members.has(r.id)} owner={alternatives.find((a) => a.memberIds.includes(r.id))?.name} onToggle={(m) => setMember(r.id, m)} />
+            <ActionRow key={r.id} rec={r} member={members.has(r.id)} justAdded={justAdded.has(r.id)} owner={alternatives.find((a) => a.memberIds.includes(r.id))?.name} onToggle={(m) => setMember(r.id, m)} />
           ))}
           <p className="text-2xs text-ink-500 leading-relaxed">
             &ldquo;In draft&rdquo; puts an action in this preview only. Approval and PDF prose are set on <Link href="/recommendations" className="text-navy-700 hover:underline">Recommendations</Link>; the final PDF uses approved actions.
@@ -426,6 +483,15 @@ function Desk() {
           </div>
         </CardBody>
       </Card>
+      </div>
+      {copilotOpen && (
+        <CopilotPanel
+          question={`Review the "${draft.name}" alternative: what stands out in this scope, and what would you simulate first?`}
+          onClose={closeCopilot}
+          onAdded={(ids) => setJustAdded(new Set(ids))}
+        />
+      )}
+      </div>
     </>
   );
 }
@@ -479,13 +545,14 @@ function AddTargetRow({ existing, onAdd }: { existing: Set<AssetClass>; onAdd: (
   );
 }
 
-function ActionRow({ rec, member, owner, onToggle }: { rec: Recommendation; member: boolean; owner?: string; onToggle: (m: boolean) => void }) {
+function ActionRow({ rec, member, justAdded, owner, onToggle }: { rec: Recommendation; member: boolean; justAdded?: boolean; owner?: string; onToggle: (m: boolean) => void }) {
   const restate = restatementMessage(rec);
   return (
-    <div className="flex flex-wrap items-start justify-between gap-2 border-b border-ink-100 pb-2 last:border-b-0">
+    <div className={cn("flex flex-wrap items-start justify-between gap-2 border-b border-ink-100 pb-2 last:border-b-0", justAdded && "rounded-md bg-navy-50 px-2 pt-2 ring-1 ring-inset ring-navy-200")} data-testid={justAdded ? "desk-just-added" : undefined}>
       <div className="min-w-0">
         <div className="text-[13px] text-ink-900">{rec.title || "Untitled recommendation"}</div>
         <div className="flex flex-wrap gap-1 mt-1">
+          {justAdded && <Badge tone="navy">Just added from Copilot</Badge>}
           {member && <Badge tone="navy">In draft</Badge>}
           {rec.approvedByAdvisor ? <Badge tone="positive">Approved</Badge> : <Badge tone="neutral">Not approved</Badge>}
           {rec.includeInPdf && <Badge tone="gold">In PDF prose</Badge>}

@@ -41,3 +41,35 @@ The D2a-released / D3-in-review checkpoint, kept for lookup. The current checkpo
   All 25 R-plans remain Planned or partial; no scope issue closes.
 - **Preserved:** accepted values, FX and source dates, every readiness and final-PDF gate, legacy recommendation effects, #59 privacy, backup and agent requirements.
 
+## D4 review rounds (29 October 2026)
+
+Moved from the handoff when the D5 usability slice was added. Evidence is on PR #82.
+
+  - **D4 review (29 October 2026):** a focused review confirmed 11 defects. Each was reproduced first in `tests/agentReview.test.ts`, then fixed together on PR #82:
+    - **Untrusted figures:** figures inside holding, account and file names, notes and titles counted as engine evidence. Now they're neither evidence nor claims.
+    - **Deeper reserve breach:** a purchase into an account already below its reserve was draftable.
+    - **Combined effect:** simulations in a run ignored drafts already saved, and acceptance didn't check the selection together. Both now use the shared `candidateProblems` gate in `allocationDesk.ts` (store, tool and page).
+    - **Stale profile:** a client-profile change didn't invalidate a pending answer.
+    - **Tool crash:** an unexpected tool error crashed the run, and an unreadable workspace gave an unhandled 500 (now 422).
+    - **Output limit:** the cumulative output limit could be overshot.
+    - **Timeout status:** a timeout at the deadline reported a generic failure.
+    - **Usage:** usage ignored the declined attempt before a fallback.
+    - **Identity:** the client's name, household name and import file names reached the model inside account names, notes and the question.
+    - **Spend accounting:** the guard priced fallbacks at Opus 5.5 rates and checked no fallback re-run. The docs no longer call it a hard ceiling.
+
+    Evidence is in PR #82.
+  - **D4 review round 2 (Codex findings, 29 October 2026):** four findings, reproduced first in `tests/agentReview2.test.ts` and fixed together. The eleven round-1 fixes are kept.
+    1. **Live-evaluation runner** (`eval/runner.ts`):
+       - unknown or empty case selections and non-integer trial counts are rejected;
+       - the verdict fails on critical failures, zero coverage or interrupted coverage, and reports are written first;
+       - a subset is labelled apart from the full 27-trial suite;
+       - the guard's input-size estimate now carries across trials (found while testing).
+    2. **Typed evidence:** currency, unit and change sign are checked, and unchecked claims are explicit in the loop, the UI and the grader.
+    3. **Advisory classification:** uses the engine preview's half-cent `no_change` rule instead of a $1 threshold.
+    4. **Terminal checks:** cancellation, deadline and output (fallback attempts included) are checked after every response, before success or any tool. The docs no longer claim a hard combined output ceiling.
+
+    Runtime model and fallback configuration are unchanged.
+  - **D4 review round 3 (29 October 2026):** `simulate_recommendation`'s `pct_change` is `recommendationPreview`'s `pctChange`, in percentage points (60,000 → 54,000 is -10). Evidence had classed it as a fraction, so the checker rejected -10% and accepted -1,000%. It is now a percentage.
+    - Reproduced first in `tests/agentReview3.test.ts`: decrease, increase and zero change through the real preview, tool, evidence, checker, loop and grader.
+    - Every other percent field was audited against its producer; all are percentage points. No tool returns a fraction today.
+    - Engine, editor and PDF values are unchanged.

@@ -95,6 +95,25 @@ export function deskActions(recommendations: Recommendation[], draft: WorkingDra
   return recommendations.filter((r) => members.has(r.id) && (r.status !== "excluded" || r.approvedByAdvisor));
 }
 
+/** How many actions each view applies, from `deskActions` itself. Counting changes nothing. */
+export function deskViewCounts(recommendations: Recommendation[], draft: WorkingDraft): Record<DeskView, number> {
+  return { draft: deskActions(recommendations, draft, "draft").length, approved: deskActions(recommendations, draft, "approved").length };
+}
+
+/**
+ * Every recommendation sorted by where it sits: in the active alternative,
+ * in another alternative, or in none. Nothing is left out (rejected ones
+ * included), so the groups always add up to the whole list.
+ */
+export function draftMembership(recommendations: Recommendation[], draft: WorkingDraft, alternatives: WorkingDraft[]) {
+  const members = new Set(draft.memberIds);
+  const elsewhere = new Set(alternatives.flatMap((a) => a.memberIds));
+  const current = recommendations.filter((r) => members.has(r.id));
+  const otherAlternatives = recommendations.filter((r) => !members.has(r.id) && elsewhere.has(r.id));
+  const unassigned = recommendations.filter((r) => !members.has(r.id) && !elsewhere.has(r.id));
+  return { current, otherAlternatives, unassigned };
+}
+
 export interface DeskRow {
   assetClass: AssetClass;
   label: string;

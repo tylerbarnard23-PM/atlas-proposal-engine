@@ -175,9 +175,9 @@ export function runDemoCopilot(snapshot: CopilotSnapshot, question: string): Cop
         : "No warning-level findings map to a standard recommendation, so I didn't draft any. The portfolio looks clean on the rules Atlas checks."
     );
   } else {
-    lines.push(`**I saved ${ctx.drafts.length} draft recommendation${ctx.drafts.length === 1 ? "" : "s"}**, sized with the proposal engine:`);
+    lines.push(`**I prepared ${ctx.drafts.length} draft recommendation${ctx.drafts.length === 1 ? "" : "s"} to preview**, sized with the proposal engine:`);
     for (const d of ctx.drafts) lines.push(`- ${d.title}`);
-    lines.push("", "Each draft is marked *needs review*, is not approved, and is excluded from the client PDF. Add them to Recommendations, then edit and approve the ones you agree with.");
+    lines.push("", "Nothing is added yet. Add the ones you agree with to the working draft: they join it marked *needs review*, unapproved and excluded from the client PDF, and you approve them on Recommendations.");
   }
   return result(ctx, trace, lines.join("\n"));
 }

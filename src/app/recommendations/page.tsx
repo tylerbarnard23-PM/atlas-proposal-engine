@@ -21,7 +21,8 @@ import { proposedCashShortfalls } from "@/engines/proposalEngine";
 import { useNormalizedHoldings } from "@/hooks/useNormalizedHoldings";
 import { useFxNow } from "@/hooks/useFxNow";
 import { hasMoneyAmounts, newRecommendation } from "@/engines/recommendationAmounts";
-import { restatementMessage } from "@/engines/allocationDesk";
+import { draftMembership, restatementMessage } from "@/engines/allocationDesk";
+import { cn } from "@/utils/cn";
 import { summarizePreview } from "@/components/recommendations/recEffect";
 import { RecPreview } from "@/components/recommendations/RecPreview";
 import { previewRecommendation } from "@/engines/recommendationPreview";
@@ -81,6 +82,7 @@ function Inner() {
     const fromCopilot = recs.filter((r) => !r.approvedByAdvisor && !isRejected(r) && r.complianceNote?.includes("Proposal Copilot")).length;
     const ok = confirm(
       `Approve ${pendingCount} recommendation${pendingCount === 1 ? "" : "s"} and include ${pendingCount === 1 ? "it" : "them"} in the PDF?` +
+        "\n\nThis covers every pending recommendation, in any alternative, not only the current view." +
         (fromCopilot ? `\n\n${fromCopilot} of these were drafted by the Proposal Copilot.` : "") +
         "\n\nApproved recommendations reshape the Before / After allocation and appear in the client proposal. You can unapprove any of them afterwards."
     );
@@ -102,6 +104,28 @@ function Inner() {
     () => new Map(unresolvedRecommendationLinks({ recommendations: recs, holdings: normalized, accounts }).map((l) => [l.recommendationId, l])),
     [recs, normalized, accounts]
   );
+  // D5 usability slice: the active alternative's recommendations, or all of them. A view only filters the list.
+  const draft = useAtlasStore((s) => s.workingDraft);
+  const alternatives = useAtlasStore((s) => s.alternatives);
+  const membership = React.useMemo(() => draftMembership(recs, draft, alternatives), [recs, draft, alternatives]);
+  const inDraft = React.useMemo(() => new Set(membership.current.map((r) => r.id)), [membership]);
+  // From a link such as Copilot's "Review and approve on Recommendations": ?view=draft&focus=id1,id2.
+  const [focus] = React.useState<Set<string>>(() => new Set((new URLSearchParams(window.location.search).get("focus") ?? "").split(",").filter(Boolean)));
+  const [view, setView] = React.useState<"draft" | "all">(() => {
+    const asked = new URLSearchParams(window.location.search).get("view");
+    if ([...focus].some((id) => !inDraft.has(id))) return "all";
+    if (asked === "draft" || asked === "all") return asked;
+    return membership.current.length > 0 ? "draft" : "all";
+  });
+  const shown = view === "draft" ? ordered.filter((r) => inDraft.has(r.id)) : ordered;
+  const outside = recs.length - membership.current.length;
+  const approvedOutside = recs.filter((r) => r.approvedByAdvisor && !inDraft.has(r.id)).length;
+  const unresolvedOutside = recs.filter((r) => unresolved.has(r.id) && !inDraft.has(r.id)).length;
+  React.useEffect(() => {
+    const first = recs.find((r) => focus.has(r.id));
+    if (first) document.getElementById(`rec-${first.id}`)?.scrollIntoView({ block: "center" });
+    // Once, on arrival.
+  }, []);
   // Each card's effect, simulated with the complete engine (the same
   // simulation as the editor's live preview), so cards, preview and proposal agree.
   const previews = React.useMemo(
@@ -188,6 +212,54 @@ function Inner() {
         </div>
       )}
 
+      {recs.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md bg-paper ring-1 ring-inset ring-ink-100 px-4 py-3" data-testid="rec-views">
+          <div className="text-[13px] text-ink-700 leading-relaxed max-w-3xl">
+            {view === "draft" ? (
+              <>
+                Showing the <strong>current draft</strong>: the {membership.current.length} recommendation{membership.current.length === 1 ? "" : "s"} in &ldquo;{draft.name}&rdquo;.
+                {outside > 0 && <> {outside} more {outside === 1 ? "is" : "are"} outside it (other alternatives or no draft); see all recommendations.</>}
+              </>
+            ) : (
+              <>
+                Showing <strong>all {recs.length} recommendations</strong>: {membership.current.length} in &ldquo;{draft.name}&rdquo;, {membership.otherAlternatives.length} in other alternatives and {membership.unassigned.length} in no draft.
+              </>
+            )}{" "}
+            Changing the view changes no recommendation.
+            {view === "draft" && approvedOutside > 0 && (
+              <span className="block text-warning-600">
+                {approvedOutside} approved recommendation{approvedOutside === 1 ? " isn't" : "s aren't"} in this draft; the final PDF still includes {approvedOutside === 1 ? "it" : "them"}.
+              </span>
+            )}
+            {view === "draft" && unresolvedOutside > 0 && (
+              <span className="block text-warning-600">
+                {unresolvedOutside} recommendation{unresolvedOutside === 1 ? " outside this draft needs" : "s outside this draft need"} relinking; see all recommendations.
+              </span>
+            )}
+          </div>
+          <div role="group" aria-label="Which recommendations to show" className="flex gap-1">
+            <Button size="sm" variant={view === "draft" ? "primary" : "secondary"} aria-pressed={view === "draft"} onClick={() => setView("draft")}>
+              Current draft ({membership.current.length})
+            </Button>
+            <Button size="sm" variant={view === "all" ? "primary" : "secondary"} aria-pressed={view === "all"} onClick={() => setView("all")}>
+              All recommendations ({recs.length})
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {recs.length > 0 && shown.length === 0 && (
+        <EmptyState
+          title="Nothing in the current draft yet"
+          description={`"${draft.name}" has no recommendations. Add a change on the allocation desk or from Copilot, or see all recommendations.`}
+          action={
+            <Button variant="secondary" onClick={() => setView("all")}>
+              See all recommendations ({recs.length})
+            </Button>
+          }
+        />
+      )}
+
       {recs.length === 0 ? (
         <EmptyState
           title="No recommendations yet"
@@ -207,16 +279,18 @@ function Inner() {
         />
       ) : (
         <div className="space-y-3">
-          {ordered.map((r) => {
+          {shown.map((r) => {
             const rejected = isRejected(r);
             const preview = previews[r.id];
             const effect = summarizePreview(preview);
+            const focused = focus.has(r.id);
             return (
-              <Card key={r.id} className={rejected ? "opacity-80 bg-slatey-50" : undefined}>
+              <Card key={r.id} id={`rec-${r.id}`} data-testid={focused ? "rec-focused" : undefined} className={cn("scroll-mt-4", rejected && "opacity-80 bg-slatey-50", focused && "ring-2 ring-navy-300")}>
                 <CardBody>
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
+                        {focused && <Badge tone="navy">Just added</Badge>}
                         <Badge tone="navy">{r.type.replace(/_/g, " ")}</Badge>
                         {rejected ? (
                           <Badge tone="negative">Rejected</Badge>
@@ -227,6 +301,7 @@ function Inner() {
                         )}
                         <Badge tone="neutral">{r.priority} priority</Badge>
                         {r.includeInPdf && <Badge tone="gold">In PDF prose</Badge>}
+                        {view === "all" && <Badge tone="neutral">{inDraft.has(r.id) ? `In ${draft.name}` : alternatives.find((a) => a.memberIds.includes(r.id))?.name ? `In ${alternatives.find((a) => a.memberIds.includes(r.id))!.name}` : "In no draft"}</Badge>}
                         {r.relatedHoldingId && fromIncomplete.has(r.relatedHoldingId) && <IncompleteImportTag />}
                         {unresolved.has(r.id) && (
                           <Badge tone="warning" title="Relink it to a current holding or account, reject it or delete it. The final PDF waits for this review.">
