@@ -63,16 +63,63 @@ export const ADDED = "Added to working draft — awaiting approval.";
 export type PreviewPhase = "preview" | "stale" | "added";
 
 /**
- * Where a Copilot answer's drafts stand. "added" once any of them is in the
- * workspace (the store adds them unapproved); "stale" when the workspace or the
- * active alternative changed after the answer, so nothing more can be added;
- * otherwise a preview that has added nothing.
+ * Where a Copilot answer's drafts stand. "added" once any of them was added:
+ * it is in the workspace, or this session added it (and it may since have
+ * been deleted). "stale" when the workspace or the active alternative changed
+ * after the answer, so nothing more can be added; otherwise a preview that
+ * has added nothing. Where an added draft is now is `draftNow`'s job.
  */
-export function previewPhase(drafts: Pick<Recommendation, "id">[], existingIds: Set<string>, stale: boolean): { phase: PreviewPhase; added: string[]; pending: string[] } {
-  const added = drafts.filter((d) => existingIds.has(d.id)).map((d) => d.id);
-  const pending = drafts.filter((d) => !existingIds.has(d.id)).map((d) => d.id);
+export function previewPhase(drafts: Pick<Recommendation, "id">[], existingIds: Set<string>, stale: boolean, addedHere: Set<string> = new Set()): { phase: PreviewPhase; added: string[]; pending: string[] } {
+  const was = (id: string) => existingIds.has(id) || addedHere.has(id);
+  const added = drafts.filter((d) => was(d.id)).map((d) => d.id);
+  const pending = drafts.filter((d) => !was(d.id)).map((d) => d.id);
   return { phase: added.length > 0 ? "added" : stale ? "stale" : "preview", added, pending };
 }
 
 /** Where to review actions just added: Recommendations, on the current draft, with them highlighted. */
 export const reviewHref = (ids: string[]) => `/recommendations?view=draft&focus=${ids.map(encodeURIComponent).join(",")}`;
+
+/** On the allocation desk, with them highlighted and the first one focused (from outside the desk). */
+export const deskHref = (ids: string[]) => `/allocation-desk?focus=${ids.map(encodeURIComponent).join(",")}`;
+
+export const ADDED_EARLIER = "Added from this answer earlier — it has changed since.";
+
+/**
+ * Where an added draft is now, from the workspace as it stands: its record,
+ * status and approval, and which alternative holds it. Adding happened once;
+ * this is read fresh every time, so the message never claims more than is
+ * true now. Nothing here adds, removes or approves anything.
+ */
+export type DraftNow =
+  | { kind: "in_draft"; approved: boolean }
+  | { kind: "other_alternative"; alternative: string; approved: boolean }
+  | { kind: "no_draft"; approved: boolean }
+  | { kind: "rejected" }
+  | { kind: "deleted" };
+
+export function draftNow(id: string, s: Pick<Workspace, "recommendations" | "workingDraft" | "alternatives">): DraftNow {
+  const rec = s.recommendations.find((r) => r.id === id);
+  if (!rec) return { kind: "deleted" };
+  // A rejection clears approval; a still-approved legacy record keeps counting where it sits.
+  if (rec.status === "excluded" && !rec.approvedByAdvisor) return { kind: "rejected" };
+  const approved = rec.approvedByAdvisor;
+  if (s.workingDraft.memberIds.includes(id)) return { kind: "in_draft", approved };
+  const owner = s.alternatives.find((a) => a.memberIds.includes(id));
+  return owner ? { kind: "other_alternative", alternative: owner.name, approved } : { kind: "no_draft", approved };
+}
+
+export function draftNowLabel(now: DraftNow): string {
+  const approval = (approved: boolean) => (approved ? "approved" : "awaiting approval");
+  switch (now.kind) {
+    case "in_draft":
+      return `In the working draft, ${approval(now.approved)}`;
+    case "other_alternative":
+      return `Now in "${now.alternative}", not the active alternative (${approval(now.approved)})`;
+    case "no_draft":
+      return `Now in no draft (${approval(now.approved)})`;
+    case "rejected":
+      return "Rejected";
+    case "deleted":
+      return "Deleted since";
+  }
+}

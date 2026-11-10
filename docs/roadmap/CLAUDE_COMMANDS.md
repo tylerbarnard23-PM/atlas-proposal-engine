@@ -57,6 +57,8 @@ D1 (PR #72, `0381db1`), D2 (PR #75, `073049f`), D2a (PR #79, `c0ee4e9`) and D3 (
 
 ### Next command: D4/D5 usability review-fix
 
+**Done on 10 November 2026 (PR #82); don't rerun.** The evidence is in the handoff and on the PR. The next step is Codex review.
+
 Use **Opus 5.5 High**. On `feat/d4-contextual-agent` (PR #82; the last passing code head is `97b65e3`), verify local and GitHub heads, the working tree and the stash first. Then fix the four open Codex UX findings listed in the [handoff](../CLAUDE_HANDOFF.md) as one batch: the new record hidden from the Current draft view, the outdated "Added to working draft" message, the same-page desk link leaving the narrow overlay open, and modal semantics for the narrow panel (the wide column stays nonmodal; cover resize cleanup).
 
 - Write meaningful regression coverage and do actual UI checks.

@@ -42,12 +42,23 @@
     - **Separate:** the owner completed a free-provider smoke before this slice (owner-reported; not repeated or re-recorded here).
     - **Cleanup:** the task server is stopped, the test origins' storage cleared, and `.claude/launch.json` restored (sha256 `7b4ae74b…`). The owner's `127.0.0.1:3210` server was left alone.
   - **Checkpoint (29 October 2026):** PR #82 is open, unmerged and not deployed. CI [run 40945699075](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/actions/runs/40945699075) passed on code head `97b65e3`: 574 passed and 2 private-PDF skips (576 total), extraction eval 2/2; build and Vercel passed.
-  - **Open: four Codex UX findings on the usability slice, to fix together next session** (not implemented yet):
-    1. **Hidden new record.** New recommendation → Save from the Current draft view creates a record that the filter immediately hides. Reveal and highlight the saved record and say where it was saved, without changing its membership or approval.
-    2. **Outdated "Added" message.** Copilot still says "Added to working draft" after the action has left that draft. Reconcile the message with actual membership, status and owning alternative, and tell "was added" apart from "is in the draft now". Never re-add or re-approve anything automatically.
-    3. **Same-page link.** "See it in the allocation desk" is a same-page hash link that leaves the narrow overlay open. Close the overlay and reveal and focus the action; keep normal navigation from the standalone page.
-    4. **Modal semantics.** The narrow panel needs modal semantics, Tab/Shift+Tab containment, isolation of the page behind it and correct focus restoration. The wide side column stays nonmodal. Cover cleanup when resizing between the two modes.
-  - **Next session:** run the "D4/D5 usability review-fix" command in [CLAUDE_COMMANDS.md](roadmap/CLAUDE_COMMANDS.md#next-command-d4d5-usability-review-fix), then stop for Codex review. The live-evaluation budget is still not approved, and reconciling PR #80's security plan comes later.
+  - **Usability review-fix (10 November 2026):** the four Codex UX findings, fixed together on PR #82. Each was reproduced first in `tests/proposalFlowUi.test.ts`, which server-renders the real pages and components against the real store (via the test-only `tests/support/liveStore.ts`; no new framework).
+    1. **Saved record:** after New recommendation → Save, the record stays visible in whichever view is open, highlighted "Just saved", scrolled to and focused. A notice says where it is (in the draft, another alternative or none) and whether it's approved. Its membership and approval are unchanged. `?saved=` keeps the reveal across a reload; changing the view clears it.
+    2. **Added message:** `draftNow` reads where each added action is now (in the draft, another alternative, no draft, rejected or deleted). "Added to working draft — awaiting approval" appears only while that's true; otherwise "Added from this answer earlier — it has changed since" plus a per-action status. Nothing is ever re-added or re-approved.
+    3. **Desk link:** inside the desk panel it's a "Show it on the allocation desk" action that closes the panel and focuses the highlighted row. The standalone page links to `/allocation-desk?focus=…`, which the desk honours.
+    4. **Modal panel:** below 80rem (Tailwind xl) the panel is a dialog: `aria-modal`, the rest of the page inert, Tab and Shift+Tab wrapping, page scroll locked, Escape or the backdrop closing it and focus returning to "Ask Copilot". At 80rem and above it is a nonmodal column. Both modes are one element tree, so resizing keeps the answer and isolation is added or removed cleanly. Focus moves only after the panel has closed (while it is open the page is inert); a desk reveal focuses the action, not the opener.
+    - **Found while testing:** at 375px the open scope editor overflowed horizontally (a fieldset's min-content width). Fixed with `min-w-0` and `grid-cols-1`.
+    - **Evidence:** local typecheck clean; 583 passed, 0 skipped (36 files, private fixture present); eval 2/2; build.
+    - **Browser:** test provider (not a model) on `flow.localhost:3107`, synthetic seed. Checked:
+      - wide: nonmodal column → preview → discard → add → untick and re-tick the action on the desk with Copilot open (the message follows) → desk reveal;
+      - narrow: dialog semantics and isolation → Tab ×7 and Shift+Tab wrap in both directions → Escape returns focus → reopen → add → resize narrow → wide → narrow (answer kept, isolation removed and restored) → desk reveal;
+      - Recommendations: save and reveal, reload, view change;
+      - desk: `?focus=` arrival, Draft/Approved comparison (byte-identical), and a repeated request after reload adding no duplicate.
+
+      No console errors. Not a usability study; not a real-model test.
+    - **Limitation noted, not fixed (pre-existing):** the recommendation editor's Title field has no accessible name.
+    - **Cleanup:** task server stopped; test origins' storage cleared; `.claude/launch.json` restored (sha256 `7b4ae74b…`); the owner's `127.0.0.1:3210` server left alone.
+  - **Next session:** Codex reviews PR #82 (D4, the usability slice and this review-fix). The live-evaluation budget is still not approved, and reconciling PR #80's security plan comes later.
 - **Preserve:** PR #80 (the D5 secrets/exposure plan) is open; keep its work when reconciling docs, and don't merge it as part of D4.
 - **Open follow-ups:** #76 (reserve-breach attribution for legacy actions), unchanged. **Zod audit warning:** `npm audit` reports GHSA-mrhx-c7xc-m3w5 (high) for zod <4.6.6, and its only offered fix is a breaking upgrade (`--force` installs zod 4.6.7). It needs a separate, tested dependency change; don't run `npm audit fix --force`.
 - **Limitations carried forward:**

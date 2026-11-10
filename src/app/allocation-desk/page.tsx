@@ -90,12 +90,34 @@ function Desk() {
   // D5 usability slice: Copilot beside the desk, the collapsed scope editor and the actions just added.
   const [copilotOpen, setCopilotOpen] = React.useState(false);
   const [scopeOpen, setScopeOpen] = React.useState(false);
-  const [justAdded, setJustAdded] = React.useState<Set<string>>(new Set());
+  // Actions to show: just added from the panel, or named by a link from Copilot (?focus=id1,id2).
+  const [justAdded, setJustAdded] = React.useState<Set<string>>(() => new Set((new URLSearchParams(window.location.search).get("focus") ?? "").split(",").filter(Boolean)));
+  // Where focus goes once the panel has closed: back to the button that opened it (Close, Escape,
+  // the backdrop), or to the actions it was asked to show. Done after the close, because while the
+  // narrow panel is open the rest of the page is inert and can't take focus.
+  const [afterClose, setAfterClose] = React.useState<{ to: "opener" } | { to: "actions"; ids: string[] } | null>(() => (justAdded.size > 0 ? { to: "actions", ids: [...justAdded] } : null));
   const askButton = React.useRef<HTMLButtonElement>(null);
   const closeCopilot = React.useCallback(() => {
     setCopilotOpen(false);
-    askButton.current?.focus();
+    setAfterClose({ to: "opener" });
   }, []);
+  // "Show it on the allocation desk": close the panel and take focus to the action, not the opener.
+  const revealFromCopilot = React.useCallback((ids: string[]) => {
+    setJustAdded(new Set(ids));
+    setCopilotOpen(false);
+    setAfterClose({ to: "actions", ids });
+  }, []);
+  React.useEffect(() => {
+    if (!afterClose || copilotOpen) return;
+    // Effects run after the panel's own cleanup, so nothing is inert any more.
+    if (afterClose.to === "opener") askButton.current?.focus();
+    else {
+      const target = afterClose.ids.map((id) => document.getElementById(`desk-action-${id}`)).find(Boolean) ?? document.getElementById("desk-actions");
+      target?.scrollIntoView({ block: "center" });
+      target?.focus();
+    }
+    setAfterClose(null);
+  }, [afterClose, copilotOpen]);
 
   const fx = React.useMemo(() => ({ reportingCurrency, rates: fxRates, now }), [reportingCurrency, fxRates, now]);
   const d = React.useMemo(() => evaluateDesk({ holdings, accounts, recommendations, draft, fx, view }), [holdings, accounts, recommendations, draft, fx, view]);
@@ -170,7 +192,7 @@ function Desk() {
             </div>
             {!d.scope.chosen && <p className="mt-1 text-2xs text-warning-600">Scope not chosen yet: every non-liability account is in the weights. Edit accounts to leave some as context.</p>}
             {scopeOpen && (
-              <fieldset id="desk-scope-editor" className="mt-2 grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+              <fieldset id="desk-scope-editor" className="mt-2 grid min-w-0 grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
                 <legend className="sr-only">Accounts in the allocation scope</legend>
                 {candidates.map((a) => {
                   const v = d.scope.accounts.find((x) => x.id === a.id)?.current ?? d.context.accounts.find((x) => x.id === a.id)?.value ?? 0;
@@ -447,7 +469,7 @@ function Desk() {
       </Card>
 
       <SectionDivider>Draft actions</SectionDivider>
-      <Card id="desk-actions" className="scroll-mt-4">
+      <Card id="desk-actions" tabIndex={-1} className="scroll-mt-4 focus:outline-hidden">
         <CardBody className="space-y-2">
           {live.length === 0 && <p className="text-[13px] text-ink-500">No recommendations yet. Edit a position above to add an explicit action to the draft.</p>}
           {live.map((r) => (
@@ -489,6 +511,7 @@ function Desk() {
           question={`Review the "${draft.name}" alternative: what stands out in this scope, and what would you simulate first?`}
           onClose={closeCopilot}
           onAdded={(ids) => setJustAdded(new Set(ids))}
+          onReveal={revealFromCopilot}
         />
       )}
       </div>
@@ -548,7 +571,15 @@ function AddTargetRow({ existing, onAdd }: { existing: Set<AssetClass>; onAdd: (
 function ActionRow({ rec, member, justAdded, owner, onToggle }: { rec: Recommendation; member: boolean; justAdded?: boolean; owner?: string; onToggle: (m: boolean) => void }) {
   const restate = restatementMessage(rec);
   return (
-    <div className={cn("flex flex-wrap items-start justify-between gap-2 border-b border-ink-100 pb-2 last:border-b-0", justAdded && "rounded-md bg-navy-50 px-2 pt-2 ring-1 ring-inset ring-navy-200")} data-testid={justAdded ? "desk-just-added" : undefined}>
+    <div
+      id={`desk-action-${rec.id}`}
+      tabIndex={-1}
+      className={cn(
+        "flex flex-wrap items-start justify-between gap-2 border-b border-ink-100 pb-2 last:border-b-0 scroll-mt-4 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-navy-300",
+        justAdded && "rounded-md bg-navy-50 px-2 pt-2 ring-1 ring-inset ring-navy-200"
+      )}
+      data-testid={justAdded ? "desk-just-added" : undefined}
+    >
       <div className="min-w-0">
         <div className="text-[13px] text-ink-900">{rec.title || "Untitled recommendation"}</div>
         <div className="flex flex-wrap gap-1 mt-1">

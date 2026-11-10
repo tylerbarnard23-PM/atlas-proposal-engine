@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Bot, Check, CircleAlert, CircleCheck, Eye, Send, Square, X } from "lucide-react";
 import { candidateProblems, evaluateDesk } from "@/engines/allocationDesk";
 import { normalizeHoldings } from "@/engines/normalizationEngine";
-import { ADDED, PREVIEW_ONLY, copilotRequest, previewPhase, reviewHref, scopeLabel } from "@/copilot/request";
+import { ADDED, ADDED_EARLIER, PREVIEW_ONLY, copilotRequest, deskHref, draftNow, draftNowLabel, previewPhase, reviewHref, scopeLabel } from "@/copilot/request";
 import { useAtlasStore } from "@/store/useStore";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -86,12 +86,15 @@ export function CopilotWorkspace({
   initialQuestion = "",
   variant = "page",
   onAdded,
+  onReveal,
 }: {
   initialQuestion?: string;
   /** "panel" stacks everything in one narrow column. */
   variant?: "page" | "panel";
   /** Called with the IDs just added to the working draft. */
   onAdded?: (ids: string[]) => void;
+  /** Inside the allocation desk: show these actions on the desk itself (instead of linking to it). */
+  onReveal?: (ids: string[]) => void;
 }) {
   const state = useAtlasStore();
   const accept = useAtlasStore((s) => s.acceptAgentDrafts);
@@ -102,6 +105,8 @@ export function CopilotWorkspace({
   const [result, setResult] = React.useState<CopilotResult | null>(null);
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const [note, setNote] = React.useState<{ tone: "info" | "error"; text: string } | null>(null);
+  // What this answer added, as history: where those actions are now is read from the workspace.
+  const [addedHere, setAddedHere] = React.useState<Set<string>>(new Set());
   const abort = React.useRef<AbortController | null>(null);
   React.useEffect(() => () => abort.current?.abort(), []);
 
@@ -120,6 +125,7 @@ export function CopilotWorkspace({
     setError(null);
     setResult(null);
     setNote(null);
+    setAddedHere(new Set());
     const controller = new AbortController();
     abort.current = controller;
     try {
@@ -151,7 +157,10 @@ export function CopilotWorkspace({
       return;
     }
     setNote(r.added.length > 0 ? (r.skipped.length ? { tone: "info", text: `${r.skipped.length} already in the working draft.` } : null) : { tone: "info", text: "Already in the working draft; nothing changed." });
-    if (r.added.length > 0) onAdded?.(r.added);
+    if (r.added.length > 0) {
+      setAddedHere((s) => new Set([...s, ...r.added]));
+      onAdded?.(r.added);
+    }
   }
 
   const shownMode = result?.mode ?? mode?.mode ?? null;
@@ -233,6 +242,8 @@ export function CopilotWorkspace({
               stale={stale}
               selected={selected}
               existing={existing}
+              addedHere={addedHere}
+              onReveal={onReveal}
               onToggle={(id) =>
                 setSelected((s) => {
                   const n = new Set(s);
@@ -352,17 +363,21 @@ function FigureStatus({ figures }: { figures: CopilotResult["figures"] }) {
 // The drafts as a preview: each draft's effect on the active alternative, from
 // the shared desk evaluator over the current workspace. Nothing is added until
 // the advisor adds it, and adding puts unapproved members only.
-function DraftPreview(props: {
+export function DraftPreview(props: {
   result: CopilotResult;
   stale: boolean;
   selected: Set<string>;
   existing: Set<string>;
+  /** What this answer added in this session (history; see draftNow for where each is now). */
+  addedHere: Set<string>;
   onToggle: (id: string) => void;
   onAdd: () => void;
   onDiscard: () => void;
+  /** Inside the allocation desk: reveal the actions there. Without it, a link to the desk. */
+  onReveal?: (ids: string[]) => void;
   note: { tone: "info" | "error"; text: string } | null;
 }) {
-  const { result, stale, selected, existing } = props;
+  const { result, stale, selected, existing, addedHere } = props;
   const s = useAtlasStore();
   const ccy = s.client.proposalOutputCurrency;
   const preview = React.useMemo(() => {
@@ -383,32 +398,62 @@ function DraftPreview(props: {
   const money = (n: number) => formatCurrency(n, ccy, { compact: true });
   const position = (d: Recommendation, which: "before" | "after") =>
     (which === "before" ? preview.before : preview.after).positions.find((p) => p.id === d.relatedHoldingId)?.proposed ?? null;
-  const { phase, added, pending } = previewPhase(result.drafts, existing, stale);
+  const { phase, added, pending } = previewPhase(result.drafts, existing, stale, addedHere);
+  // Where each added action is now: read from the workspace every render, never assumed.
+  const now = new Map(added.map((id) => [id, draftNow(id, s)] as const));
+  const current = added.length > 0 && added.every((id) => {
+    const n = now.get(id)!;
+    return n.kind === "in_draft" && !n.approved;
+  });
+  const inDraft = added.filter((id) => now.get(id)!.kind === "in_draft");
+  const onRecord = added.filter((id) => now.get(id)!.kind !== "deleted");
   const many = result.drafts.length > 1;
   const canAdd = phase === "preview" && preview.picked.length > 0 && preview.problems.length === 0;
   const alt = result.context.alternativeName;
 
   return (
-    <Card className={cn("border-l-4", phase === "added" ? "border-l-positive-500" : "border-l-warning-500")}>
+    <Card className={cn("border-l-4", phase === "added" && current ? "border-l-positive-500" : phase === "added" ? "border-l-navy-300" : "border-l-warning-500")}>
       <CardBody className="space-y-3" data-testid="copilot-drafts">
         <div role="status" data-testid="copilot-preview-state" data-phase={phase}>
           {phase === "added" ? (
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 font-semibold text-positive-600">
+            <div className="space-y-1" data-current={current}>
+              <div className={cn("flex items-center gap-2 font-semibold", current ? "text-positive-600" : "text-navy-700")}>
                 <CircleCheck className="h-4 w-4" />
-                {ADDED}
+                {current ? ADDED : ADDED_EARLIER}
               </div>
               <p className="text-[13px] text-ink-700">
-                {added.length} action{added.length === 1 ? "" : "s"} joined &ldquo;{alt}&rdquo;, unapproved and left out of the PDF.
+                {current ? (
+                  <>
+                    {added.length} action{added.length === 1 ? "" : "s"} joined &ldquo;{alt}&rdquo;, unapproved and left out of the PDF.
+                  </>
+                ) : (
+                  <>
+                    {added.length === 1 ? "The action was" : `${added.length} actions were`} added to &ldquo;{alt}&rdquo; from this answer. Where {added.length === 1 ? "it is" : "each is"} now is shown below; nothing is added back or approved automatically.
+                  </>
+                )}
                 {pending.length > 0 && ` ${pending.length} not added: the workspace changed, so ask again to add ${pending.length === 1 ? "it" : "them"}.`}
               </p>
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-[13px]">
-                <Link href={reviewHref(added)} className="font-medium text-navy-700 underline" data-testid="copilot-review-link">
-                  Review and approve on Recommendations
-                </Link>
-                <Link href="/allocation-desk#desk-actions" className="text-navy-700 underline">
-                  See it in the allocation desk
-                </Link>
+                {onRecord.length > 0 && (
+                  <Link href={reviewHref(onRecord)} className="font-medium text-navy-700 underline" data-testid="copilot-review-link">
+                    Review on Recommendations
+                  </Link>
+                )}
+                {inDraft.length > 0 &&
+                  (props.onReveal ? (
+                    <button
+                      type="button"
+                      onClick={() => props.onReveal!(inDraft)}
+                      className="rounded text-navy-700 underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-navy-300"
+                      data-testid="copilot-reveal"
+                    >
+                      Show it on the allocation desk
+                    </button>
+                  ) : (
+                    <Link href={deskHref(inDraft)} className="text-navy-700 underline">
+                      See it in the allocation desk
+                    </Link>
+                  ))}
               </div>
             </div>
           ) : phase === "stale" ? (
@@ -457,7 +502,8 @@ function DraftPreview(props: {
 
         <div className="space-y-2">
           {result.drafts.map((d) => {
-            const isAdded = existing.has(d.id);
+            const isAdded = added.includes(d.id);
+            const where = now.get(d.id);
             const b = position(d, "before");
             const a = position(d, "after");
             const label = `Include "${d.title}"`;
@@ -465,7 +511,13 @@ function DraftPreview(props: {
               <div key={d.id} className="rounded-md border border-ink-100 p-3">
                 <div className="flex flex-wrap items-center gap-2">
                   {many && phase === "preview" && <input type="checkbox" aria-label={label} checked={selected.has(d.id)} onChange={() => props.onToggle(d.id)} />}
-                  <Badge tone={isAdded ? "positive" : "warning"}>{isAdded ? "Added · awaiting approval" : "Preview"}</Badge>
+                  {where ? (
+                    <Badge tone={where.kind === "in_draft" ? "positive" : where.kind === "rejected" || where.kind === "deleted" ? "negative" : "neutral"} data-testid="copilot-draft-now">
+                      {draftNowLabel(where)}
+                    </Badge>
+                  ) : (
+                    <Badge tone="warning">Preview</Badge>
+                  )}
                   <Badge tone="navy">{d.type.replace(/_/g, " ")}</Badge>
                   <Badge tone="neutral">{d.priority} priority</Badge>
                 </div>
