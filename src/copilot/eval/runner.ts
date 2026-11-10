@@ -1,7 +1,7 @@
 import { DEFAULT_LIMITS, PROMPT_VERSION, TOOLS_VERSION, runAgent, type MessagesClient } from "@/copilot/agent";
 import { AGENT_EVAL_CASES, AGENT_EVAL_VERSION, type AgentEvalCase } from "./cases";
 import { gradeRun, type Grade } from "./grade";
-import { BudgetExceeded, PRICE_DATE, budgetedClient, planLiveEval, type LiveEvalConfig, type Spend } from "./budget";
+import { BudgetExceeded, PRICE_DATE, budgetedClient, newSpend, planLiveEval, type LiveEvalConfig, type Spend } from "./budget";
 
 // D4: runs the versioned cases against a messages client within the run's
 // limits, grades each trial and decides the verdict. The paid live command
@@ -9,8 +9,11 @@ import { BudgetExceeded, PRICE_DATE, budgetedClient, planLiveEval, type LiveEval
 // The verdict passes only when every selected trial completed (none skipped
 // or cut short by the spend guard) and no trial had a critical failure. A
 // passing selection smaller than the whole suite is labelled a subset, never
-// the full 27-trial suite. The sanitized report is written whatever the
-// verdict, and also if the run throws.
+// the full 27-trial suite. Accounting is shared by every trial: a request
+// whose charge is unknown (no valid usage accounting, an error, a timeout or
+// a cancellation) keeps its conservative reservation, ends the evaluation
+// after that trial, and fails the verdict. The sanitized report is written
+// whatever the verdict, and also if the run throws.
 
 /** The full suite: every case, three trials each. */
 export const FULL_SUITE_TRIALS = 3;
@@ -27,7 +30,7 @@ export interface TrialRecord {
   drafts: { type: string; positional: boolean }[];
   tools: { name: string; ok: boolean }[];
   grade: Grade;
-  /** Why the spend guard stopped this trial; such a trial doesn't count as covered. */
+  /** Why the spend guard stopped this trial (a limit, or a request whose charge is unknown); such a trial doesn't count as covered. */
   budgetStop: string | null;
 }
 
@@ -63,7 +66,7 @@ export async function runLiveSuite(opts: {
   const cases = config.cases ? all.filter((c) => config.cases!.includes(c.id)) : all;
   const planned = cases.flatMap((c) => Array.from({ length: config.trials }, (_, i) => ({ case: c, trial: i + 1 })));
   const fullSuite = cases.length === AGENT_EVAL_CASES.length && AGENT_EVAL_CASES.every((c) => cases.some((x) => x.id === c.id)) && config.trials === FULL_SUITE_TRIALS;
-  const spend: Spend = { requests: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, usd: 0 };
+  const spend: Spend = newSpend();
   const runs: TrialRecord[] = [];
   let interrupted: string | null = null;
   const sizing = { largestInput: 20_000 };
@@ -76,6 +79,7 @@ export async function runLiveSuite(opts: {
       const before = JSON.parse(JSON.stringify(snapshot));
       let modelBound = "";
       let budgetStop: string | null = null;
+      const unknownBefore = spend.unknownRequests;
       const guarded = budgetedClient(opts.makeClient(), config, spend, { sizing, onRequest: (params) => (modelBound += JSON.stringify(params.messages)) });
       const client: MessagesClient = {
         beta: {
@@ -93,6 +97,8 @@ export async function runLiveSuite(opts: {
       };
       const started = Date.now();
       const result = await runAgent(snapshot, p.case.question, { client, mode: "live", provider: "anthropic", model: config.model, limits: p.case.limits, now: opts.now?.() });
+      // A request in this trial whose charge is unknown ends the evaluation here, even if the loop recovered.
+      if (spend.unknownRequests > unknownBefore) budgetStop ??= `Accounting unknown: ${spend.unknownReasons.slice(unknownBefore).join("; ")}. The reservation is kept and the evaluation stops.`;
       runs.push({
         case: p.case.id,
         trial: p.trial,
@@ -121,6 +127,10 @@ export async function runLiveSuite(opts: {
   if (planned.length === 0) reasons.push("No case was selected.");
   if (covered.length === 0) reasons.push("No selected trial completed, so nothing was evaluated.");
   else if (missing.length > 0) reasons.push(`Coverage incomplete: ${missing.length} of ${planned.length} selected trials did not complete${interrupted ? ` (${interrupted})` : ""}.`);
+  if (spend.unknownRequests > 0)
+    reasons.push(
+      `Accounting incomplete: ${spend.unknownRequests} request${spend.unknownRequests === 1 ? "" : "s"} with an unknown charge (${spend.unknownReasons.join("; ")}). USD ${spend.retainedUsd.toFixed(4)} of conservative reservations is kept in the recorded spend; check the Console for the actual charge.`
+    );
   if (criticalFailures > 0) reasons.push(`${criticalFailures} critical failure${criticalFailures === 1 ? "" : "s"} observed.`);
   if (error) reasons.push(`The run stopped on an unexpected ${error}.`);
   const pass = reasons.length === 0;

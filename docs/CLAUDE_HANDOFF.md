@@ -78,13 +78,10 @@
     - **CI on `d45dae1`:** "Typecheck, test, build" passed ([run 42856385853](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/actions/runs/42856385853)), and Vercel passed. The CI test counts weren't read.
     - **Rehearsal:** fake-provider server only. The fake-to-Anthropic switch was tested with injected providers, not on a real Anthropic-configured server.
     - **Not done:** no real session armed, no paid call, no merge, no production deployment. **Paid testing remains unapproved.**
-  - **Required before any paid testing: the pilot-runner accounting gap.** The command-line evaluation wrapper (`budgetedClient` in `src/copilot/eval/budget.ts`) still treats missing usage as a known USD 0. It must:
-    - reuse the validated usage rules (`pricedUsage`);
-    - keep a conservative reservation when usage is unknown;
-    - report the condition clearly.
-
-    Valid zero usage must stay valid.
-  - **Next action:** the "Next command: review, pilot accounting fix, then approval" section in [CLAUDE_COMMANDS.md](roadmap/CLAUDE_COMMANDS.md#next-command-review-pilot-accounting-fix-then-approval). Reconciling PR #80's security plan, the zod fix and D5 copy cleanup come later.
+  - **Pilot-runner accounting fixed (10 November 2026), awaiting Codex review with the session fixes:** `budgetedClient` (`src/copilot/eval/budget.ts`) reserves each request's worst case before sending and settles to priced usage only with complete accounting (`pricedUsage`). Missing or invalid usage, an error, a timeout or a cancellation keeps the reservation. The runner (`runner.ts`) then ends the evaluation after that trial and fails the verdict ("Accounting incomplete …"). The report is still written. Valid zero usage settles as USD 0. Details: [AGENT_EVALUATION.md](roadmap/AGENT_EVALUATION.md) ("Pilot accounting").
+    - **Evidence:** `tests/pilotAccounting.test.ts`, 22 tests, 21 of which failed before the fix (the 22nd, "no double counting", passed because the old wrapper never reserved). Fake providers only. Local final checks: typecheck clean; 650 passed, 0 skipped (38 files, private fixture present); eval 2/2; build passed. No browser check: nothing visible changed.
+    - **Not changed:** runtime model, effort, prompt, tools, fallback, the loop's retries, the engines, the session gate and store/backup v10. Each trial's `usage` field is still the loop's own token tally; the cost is `spend`.
+  - **Next action:** the "Next command: review, pilot accounting fix, then approval" section in [CLAUDE_COMMANDS.md](roadmap/CLAUDE_COMMANDS.md#next-command-review-pilot-accounting-fix-then-approval), now at step 1: Codex reviews the session fixes and the pilot accounting together. Reconciling PR #80's security plan, the zod fix and D5 copy cleanup come later.
 - **Preserve:** PR #80 (the D5 secrets/exposure plan) is open; keep its work when reconciling docs, and don't merge it as part of D4.
 - **Open follow-ups:** #76 (reserve-breach attribution for legacy actions), unchanged. **Zod audit warning:** `npm audit` reports GHSA-mrhx-c7xc-m3w5 (high) for zod <4.6.6, and its only offered fix is a breaking upgrade (`--force` installs zod 4.6.7). It needs a separate, tested dependency change; don't run `npm audit fix --force`.
 - **Limitations carried forward:**

@@ -1,5 +1,5 @@
 import type Anthropic from "@anthropic-ai/sdk";
-import { COPILOT_MODEL, usageEntries, type MessagesClient } from "@/copilot/agent";
+import { COPILOT_MODEL, type MessagesClient } from "@/copilot/agent";
 import { AGENT_EVAL_CASES } from "./cases";
 
 // D4: limits for the opt-in live evaluation. A paid run needs explicit flags,
@@ -9,7 +9,9 @@ import { AGENT_EVAL_CASES } from "./cases";
 // a conservative worst case (the largest input seen plus headroom, billed as
 // cache writes; the full max_tokens of output; and, with refusal fallbacks
 // on, a full re-run at the highest listed price) and refuses the request if
-// that could cross the cap. A next request whose input exceeds the estimate,
+// that could cross the cap; otherwise that worst case is reserved, and kept
+// unless the response's usage accounting is complete (pricedUsage). Missing
+// usage is never read as zero. A next request whose input exceeds the estimate,
 // or a price change, could still overshoot it; set the cap with margin.
 // Prices are Anthropic first-party list prices from the official pricing page
 // on PRICE_DATE; the report records it.
@@ -86,14 +88,45 @@ export function planLiveEval(model: string, runs: { maxTurns: number }[], maxTok
   return { runs: runs.length, worstUsd, expectedUsd: runs.length * expectedPerRun, expectedPerRunUsd: expectedPerRun, priceDate: PRICE_DATE };
 }
 
+/**
+ * A live evaluation's accounting, shared by every trial of the selection. Each
+ * request reserves a conservative worst case before it is sent; complete
+ * accounting replaces the reservation with the priced usage, and anything else
+ * (missing or invalid usage, an error, a timeout, a cancellation) keeps it.
+ */
 export interface Spend {
+  /** HTTP requests sent, retries and failed requests included. */
   requests: number;
+  /** Model attempts with complete accounting (a refusal fallback adds one inside a request). */
+  attempts: number;
+  /** Tokens from complete accounting only. */
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens: number;
   cacheWriteTokens: number;
+  /** The committed estimate the guard checks: pricedUsd + retainedUsd + reservedUsd. */
   usd: number;
+  /** Priced from complete usage accounting. */
+  pricedUsd: number;
+  /** Reservations kept for requests whose charge is unknown. */
+  retainedUsd: number;
+  /** Reservations for requests still in flight (0 once a run has ended). */
+  reservedUsd: number;
+  /** Requests whose charge is unknown, and why (structural reasons only; never a provider payload). */
+  unknownRequests: number;
+  unknownReasons: string[];
+  /** Set once a response arrives without valid accounting: every later request in the evaluation is refused. */
+  accountingStop: string | null;
 }
+
+/** Empty accounting for a new evaluation. */
+/** Recomputes the committed estimate from its parts, so a settled reservation is never counted twice. */
+function commit(spend: Spend) {
+  if (Math.abs(spend.reservedUsd) < 1e-12) spend.reservedUsd = 0;
+  spend.usd = spend.pricedUsd + spend.retainedUsd + spend.reservedUsd;
+}
+
+export const newSpend = (): Spend => ({ requests: 0, attempts: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, usd: 0, pricedUsd: 0, retainedUsd: 0, reservedUsd: 0, unknownRequests: 0, unknownReasons: [], accountingStop: null });
 
 /** The list-price cost of usage by a model; a model without a recorded price is billed at FALLBACK_CEILING. */
 export function costOf(model: string | undefined, u: { input_tokens?: number | null; output_tokens?: number | null; cache_read_input_tokens?: number | null; cache_creation_input_tokens?: number | null }): number {
@@ -101,7 +134,9 @@ export function costOf(model: string | undefined, u: { input_tokens?: number | n
   return ((u.input_tokens ?? 0) * p.input + (u.output_tokens ?? 0) * p.output + (u.cache_read_input_tokens ?? 0) * p.cacheRead + (u.cache_creation_input_tokens ?? 0) * p.cacheWrite) / 1e6;
 }
 
-export type PricedUsage = { ok: true; usd: number; attempts: number; largestInput: number; models: string[] } | { ok: false; reason: string };
+export type PricedUsage =
+  | { ok: true; usd: number; attempts: number; largestInput: number; models: string[]; tokens: { input: number; output: number; cacheRead: number; cacheWrite: number } }
+  | { ok: false; reason: string };
 
 /**
  * A response's usage priced attempt by attempt, or why it can't be: the cost
@@ -140,6 +175,12 @@ export function pricedUsage(response: { model?: unknown; usage?: unknown }): Pri
     attempts: priced.length,
     largestInput: Math.max(...priced.map((p) => p.input + p.read + p.write)),
     models: [...new Set(priced.map((p) => p.model))],
+    tokens: {
+      input: priced.reduce((a, p) => a + p.input, 0),
+      output: priced.reduce((a, p) => a + p.output, 0),
+      cacheRead: priced.reduce((a, p) => a + p.read, 0),
+      cacheWrite: priced.reduce((a, p) => a + p.write, 0),
+    },
   };
 }
 
@@ -152,13 +193,20 @@ export function worstRequestCost(model: string, inputTokens: number, maxTokens: 
 }
 
 /**
- * Wraps a messages client with the run's limits. The request limit is exact.
- * Before each request it prices the worst case (worstRequestCost on the
- * largest input seen so far plus headroom) and refuses the request if that
- * could cross the spend cap. Spend is the sum over every attempt in
- * usage.iterations, each at its own model's price. A refusal ends the agent
- * run as "failed"; nothing is retried past it. Failed requests carry no usage
- * and are counted as unbilled.
+ * Wraps a messages client with the evaluation's limits. The request limit is
+ * exact, and every request sent counts, retries and failures included. Before
+ * each request it prices the worst case (worstRequestCost on the largest input
+ * seen so far plus headroom), refuses the request if that could cross the spend
+ * cap given everything already committed, and otherwise reserves it. After the
+ * request:
+ * - complete accounting (pricedUsage: every attempt in usage.iterations, each
+ *   at its own model's price) replaces the reservation with the priced usage;
+ * - a response without valid accounting keeps the reservation, ends the run
+ *   with the reason and refuses every later request in the evaluation;
+ * - an error, timeout or cancellation keeps the reservation and rethrows the
+ *   original error (the loop's bounded retry still applies; the runner then
+ *   ends the evaluation, which can't pass with an unknown charge).
+ * A refusal ends the agent run as "failed"; nothing is retried past it.
  */
 export function budgetedClient(
   inner: MessagesClient,
@@ -174,20 +222,47 @@ export function budgetedClient(
       messages: {
         async create(params, options) {
           if (params.model !== cfg.model) throw new BudgetExceeded(`Requested model ${params.model} isn't the configured ${cfg.model}.`);
+          if (spend.accountingStop) throw new BudgetExceeded(`An earlier request's charge is unknown (${spend.accountingStop}), so no further request is sent in this evaluation.`);
           const worst = worstRequestCost(cfg.model, sizing.largestInput + headroom, params.max_tokens, (params as { fallbacks?: unknown }).fallbacks != null);
           if (spend.requests + 1 > cfg.maxRequests) throw new BudgetExceeded(`Request limit ${cfg.maxRequests} reached.`);
-          if (spend.usd + worst > cfg.maxUsd) throw new BudgetExceeded(`Spend cap USD ${cfg.maxUsd} would be at risk (spent ${spend.usd.toFixed(4)}, next request up to ${worst.toFixed(4)}).`);
+          if (spend.usd + worst > cfg.maxUsd) throw new BudgetExceeded(`Spend cap USD ${cfg.maxUsd} would be at risk (committed ${spend.usd.toFixed(4)}, next request up to ${worst.toFixed(4)}).`);
           opts.onRequest?.(params);
+          // Reserved before sending, so a request in flight counts toward the cap.
           spend.requests += 1;
-          const res = await inner.beta.messages.create(params, options);
-          for (const u of usageEntries(res)) {
-            spend.inputTokens += u.input_tokens ?? 0;
-            spend.outputTokens += u.output_tokens ?? 0;
-            spend.cacheReadTokens += u.cache_read_input_tokens ?? 0;
-            spend.cacheWriteTokens += u.cache_creation_input_tokens ?? 0;
-            spend.usd += costOf(u.model, u);
-            sizing.largestInput = Math.max(sizing.largestInput, (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0));
+          const n = spend.requests;
+          spend.reservedUsd += worst;
+          commit(spend);
+          const keep = (reason: string) => {
+            spend.reservedUsd -= worst;
+            spend.retainedUsd += worst;
+            spend.unknownRequests += 1;
+            spend.unknownReasons.push(reason);
+            commit(spend);
+          };
+          let res: Anthropic.Beta.BetaMessage;
+          try {
+            res = await inner.beta.messages.create(params, options);
+          } catch (err) {
+            // An error, timeout or cancellation: the charge is unknown, so the reservation is kept.
+            keep(`request ${n} ended without a response (${err instanceof Error ? err.name : "unknown error"}), so its charge is unknown`);
+            throw err;
           }
+          const priced = pricedUsage(res);
+          if (!priced.ok) {
+            const reason = `request ${n} returned no valid usage accounting (${priced.reason})`;
+            keep(reason);
+            spend.accountingStop ??= reason;
+            throw new BudgetExceeded(`Request ${n} returned no valid usage accounting (${priced.reason}), so its USD ${worst.toFixed(4)} reservation is kept and the evaluation stops.`);
+          }
+          spend.reservedUsd -= worst;
+          spend.pricedUsd += priced.usd;
+          spend.attempts += priced.attempts;
+          spend.inputTokens += priced.tokens.input;
+          spend.outputTokens += priced.tokens.output;
+          spend.cacheReadTokens += priced.tokens.cacheRead;
+          spend.cacheWriteTokens += priced.tokens.cacheWrite;
+          sizing.largestInput = Math.max(sizing.largestInput, priced.largestInput);
+          commit(spend);
           return res;
         },
       },

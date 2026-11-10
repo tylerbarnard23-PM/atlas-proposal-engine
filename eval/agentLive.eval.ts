@@ -33,7 +33,7 @@ describe.skipIf(!parsed.ok)("live agent evaluation (paid, opt-in)", () => {
     });
     console.log(
       `Agent live evaluation (${report.verdict.scope === "full_suite" ? "full suite" : "SUBSET"}): ${report.verdict.pass ? "PASS" : "FAIL"}. ` +
-        `${report.coverage.completed}/${report.coverage.planned} trials completed, ${report.summary.criticalFailures} critical failures, USD ${report.spend.usd.toFixed(4)} spent (estimate-priced). ` +
+        `${report.coverage.completed}/${report.coverage.planned} trials completed, ${report.summary.criticalFailures} critical failures, USD ${report.spend.usd.toFixed(4)} recorded (estimate: ${report.spend.pricedUsd.toFixed(4)} priced from usage + ${report.spend.retainedUsd.toFixed(4)} kept for ${report.spend.unknownRequests} request(s) with an unknown charge), ${report.spend.requests} HTTP requests. ` +
         `${report.verdict.reasons.join(" ")} Report: ${file}`
     );
     expect(report.verdict.reasons).toEqual(report.verdict.pass ? report.verdict.reasons : []);

@@ -57,7 +57,9 @@ D1 (PR #72, `0381db1`), D2 (PR #75, `073049f`), D2a (PR #79, `c0ee4e9`) and D3 (
 
 ### Next command: review, pilot accounting fix, then approval
 
-Saved on 10 November 2026; not yet started. Branch `feat/d4-contextual-agent`, PR #82, runtime head `d45dae1`. Verify heads, tree and stash first, and preserve any newer work.
+Saved on 10 November 2026. Branch `feat/d4-contextual-agent`, PR #82. Verify heads, tree and stash first, and preserve any newer work.
+
+**Progress (10 November 2026):** step 2's pilot-runner accounting fix is done ahead of the review, at the owner's instruction; the handoff names the head. Next is step 1 for both batches together: Codex reviews the session fixes (`d45dae1`) and the pilot accounting. Then Claude fixes any confirmed blockers (step 2), runs step 3, and stops.
 
 1. **Codex** reviews runtime head `d45dae1` (the provider-bound session and unknown-usage fixes) and its regression coverage.
 2. **Claude** fixes the pilot-runner accounting gap together with any confirmed review blockers, writing failing regressions first. The gap: `budgetedClient` treats missing usage as a known USD 0. It must:

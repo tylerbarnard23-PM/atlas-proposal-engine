@@ -4,7 +4,7 @@ import { createTestProvider } from "@/copilot/testProvider";
 import { parseCopilotRequest } from "@/copilot/snapshot";
 import { AGENT_EVAL_CASES, AGENT_EVAL_VERSION, PRIVACY_CANARY, baseSnapshot } from "@/copilot/eval/cases";
 import { gradeRun } from "@/copilot/eval/grade";
-import { BudgetExceeded, HARD_CEILINGS, budgetedClient, costOf, liveEvalConfig, planLiveEval, type Spend } from "@/copilot/eval/budget";
+import { BudgetExceeded, HARD_CEILINGS, budgetedClient, costOf, liveEvalConfig, newSpend, planLiveEval, type Spend } from "@/copilot/eval/budget";
 import { copilotRequest } from "./support/copilotRequest";
 
 // D4: the live-evaluation harness, checked offline. No paid call is made here:
@@ -119,7 +119,7 @@ describe("live-run guard and hard limits (no paid call)", () => {
     expect(costOf(COPILOT_MODEL, { output_tokens: 1_000_000 })).toBe(20);
     const usage = { input_tokens: 10_000, output_tokens: 2_000, cache_read_input_tokens: 5_000, cache_creation_input_tokens: 0 };
     const inner: MessagesClient = { beta: { messages: { create: async () => ({ model: COPILOT_MODEL, content: [], usage }) as never } } };
-    const spend: Spend = { requests: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, usd: 0 };
+    const spend: Spend = newSpend();
     const client = budgetedClient(inner, { model: COPILOT_MODEL, maxUsd: 1, maxRequests: 100 }, spend);
     const params = { model: COPILOT_MODEL, max_tokens: DEFAULT_LIMITS.maxTokensPerResponse, messages: [] } as never;
     let n = 0;
@@ -135,12 +135,12 @@ describe("live-run guard and hard limits (no paid call)", () => {
     expect(spend.requests).toBe(n);
     expect(spend.usd).toBeCloseTo(n * costOf(COPILOT_MODEL, usage), 10);
 
-    const fewSpend: Spend = { ...spend, requests: 0, usd: 0 };
+    const fewSpend: Spend = newSpend();
     const few = budgetedClient(inner, { model: COPILOT_MODEL, maxUsd: 50, maxRequests: 2 }, fewSpend);
     await few.beta.messages.create(params);
     await few.beta.messages.create(params);
     await expect(few.beta.messages.create(params)).rejects.toThrow(/Request limit 2/);
-    await expect(budgetedClient(inner, { model: COPILOT_MODEL, maxUsd: 50, maxRequests: 9 }, { ...fewSpend, requests: 0 }).beta.messages.create({ ...(params as object), model: "claude-haiku-5-5" } as never)).rejects.toThrow(/isn't the configured/);
+    await expect(budgetedClient(inner, { model: COPILOT_MODEL, maxUsd: 50, maxRequests: 9 }, newSpend()).beta.messages.create({ ...(params as object), model: "claude-haiku-5-5" } as never)).rejects.toThrow(/isn't the configured/);
   });
 
   it("plans the proposed configuration: 9 cases × 3 trials", () => {

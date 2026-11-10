@@ -251,7 +251,7 @@ describe("live-evaluation spend accounting (no paid call)", () => {
       { type: "fallback_message", model: "claude-unlisted-fallback", input_tokens: 10_000, output_tokens: 2_000, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
     ];
     const inner = { beta: { messages: { create: async () => ({ model: "claude-unlisted-fallback", content: [], usage: { input_tokens: 10_000, output_tokens: 2_000, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, iterations } }) as never } } };
-    const spend = { requests: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, usd: 0 };
+    const spend = m.newSpend();
     const client = m.budgetedClient(inner as never, { model: "claude-opus-5-5", maxUsd: 50, maxRequests: 10 }, spend);
     await client.beta.messages.create({ model: "claude-opus-5-5", max_tokens: 16_000, messages: [] } as never);
     // Declined attempt at Opus 5.5 rates + fallback at the ceiling rate: more than the fallback alone at Opus 5.5 rates.
@@ -259,7 +259,7 @@ describe("live-evaluation spend accounting (no paid call)", () => {
     expect(spend.usd).toBeGreaterThan(opusOnly + m.costOf("claude-opus-5-5", { input_tokens: 10_000, output_tokens: 1_000 }));
     expect(spend.outputTokens).toBe(3_000);
     // A cap that covers one plain worst-case request but not a fallback re-run is refused before sending.
-    const tight = m.budgetedClient(inner as never, { model: "claude-opus-5-5", maxUsd: 1, maxRequests: 10 }, { ...spend, requests: 0, usd: 0 });
+    const tight = m.budgetedClient(inner as never, { model: "claude-opus-5-5", maxUsd: 1, maxRequests: 10 }, m.newSpend());
     // As the loop sends it: with server-side refusal fallbacks on.
     await expect(tight.beta.messages.create({ model: "claude-opus-5-5", max_tokens: 16_000, fallbacks: "default", messages: [] } as never)).rejects.toThrow(/Spend cap/);
   });
