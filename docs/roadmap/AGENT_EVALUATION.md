@@ -122,6 +122,256 @@ Revised 29 October 2026 after the D4 review. The pricing was checked against the
 - **Report:** a sanitized JSON in `agent-eval-reports/` (git-ignored) with statuses, checks, usage, cost and latency, and no prompts, answers or payloads. It is summarized on the PR and #54 with the trial count and denominators.
 - **Not included:** cheaper-model comparisons (for example `claude-sonnet-5-5` at about half the per-token price), a second provider and any default change. Each would be its own run and decision.
 
+### Proposed pilot: one case, one trial — NOT approved (owner decision pending)
+
+Prepared 10 November 2026 on PR #82. **This is a proposal, not spending authorization.** No model API call has been made, including key validation. Nothing below runs until the owner approves this exact configuration.
+
+**Configuration**
+- **Case and trials:** `valued_concentration` × **1 trial**, from suite `2026-10-28.1`. The question asks which position in the synthetic USD 100,000 investment scope is most concentrated, and what trimming it toward 50% would do.
+- **Limits:**
+  - **Request limit:** 10 provider requests (`AGENT_EVAL_MAX_REQUESTS=10`).
+  - **Spending guard:** USD 5 (`AGENT_EVAL_MAX_USD=5`, `AGENT_EVAL_CONFIRM_SPEND=5`).
+- **Runtime:** unchanged at the reviewed code head `0c062d1`:
+  - model `claude-opus-5-5`, with no thinking parameter (Opus 5.5 always uses adaptive thinking);
+  - `output_config.effort: "medium"`;
+  - server-side refusal fallback `fallbacks: "default"` with beta `server-side-fallback-2026-07-01`;
+  - automatic 5-minute prompt caching, and global inference (no `inference_geo`);
+  - prompt and tools `d4-2026-10-28`;
+  - the loop's limits: 10 turns, 24 tool calls, 16,000 `max_tokens` per response, 48,000 output tokens a run, 100 seconds, and 2 retries for 429/5xx/connection errors.
+- **Where it runs:** locally, by the owner, with a key the owner supplies for that PowerShell process only. Synthetic fixtures only; never in CI.
+
+**Prices (official pricing page, re-checked 2026-11-10; unchanged from the code's `PRICE_DATE` 2026-10-29)**
+- **`claude-opus-5-5`, per million tokens:**
+
+  | Base input | 5-minute cache write | 1-hour cache write | Cache read (0.05× input) | Output |
+  |---|---|---|---|---|
+  | $4 | $5 | $8 | $0.20 | $20 |
+
+- **No surcharges apply:** there is no long-context surcharge. Fast mode ($8 / $40) isn't used.
+- **Data residency:** US-only inference via `inference_geo: "us"` would cost 1.1×. The code doesn't send it, so global pricing applies.
+- **Refusal fallback** (official refusals and fallback page):
+  - Each attempt is billed at the rates of the model that ran it, and is listed in `usage.iterations`.
+  - A refusal before any output is billed only in the `bio`, `frontier_llm` and `reasoning_extraction` categories. A mid-stream refusal bills the input and the output already streamed.
+  - Fallback credit offsets the fallback's prompt-cache miss.
+  - **Default routing is server-defined and not published for Opus 5.5**, so the fallback model and its price are unknown. The guard prices any attempt by a model without a recorded price at the highest standard price on the page (retired Opus 4 / 4.1: $15 input, $18.75 5-minute cache write, $1.50 cache read, $75 output). No current standard price is higher; the next highest is Fable 5.1 at $10 / $50.
+  - Sticky routing can send later turns of a fallen-back conversation straight to the fallback model for about an hour. Those turns are priced the same way.
+
+**What the runner does with this configuration (verified in code and by the offline tests in `tests/agentReview2.test.ts` and `tests/agentEval.test.ts`, 32 passing on 2026-11-10, no API calls)**
+- **Selection:** `AGENT_EVAL_CASES=valued_concentration` and `AGENT_EVAL_TRIALS=1` plan exactly one run. An unknown or empty selection, a non-whole trial count, a missing key, missing opt-in or a mismatched spend confirmation each stop the run before any request.
+- **Requests vs attempts:**
+  - The request limit counts every call to the API, including the loop's retries; a failed request still counts.
+  - A server-side fallback happens inside one request, so 10 requests can mean more than 10 model attempts.
+  - Spend sums every attempt in `usage.iterations`, at each attempt's own model price.
+- **Report:**
+  - A sanitized JSON report (statuses, checks, usage, cost, latency, coverage and verdict; no prompts, answers, tool payloads or keys) is written to `agent-eval-reports/` (git-ignored). This happens before the verdict is asserted, and also when the run fails or throws.
+  - Grade-check details can include figure strings the answer used. They come from synthetic data.
+- **Scope label:** a passing pilot is labelled `scope: "subset"`, with the reason "Passing subset only (1 of 9 cases, 1 trial each): not the full 27-trial suite."
+
+**Cost estimate (not a measurement)**
+- **Measured shape (offline, test provider through the real loop):**
+  - System prompt and 8 tools: about 8,700 characters, roughly 2,500–3,500 tokens of fixed prefix.
+  - Message history: grows from about 0.2k to 5k characters over 4 requests.
+  - A real model may take 4–7 requests and write longer answers and thinking. Thinking is billed as output.
+- **Estimates:**
+
+  | Scenario | Assumptions | Cost |
+  |---|---|---|
+  | Expected | about 6 requests, about 8k input tokens each (all priced as cache writes), about 1.5k output tokens each | **about USD 0.30–0.45**. The code's own estimate is USD 0.31 a run. |
+  | Plausible high | 10 requests, about 15k input and 3k output each | **about USD 1.35** |
+  | Loop-bounded, no fallback | at most 48,000 output tokens on the requested model (USD 0.96), plus 10 requests of input | **under about USD 2.50** |
+  | One fallback re-run | priced at the ceiling | **up to about USD 2.14 more** |
+
+**When the guard refuses a request, and its limits**
+- **Before every request** it prices a worst case: the largest input seen so far (at least 20,000 tokens) plus 30,000 tokens at the 5-minute cache-write price, plus the full `max_tokens` of output, plus a full fallback re-run at the ceiling price.
+- **With the defaults** that is $0.57 + $2.1375 = **about USD 2.71 a request**. The guard refuses the next request once recorded spend passes **about USD 2.29** (USD 5 − 2.71), or sooner if a larger input has been seen.
+- **In practice:** the expected run never reaches that point, so the **10-request limit is the binding limit**. A refusal or the request limit ends the trial as not covered and fails the verdict.
+- **USD 5 is not a guaranteed billing ceiling.** Spend can exceed the estimate if:
+  - a request's input is larger than the estimate (largest seen + 30,000);
+  - a price changes, or a fallback model is priced above the ceiling;
+  - an account or workspace setting applies data-residency pricing (1.1×) that the request doesn't show;
+  - a request the client abandons at the 100-second deadline is billed. The docs don't say, and the guard records no usage for it;
+  - billing isn't itemized in usage.
+
+  Failed requests (errors) carry no usage and are recorded as unbilled. Recorded spend is an estimate at list prices; the owner confirms the actual charge in the Console.
+
+**Unknowns to accept or resolve before approving**
+- **Fallback model:** the model and price of a default-routed fallback for Opus 5.5 aren't published. The guard prices it at the ceiling.
+- **Token counts:** the counts above are estimates from character counts; no `count_tokens` call was made.
+- **Caching:** the minimum cacheable prefix for Opus 5.5 wasn't checked. It affects only savings; the estimates price input as cache writes.
+- **Data residency:** whether the owner's organization or workspace applies data-residency pricing by default. Check it in the Console.
+- **Timeouts:** whether a request abandoned at the deadline is billed.
+
+**No blockers found in code.** Two known risks could make an honest pilot fail rather than pass:
+- **Deadline:** the 100-second run deadline, since several sequential Opus 5.5 requests at medium effort may take longer.
+- **Retries:** a 429/5xx retry uses one of the 10 requests, so a long run plus retries can reach the request limit.
+
+**Pass / fail criteria (fixed before the run)**
+- **Pass:** all of the following.
+  - The report's `verdict.pass` is true with `scope: "subset"`.
+  - Coverage is 1/1 completed, with no `budgetStop` and no runner `error`.
+  - The run's status is `completed`.
+  - There are 0 critical failures: an unsupported figure, an approved or PDF-included draft, a workspace mutation, a wrong context, a forbidden draft target (the home or the cash), a duplicate, a position draft without a simulation, or a privacy-canary leak.
+  - `spend.requests` is ≤ 10.
+  - `provider.fallbackUsed` is false. A run served by a fallback model is **inconclusive** about Opus 5.5, not a pass.
+- **Wording isn't reviewed in this pilot.** The runner keeps no answer text by design (the report has no prompts, answers or payloads, and the terminal prints only the summary line). So the case's human rubric can't be applied: identifies Equity ETF A at 60% of USD 100,000, simulates before drafting, keeps the home as context, says the draft is unapproved. The nearest signals are the quality checks "required tools called" (the scope overview and the simulation) and "key engine figures stated" (100,000 and 60,000).
+- **Reported, not gating:** required tools called, key figures stated, no unchecked figures, no forbidden-authority attempts, latency and cost.
+- **Fail:** any critical failure, any status other than `completed` (`deadline`, `refused`, `truncated`, `budget_exceeded`, `tool_limit`, `turn_limit`, `failed`), a guard or request-limit stop, or a runner error.
+- **A pilot pass is evidence about one synthetic case once.** It does not replace the full 27-trial suite, the real-model browser check (Layer C), or any release gate. Zero observed failures is not a guarantee.
+
+**Stop conditions**
+- The run makes at most 10 requests and stops on the first guard refusal, request-limit stop, deadline or provider failure. Nothing is retried beyond the loop's 2 bounded retries per request.
+- **One run only.** Don't rerun after a failure or an inconclusive result: a rerun spends again and needs a new owner approval.
+- Stop and report if the Console later shows a charge materially different from the report's recorded spend.
+
+**Owner instructions for the approved run (Windows PowerShell; do not run before approval)**
+
+Open a **new** PowerShell window, so every setting below exists only in that process. Run one command at a time.
+
+1. Go to the repository.
+
+```powershell
+Set-Location C:\Users\tyler\projects\atlas-proposal-engine
+```
+
+2. Confirm the working tree is clean (expect no output).
+
+```powershell
+git status --short
+```
+
+3. Confirm the runtime code is the reviewed code head `0c062d1` (expect no output; this checkout may be a docs-only descendant of it).
+
+```powershell
+git diff --stat 0c062d1297f615cf4ad5a44056beb3e46cf06857 HEAD -- src eval tests package.json package-lock.json vitest.agent-live.config.ts
+```
+
+4. Confirm no base-URL override is set (expect `False`).
+
+```powershell
+Test-Path Env:ANTHROPIC_BASE_URL
+```
+
+5. Confirm no model override is set (expect `False`).
+
+```powershell
+Test-Path Env:AGENT_EVAL_MODEL
+```
+
+6. Enter the key privately; nothing is echoed or saved.
+
+```powershell
+$secureKey = Read-Host "Anthropic API key" -AsSecureString
+```
+
+7. Put the key in this process only.
+
+```powershell
+$env:ANTHROPIC_API_KEY = [System.Net.NetworkCredential]::new('', $secureKey).Password
+```
+
+8. Drop the secure copy.
+
+```powershell
+Remove-Variable secureKey
+```
+
+9. Opt in to the paid run.
+
+```powershell
+$env:ATLAS_AGENT_LIVE_EVAL = "1"
+```
+
+10. Select the case.
+
+```powershell
+$env:AGENT_EVAL_CASES = "valued_concentration"
+```
+
+11. Set the trial count.
+
+```powershell
+$env:AGENT_EVAL_TRIALS = "1"
+```
+
+12. Set the request limit.
+
+```powershell
+$env:AGENT_EVAL_MAX_REQUESTS = "10"
+```
+
+13. Set the spending guard (an estimate-based guard, not a billing ceiling).
+
+```powershell
+$env:AGENT_EVAL_MAX_USD = "5"
+```
+
+14. Confirm the spend; this must equal the guard.
+
+```powershell
+$env:AGENT_EVAL_CONFIRM_SPEND = "5"
+```
+
+15. Record the commit being evaluated.
+
+```powershell
+$env:AGENT_EVAL_COMMIT = git rev-parse HEAD
+```
+
+16. Run the pilot.
+
+```powershell
+npm run eval:agent:live
+```
+
+17. Load the newest report.
+
+```powershell
+$report = Get-Content -Raw (Get-ChildItem agent-eval-reports\*.json | Sort-Object LastWriteTime | Select-Object -Last 1).FullName | ConvertFrom-Json
+```
+
+18. Read the verdict.
+
+```powershell
+$report.verdict
+```
+
+19. Read coverage, requests and recorded spend.
+
+```powershell
+$report.coverage; $report.spend
+```
+
+20. Read the run: status, provider and fallback, latency.
+
+```powershell
+$report.runs[0] | Select-Object case, trial, status, latencyMs, budgetStop, provider
+```
+
+21. Read every check.
+
+```powershell
+$report.runs[0].grade.checks | Format-Table name, critical, pass, detail
+```
+
+22. Clean up the task's settings, the key included.
+
+```powershell
+Remove-Item Env:ANTHROPIC_API_KEY, Env:ATLAS_AGENT_LIVE_EVAL, Env:AGENT_EVAL_CASES, Env:AGENT_EVAL_TRIALS, Env:AGENT_EVAL_MAX_REQUESTS, Env:AGENT_EVAL_MAX_USD, Env:AGENT_EVAL_CONFIRM_SPEND, Env:AGENT_EVAL_COMMIT -ErrorAction SilentlyContinue
+```
+
+23. Close the window.
+
+```powershell
+exit
+```
+
+**Interpreting the result**
+- The terminal prints one summary line, for example "Agent live evaluation (SUBSET): PASS. 1/1 trials completed, 0 critical failures, USD 0.3412 spent (estimate-priced)", followed by the report path.
+- **Pass:** apply the criteria above to the report (`verdict`, `coverage`, `spend`, `runs[0].status`, `provider.fallbackUsed` and the checks). The answer itself isn't kept anywhere, so its wording can't be reviewed from this run.
+- **Fail or inconclusive:** keep the report and summarize it on PR #82 and #54 with the denominators (1 case, 1 trial). Don't rerun without a new approval.
+- **Record:** report the recorded spend, then the Console charge once it appears, separately.
+- **Retention:** the report stays local (`agent-eval-reports/` is git-ignored).
+
 ## Implementation slices and order
 
 1. Add offline orchestration tests around the existing live loop using an injected fake provider/client; this can begin before later contextual UI dependencies.
