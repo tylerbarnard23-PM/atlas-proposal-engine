@@ -55,6 +55,20 @@ Stop for Codex review with exact head, checks, preview association, remaining li
 
 D1 (PR #72, `0381db1`), D2 (PR #75, `073049f`), D2a (PR #79, `c0ee4e9`) and D3 (PR #81, `85b3910`) are released; the D1 command above and the D1–D3 summaries below are historical, so do not rerun them. **D4 is in review (PR #82).** D5 follows its review/release. PR #82 also carries one bounded, owner-approved D5 usability slice (the proposal-flow simplification); it doesn't complete D5. The handoff holds the current checkpoint.
 
+### Next command: review, pilot accounting fix, then approval
+
+Saved on 10 November 2026; not yet started. Branch `feat/d4-contextual-agent`, PR #82, runtime head `d45dae1`. Verify heads, tree and stash first, and preserve any newer work.
+
+1. **Codex** reviews runtime head `d45dae1` (the provider-bound session and unknown-usage fixes) and its regression coverage.
+2. **Claude** fixes the pilot-runner accounting gap together with any confirmed review blockers, writing failing regressions first. The gap: `budgetedClient` treats missing usage as a known USD 0. It must:
+   - reuse `pricedUsage`;
+   - keep a conservative reservation when usage is unknown;
+   - report the condition clearly.
+
+   Valid zero usage stays valid. Use fake providers only.
+3. Run the appropriate final validation (typecheck, full tests, extraction eval, build), push, read CI once, and stop for review.
+4. Only after that review comes the owner's explicit approval of any paid test. Until then: no real session arming, no paid call, no merge, no deployment.
+
 ### Next command: D4/D5 usability review-fix
 
 **Done on 10 November 2026 (PR #82); don't rerun.** The evidence is in the handoff and on the PR. The next step is Codex review.

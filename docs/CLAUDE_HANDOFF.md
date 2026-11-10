@@ -73,7 +73,18 @@
     2. **Usage validation:** usage counts as known only with complete accounting (`pricedUsage`); otherwise the reservation is kept and the run ends with the reason. Explicit zeros stay valid.
 
     **Evidence:** 19 regressions (16 failed first), 628 passed / 0 skipped locally, eval 2/2, build, and a fake-server rehearsal of the arming and refusal paths. **Reported, not changed:** the pilot runner's `budgetedClient` still prices missing usage as USD 0.
-  - **Next action:** Codex reviews the session controls on PR #82. Then the owner decides whether to approve this exact pilot and/or an interactive session with this exact configuration. If approved, the owner runs the documented commands locally; report the result on PR #82 and #54. Codex review of PR #82 stands. Reconciling PR #80's security plan, the zod fix and D5 copy cleanup come later.
+  - **Checkpoint (10 November 2026):** the provider-bound session and unknown-usage fixes are pushed at runtime head `d45dae1` and **await independent Codex review**.
+    - **Local:** typecheck clean; 628 passed, 0 skipped (private fixture present); extraction eval 2/2; build passed.
+    - **CI on `d45dae1`:** "Typecheck, test, build" passed ([run 42856385853](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/actions/runs/42856385853)), and Vercel passed. The CI test counts weren't read.
+    - **Rehearsal:** fake-provider server only. The fake-to-Anthropic switch was tested with injected providers, not on a real Anthropic-configured server.
+    - **Not done:** no real session armed, no paid call, no merge, no production deployment. **Paid testing remains unapproved.**
+  - **Required before any paid testing: the pilot-runner accounting gap.** The command-line evaluation wrapper (`budgetedClient` in `src/copilot/eval/budget.ts`) still treats missing usage as a known USD 0. It must:
+    - reuse the validated usage rules (`pricedUsage`);
+    - keep a conservative reservation when usage is unknown;
+    - report the condition clearly.
+
+    Valid zero usage must stay valid.
+  - **Next action:** the "Next command: review, pilot accounting fix, then approval" section in [CLAUDE_COMMANDS.md](roadmap/CLAUDE_COMMANDS.md#next-command-review-pilot-accounting-fix-then-approval). Reconciling PR #80's security plan, the zod fix and D5 copy cleanup come later.
 - **Preserve:** PR #80 (the D5 secrets/exposure plan) is open; keep its work when reconciling docs, and don't merge it as part of D4.
 - **Open follow-ups:** #76 (reserve-breach attribution for legacy actions), unchanged. **Zod audit warning:** `npm audit` reports GHSA-mrhx-c7xc-m3w5 (high) for zod <4.6.6, and its only offered fix is a breaking upgrade (`--force` installs zod 4.6.7). It needs a separate, tested dependency change; don't run `npm audit fix --force`.
 - **Limitations carried forward:**
