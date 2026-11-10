@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Input";
 import { formatCurrency } from "@/utils/formatting";
 import { cn } from "@/utils/cn";
+import { LiveSessionBar, liveReady, type LiveInfo, type LiveRunInfo } from "./LiveSessionBar";
 import type { Recommendation } from "@/domain/types";
 import type { CopilotMode, CopilotResult, RunStatus } from "@/copilot/agent";
 
@@ -61,22 +62,27 @@ const STATUS_LABEL: Record<RunStatus, string> = {
   failed: "Failed",
 };
 
-/** The mode the server runs Copilot in (a GET; it never starts a run). */
+/**
+ * The mode the server runs Copilot in, and in live mode this browser's view of
+ * the live test session (a GET; it never starts a run). `refresh` re-reads it.
+ */
 export function useCopilotMode() {
-  const [mode, setMode] = React.useState<{ mode: CopilotMode; model: string | null } | null>(null);
-  React.useEffect(() => {
+  const [mode, setMode] = React.useState<{ mode: CopilotMode; model: string | null; live: LiveInfo | null } | null>(null);
+  const refresh = React.useCallback(() => {
     fetch("/api/copilot")
       .then((r) => r.json())
-      .then((d) => setMode({ mode: d.mode, model: d.model ?? null }))
+      .then((d) => setMode({ mode: d.mode, model: d.model ?? null, live: d.live ?? null }))
       .catch(() => setMode(null));
   }, []);
-  return mode;
+  React.useEffect(() => refresh(), [refresh]);
+  return mode ? { ...mode, refresh } : null;
 }
 
-export function ModeBadge({ mode, model }: { mode: CopilotMode; model: string | null }) {
+export function ModeBadge({ mode, model, live }: { mode: CopilotMode; model: string | null; live?: LiveInfo | null }) {
+  const fake = mode === "live" && live?.provider === "fake";
   return (
-    <Badge tone={mode === "live" ? "positive" : mode === "test" ? "warning" : "gold"} className="whitespace-nowrap" title={MODE_HINT[mode]} data-testid="copilot-mode">
-      {MODE_LABEL[mode]}
+    <Badge tone={mode === "live" && !fake ? "positive" : mode === "demo" ? "gold" : "warning"} className="whitespace-nowrap" title={fake ? "The live session's controls with the deterministic test provider: no API calls." : MODE_HINT[mode]} data-testid="copilot-mode">
+      {fake ? "Live session · fake provider" : MODE_LABEL[mode]}
       {mode !== "demo" && model ? ` · ${model}` : ""}
     </Badge>
   );
@@ -107,6 +113,8 @@ export function CopilotWorkspace({
   const [note, setNote] = React.useState<{ tone: "info" | "error"; text: string } | null>(null);
   // What this answer added, as history: where those actions are now is read from the workspace.
   const [addedHere, setAddedHere] = React.useState<Set<string>>(new Set());
+  // Live mode: what the last run used, as the server reported it.
+  const [lastRun, setLastRun] = React.useState<LiveRunInfo | null>(null);
   const abort = React.useRef<AbortController | null>(null);
   React.useEffect(() => () => abort.current?.abort(), []);
 
@@ -136,6 +144,7 @@ export function CopilotWorkspace({
         body: JSON.stringify({ ...request, question: text }),
       });
       const data = await res.json();
+      if (data.live && "run" in data.live) setLastRun(data.live as LiveRunInfo);
       if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
       const r = data as CopilotResult;
       setResult(r);
@@ -145,6 +154,8 @@ export function CopilotWorkspace({
     } finally {
       abort.current = null;
       setLoading(false);
+      // Live mode: the session's counters are the server's; re-read them after every request.
+      if (mode?.mode === "live") mode.refresh();
     }
   }
 
@@ -165,6 +176,8 @@ export function CopilotWorkspace({
 
   const shownMode = result?.mode ?? mode?.mode ?? null;
   const panel = variant === "panel";
+  // Live mode asks only through an active session of this browser, one run at a time.
+  const liveBlocked = mode?.mode === "live" && !liveReady(mode.live);
 
   return (
     <div className="space-y-3">
@@ -182,11 +195,13 @@ export function CopilotWorkspace({
         </div>
         {shownMode && (
           <div className="mt-1.5 flex flex-wrap items-center gap-2 text-2xs text-ink-500">
-            {panel && mode && <ModeBadge mode={shownMode} model={mode.model} />}
-            <span>{MODE_HINT[shownMode]}</span>
+            {panel && mode && <ModeBadge mode={shownMode} model={mode.model} live={mode.live} />}
+            <span>{shownMode === "live" && mode?.live?.provider === "fake" ? "Live session with the fake provider: the session's controls and counters are real, but the deterministic test provider answers. No model, no API calls." : MODE_HINT[shownMode]}</span>
           </div>
         )}
       </div>
+
+      {mode?.mode === "live" && <LiveSessionBar live={mode.live ?? { available: false, reasons: ["Live session status couldn't be read."], provider: null, session: null }} lastRun={lastRun} onChanged={mode.refresh} />}
 
       <div className="space-y-2">
         <Textarea
@@ -200,7 +215,7 @@ export function CopilotWorkspace({
           }}
         />
         <div className="flex flex-wrap items-center gap-2">
-          <Button onClick={() => ask(question)} loading={loading} disabled={!question.trim()} iconLeft={<Send className="h-4 w-4" />}>
+          <Button onClick={() => ask(question)} loading={loading} disabled={!question.trim() || liveBlocked} iconLeft={<Send className="h-4 w-4" />}>
             Ask
           </Button>
           {loading && (
@@ -212,7 +227,7 @@ export function CopilotWorkspace({
         </div>
         <div className="flex flex-wrap gap-2" aria-label="Suggested questions">
           {SUGGESTIONS.map((s) => (
-            <Button key={s} size="sm" variant="secondary" onClick={() => ask(s)} disabled={loading}>
+            <Button key={s} size="sm" variant="secondary" onClick={() => ask(s)} disabled={loading || liveBlocked}>
               {s}
             </Button>
           ))}

@@ -13,7 +13,8 @@
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
     "eval": "vitest run tests/extraction.eval.test.ts --silent=false",
-    "eval:agent:live": "vitest run --config vitest.agent-live.config.ts --silent=false"
+    "eval:agent:live": "vitest run --config vitest.agent-live.config.ts --silent=false",
+    "live-session": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/live-session.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",

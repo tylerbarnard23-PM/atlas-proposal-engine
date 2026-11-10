@@ -38,3 +38,6 @@ next-env.d.ts
 
 # D4 opt-in live agent evaluation reports (local; sanitized, but not committed)
 agent-eval-reports/
+
+# Local live-testing session state (counters and hashes only; never committed)
+.atlas-local/

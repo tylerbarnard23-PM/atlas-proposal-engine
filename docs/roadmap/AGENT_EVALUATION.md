@@ -239,7 +239,7 @@ Set-Location C:\Users\tyler\projects\atlas-proposal-engine
 git status --short
 ```
 
-3. Confirm the runtime code is the reviewed code head `0c062d1` (expect no output; this checkout may be a docs-only descendant of it).
+3. Confirm the runtime code is the reviewed code head (expect no output; this checkout may be a docs-only descendant of it). **Update (10 November 2026):** the live-session controls changed runtime code after `0c062d1`, so use the head Codex approves for them in place of `0c062d1` below. The runner, cases, grader and budget code are unchanged.
 
 ```powershell
 git diff --stat 0c062d1297f615cf4ad5a44056beb3e46cf06857 HEAD -- src eval tests package.json package-lock.json vitest.agent-live.config.ts
@@ -371,6 +371,204 @@ exit
 - **Fail or inconclusive:** keep the report and summarize it on PR #82 and #54 with the denominators (1 case, 1 trial). Don't rerun without a new approval.
 - **Record:** report the recorded spend, then the Console charge once it appears, separately.
 - **Retention:** the report stays local (`agent-eval-reports/` is git-ignored).
+
+### Local live-testing session (interactive) — not armed; paid use NOT approved
+
+Added 10 November 2026 on PR #82. The pilot runner above covers only its own command-line run. **Every live browser request** now passes one server-enforced session instead. This section describes the controls and the owner's setup. **No paid call has been made, no real session has been armed, and paid interactive testing is not approved** until the completed controls and this exact session configuration are reviewed.
+
+**Session limits (server constants in `src/copilot/liveSessionStore.ts`)**
+
+| Limit | Value |
+|---|---|
+| Expiry | 30 minutes from arming |
+| Agent runs | 3 |
+| Anthropic HTTP requests | 10, retries and failed requests included |
+| Runs at a time | 1 |
+| Run deadline | the existing 100 seconds |
+| Spending guard | USD 5 across the session; an estimate-based guard, **not a billing ceiling** |
+| Stop | an explicit control |
+
+Model, effort, prompt, tools, fallback and the loop's other limits are unchanged.
+
+**How it is enforced**
+
+The gate is `src/copilot/liveGate.ts`, behind `src/app/api/copilot/route.ts` and `src/copilot/routeHandler.ts`. In live mode, `admitLiveRun` is the only way to a provider client, and **every** browser request goes through it. Each check fails closed, in this order:
+
+1. **Server set-up** (503 `live_unavailable`):
+   - `COPILOT_MODE=live`.
+   - Not a hosted deployment (`VERCEL` and `VERCEL_ENV` unset).
+   - **No `ANTHROPIC_BASE_URL` override.** It is set in this development machine's environment, so the owner's window must clear it.
+   - A key present (only its presence is checked; the value is never read or logged) or the fake provider.
+2. **Local request** (403 `not_local`):
+   - A loopback or `*.localhost` `Host`, with no non-loopback `X-Forwarded-For` or `X-Forwarded-Host`.
+   - A same-origin `Origin` on every POST, and no cross-site `Sec-Fetch-Site`.
+   - Also run the server bound to 127.0.0.1 (`-H 127.0.0.1`), so nothing off the machine can reach it.
+3. **Owner's session** (403, 409 or 429):
+   - **Armed:** only from a local terminal with `npm run live-session -- arm`. A browser can't arm.
+   - **Claimed:** by this browser via the one-time link that arming prints, which sets an HttpOnly, SameSite=Strict cookie on `/api/copilot`. Only hashes of the link and the cookie are stored.
+   - **Open:** not expired, not stopped, no run in progress, and allowance left.
+4. **Each HTTP request:**
+   - Before sending, the gate atomically counts the request and reserves its worst case: the evaluation's `worstRequestCost` for `claude-opus-5-5`, with the largest input seen plus 30,000 tokens and a fallback re-run at the ceiling price, about USD 2.71 at first. It refuses the request if that could pass USD 5, or if the request is the 11th.
+   - **On success**, the reservation is replaced by the usage priced with `costOf` over `usage.iterations`. The tally reports HTTP requests separately from model attempts, since a fallback adds an attempt inside one request.
+   - **On an error, timeout or cancellation**, the usage is unknown, so the reservation is **kept as spend**.
+   - A different model in the request is refused before anything is reserved.
+
+**State**
+- **Storage:** counters live in `.atlas-local/live-session.json` (git-ignored), and are changed under an in-process queue and a cross-process lock file, with atomic writes. Restarting the server, refreshing, cancelling or opening another tab never resets the allowance.
+- **Crashed runs:** a run left active by a crash is ended once its deadline plus 30 seconds has passed, and its open reservation is kept.
+- **Contents:** counters, timestamps, per-run summaries and the two hashes only. No prompts, answers, payloads, keys, tokens or cookies.
+- **Answers:** stay on the page for human review.
+
+**What the tester sees** (on the Copilot page and in the desk panel)
+- The mode, including when the fake provider is in use.
+- The session's state, runs and HTTP requests left, model attempts so far, estimated USD left, an expiry countdown and a **Stop live session** control.
+- The last run's requests, attempts and priced and kept USD.
+- When the session refuses, the reason: not armed, not claimed, another browser, expired, stopped or used up. Asking is disabled unless this browser's session is active and idle.
+- Stop also clears the browser's cookie.
+
+**Known consequences and limits**
+- **A failure ends further requests.** A failed or timed-out request keeps its reservation (about USD 2.71), and USD 2.71 plus the next request's worst case passes USD 5. So after any failed request the guard refuses the loop's retry and every further request, and the run ends as "failed" with the guard's message. This is the conservative rule as designed; re-arming is a separate owner decision.
+- **The spending guard is not a billing ceiling.** The same limits as the pilot apply: the guard estimates from list prices with an unpublished fallback model priced at the ceiling. Data-residency pricing or billing of abandoned requests could differ. The **provider-side workspace spend limit below is the real backstop.**
+- **Arming opens a new allowance.** Each arming is a new 30-minute allowance. Arming is refused while a session is still usable.
+- **Remote access:** "Local" is enforced by the host, origin and forwarding checks plus the claim cookie. Binding the server to 127.0.0.1 is the owner's step and can't be verified from inside the app.
+- **Fake provider:** `COPILOT_LIVE_PROVIDER=fake` runs the same gate with the deterministic test provider: no key, no provider call, no spend. It exists to rehearse the controls.
+
+**Evidence (10 November 2026, fake providers only)**
+- **Tests:** `tests/liveSession.test.ts` has 26 tests. They cover:
+  - readiness and locality;
+  - fail-closed cases (no, unreadable, unclaimed or other-browser sessions) and claim links;
+  - three runs then refusal; the 10-request cap within and across runs;
+  - concurrent admission (one of five admitted) and reservations (10 of 25);
+  - stale-lock recovery; failure, timeout and cancellation keeping reservations; expiry before and during a run;
+  - Stop; restart persistence and crash recovery; budget exhaustion;
+  - bypass attempts (non-local, cross-origin, hosted, base URL, wrong model, no other `new Anthropic(` in `src/`);
+  - the fake provider, privacy of the record, the owner's CLI, and the tester's view.
+- **Updated test:** `tests/agentLoop.test.ts`. Live without a key is now reported as unavailable and refused (503) instead of silently serving the scripted demo.
+- **Final checks:** typecheck; 609 passed, 0 skipped (37 files, private fixture present locally); eval 2/2; build passed.
+- **Browser** (fake provider, isolated `flow.localhost:3107`, server on 127.0.0.1, task-owned session file):
+  - Unarmed: blocked, with a message. Over real HTTP, no session, a LAN `Host`, a cross-site `Origin` and a missing `Origin` were all refused with 403.
+  - Arm and claim: the token left the address, the cookie was HttpOnly, and reusing the link was refused.
+  - Run 1 completed: 4 requests and 4 attempts, the answer visible.
+  - Reload, and a second tab with the desk panel: the same allowance.
+  - Run 2 from the desk panel completed.
+  - Server restart: the allowance was kept.
+  - Run 3 was stopped at the session's 10th request, with the reason shown and asking disabled.
+  - Stop worked, and the terminal status agreed with the browser.
+  - Expiry and a 375px layout were checked.
+
+**Owner setup before any paid interactive test (do not perform until approved)**
+
+1. **In the Anthropic Console** (as the organization admin):
+   - Create a dedicated workspace for Atlas testing.
+   - Set that workspace's **spend limit** at or below the amount the owner approves, as the provider-side backstop that this app can't enforce. Confirm that the workspace has no US-only data-residency default (1.1× pricing).
+   - Create an API key **in that workspace only**, and keep it in a password manager. Console menu names can change; follow the Console's own workspace and limit settings.
+2. **Never put the key in a committed file.** Supply it to one PowerShell process, as below.
+
+**Owner instructions for an approved interactive session (Windows PowerShell; do not run before approval)**
+
+Window 1, the server:
+
+1. Go to the repository.
+
+```powershell
+Set-Location C:\Users\tyler\projects\atlas-proposal-engine
+```
+
+2. Check the runtime is the reviewed head (expect no output).
+
+```powershell
+git status --short
+```
+
+3. Clear any base-URL override in this window; the gate refuses while one is set.
+
+```powershell
+Remove-Item Env:ANTHROPIC_BASE_URL -ErrorAction SilentlyContinue
+```
+
+4. Make sure the fake provider isn't selected.
+
+```powershell
+Remove-Item Env:COPILOT_LIVE_PROVIDER -ErrorAction SilentlyContinue
+```
+
+5. Enter the dedicated workspace's key privately.
+
+```powershell
+$secureKey = Read-Host "Anthropic API key (Atlas testing workspace)" -AsSecureString
+```
+
+6. Put it in this process only.
+
+```powershell
+$env:ANTHROPIC_API_KEY = [System.Net.NetworkCredential]::new('', $secureKey).Password
+```
+
+7. Drop the secure copy.
+
+```powershell
+Remove-Variable secureKey
+```
+
+8. Turn on live mode for this process.
+
+```powershell
+$env:COPILOT_MODE = "live"
+```
+
+9. Start the server on this machine only (use another free port if 3000 is taken, and match it in step 11).
+
+```powershell
+npm run dev -- -H 127.0.0.1 -p 3000
+```
+
+Window 2, the session:
+
+10. Go to the repository.
+
+```powershell
+Set-Location C:\Users\tyler\projects\atlas-proposal-engine
+```
+
+11. Arm the session; this prints a one-time claim link.
+
+```powershell
+npm run live-session -- arm --origin http://localhost:3000
+```
+
+12. Open the printed link in the browser on this machine, then use Copilot. The live session bar shows what's left.
+
+13. Check the session at any time.
+
+```powershell
+npm run live-session -- status
+```
+
+14. Stop the session (or use Stop live session in the browser).
+
+```powershell
+npm run live-session -- stop
+```
+
+Window 1, afterwards:
+
+15. Stop the server with Ctrl+C, then remove the task's settings, the key included.
+
+```powershell
+Remove-Item Env:ANTHROPIC_API_KEY, Env:COPILOT_MODE -ErrorAction SilentlyContinue
+```
+
+16. Close the window.
+
+```powershell
+exit
+```
+
+**After the session:**
+- Compare `npm run live-session -- status` (estimates) with the Console's usage for the workspace (billing), and report both separately.
+- Answers aren't stored. Note anything worth keeping on the PR yourself, from synthetic data only.
+
+**Rehearsal with no spend:** set `$env:COPILOT_LIVE_PROVIDER = "fake"` and skip steps 4–7. The same gate runs with the test provider and makes no API calls.
 
 ## Implementation slices and order
 

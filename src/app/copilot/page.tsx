@@ -25,7 +25,7 @@ function Inner() {
         eyebrow="Advisory · AI-assisted"
         title="Proposal Copilot"
         description="Ask about the active alternative. Answers come from the same Atlas engines the rest of the app uses. Drafts are a preview until you add them to the working draft, and adding never approves anything."
-        actions={mode && <ModeBadge mode={mode.mode} model={mode.model} />}
+        actions={mode && <ModeBadge mode={mode.mode} model={mode.model} live={mode.live} />}
       />
       <Card className="max-w-4xl">
         <CardBody>

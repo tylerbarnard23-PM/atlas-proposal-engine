@@ -264,11 +264,6 @@ export async function runAgent(snapshot: CopilotSnapshot, question: string, opts
   return finish("turn_limit", lastText, "max_turns");
 }
 
-/** The live Anthropic loop, as before: the SDK's own retries are off because the loop bounds them. */
-export function runLiveCopilot(snapshot: CopilotSnapshot, question: string, opts: Partial<AgentRunOptions> = {}): Promise<CopilotResult> {
-  return runAgent(snapshot, question, { mode: "live", provider: "anthropic", client: new Anthropic({ maxRetries: 0 }), ...opts });
-}
-
 type UsageEntry = { model?: string; input_tokens?: number | null; output_tokens?: number | null; cache_read_input_tokens?: number | null; cache_creation_input_tokens?: number | null };
 
 /** Every attempt's usage in a response: usage.iterations when present (a refusal fallback lists the declined attempt there), else the top-level usage. */
@@ -285,6 +280,8 @@ function retryable(err: unknown): boolean {
 
 // A readable reason that never repeats a provider payload, prompt or key.
 export function providerErrorMessage(err: unknown): string {
+  // The local live session refused the request before it reached the provider (liveGate.ts): say so, not "provider failed".
+  if (err instanceof Error && err.name === "LiveSessionRefused") return `The live test session stopped this run: ${err.message}`;
   if (err instanceof Anthropic.AuthenticationError) return "The Anthropic API key was rejected.";
   if (err instanceof Anthropic.RateLimitError) return "Rate limited by the Anthropic API. Try again shortly.";
   if (err instanceof Anthropic.APIConnectionError) return "Couldn't reach the Anthropic API.";

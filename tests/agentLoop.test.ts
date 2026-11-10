@@ -400,16 +400,23 @@ describe("the test provider and the route", () => {
     expect(r.answer).toMatch(/Test provider \(not a model\)/);
   });
 
-  it("serves demo by default, test only when asked, and live only with both the flag and a key; rejects stale or wrong context with 409", async () => {
+  it("serves demo by default, test only when asked, and live only through the session gate; rejects stale or wrong context with 409", async () => {
     const { GET, POST } = await import("@/app/api/copilot/route");
     const { copilotRequest } = await import("./support/copilotRequest");
+    const get = () => GET(new Request("http://localhost/api/copilot"));
     vi.stubEnv("COPILOT_MODE", "");
     vi.stubEnv("ANTHROPIC_API_KEY", "");
-    expect(await (await GET()).json()).toEqual({ mode: "demo", model: null });
+    // Independent of the machine running the tests (a base-URL override is refused too; see tests/liveSession.test.ts).
+    vi.stubEnv("ANTHROPIC_BASE_URL", "");
+    expect(await (await get()).json()).toEqual({ mode: "demo", model: null });
+    // Live without a key is reported as unavailable (never silently scripted) and refuses before any provider call.
     vi.stubEnv("COPILOT_MODE", "live");
-    expect(await (await GET()).json()).toEqual({ mode: "demo", model: null }); // no key: never live
+    expect(await (await get()).json()).toMatchObject({ mode: "live", live: { available: false, reasons: ["ANTHROPIC_API_KEY isn't set."], session: null } });
+    const refused = await POST(new Request("http://localhost/api/copilot", { method: "POST", headers: { origin: "http://localhost" }, body: JSON.stringify(copilotRequest("Q", storySnapshot())) }));
+    expect(refused.status).toBe(503);
+    expect(await refused.json()).toMatchObject({ code: "live_unavailable" });
     vi.stubEnv("COPILOT_MODE", "test");
-    expect(await (await GET()).json()).toEqual({ mode: "test", model: TEST_PROVIDER_MODEL });
+    expect(await (await get()).json()).toEqual({ mode: "test", model: TEST_PROVIDER_MODEL });
 
     const post = (body: unknown) => POST(new Request("http://localhost/api/copilot", { method: "POST", body: JSON.stringify(body) }));
     const req = copilotRequest("Review this alternative.", storySnapshot());
