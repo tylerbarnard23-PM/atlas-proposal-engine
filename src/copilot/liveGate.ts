@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { COPILOT_MODEL, usageEntries, type MessagesClient } from "./agent";
-import { costOf, worstRequestCost } from "./eval/budget";
+import { COPILOT_MODEL, type MessagesClient } from "./agent";
+import { pricedUsage, worstRequestCost } from "./eval/budget";
 import { TEST_PROVIDER_MODEL, createTestProvider } from "./testProvider";
 import * as store from "./liveSessionStore";
 
@@ -12,14 +12,16 @@ import * as store from "./liveSessionStore";
 //      read here beyond its presence) or the fake provider chosen;
 //   2. the request is local: a loopback or *.localhost Host, a same-origin
 //      Origin on writes, no cross-site fetch, and no non-loopback forwarding;
-//   3. the owner has armed a session in a terminal, this browser has claimed
-//      it (an HttpOnly cookie), and it is unexpired, unstopped and has
-//      allowance left: 30 minutes, 3 runs, 10 HTTP requests, one run at a
+//   3. the owner has armed a session in a terminal for the provider the
+//      server runs now (a session armed for the fake provider never admits a
+//      paid request, nor the reverse), this browser has claimed it (an
+//      HttpOnly cookie), and it is unexpired, unstopped and has allowance left: 30 minutes, 3 runs, 10 HTTP requests, one run at a
 //      time, a USD 5 estimate-based guard.
 // Each provider request is then reserved atomically against the session:
 // counted (retries and failures included) and priced at its worst case with
-// the evaluation's own estimate, then settled to the priced usage, or kept
-// as spend when the usage is unknown. The USD figure is a guard on an
+// the evaluation's own estimate, then settled to the priced usage only when
+// that accounting is complete (pricedUsage); otherwise, and on any error,
+// timeout or cancellation, the reservation is kept as spend and the run ends. The USD figure is a guard on an
 // estimate, not a billing ceiling.
 //
 // COPILOT_LIVE_PROVIDER=fake runs the same gate with the deterministic test
@@ -161,14 +163,15 @@ export async function admitLiveRun(req: Request, deps: LiveDeps): Promise<{ ok: 
   const local = localRequestProblem(req, "write");
   if (local) return { ok: false, status: 403, code: "not_local", error: local };
   const cookie = cookieOf(req);
-  const admitted = await store.admitRun(deps.sessionFile, deps.now(), cookie, FIRST_REQUEST_USD);
+  const provider = ready.provider;
+  // The session must have been armed for this provider; checked before any client exists.
+  const admitted = await store.admitRun(deps.sessionFile, deps.now(), cookie, FIRST_REQUEST_USD, provider);
   if (!admitted.ok) {
     const status = admitted.code === "run_in_progress" ? 409 : admitted.code === "exhausted" ? 429 : 403;
-    return { ok: false, status, code: admitted.code, error: admitted.error, session: await store.readView(deps.sessionFile, deps.now(), cookie, FIRST_REQUEST_USD) };
+    return { ok: false, status, code: admitted.code, error: admitted.error, session: await store.readView(deps.sessionFile, deps.now(), cookie, FIRST_REQUEST_USD, provider) };
   }
 
   const runId = admitted.runId;
-  const provider = ready.provider;
   const model = provider === "fake" ? TEST_PROVIDER_MODEL : COPILOT_MODEL;
   const inner = provider === "fake" ? createTestProvider() : deps.makeClient();
   const stop = new AbortController();
@@ -185,7 +188,7 @@ export async function admitLiveRun(req: Request, deps: LiveDeps): Promise<{ ok: 
             throw new LiveSessionRefused(stoppedBy, "wrong_model");
           }
           const fallbacks = (params as { fallbacks?: unknown }).fallbacks != null;
-          const r = await store.reserveRequest(deps.sessionFile, deps.now(), runId, (largest) => worstNextRequest(largest, params.max_tokens, fallbacks));
+          const r = await store.reserveRequest(deps.sessionFile, deps.now(), runId, provider, (largest) => worstNextRequest(largest, params.max_tokens, fallbacks));
           if (!r.ok) {
             stoppedBy = r.error;
             throw new LiveSessionRefused(r.error, r.code);
@@ -198,14 +201,14 @@ export async function admitLiveRun(req: Request, deps: LiveDeps): Promise<{ ok: 
             await store.settleRequest(deps.sessionFile, r.reservationId, { known: false });
             throw err;
           }
-          const entries = usageEntries(res);
-          await store.settleRequest(deps.sessionFile, r.reservationId, {
-            known: true,
-            usd: entries.reduce((a, u) => a + costOf(u.model ?? res.model, u), 0),
-            attempts: entries.length,
-            largestInput: Math.max(0, ...entries.map((u) => (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0))),
-            models: [...new Set(entries.map((u) => u.model ?? res.model))],
-          });
+          // The cost counts as known only with complete accounting; otherwise it is never read as zero.
+          const priced = pricedUsage(res);
+          if (!priced.ok) {
+            await store.settleRequest(deps.sessionFile, r.reservationId, { known: false });
+            stoppedBy = `The provider's response had no valid usage accounting (${priced.reason}), so its USD ${r.usd.toFixed(4)} reservation is kept and the run ends.`;
+            throw new LiveSessionRefused(stoppedBy, "unknown_usage");
+          }
+          await store.settleRequest(deps.sessionFile, r.reservationId, { known: true, usd: priced.usd, attempts: priced.attempts, largestInput: priced.largestInput, models: priced.models });
           return res;
         },
       },
@@ -228,7 +231,7 @@ export async function admitLiveRun(req: Request, deps: LiveDeps): Promise<{ ok: 
           provider,
           run: summary ? { requests: summary.requests, attempts: summary.attempts, usd: summary.usd, retainedUsd: summary.retainedUsd, status: summary.status } : null,
           stoppedBy,
-          session: await store.readView(deps.sessionFile, deps.now(), cookie, FIRST_REQUEST_USD),
+          session: await store.readView(deps.sessionFile, deps.now(), cookie, FIRST_REQUEST_USD, provider),
         };
       },
     },
@@ -241,7 +244,7 @@ export async function liveSessionStatus(req: Request, deps: LiveDeps): Promise<{
   if (!ready.ok) return { provider: null, available: false, reasons: ready.reasons, session: null };
   const local = localRequestProblem(req, "read");
   if (local) return { provider: ready.provider, available: false, reasons: [local], session: null };
-  return { provider: ready.provider, available: true, reasons: [], session: await store.readView(deps.sessionFile, deps.now(), cookieOf(req), FIRST_REQUEST_USD) };
+  return { provider: ready.provider, available: true, reasons: [], session: await store.readView(deps.sessionFile, deps.now(), cookieOf(req), FIRST_REQUEST_USD, ready.provider) };
 }
 
 /** Stops the session (from this machine) and cancels its run in progress here. Stopping is always allowed locally. */
@@ -251,7 +254,8 @@ export async function stopLiveSession(req: Request, deps: LiveDeps, reason: stri
   const r = await store.stopSession(deps.sessionFile, deps.now(), reason);
   if (!r.ok) return { ok: false, status: 404, code: r.code, error: r.error };
   for (const c of running().values()) c.abort();
-  return { ok: true, session: await store.readView(deps.sessionFile, deps.now(), cookieOf(req), FIRST_REQUEST_USD) };
+  const ready = liveReadiness(deps.env);
+  return { ok: true, session: await store.readView(deps.sessionFile, deps.now(), cookieOf(req), FIRST_REQUEST_USD, ready.ok ? ready.provider : undefined) };
 }
 
 /** Exchanges the one-time claim link for this browser's session cookie. */
@@ -260,7 +264,7 @@ export async function claimLiveSession(req: Request, deps: LiveDeps, token: stri
   if (!ready.ok) return { ok: false, status: 503, code: "live_unavailable", error: `Live testing isn't available: ${ready.reasons.join(" ")}` };
   const local = localRequestProblem(req, "navigate");
   if (local) return { ok: false, status: 403, code: "not_local", error: local };
-  const r = await store.claimSession(deps.sessionFile, deps.now(), token);
+  const r = await store.claimSession(deps.sessionFile, deps.now(), token, ready.provider);
   if (!r.ok) return { ok: false, status: 403, code: r.code, error: r.error };
   return { ok: true, cookie: r.cookie, expiresAt: r.expiresAt };
 }

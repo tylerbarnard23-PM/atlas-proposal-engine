@@ -55,10 +55,10 @@ function snap(): CopilotSnapshot & { workingDraft: WorkingDraft } {
 
 // --- Fake provider ---------------------------------------------------------------
 
-type Step = "answer" | "tool" | "error529" | "timeout" | "wait_abort" | { huge: true };
+type Step = "answer" | "tool" | "error529" | "timeout" | "wait_abort" | { huge: true } | { usage: unknown; model?: string };
 const USAGE = { input_tokens: 1_000, output_tokens: 100, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 };
 let ids = 0;
-const message = (content: unknown[], stop: string, usage = USAGE) => ({ id: `msg_${++ids}`, type: "message", role: "assistant", model: COPILOT_MODEL, content, stop_reason: stop, stop_sequence: null, usage }) as unknown as Anthropic.Beta.BetaMessage;
+const message = (content: unknown[], stop: string, usage: unknown = USAGE, model: string = COPILOT_MODEL) => ({ id: `msg_${++ids}`, type: "message", role: "assistant", model, content, stop_reason: stop, stop_sequence: null, usage }) as unknown as Anthropic.Beta.BetaMessage;
 
 /** A fake Anthropic client following a script, recording every call it receives. */
 function fakeProvider(script: Step[] | ((n: number) => Step)) {
@@ -75,6 +75,8 @@ function fakeProvider(script: Step[] | ((n: number) => Step)) {
           if (step === "wait_abort") {
             await new Promise<void>((_, reject) => options?.signal?.addEventListener("abort", () => reject(new Anthropic.APIUserAbortError())));
           }
+          // Spread, so an explicitly missing usage stays missing (a default parameter would fill it in).
+          if (typeof step === "object" && "usage" in step) return { ...message([{ type: "text", text: "An answer whose accounting is under test.", citations: null }], "end_turn", USAGE, step.model), usage: step.usage } as Anthropic.Beta.BetaMessage;
           if (typeof step === "object") return message([{ type: "text", text: "A long answer.", citations: null }], "end_turn", { ...USAGE, output_tokens: 120_000 });
           if (step === "tool") return message([{ type: "tool_use", id: `toolu_${++ids}`, name: "get_scope_overview", input: {} }], "tool_use");
           return message([{ type: "text", text: "Synthetic answer for human review: Equity ETF A is the largest position.", citations: null }], "end_turn");
@@ -118,8 +120,8 @@ const ask = (d: ReturnType<typeof deps>["d"], cookie: string | null, headers: Re
   );
 
 /** Arms a session as the owner's terminal does, and claims it in "the browser". Returns the cookie. */
-async function armAndClaim(d: ReturnType<typeof deps>["d"]) {
-  const armed = await store.armSession(file, clock);
+async function armAndClaim(d: ReturnType<typeof deps>["d"], provider: "anthropic" | "fake" = d.env.COPILOT_LIVE_PROVIDER === "fake" ? "fake" : "anthropic") {
+  const armed = await store.armSession(file, clock, provider);
   if (!armed.ok) throw new Error(armed.error);
   const res = await handleLiveSessionClaim(new Request(`http://localhost:3000/api/copilot/live-session/claim?token=${armed.token}`, { headers: { host: "localhost:3000", "sec-fetch-site": "none" } }), d);
   expect(res.status).toBe(303);
@@ -172,11 +174,11 @@ describe("fails closed before any provider call", () => {
 
     writeFileSync(file, "{ not json");
     expect(await (await ask(d, "made-up")).json()).toMatchObject({ code: "invalid_session" });
-    writeFileSync(file, JSON.stringify({ version: 1, id: "x", armedAt: T0.toISOString(), claimHash: "h", cookieHash: null, stopped: null, runs: -1 }));
+    writeFileSync(file, JSON.stringify({ version: 2, provider: "anthropic", id: "x", armedAt: T0.toISOString(), claimHash: "h", cookieHash: null, stopped: null, runs: -1 }));
     expect(await (await ask(d, "made-up")).json()).toMatchObject({ code: "invalid_session" });
     rmSync(file);
 
-    expect((await store.armSession(file, clock)).ok).toBe(true);
+    expect((await store.armSession(file, clock, "anthropic")).ok).toBe(true);
     expect(await (await ask(d, null)).json()).toMatchObject({ code: "not_claimed" });
 
     await store.stopSession(file, clock, "test");
@@ -191,7 +193,7 @@ describe("fails closed before any provider call", () => {
 
   it("claim links are local, single-use and bound to the armed session", async () => {
     const { d } = deps(fakeProvider(["answer"]).client);
-    const armed = await store.armSession(file, clock);
+    const armed = await store.armSession(file, clock, "anthropic");
     if (!armed.ok) throw new Error();
     const claim = (token: string, h: Record<string, string> = { host: "localhost:3000", "sec-fetch-site": "none" }) =>
       handleLiveSessionClaim(new Request(`http://localhost:3000/api/copilot/live-session/claim?token=${token}`, { headers: h }), d);
@@ -200,7 +202,7 @@ describe("fails closed before any provider call", () => {
     expect((await claim("wrong-token")).status).toBe(403);
     expect((await claim(armed.token)).status).toBe(303);
     expect((await claim(armed.token)).status).toBe(403); // already claimed
-    expect((await store.armSession(file, clock)).ok).toBe(false); // can't re-arm while armed
+    expect((await store.armSession(file, clock, "anthropic")).ok).toBe(false); // can't re-arm while armed
   });
 });
 
@@ -282,7 +284,7 @@ describe("the allowance", () => {
   });
 
   it("concurrent reservations never exceed the request cap", async () => {
-    await store.armSession(file, clock);
+    await store.armSession(file, clock, "anthropic");
     const s = JSON.parse(readFileSync(file, "utf8"));
     s.cookieHash = "x".repeat(64);
     writeFileSync(file, JSON.stringify(s));
@@ -291,14 +293,14 @@ describe("the allowance", () => {
     raw.active = { id: "run-1", startedAt: clock.toISOString(), requests: 0, attempts: 0, usd: 0, retainedUsd: 0, models: [] };
     raw.runs = 1;
     writeFileSync(file, JSON.stringify(raw));
-    const results = await Promise.all(Array.from({ length: 25 }, () => store.reserveRequest(file, clock, "run-1", () => 0.01)));
+    const results = await Promise.all(Array.from({ length: 25 }, () => store.reserveRequest(file, clock, "run-1", "anthropic", () => 0.01)));
     expect(results.filter((r) => r.ok)).toHaveLength(10);
     expect(results.filter((r) => !r.ok && r.code === "exhausted")).toHaveLength(15);
     expect(JSON.parse(readFileSync(file, "utf8")).requests).toBe(10);
   });
 
   it("a stale lock left by a crashed process doesn't wedge the session", async () => {
-    await store.armSession(file, clock);
+    await store.armSession(file, clock, "anthropic");
     writeFileSync(`${file}.lock`, "");
     const old = new Date(Date.now() - 60_000);
     utimesSync(`${file}.lock`, old, old);
@@ -405,9 +407,9 @@ describe("stop, restart and budget", () => {
     expect((await ask(d, cookie)).status).toBe(200);
 
     // A run admitted and mid-request when the server died: nothing settled it.
-    const admitted = await store.admitRun(file, clock, cookie, FIRST_REQUEST_USD);
+    const admitted = await store.admitRun(file, clock, cookie, FIRST_REQUEST_USD, "anthropic");
     if (!admitted.ok) throw new Error(admitted.error);
-    expect((await store.reserveRequest(file, clock, admitted.runId, () => FIRST_REQUEST_USD)).ok).toBe(true);
+    expect((await store.reserveRequest(file, clock, admitted.runId, "anthropic", () => FIRST_REQUEST_USD)).ok).toBe(true);
 
     // "Restart": fresh modules read the same file.
     vi.resetModules();
@@ -519,20 +521,20 @@ describe("what is kept", () => {
     await ask(d, cookie);
     const text = readFileSync(file, "utf8");
     for (const secret of [QUESTION, "Synthetic answer for human review", token, cookie, "Live Gate Household", ENV.ANTHROPIC_API_KEY]) expect(text).not.toContain(secret);
-    expect(Object.keys(JSON.parse(text)).sort()).toEqual(["active", "armedAt", "attempts", "claimHash", "cookieHash", "history", "id", "largestInput", "pending", "requests", "retainedUsd", "runs", "spentUsd", "stopped", "version"]);
+    expect(Object.keys(JSON.parse(text)).sort()).toEqual(["active", "armedAt", "attempts", "claimHash", "cookieHash", "history", "id", "largestInput", "pending", "provider", "requests", "retainedUsd", "runs", "spentUsd", "stopped", "version"]);
   });
 
   it("the owner's terminal script arms, reports and stops, against the same record (no provider call)", () => {
     const env = { ...process.env, ATLAS_LIVE_SESSION_FILE: file };
     const run = (...args: string[]) => execFileSync(process.execPath, ["--disable-warning=MODULE_TYPELESS_PACKAGE_JSON", "scripts/live-session.mjs", ...args], { env, encoding: "utf8" });
-    expect(() => run("arm", "--origin", "http://192.168.1.20:3000")).toThrow();
-    const armed = run("arm", "--origin", "http://flow.localhost:3107");
-    expect(armed).toMatch(/Armed a live test session until/);
+    expect(() => run("arm", "--provider", "fake", "--origin", "http://192.168.1.20:3000")).toThrow();
+    const armed = run("arm", "--provider", "fake", "--origin", "http://flow.localhost:3107");
+    expect(armed).toMatch(/Armed a live test session for the fake provider \(no API calls\) until/);
     expect(armed).toMatch(/http:\/\/flow\.localhost:3107\/api\/copilot\/live-session\/claim\?token=[\w-]{20,}/);
-    expect(() => run("arm")).toThrow(); // already armed
+    expect(() => run("arm", "--provider", "fake")).toThrow(); // already armed
     expect(run("status")).toMatch(/Session: unclaimed/);
     expect(run("stop")).toMatch(/Session: stopped/);
-    expect(run("arm")).toMatch(/Armed/); // a new allowance only by an explicit new arming
+    expect(run("arm", "--provider", "fake")).toMatch(/Armed/); // a new allowance only by an explicit new arming
   });
 });
 
@@ -576,5 +578,144 @@ describe("what the tester sees", () => {
     expect(t).toContain("Stopped");
     expect(t).toContain("Fake provider · no API calls");
     expect(t).not.toContain("Stop live session");
+  });
+});
+
+// Codex review of the session controls (10 November 2026): two findings,
+// reproduced here before the fix.
+describe("review: a session is bound to the provider it was armed for", () => {
+  const FAKE_ENV = { COPILOT_MODE: "live", COPILOT_LIVE_PROVIDER: "fake" };
+  const arm = (provider: string) => (store.armSession as (...a: unknown[]) => ReturnType<typeof store.armSession>)(file, clock, provider);
+
+  it("a fake-provider session never admits a paid request after the server switches to Anthropic, and no client is made", async () => {
+    const fake = fakeProvider(["answer"]);
+    const { d, made } = deps(fake.client, FAKE_ENV);
+    const { cookie } = await armAndClaim(d, "fake");
+    expect((await ask(d, cookie)).status).toBe(200); // the rehearsal itself works
+    const paid = { ...d, env: ENV };
+    const res = await ask(paid, cookie);
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ code: "provider_mismatch", error: expect.stringMatching(/armed for the fake provider/) });
+    expect(made.count).toBe(0);
+    expect(fake.calls).toHaveLength(0);
+    expect((await view()).used).toMatchObject({ runs: 1 });
+  });
+
+  it("a paid session isn't usable under the fake provider either", async () => {
+    const { d, made } = deps(fakeProvider(["answer"]).client);
+    const { cookie } = await armAndClaim(d, "anthropic");
+    const res = await ask({ ...d, env: FAKE_ENV }, cookie);
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ code: "provider_mismatch" });
+    expect(made.count).toBe(0);
+  });
+
+  it("a session record from before provider binding needs a fresh, explicit arming; it is never treated as paid", async () => {
+    const fake = fakeProvider(["answer"]);
+    const { d, made } = deps(fake.client);
+    const { cookie } = await armAndClaim(d, "anthropic");
+    // Rewrite the record as the earlier code wrote it: version 1, no provider.
+    const old = JSON.parse(readFileSync(file, "utf8"));
+    delete old.provider;
+    old.version = 1;
+    writeFileSync(file, JSON.stringify(old));
+    for (const env of [ENV, FAKE_ENV]) {
+      const res = await ask({ ...d, env }, cookie);
+      expect(res.status).toBe(403);
+      expect(await res.json()).toMatchObject({ code: "unbound_session", error: expect.stringMatching(/arm a new session/i) });
+    }
+    expect(made.count).toBe(0);
+    expect(fake.calls).toHaveLength(0);
+    expect((await view()).status).toBe("unbound");
+    // A fresh arming replaces it.
+    expect((await arm("anthropic")).ok).toBe(true);
+  });
+
+  it("arming needs a known provider", async () => {
+    expect((await arm("paid")).ok).toBe(false);
+    expect((await arm(undefined as unknown as string)).ok).toBe(false);
+    expect(existsSync(file)).toBe(false);
+  });
+
+  it("the claim link refuses a session armed for the other provider", async () => {
+    const { d } = deps(fakeProvider(["answer"]).client, FAKE_ENV);
+    const armed = await arm("anthropic");
+    if (!armed.ok) throw new Error(armed.error);
+    const res = await handleLiveSessionClaim(new Request(`http://localhost:3000/api/copilot/live-session/claim?token=${armed.token}`, { headers: { host: "localhost:3000", "sec-fetch-site": "none" } }), d);
+    expect(res.status).toBe(403);
+    expect(await res.text()).toMatch(/armed for Anthropic/);
+  });
+
+  it("the terminal command needs an explicit provider", () => {
+    const env = { ...process.env, ATLAS_LIVE_SESSION_FILE: file };
+    const run = (...args: string[]) => execFileSync(process.execPath, ["--disable-warning=MODULE_TYPELESS_PACKAGE_JSON", "scripts/live-session.mjs", ...args], { env, encoding: "utf8", stdio: "pipe" });
+    expect(() => run("arm")).toThrow();
+    expect(() => run("arm", "--provider", "paid")).toThrow();
+    expect(existsSync(file)).toBe(false);
+    expect(run("arm", "--provider", "fake")).toMatch(/for the fake provider \(no API calls\)/);
+    expect(run("status")).toMatch(/Provider: fake/);
+  });
+});
+
+describe("review: usage is validated before its cost counts as known", () => {
+  const cases: [string, unknown][] = [
+    ["missing usage", undefined],
+    ["null usage", null],
+    ["no output tokens", { input_tokens: 1_000 }],
+    ["no input tokens", { output_tokens: 100 }],
+    ["a negative count", { input_tokens: -1, output_tokens: 100 }],
+    ["a non-number", { input_tokens: "1000", output_tokens: 100 }],
+    ["an invalid cache count", { input_tokens: 1_000, output_tokens: 100, cache_read_input_tokens: Number.NaN }],
+    ["a fallback attempt without accounting", { input_tokens: 1_000, output_tokens: 100, iterations: [{ type: "message", model: COPILOT_MODEL, input_tokens: 1_000, output_tokens: 0 }, { type: "fallback_message", model: "claude-opus-4-8", input_tokens: 1_000 }] }],
+    ["a fallback attempt without its model", { input_tokens: 1_000, output_tokens: 100, iterations: [{ type: "message", model: COPILOT_MODEL, input_tokens: 1_000, output_tokens: 0 }, { type: "fallback_message", input_tokens: 1_000, output_tokens: 100 }] }],
+    ["an iterations list that isn't a list", { input_tokens: 1_000, output_tokens: 100, iterations: "x" }],
+  ];
+
+  it.each(cases)("%s: the reservation is kept, nothing is priced as zero, and the run ends with the reason", async (_name, usage) => {
+    const fake = fakeProvider([{ usage }, "answer"]);
+    const { d } = deps(fake.client);
+    const { cookie } = await armAndClaim(d);
+    const body = await (await ask(d, cookie)).json();
+    expect(body.status).toBe("failed");
+    expect(body.live.stoppedBy).toMatch(/usage accounting/);
+    expect(body.answer).toMatch(/usage accounting/);
+    expect(body.live.run).toMatchObject({ requests: 1, attempts: 0, usd: 0 });
+    expect(body.live.run.retainedUsd).toBeCloseTo(FIRST_REQUEST_USD, 6);
+    const v = await view();
+    expect(v.used.spentUsd).toBe(0);
+    expect(v.used.retainedUsd).toBeCloseTo(FIRST_REQUEST_USD, 6);
+    expect(fake.calls).toHaveLength(1);
+  });
+
+  it("explicit zero usage is valid accounting: settled as known USD 0", async () => {
+    const fake = fakeProvider([{ usage: { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } }]);
+    const { d } = deps(fake.client);
+    const { cookie } = await armAndClaim(d);
+    const body = await (await ask(d, cookie)).json();
+    expect(body.status).toBe("completed");
+    expect(body.live.run).toMatchObject({ requests: 1, attempts: 1, usd: 0, retainedUsd: 0 });
+  });
+
+  it("nullable cache counts read as none, as the API documents them", async () => {
+    const fake = fakeProvider([{ usage: { input_tokens: 1_000, output_tokens: 100, cache_read_input_tokens: null, cache_creation_input_tokens: null } }]);
+    const { d } = deps(fake.client);
+    const { cookie } = await armAndClaim(d);
+    const body = await (await ask(d, cookie)).json();
+    expect(body.status).toBe("completed");
+    expect(body.live.run.usd).toBeCloseTo(costOf(COPILOT_MODEL, USAGE), 9);
+  });
+
+  it("a complete fallback record is priced attempt by attempt", async () => {
+    const iterations = [
+      { type: "message", model: COPILOT_MODEL, input_tokens: 1_000, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+      { type: "fallback_message", model: "claude-opus-4-8", input_tokens: 1_000, output_tokens: 100, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+    ];
+    const fake = fakeProvider([{ usage: { ...iterations[1], iterations }, model: "claude-opus-4-8" }]);
+    const { d } = deps(fake.client);
+    const { cookie } = await armAndClaim(d);
+    const body = await (await ask(d, cookie)).json();
+    expect(body.status).toBe("completed");
+    expect(body.live.run).toMatchObject({ attempts: 2, retainedUsd: 0 });
+    expect(body.live.run.usd).toBeCloseTo(costOf(COPILOT_MODEL, iterations[0]) + costOf("claude-opus-4-8", iterations[1]), 9);
   });
 });

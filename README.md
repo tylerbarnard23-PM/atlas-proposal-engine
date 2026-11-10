@@ -114,7 +114,7 @@ tests/            unit tests + extraction eval
 ## Tests and evals
 
 ```bash
-npm test        # 609 tests in 37 files (2 need the private UBS PDF and are skipped without it, as in CI): the Copilot agent loop with an injected fake provider (no key, no spend), proposal math and currency handling, calendar dates across time zones, workspace backup and restore, recommendation currencies and previews, cash flows, readiness, insights, CSV/Excel/PDF import, import completeness, Copilot tools (demo mode) + the extraction eval
+npm test        # 628 tests in 37 files (2 need the private UBS PDF and are skipped without it, as in CI): the Copilot agent loop with an injected fake provider (no key, no spend), proposal math and currency handling, calendar dates across time zones, workspace backup and restore, recommendation currencies and previews, cash flows, readiness, insights, CSV/Excel/PDF import, import completeness, Copilot tools (demo mode) + the extraction eval
 npm run eval    # statement-extraction accuracy scorecard
 npm run eval:agent:live   # opt-in PAID live agent evaluation; refuses to run without explicit flags, a key and a spend cap. The cap is an estimate-based guard, not a guaranteed ceiling (see docs/roadmap/AGENT_EVALUATION.md)
 ```
@@ -162,7 +162,7 @@ npm run dev
 
 Open http://localhost:3000. The app loads with a sample client (the Blackwell Family Office); **Settings** resets the sample or clears to a blank workspace.
 
-To try the Copilot with Claude locally, follow the owner setup in [the live-testing session](docs/roadmap/AGENT_EVALUATION.md#local-live-testing-session-interactive--not-armed-paid-use-not-approved): a dedicated workspace and key with a provider-side spend limit, `COPILOT_MODE=live`, a server bound to 127.0.0.1, and a session armed with `npm run live-session -- arm`. The public demo deliberately runs without a key, and live mode refuses on a hosted deployment. Everything else is optional:
+To try the Copilot with Claude locally, follow the owner setup in [the live-testing session](docs/roadmap/AGENT_EVALUATION.md#local-live-testing-session-interactive--not-armed-paid-use-not-approved): a dedicated workspace and key with a provider-side spend limit, `COPILOT_MODE=live`, a server bound to 127.0.0.1, and a session armed with `npm run live-session -- arm --provider anthropic` (bound to that provider). The public demo deliberately runs without a key, and live mode refuses on a hosted deployment. Everything else is optional:
 
 | Variable | Purpose |
 |---|---|

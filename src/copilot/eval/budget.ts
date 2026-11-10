@@ -101,6 +101,48 @@ export function costOf(model: string | undefined, u: { input_tokens?: number | n
   return ((u.input_tokens ?? 0) * p.input + (u.output_tokens ?? 0) * p.output + (u.cache_read_input_tokens ?? 0) * p.cacheRead + (u.cache_creation_input_tokens ?? 0) * p.cacheWrite) / 1e6;
 }
 
+export type PricedUsage = { ok: true; usd: number; attempts: number; largestInput: number; models: string[] } | { ok: false; reason: string };
+
+/**
+ * A response's usage priced attempt by attempt, or why it can't be: the cost
+ * counts as known only when the accounting is complete. Every attempt (the
+ * top-level usage, or each entry of usage.iterations when a refusal fallback
+ * lists them) needs finite, non-negative input and output token counts; cache
+ * counts may be absent or null (the API's "none") but otherwise must be valid
+ * too; and with more than one attempt each must name its model, since each is
+ * priced at its own model's rates. Explicit zeros are valid. Nothing missing is
+ * ever read as zero.
+ */
+export function pricedUsage(response: { model?: unknown; usage?: unknown }): PricedUsage {
+  const usage = response.usage as Record<string, unknown> | null | undefined;
+  if (!usage || typeof usage !== "object" || Array.isArray(usage)) return { ok: false, reason: "the response has no usage" };
+  const iterations = usage.iterations;
+  if (iterations != null && !Array.isArray(iterations)) return { ok: false, reason: "usage.iterations isn't a list" };
+  const listed = Array.isArray(iterations) && iterations.length > 0;
+  const entries: unknown[] = listed ? (iterations as unknown[]) : [usage];
+  const count = (v: unknown) => typeof v === "number" && Number.isFinite(v) && v >= 0;
+  const priced: { model: string; input: number; output: number; read: number; write: number }[] = [];
+  for (const [i, raw] of entries.entries()) {
+    const label = listed ? `attempt ${i + 1} of ${entries.length}` : "the response";
+    const e = raw as Record<string, unknown> | null;
+    if (!e || typeof e !== "object") return { ok: false, reason: `${label} has no usage` };
+    if (!count(e.input_tokens) || !count(e.output_tokens)) return { ok: false, reason: `${label} lacks valid input or output token counts` };
+    for (const k of ["cache_read_input_tokens", "cache_creation_input_tokens"]) {
+      if (e[k] != null && !count(e[k])) return { ok: false, reason: `${label} has an invalid ${k}` };
+    }
+    const model = typeof e.model === "string" && e.model ? e.model : entries.length === 1 && typeof response.model === "string" && response.model ? response.model : null;
+    if (!model) return { ok: false, reason: `${label} doesn't name the model that ran it` };
+    priced.push({ model, input: e.input_tokens as number, output: e.output_tokens as number, read: (e.cache_read_input_tokens as number | null) ?? 0, write: (e.cache_creation_input_tokens as number | null) ?? 0 });
+  }
+  return {
+    ok: true,
+    usd: priced.reduce((a, p) => a + costOf(p.model, { input_tokens: p.input, output_tokens: p.output, cache_read_input_tokens: p.read, cache_creation_input_tokens: p.write }), 0),
+    attempts: priced.length,
+    largestInput: Math.max(...priced.map((p) => p.input + p.read + p.write)),
+    models: [...new Set(priced.map((p) => p.model))],
+  };
+}
+
 /** A conservative worst case for one request: input billed as cache writes, full output, and with fallbacks a second full attempt at the ceiling price. */
 export function worstRequestCost(model: string, inputTokens: number, maxTokens: number, fallbacks: boolean): number {
   const p = priceOf(model);

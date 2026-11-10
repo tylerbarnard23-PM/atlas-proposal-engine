@@ -28,6 +28,8 @@ export interface LiveRunInfo {
 const STATUS_TEXT: Record<SessionStatus, string> = {
   unarmed: "Not armed",
   invalid: "Unreadable",
+  unbound: "Needs re-arming",
+  provider_mismatch: "Other provider",
   unclaimed: "Not claimed",
   not_this_browser: "Another browser",
   active: "Active",

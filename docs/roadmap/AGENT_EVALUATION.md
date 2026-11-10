@@ -404,12 +404,15 @@ The gate is `src/copilot/liveGate.ts`, behind `src/app/api/copilot/route.ts` and
    - A same-origin `Origin` on every POST, and no cross-site `Sec-Fetch-Site`.
    - Also run the server bound to 127.0.0.1 (`-H 127.0.0.1`), so nothing off the machine can reach it.
 3. **Owner's session** (403, 409 or 429):
-   - **Armed:** only from a local terminal with `npm run live-session -- arm`. A browser can't arm.
+   - **Armed:** only from a local terminal with `npm run live-session -- arm --provider anthropic|fake`. A browser can't arm.
+   - **Bound to its provider** (added after Codex review, 10 November 2026). Arming must name the provider explicitly, and the session is usable only while the server runs that same provider. A session armed for the fake provider is refused (403 `provider_mismatch`) once the server is configured for Anthropic, and the reverse. The refusal happens at claim, at admission and at every request reservation, before any client is constructed. Records from before this binding (version 1) read as "unbound" and are refused (403 `unbound_session`) until the owner arms afresh; they never become paid sessions.
    - **Claimed:** by this browser via the one-time link that arming prints, which sets an HttpOnly, SameSite=Strict cookie on `/api/copilot`. Only hashes of the link and the cookie are stored.
    - **Open:** not expired, not stopped, no run in progress, and allowance left.
 4. **Each HTTP request:**
    - Before sending, the gate atomically counts the request and reserves its worst case: the evaluation's `worstRequestCost` for `claude-opus-5-5`, with the largest input seen plus 30,000 tokens and a fallback re-run at the ceiling price, about USD 2.71 at first. It refuses the request if that could pass USD 5, or if the request is the 11th.
-   - **On success**, the reservation is replaced by the usage priced with `costOf` over `usage.iterations`. The tally reports HTTP requests separately from model attempts, since a fallback adds an attempt inside one request.
+   - **On success**, the reservation is replaced by the priced usage **only when the accounting is complete** (`pricedUsage` in `src/copilot/eval/budget.ts`, added after Codex review). Every attempt, whether the top-level usage or each `usage.iterations` entry, needs finite, non-negative input and output counts. Cache counts may be absent or `null` (the API's "none") but must otherwise be valid. With more than one attempt, each must name its model. Explicit zeros are valid.
+   - **Incomplete accounting:** missing, incomplete or invalid usage is never read as zero. The reservation is kept, and the run ends with the reason ("no valid usage accounting …").
+   - **Requests vs attempts:** the tally reports HTTP requests separately from model attempts, since a fallback adds an attempt inside one request.
    - **On an error, timeout or cancellation**, the usage is unknown, so the reservation is **kept as spend**.
    - A different model in the request is refused before anything is reserved.
 
@@ -434,7 +437,19 @@ The gate is `src/copilot/liveGate.ts`, behind `src/app/api/copilot/route.ts` and
 - **Fake provider:** `COPILOT_LIVE_PROVIDER=fake` runs the same gate with the deterministic test provider: no key, no provider call, no spend. It exists to rehearse the controls.
 
 **Evidence (10 November 2026, fake providers only)**
-- **Tests:** `tests/liveSession.test.ts` has 26 tests. They cover:
+- **Codex review fixes (10 November 2026):** 19 regressions in `tests/liveSession.test.ts`, 16 of which failed before the fix.
+  - **Provider binding:** a fake session refused after the server switches to Anthropic, with no client constructed; the reverse direction; an older version-1 record refused under both providers until re-armed; arming without a known provider refused; a claim refused for the other provider; and the CLI requiring `--provider`.
+  - **Usage validation:** missing or `null` usage, no output or input count, negative or non-number counts, an invalid cache count, a fallback attempt without accounting or without its model, and a non-list `iterations`. Each kept its reservation, priced nothing as zero, and ended the run with the reason.
+  - **Valid accounting still settles:** explicit zero usage, `null` cache counts and a complete fallback record.
+  - **Final checks:** typecheck; 628 passed, 0 skipped (37 files); eval 2/2; build passed.
+  - **Rehearsal** (fake-configured server on 127.0.0.1, scratch session file, no Anthropic client possible):
+    - The CLI refused arming without `--provider` or with an unknown one.
+    - A session armed for Anthropic was refused at its claim link (403, explaining the mismatch), shown as "Other provider" with asking disabled, and refused on POST (403 `provider_mismatch`).
+    - A fake-bound session ran: 4 requests and 4 attempts, explicit zero usage settled as known USD 0.
+    - The same record rewritten as version 1 showed "Needs re-arming" and was refused (403 `unbound_session`). A fresh `--provider fake` arming replaced it.
+  - **The finding's own direction is shown by tests only:** a fake session followed by a server switched to Anthropic is verified with injected fakes, which assert that no client is constructed. Running it on a real server would need an Anthropic configuration and could make a real call if the gate failed.
+  - **Not changed (reported):** the pilot runner's `budgetedClient` still prices a response without usage at USD 0 (the same pattern). That is a separate change to the pilot path.
+- **Tests:** `tests/liveSession.test.ts` originally had 26 tests (45 with the review regressions). They cover:
   - readiness and locality;
   - fail-closed cases (no, unreadable, unclaimed or other-browser sessions) and claim links;
   - three runs then refusal; the 10-request cap within and across runs;
@@ -530,10 +545,10 @@ Window 2, the session:
 Set-Location C:\Users\tyler\projects\atlas-proposal-engine
 ```
 
-11. Arm the session; this prints a one-time claim link.
+11. Arm the session for Anthropic (it must match window 1's configuration); this prints a one-time claim link.
 
 ```powershell
-npm run live-session -- arm --origin http://localhost:3000
+npm run live-session -- arm --provider anthropic --origin http://localhost:3000
 ```
 
 12. Open the printed link in the browser on this machine, then use Copilot. The live session bar shows what's left.
@@ -568,7 +583,9 @@ exit
 - Compare `npm run live-session -- status` (estimates) with the Console's usage for the workspace (billing), and report both separately.
 - Answers aren't stored. Note anything worth keeping on the PR yourself, from synthetic data only.
 
-**Rehearsal with no spend:** set `$env:COPILOT_LIVE_PROVIDER = "fake"` and skip steps 4–7. The same gate runs with the test provider and makes no API calls.
+**Rehearsal with no spend:**
+- Set `$env:COPILOT_LIVE_PROVIDER = "fake"`, skip steps 4–7, and arm with `--provider fake`. The same gate runs with the test provider and makes no API calls.
+- A rehearsal session is never carried over to Anthropic: to test paid, stop it and arm afresh with `--provider anthropic`.
 
 ## Implementation slices and order
 

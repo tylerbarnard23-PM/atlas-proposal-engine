@@ -63,11 +63,16 @@
     - **Limits:** USD 5 is not a billing ceiling. The fallback model for Opus 5.5 is unpublished (priced at the $15 / $75 ceiling). The answer's wording can't be reviewed, because the runner keeps no answer text. A pilot pass replaces neither the full 27-trial suite nor the real-model browser check.
   - **Local live-testing session gate (10 November 2026):** every live browser request now passes one server-enforced session:
     - **Limits:** 30 minutes, 3 runs, 10 HTTP requests (retries included), one run at a time, the 100-second deadline, a USD 5 estimate-based guard (not a billing ceiling), and Stop.
-    - **Arming and claiming:** armed only in a local terminal (`npm run live-session -- arm`) and claimed by one browser with a one-time link.
+    - **Arming and claiming:** armed only in a local terminal (`npm run live-session -- arm --provider anthropic|fake`, bound to that provider) and claimed by one browser with a one-time link.
     - **Fails closed:** on hosted deployments, base-URL overrides and non-local or cross-origin requests.
     - **Where:** `src/copilot/liveGate.ts`, `liveSessionStore.ts`, `routeHandler.ts`; the details and the owner setup are in [AGENT_EVALUATION.md](roadmap/AGENT_EVALUATION.md#local-live-testing-session-interactive--not-armed-paid-use-not-approved). The unused ungated `runLiveCopilot` was removed.
     - **Evidence:** fake providers only — `tests/liveSession.test.ts` (26 tests), 609 passed / 0 skipped locally, eval 2/2, build, and a fake-provider browser journey on `flow.localhost:3107`.
     - **Not armed for real; paid interactive testing NOT approved.** After any failed request the kept reservation (about USD 2.71) makes the guard refuse further requests in that session, by design.
+  - **Codex review fixes to the session gate (10 November 2026):**
+    1. **Provider binding:** arming needs `--provider anthropic|fake`, and the session is usable only while the server runs that provider. A fake session can never become paid. Older (version 1) records are refused until re-armed.
+    2. **Usage validation:** usage counts as known only with complete accounting (`pricedUsage`); otherwise the reservation is kept and the run ends with the reason. Explicit zeros stay valid.
+
+    **Evidence:** 19 regressions (16 failed first), 628 passed / 0 skipped locally, eval 2/2, build, and a fake-server rehearsal of the arming and refusal paths. **Reported, not changed:** the pilot runner's `budgetedClient` still prices missing usage as USD 0.
   - **Next action:** Codex reviews the session controls on PR #82. Then the owner decides whether to approve this exact pilot and/or an interactive session with this exact configuration. If approved, the owner runs the documented commands locally; report the result on PR #82 and #54. Codex review of PR #82 stands. Reconciling PR #80's security plan, the zod fix and D5 copy cleanup come later.
 - **Preserve:** PR #80 (the D5 secrets/exposure plan) is open; keep its work when reconciling docs, and don't merge it as part of D4.
 - **Open follow-ups:** #76 (reserve-breach attribution for legacy actions), unchanged. **Zod audit warning:** `npm audit` reports GHSA-mrhx-c7xc-m3w5 (high) for zod <4.6.6, and its only offered fix is a breaking upgrade (`--force` installs zod 4.6.7). It needs a separate, tested dependency change; don't run `npm audit fix --force`.
