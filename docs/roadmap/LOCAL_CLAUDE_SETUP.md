@@ -5,7 +5,7 @@ How a user runs Atlas on their own machine and connects their own Claude access,
 ## Status
 
 - **Route 1 is chosen by the owner and implemented:** the existing Claude API integration with a user-owned Console API key, guided key entry in Atlas, optional remembering in the operating system's credential store, and sessions started inside Atlas.
-- **Awaiting independent Codex review.** Not merged, not deployed.
+- **Reviewed once at `03128df` (11 November 2026): eight findings and seven evidence gaps, recorded under "Review findings" below. None is fixed yet.** Not merged, not deployed.
 - **No real-Claude verification has occurred.** Everything was built and checked with fake providers, made-up keys and synthetic data. No request has been sent to Anthropic, and no real key has been validated.
 - **No paid testing is authorized.** The earlier paid-pilot approval was withdrawn.
 - **No Anthropic permission or legal clearance has been sought or obtained.** Route 1 uses a customer-owned API key, which Anthropic's documentation allows; the other routes are not part of this work.
@@ -136,9 +136,38 @@ Three routes were assessed against Anthropic's official documentation before the
 - Subscriber credits can be spent by a self-hosted application such as Atlas. The documentation names the Claude API and the user's own apps without restricting application type.
 - The Console's menu names are as documented on 11 November 2026; they can change.
 
+## Review findings (11 November 2026, reviewed head `03128df`)
+
+A read-only review of the onboarding package against the security design above. **Nothing is fixed yet.** No way was found to spend or expose a key without pairing. CI "Typecheck, test, build" ([run 43051645777](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/actions/runs/43051645777)) and Vercel were reported passing on `03128df`; the CI test counts were not extracted.
+
+**Resolve findings 1 and 2 before any real credential is used.**
+
+| # | Finding | Evidence | How confirmed |
+|---|---|---|---|
+| 1 | **Key validation accepts subscription-token-shaped strings.** `keyShapeProblem` refuses only `sk-ant-admin…` and accepts anything else starting `sk-ant-`, so a Claude subscription OAuth token could be pasted and stored. | `src/copilot/localConnection.ts:98-99`. `sk-ant-oat01-…` and `sk-ant-ort01-…` were both accepted. | Run. The prefix evidence is community-sourced (GitHub issues and articles), not an officially verified format. The guide and UI also state the standard-key prefix as fact, which the official pages read did not state. |
+| 2 | **Credentials are resolved before session admission.** The key is read from its store before the session is checked, so a local same-origin request with no session, or a used-up one, opens the OS credential store. The file's header says the key is read only for an admitted run. | `src/copilot/liveGate.ts:238` (resolve) before `:242` (admit); header at `:18`. | Code read. Nothing leaks. |
+| 3 | **Pairing lasts seven days with no revocation, and there is no cumulative allowance.** A paired browser can stop and start sessions back to back; each new record replaces the old counters. The only total cap is the Console workspace spend limit. | `src/copilot/localPairing.ts:18`; no unpair function, command or control; `armSession` in `liveSessionStore.ts`. | Code read. **An owner design decision, not a demonstrated authorization bypass:** every start is an explicit, authorized request. |
+| 4 | **Fixed cookie names can collide between instances on the same host.** Cookies aren't isolated by port, so pairing or starting a session in one Atlas instance on 127.0.0.1 overwrites another's cookies. | `src/copilot/localConnect.ts:21`, `src/copilot/liveGate.ts:114`. | Reasoned from the code. **Not reproduced.** |
+| 5 | **The terminal scripts and the server resolve the state folder differently.** The launcher starts the server in the repository root but resolves its own state folder from the current directory. Run by path from elsewhere, the pairing link would be refused. `npm run` always sets the right directory. | `scripts/atlas-local.mjs:182, 193, 219`. | **Reproduced:** the doctor run from another folder created `.atlas-local` there. |
+| 6 | **The Node version check runs after the TypeScript imports.** On an older Node the script fails on its `.ts` imports before the friendly message can print. | `scripts/atlas-local.mjs:22-25`. | Code read; not run on an older Node. |
+| 7 | **Request bodies are buffered before authorization and size enforcement.** `smallJson` reads the whole body and then tests its length, and the handlers call it before `authorize`. | `src/copilot/routeHandler.ts:140-141, 160, 171`. | Code read. |
+| 8 | **Environment credentials are not trimmed like pasted credentials.** A pasted key is trimmed before it is stored; the environment key is used as is. | `saveKey` and `useEnvironmentKey` in `src/copilot/localConnect.ts`. | Code read. Impact not measured. |
+
+**Evidence gaps (not defects)**
+- The launcher's default browser-opening path was never run; the rehearsal used `--no-open`.
+- `--dev` mode was not exercised.
+- `npm run local:pair` was not run.
+- Terminal arming without a connected key has no test.
+- macOS Keychain and Linux Secret Service were not exercised.
+- Hosted refusal was not independently probed on the preview; it is covered by tests only.
+- No real-Claude verification.
+
+**What held up:** single-use, hash-only pairing tokens; cookie, header token and strict origin on every change (a same-host page on another port is refused); no plaintext credential path; a failed OS-store save changing nothing; no silent switch to the environment key; provider and credential binding at admission and before every request; limits that can only be lowered; local endpoints checking server readiness first; and the native module building on Linux CI and Vercel.
+
+
 ## Open before real use
 
-1. Codex review of this package.
+1. Fixing the review findings above (1 and 2 before any real credential), then Codex review of the fixes.
 2. The owner's explicit approval of a real-Claude verification: one key, one session, synthetic data.
 3. Exercising the macOS and Linux credential stores.
 4. Data scope beyond sample data, which needs [PII_PROTECTION.md](PII_PROTECTION.md).

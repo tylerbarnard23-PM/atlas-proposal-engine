@@ -55,7 +55,18 @@ Stop for Codex review with exact head, checks, preview association, remaining li
 
 D1 (PR #72, `0381db1`), D2 (PR #75, `073049f`), D2a (PR #79, `c0ee4e9`) and D3 (PR #81, `85b3910`) are released; the D1 command above and the D1–D3 summaries below are historical, so do not rerun them. **D4 is in review (PR #82).** D5 follows its review/release. PR #82 also carries one bounded, owner-approved D5 usability slice (the proposal-flow simplification); it doesn't complete D5. The handoff holds the current checkpoint.
 
+### Next command: fix the onboarding review findings
+
+Saved on 11 November 2026; not yet started. Branch `feat/d4-contextual-agent`, PR #82, reviewed code head `03128df`. Verify heads, tree and stash first, and preserve any newer work. The findings are in [LOCAL_CLAUDE_SETUP.md](LOCAL_CLAUDE_SETUP.md#review-findings-11-november-2026-reviewed-head-03128df).
+
+> Reproduce and batch-fix confirmed onboarding findings on PR #82, with meaningful failing regressions first. Resolve findings 1 and 2 before real credentials are used. Verify official credential guidance rather than treating a prefix as proof of authentication. Prepare a concrete recommendation for pairing revocation/lifetime and cumulative allowances. Include confirmed fixes 4–8 in the same coherent batch. Use fake providers and dummy credentials only, then run the required checks and isolated browser verification. Stop for Codex review.
+
+Until the owner says otherwise: no real key, no model call, no paid testing, no session arming for a paid provider, no dependency change, no merge, no deployment.
+
 ### Next command: review the local Claude onboarding
+
+**Step 1 done on 11 November 2026 (a read-only review at `03128df`); don't rerun it.** Steps 2 and 3 are carried by the command above.
+
 
 Saved on 11 November 2026; not yet started. Branch `feat/d4-contextual-agent`, PR #82. The handoff names the head. Verify heads, tree and stash first, and preserve any newer work.
 
