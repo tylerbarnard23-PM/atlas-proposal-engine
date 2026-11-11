@@ -14,6 +14,8 @@ import { Textarea } from "@/components/ui/Input";
 import { formatCurrency } from "@/utils/formatting";
 import { cn } from "@/utils/cn";
 import { LiveSessionBar, liveReady, type LiveInfo, type LiveRunInfo } from "./LiveSessionBar";
+import { ConnectClaude } from "./ConnectClaude";
+import type { LocalInfo } from "@/copilot/localConnect";
 import type { Recommendation } from "@/domain/types";
 import type { CopilotMode, CopilotResult, RunStatus } from "@/copilot/agent";
 
@@ -67,11 +69,11 @@ const STATUS_LABEL: Record<RunStatus, string> = {
  * the live test session (a GET; it never starts a run). `refresh` re-reads it.
  */
 export function useCopilotMode() {
-  const [mode, setMode] = React.useState<{ mode: CopilotMode; model: string | null; live: LiveInfo | null } | null>(null);
+  const [mode, setMode] = React.useState<{ mode: CopilotMode; model: string | null; live: LiveInfo | null; local: LocalInfo | null } | null>(null);
   const refresh = React.useCallback(() => {
     fetch("/api/copilot")
       .then((r) => r.json())
-      .then((d) => setMode({ mode: d.mode, model: d.model ?? null, live: d.live ?? null }))
+      .then((d) => setMode({ mode: d.mode, model: d.model ?? null, live: d.live ?? null, local: d.local ?? null }))
       .catch(() => setMode(null));
   }, []);
   React.useEffect(() => refresh(), [refresh]);
@@ -201,6 +203,7 @@ export function CopilotWorkspace({
         )}
       </div>
 
+      {mode?.mode === "live" && mode.live && <ConnectClaude live={mode.live} local={mode.local} onChanged={mode.refresh} />}
       {mode?.mode === "live" && <LiveSessionBar live={mode.live ?? { available: false, reasons: ["Live session status couldn't be read."], provider: null, session: null }} lastRun={lastRun} onChanged={mode.refresh} />}
 
       <div className="space-y-2">

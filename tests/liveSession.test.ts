@@ -16,6 +16,7 @@ import { STORY_ACCOUNTS, STORY_HOLDINGS } from "@/data/allocationStory";
 import { SEED_ADVISOR, SEED_CLIENT } from "@/data/seedClient";
 import { DISCLOSURE_LIBRARY } from "@/domain/disclosureLibrary";
 import { copilotRequest } from "./support/copilotRequest";
+import { currentRevision, localDeps, selectEnvironmentKey } from "./support/localDeps";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { LiveSessionBar, liveReady } from "@/components/copilot/LiveSessionBar";
@@ -90,22 +91,13 @@ function fakeProvider(script: Step[] | ((n: number) => Step)) {
 // --- Requests ----------------------------------------------------------------------
 
 const LOCAL = { host: "localhost:3000", origin: "http://localhost:3000", "sec-fetch-site": "same-origin" };
-const ENV = { COPILOT_MODE: "live", ANTHROPIC_API_KEY: "test-placeholder-not-a-key" };
+const ENV = { COPILOT_MODE: "live", ANTHROPIC_API_KEY: "sk-ant-test-placeholder-not-a-real-key" };
 
+// The key is the environment's, selected explicitly (as the user does in Atlas): a key is never used just because it is set.
 function deps(client: MessagesClient, env: Record<string, string | undefined> = ENV) {
-  const made = { count: 0 };
-  return {
-    made,
-    d: {
-      env,
-      now: () => clock,
-      sessionFile: file,
-      makeClient: () => {
-        made.count++;
-        return client;
-      },
-    },
-  };
+  const t = localDeps({ dir, sessionFile: file, client, env, now: () => clock });
+  selectEnvironmentKey(t.d, clock);
+  return { made: t.made, d: t.d };
 }
 
 const ask = (d: ReturnType<typeof deps>["d"], cookie: string | null, headers: Record<string, string> = LOCAL, signal?: AbortSignal) =>
@@ -121,7 +113,7 @@ const ask = (d: ReturnType<typeof deps>["d"], cookie: string | null, headers: Re
 
 /** Arms a session as the owner's terminal does, and claims it in "the browser". Returns the cookie. */
 async function armAndClaim(d: ReturnType<typeof deps>["d"], provider: "anthropic" | "fake" = d.env.COPILOT_LIVE_PROVIDER === "fake" ? "fake" : "anthropic") {
-  const armed = await store.armSession(file, clock, provider);
+  const armed = await store.armSession(file, clock, provider, { credentialRevision: currentRevision(d) });
   if (!armed.ok) throw new Error(armed.error);
   const res = await handleLiveSessionClaim(new Request(`http://localhost:3000/api/copilot/live-session/claim?token=${armed.token}`, { headers: { host: "localhost:3000", "sec-fetch-site": "none" } }), d);
   expect(res.status).toBe(303);
@@ -137,10 +129,11 @@ const view = () => store.readView(file, clock, null);
 // --- Tests -------------------------------------------------------------------------
 
 describe("server readiness and locality", () => {
-  it("live mode needs a local server set-up: not hosted, no base-URL override, a key (or the fake provider)", () => {
+  it("live mode needs a local server set-up: not hosted and no base-URL override; the key is connected separately", () => {
     expect(liveReadiness(ENV)).toEqual({ ok: true, provider: "anthropic" });
     expect(liveReadiness({ COPILOT_MODE: "live", COPILOT_LIVE_PROVIDER: "fake" })).toEqual({ ok: true, provider: "fake" });
-    expect(liveReadiness({ COPILOT_MODE: "live" })).toMatchObject({ ok: false, reasons: ["ANTHROPIC_API_KEY isn't set."] });
+    // A key is no longer part of the server's set-up: it is connected in Atlas and checked at admission (see the hosted test below and tests/localConnect.test.ts).
+    expect(liveReadiness({ COPILOT_MODE: "live" })).toEqual({ ok: true, provider: "anthropic" });
     expect(liveReadiness({ ...ENV, VERCEL: "1" }).ok).toBe(false);
     expect(liveReadiness({ ...ENV, VERCEL_ENV: "production" }).ok).toBe(false);
     expect(liveReadiness({ ...ENV, ANTHROPIC_BASE_URL: "https://proxy.example" }).ok).toBe(false);
@@ -174,11 +167,11 @@ describe("fails closed before any provider call", () => {
 
     writeFileSync(file, "{ not json");
     expect(await (await ask(d, "made-up")).json()).toMatchObject({ code: "invalid_session" });
-    writeFileSync(file, JSON.stringify({ version: 2, provider: "anthropic", id: "x", armedAt: T0.toISOString(), claimHash: "h", cookieHash: null, stopped: null, runs: -1 }));
+    writeFileSync(file, JSON.stringify({ version: 3, provider: "anthropic", credentialRevision: null, limits: store.LIVE_SESSION_LIMITS, id: "x", armedAt: T0.toISOString(), claimHash: "h", cookieHash: null, stopped: null, runs: -1 }));
     expect(await (await ask(d, "made-up")).json()).toMatchObject({ code: "invalid_session" });
     rmSync(file);
 
-    expect((await store.armSession(file, clock, "anthropic")).ok).toBe(true);
+    expect((await store.armSession(file, clock, "anthropic", { credentialRevision: currentRevision(d) })).ok).toBe(true);
     expect(await (await ask(d, null)).json()).toMatchObject({ code: "not_claimed" });
 
     await store.stopSession(file, clock, "test");
@@ -407,9 +400,9 @@ describe("stop, restart and budget", () => {
     expect((await ask(d, cookie)).status).toBe(200);
 
     // A run admitted and mid-request when the server died: nothing settled it.
-    const admitted = await store.admitRun(file, clock, cookie, FIRST_REQUEST_USD, "anthropic");
+    const admitted = await store.admitRun(file, clock, cookie, FIRST_REQUEST_USD, "anthropic", currentRevision(d));
     if (!admitted.ok) throw new Error(admitted.error);
-    expect((await store.reserveRequest(file, clock, admitted.runId, "anthropic", () => FIRST_REQUEST_USD)).ok).toBe(true);
+    expect((await store.reserveRequest(file, clock, admitted.runId, "anthropic", () => FIRST_REQUEST_USD, currentRevision(d))).ok).toBe(true);
 
     // "Restart": fresh modules read the same file.
     vi.resetModules();
@@ -467,10 +460,14 @@ describe("no way around the gate", () => {
     const fake = fakeProvider(["answer"]);
     const { d, made } = deps(fake.client);
     const { cookie } = await armAndClaim(d);
-    for (const env of [{ ...ENV, VERCEL: "1" }, { ...ENV, ANTHROPIC_BASE_URL: "https://proxy.example" }, { COPILOT_MODE: "live" }]) {
+    for (const env of [{ ...ENV, VERCEL: "1" }, { ...ENV, ANTHROPIC_BASE_URL: "https://proxy.example" }]) {
       const res = await ask({ ...d, env }, cookie);
       expect(res.status).toBe(503);
     }
+    // The selected environment key gone: refused for the missing credential (it was a set-up refusal before keys could be connected in Atlas).
+    const noKey = await ask({ ...d, env: { COPILOT_MODE: "live" } }, cookie);
+    expect(noKey.status).toBe(403);
+    expect(await noKey.json()).toMatchObject({ code: "credential_missing" });
     expect(made.count).toBe(0);
   });
 
@@ -521,11 +518,11 @@ describe("what is kept", () => {
     await ask(d, cookie);
     const text = readFileSync(file, "utf8");
     for (const secret of [QUESTION, "Synthetic answer for human review", token, cookie, "Live Gate Household", ENV.ANTHROPIC_API_KEY]) expect(text).not.toContain(secret);
-    expect(Object.keys(JSON.parse(text)).sort()).toEqual(["active", "armedAt", "attempts", "claimHash", "cookieHash", "history", "id", "largestInput", "pending", "provider", "requests", "retainedUsd", "runs", "spentUsd", "stopped", "version"]);
+    expect(Object.keys(JSON.parse(text)).sort()).toEqual(["active", "armedAt", "attempts", "claimHash", "cookieHash", "credentialRevision", "history", "id", "largestInput", "limits", "pending", "provider", "requests", "retainedUsd", "runs", "spentUsd", "stopped", "version"]);
   });
 
   it("the owner's terminal script arms, reports and stops, against the same record (no provider call)", () => {
-    const env = { ...process.env, ATLAS_LIVE_SESSION_FILE: file };
+    const env = { ...process.env, ATLAS_LIVE_SESSION_FILE: file, ATLAS_LOCAL_DIR: dir };
     const run = (...args: string[]) => execFileSync(process.execPath, ["--disable-warning=MODULE_TYPELESS_PACKAGE_JSON", "scripts/live-session.mjs", ...args], { env, encoding: "utf8" });
     expect(() => run("arm", "--provider", "fake", "--origin", "http://192.168.1.20:3000")).toThrow();
     const armed = run("arm", "--provider", "fake", "--origin", "http://flow.localhost:3107");
@@ -593,6 +590,10 @@ describe("review: a session is bound to the provider it was armed for", () => {
     const { cookie } = await armAndClaim(d, "fake");
     expect((await ask(d, cookie)).status).toBe(200); // the rehearsal itself works
     const paid = { ...d, env: ENV };
+    // With no key connected the paid request is refused for that alone.
+    expect(await (await ask(paid, cookie)).json()).toMatchObject({ code: "no_credential" });
+    // Even with a key connected, the rehearsal session is never the paid one.
+    selectEnvironmentKey(paid, clock);
     const res = await ask(paid, cookie);
     expect(res.status).toBe(403);
     expect(await res.json()).toMatchObject({ code: "provider_mismatch", error: expect.stringMatching(/armed for the fake provider/) });
@@ -647,7 +648,7 @@ describe("review: a session is bound to the provider it was armed for", () => {
   });
 
   it("the terminal command needs an explicit provider", () => {
-    const env = { ...process.env, ATLAS_LIVE_SESSION_FILE: file };
+    const env = { ...process.env, ATLAS_LIVE_SESSION_FILE: file, ATLAS_LOCAL_DIR: dir };
     const run = (...args: string[]) => execFileSync(process.execPath, ["--disable-warning=MODULE_TYPELESS_PACKAGE_JSON", "scripts/live-session.mjs", ...args], { env, encoding: "utf8", stdio: "pipe" });
     expect(() => run("arm")).toThrow();
     expect(() => run("arm", "--provider", "paid")).toThrow();

@@ -386,7 +386,14 @@ exit
 
 ### Local live-testing session (interactive) — not armed; paid use NOT approved
 
-**Next step, 11 November 2026:** how a user connects their own Claude access is assessed in [LOCAL_CLAUDE_SETUP.md](LOCAL_CLAUDE_SETUP.md) (a plan; nothing in it is built or approved). The session below stays the only live path until the owner settles that route.
+**Update, 11 November 2026: local onboarding (Route 1) is implemented on PR #82 and awaits Codex review.** [LOCAL_CLAUDE_SETUP.md](LOCAL_CLAUDE_SETUP.md) is now the setup guide and the security design. What changed in this section's contract:
+- **A key is connected in Atlas** by a paired browser (session-only, or remembered in the OS credential store). A key in the environment is used only after it is selected there. A key is no longer part of the server's set-up check, so live without one is refused as `no_credential` (403), not `live_unavailable`.
+- **A session can be started in Atlas** after its allowance is confirmed. The limits below are now ceilings: a session may lower them, never raise them. Terminal arming remains.
+- **Sessions are also bound to the credential revision** (record version 3). Replacing or removing the key stops the session; version-2 records are refused like version-1 ones.
+- **Evidence:** `tests/localConnect.test.ts` (34 tests) and the updated `tests/liveSession.test.ts` (45), fake providers and fake credential stores only. Local final checks: typecheck clean; 684 passed, 0 skipped (39 files, private fixture present); eval 2/2; build passed.
+- **Still true:** no paid call has been made, no real key has been used, and paid testing is not authorized.
+
+The text below is the session gate as first built; read it with those changes in mind.
 
 Added 10 November 2026 on PR #82. The pilot runner above covers only its own command-line run. **Every live browser request** now passes one server-enforced session instead. This section describes the controls and the owner's setup. **No paid call has been made, no real session has been armed, and paid interactive testing is not approved** until the completed controls and this exact session configuration are reviewed.
 
@@ -486,6 +493,8 @@ The gate is `src/copilot/liveGate.ts`, behind `src/app/api/copilot/route.ts` and
   - Expiry and a 375px layout were checked.
 
 **Owner setup before any paid interactive test (do not perform until approved)**
+
+> **Superseded as the user path (11 November 2026).** Use `npm run local` and Connect Claude ([LOCAL_CLAUDE_SETUP.md](LOCAL_CLAUDE_SETUP.md)). The steps below remain valid as the advanced, environment-key path with one addition: after step 9, open Atlas with a pairing link (`npm run local:pair -- --origin http://localhost:3000`) and choose "Use the server's environment key" under Connect Claude before arming in step 11. Without that selection the key is not used.
 
 1. **In the Anthropic Console** (as the organization admin):
    - Create a dedicated workspace for Atlas testing.

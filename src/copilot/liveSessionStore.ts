@@ -1,6 +1,6 @@
-import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { randomUUID } from "node:crypto";
+import { resolve } from "node:path";
+import { hash, randomToken, readJson, sameHash, saveJson as save, withLock } from "./localFiles.ts";
 
 // The local live-testing session: the one allowance every live Copilot
 // request draws on. The state is a small JSON file on this machine
@@ -9,16 +9,48 @@ import { dirname, resolve } from "node:path";
 // process and across processes) and is written atomically, so admission and
 // spending reservations can't race. Only hashes, counters, timestamps and
 // per-run summaries are stored: never prompts, answers, payloads or keys.
-// The owner arms a session from a terminal (scripts/live-session.mjs), which
-// is the only way to create one, and names the provider it is for: Anthropic
-// (paid) or the fake provider (no API calls). A session is usable only while
-// the server runs that same provider, so a rehearsal can never turn into a
-// paid session. Records from before this binding (version 1) are refused
-// until the owner arms afresh. This file imports Node built-ins only, so that
-// script can load it directly.
+// A session starts in one of two ways: a paired browser starts it in Atlas
+// after confirming its allowance (localConnect.ts), or the owner arms it from
+// a terminal (scripts/live-session.mjs) and a browser claims it. Either way it
+// names the provider it is for (Anthropic, paid; or the fake provider, no API
+// calls) and the credential revision it was started under, and is usable only
+// while the server runs that same provider with that same credential: a
+// rehearsal can never turn into a paid session, and replacing the key ends
+// the old session. Its allowance is fixed when it starts, at or below the
+// ceilings here. Records from before these bindings (versions 1 and 2) are
+// refused until a new session is started. This file imports Node built-ins
+// only (through localFiles.ts), so that script can load it directly.
 
-/** Fixed limits of one session. USD is an estimate-based guard, not a billing ceiling. */
+/** The ceilings of one session, and its default allowance. USD is an estimate-based guard, not a billing ceiling. */
 export const LIVE_SESSION_LIMITS = { minutes: 30, runs: 3, requests: 10, usd: 5, activeRuns: 1 } as const;
+/** One session's allowance: never above LIVE_SESSION_LIMITS. */
+export interface Allowance {
+  minutes: number;
+  runs: number;
+  requests: number;
+  usd: number;
+  activeRuns: 1;
+}
+export type AllowanceChoice = Pick<Allowance, "minutes" | "runs" | "requests" | "usd">;
+
+/**
+ * The allowance a session would start with: the ceilings, lowered by any valid
+ * choice. Whole minutes, runs and requests of at least 1; a positive USD
+ * figure. Anything above a ceiling, or not a number, is refused: a choice can
+ * lower a limit and never raise it.
+ */
+export function allowanceFrom(choice: Partial<AllowanceChoice> | undefined | null): { ok: true; allowance: Allowance } | { ok: false; error: string } {
+  const out: Allowance = { ...LIVE_SESSION_LIMITS };
+  for (const key of ["minutes", "runs", "requests", "usd"] as const) {
+    const v = choice?.[key];
+    if (v === undefined) continue;
+    const ceiling = LIVE_SESSION_LIMITS[key];
+    if (typeof v !== "number" || !Number.isFinite(v) || v <= 0 || (key !== "usd" && !Number.isInteger(v))) return { ok: false, error: `The session's ${key} must be a ${key === "usd" ? "positive number" : "whole number of at least 1"}.` };
+    if (v > ceiling) return { ok: false, error: `The session's ${key} can be lowered, not raised: ${v} is above the limit of ${ceiling}.` };
+    out[key] = v;
+  }
+  return { ok: true, allowance: out };
+}
 /** A run still marked active after the 100-second run deadline plus this grace was abandoned (a crash or restart). */
 export const STALE_RUN_MS = 100_000 + 30_000;
 export const DEFAULT_SESSION_FILE = ".atlas-local/live-session.json";
@@ -52,9 +84,13 @@ export interface Reservation {
   at: string;
 }
 export interface SessionState {
-  version: 2;
+  version: 3;
   /** The provider this session was armed for. */
   provider: SessionProvider;
+  /** The credential revision it was started under (null: no key in use, which only the fake provider allows). */
+  credentialRevision: string | null;
+  /** This session's allowance, fixed when it started. */
+  limits: Allowance;
   id: string;
   armedAt: string;
   claimHash: string;
@@ -80,7 +116,9 @@ export type SessionErrorCode =
   | "invalid_session"
   | "unbound_session"
   | "provider_mismatch"
+  | "credential_mismatch"
   | "bad_provider"
+  | "bad_allowance"
   | "already_armed"
   | "bad_token"
   | "already_claimed"
@@ -93,11 +131,9 @@ export type SessionErrorCode =
   | "not_active_run";
 export type Result<T> = ({ ok: true } & T) | { ok: false; code: SessionErrorCode; error: string };
 
-const hash = (s: string) => createHash("sha256").update(s).digest("hex");
-const sameHash = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 const round = (n: number) => Math.round(n * 1e6) / 1e6;
 
-export const expiresAt = (s: Pick<SessionState, "armedAt">) => new Date(Date.parse(s.armedAt) + LIVE_SESSION_LIMITS.minutes * 60_000);
+export const expiresAt = (s: Pick<SessionState, "armedAt" | "limits">) => new Date(Date.parse(s.armedAt) + s.limits.minutes * 60_000);
 export const committedUsd = (s: Pick<SessionState, "spentUsd" | "retainedUsd" | "pending">) => round(s.spentUsd + s.retainedUsd + s.pending.reduce((a, r) => a + r.usd, 0));
 
 // --- File access ------------------------------------------------------------
@@ -112,7 +148,11 @@ const isTally = (t: unknown): t is RunTally => {
 /** The session in the file, or null when it is missing or doesn't read as a valid session (which callers treat as closed). */
 export function parseState(raw: unknown): SessionState | null {
   const s = raw as SessionState;
-  if (!s || s.version !== 2 || !isProvider(s.provider) || !str(s.id) || !str(s.armedAt) || Number.isNaN(Date.parse(s.armedAt)) || !str(s.claimHash)) return null;
+  if (!s || s.version !== 3 || !isProvider(s.provider) || !str(s.id) || !str(s.armedAt) || Number.isNaN(Date.parse(s.armedAt)) || !str(s.claimHash)) return null;
+  if (!(s.credentialRevision === null || str(s.credentialRevision))) return null;
+  // A stored allowance above a ceiling is never honoured.
+  const limits = s.limits && typeof s.limits === "object" ? allowanceFrom({ minutes: s.limits.minutes, runs: s.limits.runs, requests: s.limits.requests, usd: s.limits.usd }) : null;
+  if (!limits || !limits.ok || s.limits.activeRuns !== 1) return null;
   if (!(s.cookieHash === null || str(s.cookieHash))) return null;
   if (!(s.stopped === null || (s.stopped && str(s.stopped.at) && typeof s.stopped.reason === "string"))) return null;
   if (![s.runs, s.requests, s.attempts, s.spentUsd, s.retainedUsd, s.largestInput].every(num)) return null;
@@ -125,26 +165,23 @@ export function parseState(raw: unknown): SessionState | null {
 type Loaded = { kind: "none" } | { kind: "invalid" } | { kind: "unbound" } | { kind: "ok"; state: SessionState };
 
 function load(file: string): Loaded {
-  if (!existsSync(file)) return { kind: "none" };
-  try {
-    const raw = JSON.parse(readFileSync(file, "utf8"));
-    // Armed before sessions were bound to a provider: never usable, whatever the server runs.
-    if (raw && typeof raw === "object" && (raw.version === 1 || (raw.version === 2 && !isProvider(raw.provider)))) return { kind: "unbound" };
-    const state = parseState(raw);
-    return state ? { kind: "ok", state } : { kind: "invalid" };
-  } catch {
-    return { kind: "invalid" };
-  }
+  const raw = readJson(file) as { version?: unknown } | null | undefined;
+  if (raw === undefined) return { kind: "none" };
+  if (raw === null) return { kind: "invalid" };
+  // Armed before sessions were bound to a provider and a credential: never usable, whatever the server runs.
+  if (raw && typeof raw === "object" && (raw.version === 1 || raw.version === 2)) return { kind: "unbound" };
+  const state = parseState(raw);
+  return state ? { kind: "ok", state } : { kind: "invalid" };
 }
 
-const UNBOUND_ERROR =
-  "This live session was armed before sessions were bound to a provider, so it can't be used. Arm a new session in a terminal: npm run live-session -- arm --provider anthropic (or fake).";
+const HOW_TO_START = "Start a new session in Atlas (Connect Claude on the Copilot page), or arm a new session in a terminal: npm run live-session -- arm --provider anthropic (or fake).";
+const UNBOUND_ERROR = `This live session was armed before sessions were bound to a provider and a key, so it can't be used. ${HOW_TO_START}`;
 
 /** The refusal for a record that isn't a usable session, or null when it is one. */
 function notUsable(l: Loaded): Extract<Result<object>, { ok: false }> | null {
-  if (l.kind === "none") return { ok: false, code: "no_session", error: "No live test session is armed. The owner arms one in a local terminal: npm run live-session -- arm --provider anthropic (or fake)." };
+  if (l.kind === "none") return { ok: false, code: "no_session", error: `No live session is armed. ${HOW_TO_START}` };
   if (l.kind === "unbound") return { ok: false, code: "unbound_session", error: UNBOUND_ERROR };
-  if (l.kind === "invalid") return { ok: false, code: "invalid_session", error: "The live session record can't be read, so live requests are refused. Arm a new session from the terminal." };
+  if (l.kind === "invalid") return { ok: false, code: "invalid_session", error: `The live session record can't be read, so live requests are refused. ${HOW_TO_START}` };
   return null;
 }
 
@@ -154,73 +191,21 @@ function providerMismatch(s: SessionState, provider: SessionProvider): Extract<R
   return {
     ok: false,
     code: "provider_mismatch",
-    error: `This live session was armed for ${providerName(s.provider)}, but the server is now configured for ${providerName(provider)}. It isn't carried over: arm a new session for it (npm run live-session -- arm --provider ${provider}).`,
+    error: `This live session was armed for ${providerName(s.provider)}, but the server is now configured for ${providerName(provider)}. It isn't carried over: stop it and start a new session for ${providerName(provider)}.`,
   };
 }
 
-function save(file: string, state: SessionState) {
-  mkdirSync(dirname(file), { recursive: true });
-  const tmp = `${file}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
-  writeFileSync(tmp, JSON.stringify(state, null, 2), { encoding: "utf8", mode: 0o600 });
-  for (let i = 0; ; i++) {
-    try {
-      renameSync(tmp, file);
-      return;
-    } catch (err) {
-      // Windows can briefly refuse to replace a file another process has open.
-      if (i >= 20) {
-        rmSync(tmp, { force: true });
-        throw err;
-      }
-      const until = Date.now() + 10;
-      while (Date.now() < until) {
-        /* brief spin before retrying the rename */
-      }
-    }
-  }
+/** Refuses a session started under another credential than the one in use now (the key was replaced, removed or reselected). */
+function credentialMismatch(s: SessionState, credentialRevision: string | null): Extract<Result<object>, { ok: false }> | null {
+  if (s.credentialRevision === credentialRevision) return null;
+  return {
+    ok: false,
+    code: "credential_mismatch",
+    error: "The API key connection changed after this session started, so the session can't be used. Its counters are kept. Stop it and start a new session to continue.",
+  };
 }
 
-// One queue per process (shared by every route bundle through globalThis),
-// plus an exclusive lock file for other processes such as the arming script.
-const g = globalThis as typeof globalThis & { __atlasLiveSessionQueue?: Promise<unknown> };
-
-async function withLock<T>(file: string, fn: () => T): Promise<T> {
-  const prior = g.__atlasLiveSessionQueue ?? Promise.resolve();
-  const run = prior.then(() => crossProcess(file, fn));
-  g.__atlasLiveSessionQueue = run.then(
-    () => undefined,
-    () => undefined
-  );
-  return run;
-}
-
-async function crossProcess<T>(file: string, fn: () => T): Promise<T> {
-  mkdirSync(dirname(file), { recursive: true });
-  const lock = `${file}.lock`;
-  const deadline = Date.now() + 5_000;
-  let fd: number | null = null;
-  while (fd === null) {
-    try {
-      fd = openSync(lock, "wx");
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
-      try {
-        // A lock left by a crashed process: every holder finishes in milliseconds.
-        if (Date.now() - statSync(lock).mtimeMs > 10_000) rmSync(lock, { force: true });
-      } catch {
-        /* the lock was released meanwhile */
-      }
-      if (Date.now() > deadline) throw new Error("The live session record is busy.");
-      await new Promise((r) => setTimeout(r, 15));
-    }
-  }
-  try {
-    return fn();
-  } finally {
-    closeSync(fd);
-    rmSync(lock, { force: true });
-  }
-}
+const runsUsedUp = (s: SessionState) => `The session's ${s.limits.runs} agent run${s.limits.runs === 1 ? " is" : "s are"} used up.`;
 
 // --- Derived state ------------------------------------------------------------
 
@@ -246,17 +231,17 @@ function endRun(s: SessionState, now: Date, runId: string, status: string) {
 function closedReason(s: SessionState, now: Date, nextRequestUsd: number): Extract<Result<object>, { ok: false }> | null {
   if (s.stopped) return { ok: false, code: "stopped", error: `The live session was stopped (${s.stopped.reason}).` };
   if (now >= expiresAt(s)) return { ok: false, code: "expired", error: `The live session expired at ${expiresAt(s).toISOString()}.` };
-  if (s.requests >= LIVE_SESSION_LIMITS.requests) return { ok: false, code: "exhausted", error: `The session's ${LIVE_SESSION_LIMITS.requests} provider requests are used up.` };
-  if (committedUsd(s) + nextRequestUsd > LIVE_SESSION_LIMITS.usd)
+  if (s.requests >= s.limits.requests) return { ok: false, code: "exhausted", error: `The session's ${s.limits.requests} provider request${s.limits.requests === 1 ? " is" : "s are"} used up.` };
+  if (committedUsd(s) + nextRequestUsd > s.limits.usd)
     return {
       ok: false,
       code: "exhausted",
-      error: `The USD ${LIVE_SESSION_LIMITS.usd} spending guard would be at risk: USD ${committedUsd(s).toFixed(4)} is spent or reserved, and the next request could cost up to USD ${nextRequestUsd.toFixed(4)} (an estimate).`,
+      error: `The USD ${s.limits.usd} spending guard would be at risk: USD ${committedUsd(s).toFixed(4)} is spent or reserved, and the next request could cost up to USD ${nextRequestUsd.toFixed(4)} (an estimate).`,
     };
   return null;
 }
 
-export type SessionStatus = "unarmed" | "invalid" | "unbound" | "provider_mismatch" | "unclaimed" | "not_this_browser" | "active" | "expired" | "stopped" | "exhausted";
+export type SessionStatus = "unarmed" | "invalid" | "unbound" | "provider_mismatch" | "credential_mismatch" | "unclaimed" | "not_this_browser" | "active" | "expired" | "stopped" | "exhausted";
 
 export interface SessionView {
   status: SessionStatus;
@@ -266,7 +251,7 @@ export interface SessionView {
   id: string | null;
   armedAt: string | null;
   expiresAt: string | null;
-  limits: typeof LIVE_SESSION_LIMITS;
+  limits: Allowance;
   used: { runs: number; requests: number; attempts: number; spentUsd: number; retainedUsd: number; committedUsd: number };
   remaining: { runs: number; requests: number; usd: number };
   runInProgress: boolean;
@@ -281,11 +266,12 @@ const zeroUsed = { runs: 0, requests: 0, attempts: 0, spentUsd: 0, retainedUsd: 
  * is this browser's session cookie, if any; `provider` is the server's
  * configured provider, when known, so a session armed for another one shows as such.
  */
-export function viewOf(loaded: Loaded, now: Date, cookie: string | null, nextRequestUsd = 0, provider?: SessionProvider): SessionView {
-  const base = { limits: LIVE_SESSION_LIMITS, nextRequestUsd: round(nextRequestUsd) };
+export function viewOf(loaded: Loaded, now: Date, cookie: string | null, nextRequestUsd = 0, provider?: SessionProvider, credentialRevision?: string | null): SessionView {
+  const base = { nextRequestUsd: round(nextRequestUsd) };
   if (loaded.kind !== "ok")
     return {
       ...base,
+      limits: { ...LIVE_SESSION_LIMITS },
       status: loaded.kind === "none" ? "unarmed" : loaded.kind === "unbound" ? "unbound" : "invalid",
       message: notUsable(loaded)!.error,
       provider: null,
@@ -302,25 +288,30 @@ export function viewOf(loaded: Loaded, now: Date, cookie: string | null, nextReq
   const committed = committedUsd(s);
   const used = { runs: s.runs, requests: s.requests, attempts: s.attempts, spentUsd: round(s.spentUsd), retainedUsd: round(s.retainedUsd), committedUsd: committed };
   const remaining = {
-    runs: Math.max(0, LIVE_SESSION_LIMITS.runs - s.runs),
-    requests: Math.max(0, LIVE_SESSION_LIMITS.requests - s.requests),
-    usd: round(Math.max(0, LIVE_SESSION_LIMITS.usd - committed)),
+    runs: Math.max(0, s.limits.runs - s.runs),
+    requests: Math.max(0, s.limits.requests - s.requests),
+    usd: round(Math.max(0, s.limits.usd - committed)),
   };
-  const closedNow = closedReason(s, now, nextRequestUsd) ?? (s.runs >= LIVE_SESSION_LIMITS.runs && !s.active ? ({ ok: false, code: "exhausted", error: `The session's ${LIVE_SESSION_LIMITS.runs} agent runs are used up.` } as const) : null);
+  const closedNow = closedReason(s, now, nextRequestUsd) ?? (s.runs >= s.limits.runs && !s.active ? ({ ok: false, code: "exhausted", error: runsUsedUp(s) } as const) : null);
   // Mid-run, an in-flight reservation makes the budget look spent; that is "in progress", not "exhausted".
   const closed = closedNow && s.active && closedNow.code === "exhausted" ? null : closedNow;
   let status: SessionStatus;
   let message: string;
   const mismatch = provider ? providerMismatch(s, provider) : null;
+  // A stopped or expired session says so; a key change matters only while the session could otherwise be used.
+  const changed = credentialRevision !== undefined && !closed ? credentialMismatch(s, credentialRevision) : null;
   if (mismatch) {
     status = "provider_mismatch";
     message = mismatch.error;
+  } else if (changed) {
+    status = "credential_mismatch";
+    message = changed.error;
   } else if (closed) {
     status = closed.code === "stopped" ? "stopped" : closed.code === "expired" ? "expired" : "exhausted";
     message = closed.error;
   } else if (!s.cookieHash) {
     status = "unclaimed";
-    message = "A session is armed but no browser has claimed it. Open the claim link printed in the terminal when it was armed.";
+    message = "A session was armed in a terminal but no browser has claimed it. Open the claim link printed when it was armed.";
   } else if (!cookie || !sameHash(hash(cookie), s.cookieHash)) {
     status = "not_this_browser";
     message = "This session was claimed by another browser (or this browser's session cookie is missing).";
@@ -328,38 +319,54 @@ export function viewOf(loaded: Loaded, now: Date, cookie: string | null, nextReq
     status = "active";
     message = s.active ? "A run is in progress." : "Ready: live requests will use this session's allowance.";
   }
-  return { ...base, status, message, provider: s.provider, id: s.id, armedAt: s.armedAt, expiresAt: expiresAt(s).toISOString(), used, remaining, runInProgress: !!s.active, history: s.history.map(({ id: _id, ...h }) => h) };
+  return { ...base, limits: s.limits, status, message, provider: s.provider, id: s.id, armedAt: s.armedAt, expiresAt: expiresAt(s).toISOString(), used, remaining, runInProgress: !!s.active, history: s.history.map(({ id: _id, ...h }) => h) };
 }
 
 // --- Operations ---------------------------------------------------------------
 
-export async function readView(file: string, now: Date, cookie: string | null, nextRequestUsd = 0, provider?: SessionProvider): Promise<SessionView> {
-  return withLock(file, () => viewOf(load(file), now, cookie, nextRequestUsd, provider));
+export async function readView(file: string, now: Date, cookie: string | null, nextRequestUsd = 0, provider?: SessionProvider, credentialRevision?: string | null): Promise<SessionView> {
+  return withLock(file, () => viewOf(load(file), now, cookie, nextRequestUsd, provider, credentialRevision), true);
+}
+
+export interface ArmOptions {
+  /** A lower allowance than the ceilings; omitted limits stay at the ceiling. */
+  allowance?: Partial<AllowanceChoice> | null;
+  /** The credential revision in use now (null: none, which only the fake provider allows). */
+  credentialRevision?: string | null;
+  /** Started in Atlas by a paired browser: claim it for that browser in the same step, returning its session cookie. */
+  claim?: boolean;
 }
 
 /**
- * Arms a new session for one provider, named explicitly. Refused while one is
- * armed and still usable: stop it first. An unbound (older) or unreadable
- * record is replaced. Returns the one-time claim token.
+ * Starts a new session for one provider, named explicitly, under the
+ * credential in use now. Refused while one is armed and still usable: stop it
+ * first, so counters are never reset silently. An older or unreadable record
+ * is replaced. Returns the one-time claim token (terminal arming), or with
+ * `claim` the session cookie of the browser that started it.
  */
-export async function armSession(file: string, now: Date, provider: SessionProvider): Promise<Result<{ token: string; state: SessionState }>> {
+export async function armSession(file: string, now: Date, provider: SessionProvider, opts: ArmOptions = {}): Promise<Result<{ token: string; cookie: string | null; state: SessionState }>> {
   if (!isProvider(provider)) return { ok: false, code: "bad_provider", error: `Name the provider to arm for: --provider ${SESSION_PROVIDERS.join(" or --provider ")}.` };
+  const limits = allowanceFrom(opts.allowance);
+  if (!limits.ok) return { ok: false, code: "bad_allowance", error: limits.error };
   return withLock(file, () => {
     const prev = load(file);
     if (prev.kind === "ok") {
       const s = prev.state;
       reapStale(s, now);
-      if (!s.stopped && now < expiresAt(s) && (s.active || s.runs < LIVE_SESSION_LIMITS.runs))
-        return { ok: false, code: "already_armed", error: `A live session is armed until ${expiresAt(s).toISOString()}. Stop it first (npm run live-session -- stop).` } as const;
+      if (!s.stopped && now < expiresAt(s) && (s.active || s.runs < s.limits.runs))
+        return { ok: false, code: "already_armed", error: `A live session is armed until ${expiresAt(s).toISOString()}. Stop it first (Stop live session in Atlas, or npm run live-session -- stop).` } as const;
     }
-    const token = randomBytes(32).toString("base64url");
+    const token = randomToken();
+    const cookie = opts.claim ? randomToken() : null;
     const state: SessionState = {
-      version: 2,
+      version: 3,
       provider,
+      credentialRevision: opts.credentialRevision ?? null,
+      limits: limits.allowance,
       id: randomUUID(),
       armedAt: now.toISOString(),
       claimHash: hash(token),
-      cookieHash: null,
+      cookieHash: cookie ? hash(cookie) : null,
       stopped: null,
       runs: 0,
       requests: 0,
@@ -372,7 +379,7 @@ export async function armSession(file: string, now: Date, provider: SessionProvi
       history: [],
     };
     save(file, state);
-    return { ok: true, token, state };
+    return { ok: true, token, cookie, state };
   });
 }
 
@@ -389,7 +396,7 @@ export async function claimSession(file: string, now: Date, token: string, provi
     if (now >= expiresAt(s)) return { ok: false, code: "expired", error: "This live session has expired." } as const;
     if (s.cookieHash) return { ok: false, code: "already_claimed", error: "This live session has already been claimed." } as const;
     if (!token || !sameHash(hash(token), s.claimHash)) return { ok: false, code: "bad_token", error: "The claim link isn't valid for the armed session." } as const;
-    const cookie = randomBytes(32).toString("base64url");
+    const cookie = randomToken();
     s.cookieHash = hash(cookie);
     save(file, s);
     return { ok: true, cookie, expiresAt: expiresAt(s) };
@@ -410,14 +417,15 @@ export async function stopSession(file: string, now: Date, reason: string): Prom
 }
 
 /** Admits one run: this browser's claimed, unexpired, unstopped session, with no run active and allowance left. Counts the run. */
-export async function admitRun(file: string, now: Date, cookie: string | null, nextRequestUsd: number, provider: SessionProvider): Promise<Result<{ runId: string; view: SessionView }>> {
+export async function admitRun(file: string, now: Date, cookie: string | null, nextRequestUsd: number, provider: SessionProvider, credentialRevision: string | null = null): Promise<Result<{ runId: string; view: SessionView }>> {
   return withLock(file, () => {
     const l = load(file);
     const unusable = notUsable(l);
     if (unusable || l.kind !== "ok") return unusable!;
     const s = l.state;
     // Before anything else: a session armed for another provider is never used, nor counted against.
-    const mismatch = providerMismatch(s, provider);
+    // A session stopped because the key changed says it was stopped (with the reason), not merely that the key differs.
+    const mismatch = providerMismatch(s, provider) ?? (s.stopped ? null : credentialMismatch(s, credentialRevision));
     if (mismatch) return mismatch;
     const reaped = reapStale(s, now);
     const closedNow = closedReason(s, now, nextRequestUsd);
@@ -433,12 +441,12 @@ export async function admitRun(file: string, now: Date, cookie: string | null, n
       if (reaped) save(file, s);
       return { ok: false, code: "run_in_progress", error: "A live run is already in progress; only one runs at a time." } as const;
     }
-    if (s.runs >= LIVE_SESSION_LIMITS.runs) return { ok: false, code: "exhausted", error: `The session's ${LIVE_SESSION_LIMITS.runs} agent runs are used up.` } as const;
+    if (s.runs >= s.limits.runs) return { ok: false, code: "exhausted", error: runsUsedUp(s) } as const;
     const runId = randomUUID();
     s.runs += 1;
     s.active = { id: runId, startedAt: now.toISOString(), requests: 0, attempts: 0, usd: 0, retainedUsd: 0, models: [] };
     save(file, s);
-    return { ok: true, runId, view: viewOf({ kind: "ok", state: s }, now, cookie, nextRequestUsd, provider) };
+    return { ok: true, runId, view: viewOf({ kind: "ok", state: s }, now, cookie, nextRequestUsd, provider, credentialRevision) };
   });
 }
 
@@ -448,13 +456,20 @@ export async function admitRun(file: string, now: Date, cookie: string | null, n
  * Refused when the run isn't the active one, or the session is stopped,
  * expired or out of requests or budget.
  */
-export async function reserveRequest(file: string, now: Date, runId: string, provider: SessionProvider, price: (largestInput: number) => number): Promise<Result<{ reservationId: string; usd: number }>> {
+export async function reserveRequest(
+  file: string,
+  now: Date,
+  runId: string,
+  provider: SessionProvider,
+  price: (largestInput: number) => number,
+  credentialRevision: string | null = null
+): Promise<Result<{ reservationId: string; usd: number }>> {
   return withLock(file, () => {
     const l = load(file);
     const unusable = notUsable(l);
     if (unusable || l.kind !== "ok") return unusable!;
     const s = l.state;
-    const mismatch = providerMismatch(s, provider);
+    const mismatch = providerMismatch(s, provider) ?? (s.stopped ? null : credentialMismatch(s, credentialRevision));
     if (mismatch) return mismatch;
     if (s.active?.id !== runId) return { ok: false, code: "not_active_run", error: "This run is no longer the session's active run." } as const;
     const usd = round(price(s.largestInput));

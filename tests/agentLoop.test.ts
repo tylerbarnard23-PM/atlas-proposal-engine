@@ -409,12 +409,18 @@ describe("the test provider and the route", () => {
     // Independent of the machine running the tests (a base-URL override is refused too; see tests/liveSession.test.ts).
     vi.stubEnv("ANTHROPIC_BASE_URL", "");
     expect(await (await get()).json()).toEqual({ mode: "demo", model: null });
-    // Live without a key is reported as unavailable (never silently scripted) and refuses before any provider call.
+    // Live without a connected key is never silently scripted and refuses before any provider call. (A key is now
+    // connected in Atlas rather than being part of the server's set-up, so this is a credential refusal, not "unavailable".)
     vi.stubEnv("COPILOT_MODE", "live");
-    expect(await (await get()).json()).toMatchObject({ mode: "live", live: { available: false, reasons: ["ANTHROPIC_API_KEY isn't set."], session: null } });
-    const refused = await POST(new Request("http://localhost/api/copilot", { method: "POST", headers: { origin: "http://localhost" }, body: JSON.stringify(copilotRequest("Q", storySnapshot())) }));
-    expect(refused.status).toBe(503);
-    expect(await refused.json()).toMatchObject({ code: "live_unavailable" });
+    vi.stubEnv("ATLAS_LOCAL_DIR", "no-such-atlas-local-dir-for-tests");
+    vi.stubEnv("ATLAS_LIVE_SESSION_FILE", "no-such-atlas-local-dir-for-tests/live-session.json");
+    const local = { host: "localhost", origin: "http://localhost", "sec-fetch-site": "same-origin" };
+    expect(await (await GET(new Request("http://localhost/api/copilot", { headers: local }))).json()).toMatchObject({ mode: "live", live: { available: true, session: { status: "unarmed" } }, local: { paired: false, connection: null } });
+    const refused = await POST(new Request("http://localhost/api/copilot", { method: "POST", headers: local, body: JSON.stringify(copilotRequest("Q", storySnapshot())) }));
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toMatchObject({ code: "no_credential" });
+    // A request that isn't from this machine's own page is refused whatever else is true.
+    expect((await POST(new Request("http://localhost/api/copilot", { method: "POST", headers: { origin: "http://localhost" }, body: JSON.stringify(copilotRequest("Q", storySnapshot())) }))).status).toBe(403);
     vi.stubEnv("COPILOT_MODE", "test");
     expect(await (await get()).json()).toEqual({ mode: "test", model: TEST_PROVIDER_MODEL });
 

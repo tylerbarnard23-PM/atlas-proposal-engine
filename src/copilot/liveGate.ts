@@ -3,20 +3,25 @@ import { COPILOT_MODEL, type MessagesClient } from "./agent";
 import { pricedUsage, worstRequestCost } from "./eval/budget";
 import { TEST_PROVIDER_MODEL, createTestProvider } from "./testProvider";
 import * as store from "./liveSessionStore";
+import type { SecretStore } from "./credentialStore";
+import { fingerprintOf, keychainAccount, markOutcome, readConnection, type ConnectionState, type CredentialSource } from "./localConnection";
 
 // The gate every live Copilot request passes before any provider call.
 //
-// Live mode (COPILOT_MODE=live) is local testing only. It fails closed unless:
-//   1. the server is set up for it: not a public deployment (VERCEL), no
-//      ANTHROPIC_BASE_URL override, and a key present (its value is never
-//      read here beyond its presence) or the fake provider chosen;
+// Live mode (COPILOT_MODE=live) is local use only. It fails closed unless:
+//   1. the server is set up for it: not a public deployment (VERCEL) and no
+//      ANTHROPIC_BASE_URL override;
 //   2. the request is local: a loopback or *.localhost Host, a same-origin
 //      Origin on writes, no cross-site fetch, and no non-loopback forwarding;
-//   3. the owner has armed a session in a terminal for the provider the
-//      server runs now (a session armed for the fake provider never admits a
-//      paid request, nor the reverse), this browser has claimed it (an
-//      HttpOnly cookie), and it is unexpired, unstopped and has allowance left: 30 minutes, 3 runs, 10 HTTP requests, one run at a
-//      time, a USD 5 estimate-based guard.
+//   3. a key is connected (localConnect.ts) and can be read from where the
+//      user chose to keep it, unless the fake provider is chosen. The key is
+//      read only here, for an admitted run, and is never logged or returned;
+//   4. a session exists for the provider the server runs now and the
+//      credential revision in use now (a session for the fake provider never
+//      admits a paid request, nor the reverse, and replacing the key ends the
+//      old session), this browser holds it (an HttpOnly cookie), and it is
+//      unexpired, unstopped and has allowance left: at most 30 minutes, 3
+//      runs, 10 HTTP requests, one run at a time, a USD 5 estimate-based guard.
 // Each provider request is then reserved atomically against the session:
 // counted (retries and failures included) and priced at its worst case with
 // the evaluation's own estimate, then settled to the priced usage only when
@@ -34,15 +39,18 @@ const INPUT_HEADROOM = 30_000;
 export type LiveProvider = "anthropic" | "fake";
 type Env = Record<string, string | undefined>;
 
-/** Whether this server may run the live mode at all, and with which provider. Never reads the key's value. */
+/**
+ * Whether this server may run the live mode at all, and with which provider.
+ * A key isn't part of this: it is connected in Atlas (or selected from the
+ * environment) and checked when a session starts and a run is admitted.
+ */
 export function liveReadiness(env: Env): { ok: true; provider: LiveProvider } | { ok: false; reasons: string[] } {
   const reasons: string[] = [];
   if (env.COPILOT_MODE !== "live") reasons.push("COPILOT_MODE isn't live.");
-  if (env.VERCEL || env.VERCEL_ENV) reasons.push("Live testing is local only; this looks like a hosted deployment.");
-  if (env.ANTHROPIC_BASE_URL) reasons.push("ANTHROPIC_BASE_URL is set; live testing only calls the default Anthropic endpoint.");
+  if (env.VERCEL || env.VERCEL_ENV) reasons.push("Live mode is local only; this looks like a hosted deployment.");
+  if (env.ANTHROPIC_BASE_URL) reasons.push("ANTHROPIC_BASE_URL is set; live mode only calls the default Anthropic endpoint.");
   const provider = env.COPILOT_LIVE_PROVIDER ?? "anthropic";
   if (provider !== "anthropic" && provider !== "fake") reasons.push(`COPILOT_LIVE_PROVIDER must be "anthropic" or "fake".`);
-  if (provider === "anthropic" && !env.ANTHROPIC_API_KEY) reasons.push("ANTHROPIC_API_KEY isn't set.");
   return reasons.length ? { ok: false, reasons } : { ok: true, provider: provider as LiveProvider };
 }
 
@@ -87,11 +95,17 @@ export function localRequestProblem(req: Request, kind: "read" | "write" | "navi
   return null;
 }
 
-export function cookieOf(req: Request): string | null {
+export function cookieOf(req: Request, name: string = LIVE_COOKIE): string | null {
   const raw = req.headers.get("cookie") ?? "";
   for (const part of raw.split(";")) {
     const [k, ...v] = part.trim().split("=");
-    if (k === LIVE_COOKIE) return decodeURIComponent(v.join("="));
+    if (k === name) {
+      try {
+        return decodeURIComponent(v.join("="));
+      } catch {
+        return null;
+      }
+    }
   }
   return null;
 }
@@ -131,16 +145,71 @@ export class LiveSessionRefused extends Error {
 const g = globalThis as typeof globalThis & { __atlasLiveRuns?: Map<string, AbortController> };
 const running = () => (g.__atlasLiveRuns ??= new Map());
 
-/** The production client for live runs. Only this gate constructs it, and only for an admitted run. */
-export const anthropicClient = (): MessagesClient => new Anthropic({ maxRetries: 0 });
+/** Cancels every run in progress in this process (Stop, and any change of key). Their open reservations are kept as spend. */
+export function cancelRunningRuns() {
+  for (const c of running().values()) c.abort();
+}
+
+/**
+ * The production client for live runs. Only this gate constructs it, only for
+ * an admitted run, and only with the key the user connected: nothing is read
+ * from the environment implicitly (no ambient key and no auth token).
+ */
+export const anthropicClient = (apiKey: string): MessagesClient => new Anthropic({ apiKey, authToken: null, maxRetries: 0 });
 
 export interface LiveDeps {
   env: Env;
   now: () => Date;
   sessionFile: string;
-  /** The Anthropic client factory (tests pass a fake). Unused with the fake provider. */
-  makeClient: () => MessagesClient;
+  /** Which browsers may manage the connection (localPairing.ts). */
+  pairingFile: string;
+  /** Where the key is kept and its revision; never the key (localConnection.ts). */
+  connectionFile: string;
+  /** The two places a key can be kept (tests pass fakes). */
+  secrets: { session: SecretStore; keychain: SecretStore };
+  /** The Anthropic client factory, given the connected key (tests pass a fake). Unused with the fake provider. */
+  makeClient: (apiKey: string) => MessagesClient;
 }
+
+export type CredentialProblem = "no_credential" | "credential_missing" | "credential_changed" | "credential_unreadable";
+export type ResolvedCredential =
+  | { ok: true; source: CredentialSource; revision: string | null; key: string | null }
+  | { ok: false; code: CredentialProblem; error: string; source: CredentialSource; revision: string | null };
+
+/**
+ * The key in use now, read from where the user chose to keep it, or why it
+ * can't be used. Atlas never switches source on its own: a missing stored key
+ * doesn't fall back to the environment, and an environment key is used only
+ * once selected. `read: false` checks what can be checked without opening the
+ * OS credential store (the status read).
+ */
+export async function resolveCredential(deps: LiveDeps, conn?: ConnectionState, read = true): Promise<ResolvedCredential> {
+  const c = conn ?? (await readConnection(deps.connectionFile));
+  const fail = (code: CredentialProblem, error: string) => ({ ok: false, code, error, source: c.source, revision: c.revision }) as const;
+  if (c.source === "none" || !c.revision || !c.fingerprint) return fail("no_credential", "No API key is connected. Connect one in Atlas (Connect Claude) before starting a session.");
+  let key: string | null;
+  if (c.source === "environment") {
+    key = deps.env.ANTHROPIC_API_KEY || null;
+    if (!key) return fail("credential_missing", "The environment key was selected, but ANTHROPIC_API_KEY isn't set in the server's environment any more. Set it and restart, or connect a key in Atlas.");
+  } else if (c.source === "session") {
+    key = await deps.secrets.session.get(keychainAccount(c.salt));
+    if (!key) return fail("credential_missing", "The key was kept for this server session only, and the server has restarted since. Paste the key again to continue.");
+  } else {
+    if (!read) return { ok: true, source: c.source, revision: c.revision, key: null };
+    try {
+      key = await deps.secrets.keychain.get(keychainAccount(c.salt));
+    } catch (err) {
+      return fail("credential_unreadable", `${err instanceof Error ? err.message : "The operating system's credential store couldn't be read."} Unlock it and try again, or replace the key.`);
+    }
+    if (!key) return fail("credential_missing", "The remembered key is no longer in the operating system's credential store. Paste the key again to continue.");
+  }
+  if (fingerprintOf(c.salt, key) !== c.fingerprint)
+    return fail("credential_changed", c.source === "environment" ? "ANTHROPIC_API_KEY in the server's environment changed after it was selected. Select it again to use the new key." : "The stored key changed outside Atlas. Replace the key in Atlas to continue.");
+  return { ok: true, source: c.source, revision: c.revision, key };
+}
+
+/** The credential revision a session must match under this provider, without reading any key. */
+const currentRevision = async (deps: LiveDeps) => (await readConnection(deps.connectionFile)).revision;
 
 export interface AdmittedRun {
   id: string;
@@ -154,7 +223,7 @@ export interface AdmittedRun {
   finish: (status: string) => Promise<LiveRunReport>;
 }
 
-type Refusal = { ok: false; status: number; code: string; error: string; session?: store.SessionView };
+export type Refusal = { ok: false; status: number; code: string; error: string; session?: store.SessionView };
 
 /** Admits one live run for this request, or says why not. Nothing reaches a provider unless this returns ok. */
 export async function admitLiveRun(req: Request, deps: LiveDeps): Promise<{ ok: true; run: AdmittedRun } | Refusal> {
@@ -164,16 +233,28 @@ export async function admitLiveRun(req: Request, deps: LiveDeps): Promise<{ ok: 
   if (local) return { ok: false, status: 403, code: "not_local", error: local };
   const cookie = cookieOf(req);
   const provider = ready.provider;
-  // The session must have been armed for this provider; checked before any client exists.
-  const admitted = await store.admitRun(deps.sessionFile, deps.now(), cookie, FIRST_REQUEST_USD, provider);
+  // The key in use now. With Anthropic it must be readable; the fake provider needs none and reads none.
+  const conn = await readConnection(deps.connectionFile);
+  const cred: ResolvedCredential = provider === "fake" ? { ok: true, source: conn.source, revision: conn.revision, key: null } : await resolveCredential(deps, conn);
+  if (!cred.ok) return { ok: false, status: 403, code: cred.code, error: cred.error, session: await store.readView(deps.sessionFile, deps.now(), cookie, FIRST_REQUEST_USD, provider, cred.revision) };
+  const revision = cred.revision;
+  // The session must have been started for this provider and this credential; checked before any client exists.
+  const admitted = await store.admitRun(deps.sessionFile, deps.now(), cookie, FIRST_REQUEST_USD, provider, revision);
   if (!admitted.ok) {
     const status = admitted.code === "run_in_progress" ? 409 : admitted.code === "exhausted" ? 429 : 403;
-    return { ok: false, status, code: admitted.code, error: admitted.error, session: await store.readView(deps.sessionFile, deps.now(), cookie, FIRST_REQUEST_USD, provider) };
+    return { ok: false, status, code: admitted.code, error: admitted.error, session: await store.readView(deps.sessionFile, deps.now(), cookie, FIRST_REQUEST_USD, provider, revision) };
   }
 
   const runId = admitted.runId;
   const model = provider === "fake" ? TEST_PROVIDER_MODEL : COPILOT_MODEL;
-  const inner = provider === "fake" ? createTestProvider() : deps.makeClient();
+  const inner = provider === "fake" ? createTestProvider() : deps.makeClient(cred.key!);
+  // Whether a real provider answer has been recorded for this key yet (once per run is enough).
+  let outcomeRecorded = false;
+  const recordOutcome = async (outcome: "verified" | "rejected") => {
+    if (provider !== "anthropic" || !revision || outcomeRecorded) return;
+    outcomeRecorded = true;
+    await markOutcome(deps.connectionFile, deps.now(), revision, outcome);
+  };
   const stop = new AbortController();
   running().set(runId, stop);
   const signal = AbortSignal.any([req.signal, stop.signal]);
@@ -188,7 +269,8 @@ export async function admitLiveRun(req: Request, deps: LiveDeps): Promise<{ ok: 
             throw new LiveSessionRefused(stoppedBy, "wrong_model");
           }
           const fallbacks = (params as { fallbacks?: unknown }).fallbacks != null;
-          const r = await store.reserveRequest(deps.sessionFile, deps.now(), runId, provider, (largest) => worstNextRequest(largest, params.max_tokens, fallbacks));
+          // The credential is re-checked for every request: replacing or removing the key ends this run before another request is sent.
+          const r = await store.reserveRequest(deps.sessionFile, deps.now(), runId, provider, (largest) => worstNextRequest(largest, params.max_tokens, fallbacks), await currentRevision(deps));
           if (!r.ok) {
             stoppedBy = r.error;
             throw new LiveSessionRefused(r.error, r.code);
@@ -199,8 +281,11 @@ export async function admitLiveRun(req: Request, deps: LiveDeps): Promise<{ ok: 
           } catch (err) {
             // An error, timeout or cancellation: the usage is unknown, so the reservation is kept as spend.
             await store.settleRequest(deps.sessionFile, r.reservationId, { known: false });
+            if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError) await recordOutcome("rejected");
             throw err;
           }
+          // Any response from the provider means the key was accepted.
+          await recordOutcome("verified");
           // The cost counts as known only with complete accounting; otherwise it is never read as zero.
           const priced = pricedUsage(res);
           if (!priced.ok) {
@@ -231,7 +316,7 @@ export async function admitLiveRun(req: Request, deps: LiveDeps): Promise<{ ok: 
           provider,
           run: summary ? { requests: summary.requests, attempts: summary.attempts, usd: summary.usd, retainedUsd: summary.retainedUsd, status: summary.status } : null,
           stoppedBy,
-          session: await store.readView(deps.sessionFile, deps.now(), cookie, FIRST_REQUEST_USD, provider),
+          session: await store.readView(deps.sessionFile, deps.now(), cookie, FIRST_REQUEST_USD, provider, await currentRevision(deps)),
         };
       },
     },
@@ -244,7 +329,7 @@ export async function liveSessionStatus(req: Request, deps: LiveDeps): Promise<{
   if (!ready.ok) return { provider: null, available: false, reasons: ready.reasons, session: null };
   const local = localRequestProblem(req, "read");
   if (local) return { provider: ready.provider, available: false, reasons: [local], session: null };
-  return { provider: ready.provider, available: true, reasons: [], session: await store.readView(deps.sessionFile, deps.now(), cookieOf(req), FIRST_REQUEST_USD, ready.provider) };
+  return { provider: ready.provider, available: true, reasons: [], session: await store.readView(deps.sessionFile, deps.now(), cookieOf(req), FIRST_REQUEST_USD, ready.provider, await currentRevision(deps)) };
 }
 
 /** Stops the session (from this machine) and cancels its run in progress here. Stopping is always allowed locally. */
@@ -253,7 +338,7 @@ export async function stopLiveSession(req: Request, deps: LiveDeps, reason: stri
   if (local) return { ok: false, status: 403, code: "not_local", error: local };
   const r = await store.stopSession(deps.sessionFile, deps.now(), reason);
   if (!r.ok) return { ok: false, status: 404, code: r.code, error: r.error };
-  for (const c of running().values()) c.abort();
+  cancelRunningRuns();
   const ready = liveReadiness(deps.env);
   return { ok: true, session: await store.readView(deps.sessionFile, deps.now(), cookieOf(req), FIRST_REQUEST_USD, ready.ok ? ready.provider : undefined) };
 }

@@ -30,6 +30,7 @@ const STATUS_TEXT: Record<SessionStatus, string> = {
   invalid: "Unreadable",
   unbound: "Needs re-arming",
   provider_mismatch: "Other provider",
+  credential_mismatch: "Key changed",
   unclaimed: "Not claimed",
   not_this_browser: "Another browser",
   active: "Active",

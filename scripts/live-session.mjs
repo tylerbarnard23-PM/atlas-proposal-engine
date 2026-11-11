@@ -1,7 +1,8 @@
-// The owner's controls for the local live-testing session. Arming happens
-// here, in a terminal on the machine running Atlas, and nowhere else; the
-// browser can only claim an armed session (with the one-time link printed
-// below), use its allowance and stop it.
+// Terminal controls for the local live session: an alternative to starting
+// one in Atlas (Connect Claude on the Copilot page). A session armed here is
+// claimed by a browser with the one-time link printed below. It is bound to
+// the provider named and to the key connection in use when it is armed, so
+// connect the key in Atlas first.
 //
 //   npm run live-session -- arm --provider anthropic|fake [--origin http://localhost:3000]
 //   npm run live-session -- status
@@ -9,7 +10,8 @@
 //
 // --provider is required and binds the session: a session armed for the fake
 // provider (no API calls) can never be used once the server runs Anthropic,
-// nor the reverse. Records armed before this binding must be armed afresh.
+// nor the reverse. Replacing or removing the key ends the session too.
+// Records armed before these bindings must be armed afresh.
 //
 // The session file is .atlas-local/live-session.json (or
 // ATLAS_LIVE_SESSION_FILE). It holds counters, timestamps and hashes only.
@@ -19,6 +21,8 @@
 // owner's approval for that session.
 
 import { LIVE_SESSION_LIMITS, SESSION_PROVIDERS, armSession, providerName, readView, sessionFilePath, stopSession } from "../src/copilot/liveSessionStore.ts";
+import { readConnection } from "../src/copilot/localConnection.ts";
+import { connectionFilePath } from "../src/copilot/localFiles.ts";
 
 const [command, ...rest] = process.argv.slice(2);
 const flag = (name, fallback) => {
@@ -55,7 +59,13 @@ if (command === "arm") {
     console.error("--origin must be a local address (localhost, 127.0.0.1, [::1] or *.localhost).");
     process.exit(1);
   }
-  const r = await armSession(file, now, provider);
+  // The key connection in use now (never the key): the session is bound to it.
+  const connection = await readConnection(connectionFilePath(process.env));
+  if (provider === "anthropic" && connection.source === "none") {
+    console.error("No API key is connected yet. Open Atlas (npm run local), connect a key under Connect Claude, then arm the session, or start it there.");
+    process.exit(1);
+  }
+  const r = await armSession(file, now, provider, { credentialRevision: connection.revision });
   if (!r.ok) {
     console.error(r.error);
     process.exit(1);

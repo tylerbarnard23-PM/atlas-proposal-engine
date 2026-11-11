@@ -6,15 +6,20 @@ import { parseCopilotRequest } from "./snapshot";
 import { TEST_PROVIDER_MODEL, createTestProvider } from "./testProvider";
 import { admitLiveRun, anthropicClient, claimLiveSession, clearedSessionCookie, liveSessionStatus, sessionCookie, stopLiveSession, type LiveDeps, type LiveRunReport } from "./liveGate";
 import { sessionFilePath } from "./liveSessionStore";
+import { keychainStore, memoryStore } from "./credentialStore";
+import { connectionFilePath, pairingFilePath } from "./localFiles";
+import { MAX_KEY_BODY_BYTES, disconnect, localInfo, pairBrowser, pairingCookie, saveKey, startSession, useEnvironmentKey } from "./localConnect";
 
 // The Copilot API's request handling, kept out of the route files so tests
 // can drive it with a fake provider. Modes:
 //   - demo (default): the scripted planner. No key, no model.
 //   - test (COPILOT_MODE=test): the deterministic test provider through the
 //     real loop. No key, no spend, not a model.
-//   - live (COPILOT_MODE=live): local testing only, through the live
-//     session gate (liveGate.ts). Without an armed, claimed session with
-//     allowance left, every live request is refused before any provider call.
+//   - live (COPILOT_MODE=live): local use only, through the live session
+//     gate (liveGate.ts). Without a connected key and a session of this
+//     browser with allowance left, every live request is refused before any
+//     provider call. The key and the session are managed by a paired browser
+//     (localConnect.ts); none of that contacts the provider.
 
 const MAX_BODY_BYTES = 1_000_000;
 
@@ -24,13 +29,22 @@ export function copilotMode(env: Record<string, string | undefined>): CopilotMod
   return "demo";
 }
 
-export const defaultDeps = (): LiveDeps => ({ env: process.env, now: () => new Date(), sessionFile: sessionFilePath(process.env), makeClient: anthropicClient });
+export const defaultDeps = (): LiveDeps => ({
+  env: process.env,
+  now: () => new Date(),
+  sessionFile: sessionFilePath(process.env),
+  pairingFile: pairingFilePath(process.env),
+  connectionFile: connectionFilePath(process.env),
+  secrets: { session: memoryStore(), keychain: keychainStore() },
+  makeClient: anthropicClient,
+});
 
 export async function handleCopilotGet(req: Request, deps: LiveDeps = defaultDeps()) {
   const mode = copilotMode(deps.env);
   if (mode !== "live") return NextResponse.json({ mode, model: mode === "test" ? TEST_PROVIDER_MODEL : null });
   const live = await liveSessionStatus(req, deps);
-  return NextResponse.json({ mode, model: live.provider === "fake" ? TEST_PROVIDER_MODEL : COPILOT_MODEL, live });
+  // `local` is this browser's view of the connection: the key itself is never part of it.
+  return NextResponse.json({ mode, model: live.provider === "fake" ? TEST_PROVIDER_MODEL : COPILOT_MODEL, live, local: await localInfo(req, deps) }, { headers: { "cache-control": "no-store" } });
 }
 
 export async function handleCopilotPost(req: Request, deps: LiveDeps = defaultDeps()) {
@@ -117,15 +131,51 @@ export async function handleLiveSessionClaim(req: Request, deps: LiveDeps = defa
   return new NextResponse(null, { status: 303, headers: { location: to.pathname, "set-cookie": sessionCookie(r.cookie, r.expiresAt), "cache-control": "no-store", "referrer-policy": "no-referrer" } });
 }
 
-/** POST /api/copilot/live-session {"action":"stop"} : the Stop control. */
-export async function handleLiveSessionPost(req: Request, deps: LiveDeps = defaultDeps()) {
-  let action: unknown;
+const NO_STORE = { "cache-control": "no-store" };
+const refused = (r: { status: number; code: string; error: string }) => NextResponse.json({ error: r.error, code: r.code }, { status: r.status, headers: NO_STORE });
+
+/** A small JSON object body, or null. Never logged: it may carry a key. */
+async function smallJson(req: Request): Promise<Record<string, unknown> | null> {
   try {
-    action = (await req.json())?.action;
+    const raw = await req.text();
+    if (raw.length > MAX_KEY_BODY_BYTES) return null;
+    const body = JSON.parse(raw);
+    return body && typeof body === "object" && !Array.isArray(body) ? body : null;
   } catch {
-    action = null;
+    return null;
   }
-  if (action !== "stop") return NextResponse.json({ error: 'The only action is "stop".' }, { status: 400 });
+}
+
+/** GET /api/copilot/local/pair?token=… : the launcher's one-time bootstrap link. Pairs this browser; starts no session. */
+export async function handleLocalPair(req: Request, deps: LiveDeps = defaultDeps()) {
+  const token = new URL(req.url).searchParams.get("token") ?? "";
+  const r = await pairBrowser(req, deps, token);
+  if (!r.ok) return new NextResponse(`Atlas wasn't paired with this browser: ${r.error}`, { status: r.status, headers: { "content-type": "text/plain; charset=utf-8", ...NO_STORE } });
+  // To the Copilot page on the same origin, without the token in the address.
+  return new NextResponse(null, { status: 303, headers: { location: "/copilot", "set-cookie": pairingCookie(r.cookie, r.expiresAt), ...NO_STORE, "referrer-policy": "no-referrer" } });
+}
+
+/** POST /api/copilot/local/connection {"action":"save"|"use_environment"|"disconnect"} : a paired browser manages the key. No provider request. */
+export async function handleLocalConnection(req: Request, deps: LiveDeps = defaultDeps()) {
+  const body = await smallJson(req);
+  if (!body) return NextResponse.json({ error: "Send a small JSON body.", code: "bad_body" }, { status: 400, headers: NO_STORE });
+  const r = body.action === "save" ? await saveKey(req, deps, body) : body.action === "use_environment" ? await useEnvironmentKey(req, deps) : body.action === "disconnect" ? await disconnect(req, deps) : null;
+  if (!r) return NextResponse.json({ error: 'The action must be "save", "use_environment" or "disconnect".', code: "bad_action" }, { status: 400, headers: NO_STORE });
+  if (!r.ok) return refused(r);
+  // The key is never echoed: only where it is kept and its status.
+  return NextResponse.json({ connection: r.connection, warning: r.warning }, { headers: NO_STORE });
+}
+
+/** POST /api/copilot/live-session {"action":"start","allowance":{…}} or {"action":"stop"} : the session's Start and Stop controls. */
+export async function handleLiveSessionPost(req: Request, deps: LiveDeps = defaultDeps()) {
+  const body = await smallJson(req);
+  const action = body?.action;
+  if (action === "start") {
+    const r = await startSession(req, deps, body!);
+    if (!r.ok) return refused(r);
+    return NextResponse.json({ live: { session: r.session } }, { headers: { "set-cookie": sessionCookie(r.cookie, r.expiresAt), ...NO_STORE } });
+  }
+  if (action !== "stop") return NextResponse.json({ error: 'The action must be "start" or "stop".' }, { status: 400 });
   const r = await stopLiveSession(req, deps, "stopped from the browser");
   if (!r.ok) return NextResponse.json({ error: r.error, code: r.code }, { status: r.status });
   // A stopped session is over: this browser's cookie goes too.

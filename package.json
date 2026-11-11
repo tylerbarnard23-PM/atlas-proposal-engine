@@ -14,7 +14,10 @@
     "test": "vitest run",
     "eval": "vitest run tests/extraction.eval.test.ts --silent=false",
     "eval:agent:live": "vitest run --config vitest.agent-live.config.ts --silent=false",
-    "live-session": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/live-session.mjs"
+    "live-session": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/live-session.mjs",
+    "local": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/atlas-local.mjs",
+    "local:pair": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/atlas-local.mjs pair",
+    "local:doctor": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/atlas-local.mjs doctor"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",
@@ -46,5 +49,8 @@
     "tailwindcss": "^4.3.3",
     "typescript": "^5.7.2",
     "vitest": "^5.0.5"
+  },
+  "optionalDependencies": {
+    "@napi-rs/keyring": "^2.1.2"
   }
 }
