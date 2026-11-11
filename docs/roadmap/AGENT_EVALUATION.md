@@ -125,6 +125,8 @@ Revised 29 October 2026 after the D4 review. The pricing was checked against the
 
 ### Proposed pilot: one case, one trial — NOT approved (owner decision pending)
 
+**Status, 11 November 2026:** an approval given for this pilot was later withdrawn. No paid testing is currently authorized, and the pilot has not run.
+
 Prepared 10 November 2026 on PR #82. **This is a proposal, not spending authorization.** No model API call has been made, including key validation. Nothing below runs until the owner approves this exact configuration.
 
 **Configuration**
@@ -383,6 +385,8 @@ exit
 - **Retention:** the report stays local (`agent-eval-reports/` is git-ignored).
 
 ### Local live-testing session (interactive) — not armed; paid use NOT approved
+
+**Next step, 11 November 2026:** how a user connects their own Claude access is assessed in [LOCAL_CLAUDE_SETUP.md](LOCAL_CLAUDE_SETUP.md) (a plan; nothing in it is built or approved). The session below stays the only live path until the owner settles that route.
 
 Added 10 November 2026 on PR #82. The pilot runner above covers only its own command-line run. **Every live browser request** now passes one server-enforced session instead. This section describes the controls and the owner's setup. **No paid call has been made, no real session has been armed, and paid interactive testing is not approved** until the completed controls and this exact session configuration are reviewed.
 

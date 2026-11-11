@@ -55,7 +55,19 @@ Stop for Codex review with exact head, checks, preview association, remaining li
 
 D1 (PR #72, `0381db1`), D2 (PR #75, `073049f`), D2a (PR #79, `c0ee4e9`) and D3 (PR #81, `85b3910`) are released; the D1 command above and the D1–D3 summaries below are historical, so do not rerun them. **D4 is in review (PR #82).** D5 follows its review/release. PR #82 also carries one bounded, owner-approved D5 usability slice (the proposal-flow simplification); it doesn't complete D5. The handoff holds the current checkpoint.
 
+### Next command: settle the local Claude connection
+
+Saved on 11 November 2026; not yet started. Branch `feat/d4-contextual-agent`, PR #82, reviewed runtime head `538a8fc`. Verify heads, tree and stash first, and preserve any newer work.
+
+1. Read [LOCAL_CLAUDE_SETUP.md](LOCAL_CLAUDE_SETUP.md).
+2. With the owner, settle the connection route and the setup experience. The pending decisions are listed there: the route, session controls, and whether to draft a question to Anthropic. Contact nobody.
+3. Prepare the selected work as one coherent implementation: impact note first, failing tests first, fake providers only.
+
+Until the owner says otherwise: no paid testing (the earlier pilot approval was withdrawn), no real session arming, no model call, no merge, no deployment.
+
 ### Next command: review, pilot accounting fix, then approval
+
+**Done on 11 November 2026; don't rerun.** The pilot accounting fix is at `538a8fc`, and the joint Codex review of it and the session fixes finished with no new blocking findings. Step 4 never happened: the paid-pilot approval was withdrawn.
 
 Saved on 10 November 2026. Branch `feat/d4-contextual-agent`, PR #82. Verify heads, tree and stash first, and preserve any newer work.
 
