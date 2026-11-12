@@ -5,7 +5,7 @@ How a user runs Atlas on their own machine and connects their own Claude access,
 ## Status
 
 - **Route 1 is chosen by the owner and implemented:** the existing Claude API integration with a user-owned Console API key, guided key entry in Atlas, optional remembering in the operating system's credential store, and sessions started inside Atlas.
-- **Reviewed at `03128df` (11 November 2026); the confirmed findings fixed (12 November), then four rounds of defects found while reviewing those fixes closed the same day.** Finding 3 is a design decision with a recommendation below. Awaiting Codex review.
+- **Reviewed at `03128df` (11 November 2026); the confirmed findings fixed (12 November), then four rounds of defects found while reviewing those fixes closed the same day. The latest focused review passed (owner-reported, 12 November 2026; runtime head `8f715d6`).** Finding 3 is a design decision with a recommendation below.
 - **No real-Claude verification has occurred.** Everything was built and checked with fake providers, made-up keys and synthetic data. No request has been sent to Anthropic, and no real key has been validated.
 - **No paid testing is authorized.** The earlier paid-pilot approval was withdrawn.
 - **No Anthropic permission or legal clearance has been sought or obtained.** Route 1 uses a customer-owned API key, which Anthropic's documentation allows; the other routes are not part of this work.
@@ -90,6 +90,99 @@ How a user runs Atlas on their own machine and connects their own Claude access,
 | "An earlier entry couldn't be removed… one may still be there" | Atlas couldn't confirm removing a superseded entry. It retries on the next save or Disconnect; you can also remove the "Atlas Proposal Engine" entries yourself. |
 | "Another change to the Claude connection is still in progress" | Two changes arrived at once (often a double-click). Nothing was half-applied; try again. |
 | "The operating system's credential store didn't answer" | The store is locked, or a prompt is waiting unanswered. Unlock it (on Linux, start the Secret Service) and try again. Nothing replaced your previous key, and the entry Atlas had started is cleaned up as soon as the store finishes with it. |
+
+## Owner-operated verification walkthrough (prepared 12 November 2026; the real-Claude step is NOT approved)
+
+One question, one session, synthetic data, a dedicated Console workspace with a spending limit. **Part A uses the fake provider and no key at all, and can be done now. Part B uses a real key and starts only after the owner approves the exact test below.** Claude never asks for the key in chat, never reads it, and never puts it in a command.
+
+**The scenario.** A synthetic USD 100,000 investment account: Equity ETF A 60,000, Bond ETF A 30,000, Cash 10,000, with a USD 5,000 cash reserve and one explicit investment scope (that account). A USD 400,000 home sits outside it as household context. Every value has a recorded date and source. It lives in a **git-ignored** restore file, `.atlas-local/walkthrough/atlas-synthetic-100k-walkthrough.json`, checked to load and to give the expected simulation offline. If it is missing, recreate it from `STORY_ACCOUNTS`/`STORY_HOLDINGS` in `src/data/allocationStory.ts` with the funding and scope above.
+
+**The question and the expected result.** Ask exactly:
+
+> Simulate reducing Equity ETF A by USD 6,000, then prepare an unapproved draft of that change.
+
+Expected engine figures: **Equity 60,000 → 54,000, Bonds 30,000 → 30,000, Cash 10,000 → 16,000**, scope total 100,000 unchanged, no reserve breach, draftable. (The fake provider trims 10% of the largest non-cash position, which is also USD 6,000 here, so Part A shows the same numbers.) Wording will vary with a real model; the figures should not.
+
+### Part A: rehearse with the fake provider (no key, no cost)
+
+Use an isolated state folder and a port other than your existing server's. One command per block, in one PowerShell window opened in the repository.
+
+1. Isolated state, so nothing in your saved pairing, connection or session files is touched:
+
+   ```powershell
+   $env:ATLAS_LOCAL_DIR = ".atlas-local/walkthrough-state"
+   ```
+
+2. Build the reviewed checkout (once):
+
+   ```powershell
+   npm run build
+   ```
+
+3. Check the machine (looks locally only; contacts nothing, reads no key):
+
+   ```powershell
+   npm run local:doctor
+   ```
+
+4. Start Atlas with the fake provider (it binds 127.0.0.1 and opens a one-time pairing link; the port is a different browser origin from your existing server, so your saved workspace there is not touched):
+
+   ```powershell
+   npm run local -- --fake --port 3107
+   ```
+
+5. In Atlas: **Settings → Backup & restore → Restore from backup…**, choose the walkthrough file, read the preview, leave "Also replace firm & branding" unticked, then **Replace current workspace**. This replaces only this origin's workspace.
+6. Open **Proposal Copilot**, paste the question, and ask. Check, in order:
+   - **Preview first:** the answer shows the simulated before/after (60,000 → 54,000; 10,000 → 16,000) and a draft *preview*. Nothing has been added yet.
+   - **Explicit Add:** click **Add to working draft**. Only then does the action join the draft.
+   - **Unapproved:** the new action reads "Not approved" and is left out of the PDF; in the Allocation desk's Current draft view the proposed values are equity 54,000, bonds 30,000, cash 16,000.
+   - **Current holdings unchanged:** Accounts & assets still shows 60,000 / 30,000 / 10,000. A draft never edits observed holdings.
+   - Press **Stop live session**, then in Connect Claude press **Disconnect**.
+7. Stop Atlas with Ctrl+C in that window. Remove the rehearsal state if you like (it holds only hashes and counters, never a key):
+
+   ```powershell
+   Remove-Item -Recurse -Force .atlas-local/walkthrough-state
+   ```
+
+### Part B: the real-Claude verification (only after approval)
+
+**B1. In the Claude Console** (platform.claude.com), in the organization you want billed:
+- **Workspaces → create a workspace just for this test** (the Default Workspace can't have a spend limit).
+- Set that workspace's monthly **spend limit** low (for example USD 5). This, not Atlas's guard, is what actually caps charges.
+- **Create an API key in that workspace.** Never an Admin key (`sk-ant-admin…`) and never a `claude setup-token` subscription token; Atlas refuses both. Keep the key out of chat, files and commands.
+
+**B2. Start Atlas without `--fake`** (same isolated state, same port; stop any Part A server first):
+
+```powershell
+npm run local -- --port 3107
+```
+
+**B3. Restore the walkthrough file** exactly as in Part A step 5 (a fresh state folder needs it again).
+
+**B4. Enter the key privately.** In Connect Claude press **Add a key**, paste the key into the masked field yourself, choose **for this server session only** (recommended for a one-off: it is gone when Atlas stops), and press **Save key**. Expect "Key saved; connection not yet verified": Atlas has not contacted Anthropic. Nothing has been spent.
+
+**B5. Start one limited session.** Press **Start a session…**, lower the allowance to **1 run, 10 requests, 30 minutes, USD 5**, and confirm.
+
+**B6. Ask the one question** and check the same four points as Part A step 6. Expect about four provider requests. If anything looks wrong, press **Stop live session**. Do not ask a second question.
+
+**B7. Clean up:** **Stop live session**, then **Disconnect**, stop Atlas, delete the API key in the Console (and the workspace if you want), and remove the state folder as in Part A step 7.
+
+### The exact test proposed for approval
+
+| | |
+|---|---|
+| Interactive Copilot runs | **One**, started and asked by the owner |
+| Data | Synthetic only: the USD 100,000 scenario above |
+| Model, effort, fallback | **Unchanged** (the existing runtime configuration) |
+| Provider requests | **At most 10**, retries and failures included |
+| Session | **30 minutes** |
+| USD guard | **5**, an Atlas estimate from list prices, **explicitly not a billing ceiling**; each request is reserved at its worst case (about USD 2.71) first |
+| Real spending cap | The **Console workspace's spend limit**, set by the owner |
+| Reruns | **None** automatic; no second question |
+| Key | A key in a dedicated workspace, entered privately by the owner, kept for this server session only |
+
+**What a pass would and wouldn't show.** It would show that one real round trip works end to end through the onboarding, the session gate and the draft path, with the engine's figures matching. It would **not** replace the full 27-trial agent evaluation or the broader real-model browser checks, which remain unperformed and still required.
+
 
 ## What reaches Anthropic
 

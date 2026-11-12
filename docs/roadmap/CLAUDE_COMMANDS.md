@@ -55,9 +55,22 @@ Stop for Codex review with exact head, checks, preview association, remaining li
 
 D1 (PR #72, `0381db1`), D2 (PR #75, `073049f`), D2a (PR #79, `c0ee4e9`) and D3 (PR #81, `85b3910`) are released; the D1 command above and the D1–D3 summaries below are historical, so do not rerun them. **D4 is in review (PR #82).** D5 follows its review/release. PR #82 also carries one bounded, owner-approved D5 usability slice (the proposal-flow simplification); it doesn't complete D5. The handoff holds the current checkpoint.
 
-### Next command: review the onboarding fixes
+### Next command: owner-operated local Claude verification
 
-Saved on 12 November 2026; not yet started. Branch `feat/d4-contextual-agent`, PR #82. The handoff names the head. Verify heads, tree and stash first, and preserve any newer work.
+Saved on 12 November 2026; the walkthrough is prepared and **the real step is not approved**. Branch `feat/d4-contextual-agent`, PR #82. Verify heads, tree and stash first, and preserve any newer work.
+
+1. **The owner** runs Part A of the walkthrough in [LOCAL_CLAUDE_SETUP.md](LOCAL_CLAUDE_SETUP.md#owner-operated-verification-walkthrough-prepared-12-november-2026-the-real-claude-step-is-not-approved) with the fake provider (no key, no cost) and checks preview, explicit Add, unapproved draft, unchanged holdings, Stop and Disconnect.
+2. **The owner** decides whether to approve the exact real test: one interactive run, synthetic data, model/effort/fallback unchanged, at most 10 requests, 30 minutes, a USD 5 estimate-based guard (not a billing ceiling), a Console workspace spend limit, no reruns.
+3. **Only if approved:** the owner creates the workspace, limit and key, and enters the key privately in Connect Claude. Claude never asks for it in chat, reads it or puts it in a command; Claude may help read the outcome afterwards (status, counters, the draft), then stops.
+4. Afterwards, still open: finding 3's pairing policy (owner decision), [#83](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/83), the full 27-trial evaluation and real-model browser checks (unperformed, budget unapproved), the PR #80 reconciliation and the zod fix.
+
+Until the owner says otherwise: no real key, no model call, no paid testing, no dependency change, no merge, no deployment.
+
+### Previous command (done 12 November 2026, don't rerun): review the onboarding fixes
+
+
+
+Saved on 12 November 2026; the review and its fixes finished (owner-reported), so don't rerun. Branch `feat/d4-contextual-agent`, PR #82. The handoff names the head. Verify heads, tree and stash first, and preserve any newer work.
 
 1. **Codex** reviews the fixes to findings 1, 2 and 4–8 **and the four rounds of defects found while reviewing them** — staged credential writes over two account slots, relative state-path overrides, per-backend cleanup tracking, the credential transaction, its lock's liveness, ownership and bounded waits, the deadline on native credential calls, **ownership of a native call that finishes after Atlas stopped waiting for it, on every write and removal path**, and intent recorded before the external write — against the security design and the findings tables in [LOCAL_CLAUDE_SETUP.md](LOCAL_CLAUDE_SETUP.md): credential validation and what it does and doesn't claim, the admission order, the credential write/commit/cleanup lifecycle and its failure, late-completion and interruption paths, instance-scoped cookies, state-path resolution, the authorize-then-read body handling, and environment-key handling.
 2. **The owner** decides on finding 3's recommendation (pairing revocation, idle lifetime, a 24-hour cumulative allowance). Nothing there is built, and no existing limit may be raised without that decision.
