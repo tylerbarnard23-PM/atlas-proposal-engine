@@ -1,7 +1,8 @@
 import { FIRST_REQUEST_USD, cancelRunningRuns, cookieOf, liveReadiness, localRequestProblem, resolveCredential, type LiveDeps, type LiveProvider, type Refusal } from "./liveGate";
+import { KEYCHAIN_SERVICE } from "./credentialStore";
 import { instanceId } from "./localFiles";
 import * as sessions from "./liveSessionStore";
-import { clearConnection, ensureConnection, keyShapeProblem, keychainAccount, normalizeKey, readConnection, recordConnection, type ConnectionState, type CredentialSource } from "./localConnection";
+import { accountFor, addPending, clearConnection, clearPending, ensureConnection, freeSlot, keyShapeProblem, normalizeKey, readConnection, recordConnection, type ConnectionState, type CredentialSource, type Slot } from "./localConnection";
 import { PAIR_COOKIE, PAIR_DAYS, csrfMatches, csrfTokenFor, isPaired, redeemPairingToken } from "./localPairing";
 
 // Connect Claude: what a paired browser on this machine may do to the local
@@ -133,23 +134,42 @@ async function endSessionFor(deps: LiveDeps, reason: string) {
   await sessions.stopSession(deps.sessionFile, deps.now(), reason);
 }
 
-/** Removes any key Atlas itself stored. Returns a warning if the OS entry couldn't be removed. */
-async function forgetStored(deps: LiveDeps, conn: ConnectionState, keep: CredentialSource | null): Promise<string | null> {
-  const account = keychainAccount(conn.salt);
-  if (keep !== "session") await deps.secrets.session.delete(account);
-  if (keep !== "keychain" && conn.source === "keychain") {
-    try {
-      await deps.secrets.keychain.delete(account);
-    } catch {
-      return `The earlier key couldn't be removed from the operating system's credential store. Remove the "Atlas Proposal Engine" entry there yourself.`;
-    }
-  }
-  return null;
+const LEFT_BEHIND = `An earlier entry couldn't be removed from the operating system's credential store, so one may still be there. Atlas will remove it the next time the store is available, or you can remove the "${KEYCHAIN_SERVICE}" entries there yourself.`;
+
+/**
+ * Removes every entry Atlas stored except `keep`: the slot the previous key
+ * used, and any slot left pending by an earlier failure. Slots whose removal
+ * can't be confirmed stay pending, and are reported rather than forgotten.
+ */
+async function forgetStored(deps: LiveDeps, conn: ConnectionState, keep: Slot | null): Promise<{ warning: string | null; stuck: Slot[] }> {
+  const stuck: Slot[] = [];
+  const gone: Slot[] = [];
+  const drop = async (slot: Slot, source: CredentialSource) => {
+    if (slot === keep) return;
+    // Session entries live in this process's memory, where removal can't fail; pending slots are always OS-store ones.
+    const store = source === "session" ? deps.secrets.session : deps.secrets.keychain;
+    const r = await store.delete(accountFor(conn.salt, slot));
+    (r.ok ? gone : stuck).push(slot);
+  };
+  if (conn.slot && (conn.source === "session" || conn.source === "keychain")) await drop(conn.slot, conn.source);
+  for (const slot of conn.pending) await drop(slot, "keychain");
+  if (gone.length) await clearPending(deps.connectionFile, gone);
+  if (stuck.length) await addPending(deps.connectionFile, stuck);
+  return { warning: stuck.length ? LEFT_BEHIND : null, stuck };
 }
 
 type Changed = { ok: true; connection: ConnectionView; warning: string | null } | Refusal;
 
-/** Saves a pasted key where the user chose. Makes no provider request. The key is never echoed back. */
+const KEEP_PREVIOUS = "Your previous connection is unchanged.";
+const TRY_SESSION = "You can keep the key for this server session only instead.";
+
+/**
+ * Saves a pasted key where the user chose, in two steps: it is written to the
+ * free slot and committed only once it reads back. The live entry is never
+ * overwritten, so a failure leaves the previous key, its revision and its
+ * session exactly as they were. Makes no provider request, and never echoes
+ * the key.
+ */
 export async function saveKey(deps: LiveDeps, provider: LiveProvider, body: { key?: unknown; storage?: unknown }): Promise<Changed> {
   const problem = keyShapeProblem(body.key);
   if (problem) return { ok: false, status: 400, code: "bad_key", error: problem };
@@ -157,23 +177,28 @@ export async function saveKey(deps: LiveDeps, provider: LiveProvider, body: { ke
   if (storage !== "session" && storage !== "keychain") return { ok: false, status: 400, code: "bad_storage", error: "Choose where to keep the key: this server session only, or the operating system's credential store." };
   const key = normalizeKey(body.key);
   const prev = await ensureConnection(deps.connectionFile);
-  const account = keychainAccount(prev.salt);
+  const target = freeSlot(prev);
+  const account = accountFor(prev.salt, target);
+  const store = storage === "keychain" ? deps.secrets.keychain : deps.secrets.session;
   if (storage === "keychain") {
     const usable = await deps.secrets.keychain.available();
     // Never a plaintext fallback: if the OS store can't hold it, nothing is saved and the earlier connection stands.
-    if (!usable.ok) return { ok: false, status: 503, code: "remember_unavailable", error: `${usable.reason} Nothing was saved. You can keep the key for this server session only instead.` };
-    try {
-      await deps.secrets.keychain.set(account, key);
-    } catch (err) {
-      return { ok: false, status: 503, code: "remember_unavailable", error: `${err instanceof Error ? err.message : "The operating system's credential store couldn't save the key."} Nothing was saved. You can keep the key for this server session only instead.` };
-    }
-  } else {
-    await deps.secrets.session.set(account, key);
+    if (!usable.ok) return { ok: false, status: 503, code: "remember_unavailable", error: `${usable.reason} Nothing was saved. ${TRY_SESSION}` };
   }
-  const warning = await forgetStored(deps, prev, storage);
-  const conn = await recordConnection(deps.connectionFile, deps.now(), storage, key);
+  const written = await store.set(account, key);
+  if (!written.ok) {
+    if (!written.maybeStored) return { ok: false, status: 503, code: "remember_unavailable", error: `${written.reason} Nothing was saved. ${KEEP_PREVIOUS} ${TRY_SESSION}` };
+    // The write may have landed: remove it, and if that can't be confirmed, remember the slot and say so.
+    const removed = await store.delete(account);
+    if (!removed.ok) await addPending(deps.connectionFile, [target]);
+    const left = removed.ok ? "The entry it had started to write was removed." : LEFT_BEHIND;
+    return { ok: false, status: 503, code: "remember_unavailable", error: `${written.reason} The new key was not connected. ${KEEP_PREVIOUS} ${left} ${TRY_SESSION}` };
+  }
+  // Confirmed: commit, then clear out what the previous key and any earlier failure left.
+  const conn = await recordConnection(deps.connectionFile, deps.now(), storage, key, target);
+  const { warning } = await forgetStored(deps, { ...prev, pending: conn.pending }, target);
   await endSessionFor(deps, "the API key was replaced");
-  return { ok: true, connection: await connectionView(deps, provider, conn), warning };
+  return { ok: true, connection: await connectionView(deps, provider, await readConnection(deps.connectionFile)), warning };
 }
 
 /** Selects the key in the server's environment, explicitly. Atlas doesn't manage it and can't remove it. */
@@ -184,17 +209,18 @@ export async function useEnvironmentKey(deps: LiveDeps, provider: LiveProvider):
   const problem = keyShapeProblem(key);
   if (problem) return { ok: false, status: 400, code: "bad_key", error: `The key in the server's environment can't be used. ${problem}` };
   const prev = await ensureConnection(deps.connectionFile);
-  const warning = await forgetStored(deps, prev, null);
-  const conn = await recordConnection(deps.connectionFile, deps.now(), "environment", key);
+  const conn = await recordConnection(deps.connectionFile, deps.now(), "environment", key, null);
+  const { warning } = await forgetStored(deps, prev, null);
   await endSessionFor(deps, "the API key was replaced");
-  return { ok: true, connection: await connectionView(deps, provider, conn), warning };
+  return { ok: true, connection: await connectionView(deps, provider, await readConnection(deps.connectionFile)), warning };
 }
 
 /** Removes the key Atlas stored and records that none is in use. */
 export async function disconnect(deps: LiveDeps, provider: LiveProvider): Promise<Changed> {
+  // Everything Atlas stored goes, including a slot left behind by a failed first save.
   const prev = await ensureConnection(deps.connectionFile);
-  const stored = await forgetStored(deps, prev, null);
-  const conn = await clearConnection(deps.connectionFile);
+  const { warning: stored, stuck } = await forgetStored(deps, prev, null);
+  const conn = await clearConnection(deps.connectionFile, stuck);
   await endSessionFor(deps, "the API key was disconnected");
   const env = prev.source === "environment" ? "The key in the server's environment is managed outside Atlas and is still set there; Atlas no longer uses it." : null;
   return { ok: true, connection: await connectionView(deps, provider, conn), warning: [stored, env].filter(Boolean).join(" ") || null };

@@ -5,7 +5,7 @@ How a user runs Atlas on their own machine and connects their own Claude access,
 ## Status
 
 - **Route 1 is chosen by the owner and implemented:** the existing Claude API integration with a user-owned Console API key, guided key entry in Atlas, optional remembering in the operating system's credential store, and sessions started inside Atlas.
-- **Reviewed at `03128df` (11 November 2026), and the confirmed findings fixed (12 November 2026).** Seven of the eight are fixed and covered by regressions; finding 3 is a design decision with a recommendation below. Awaiting Codex review of the fixes.
+- **Reviewed at `03128df` (11 November 2026); the confirmed findings fixed (12 November), and two defects found while reviewing those fixes closed the same day.** Finding 3 is a design decision with a recommendation below. Awaiting Codex review.
 - **No real-Claude verification has occurred.** Everything was built and checked with fake providers, made-up keys and synthetic data. No request has been sent to Anthropic, and no real key has been validated.
 - **No paid testing is authorized.** The earlier paid-pilot approval was withdrawn.
 - **No Anthropic permission or legal clearance has been sought or obtained.** Route 1 uses a customer-owned API key, which Anthropic's documentation allows; the other routes are not part of this work.
@@ -67,6 +67,7 @@ How a user runs Atlas on their own machine and connects their own Claude access,
 ### Managing the key
 
 - **Replace key** and **Disconnect** stop the current session and cancel a run in progress. The stopped session keeps its counters.
+- **A replacement is staged.** A new key is written to a second entry and only becomes the live one once it reads back, so a failed save leaves the previous key, its revision and its session exactly as they were. If an unconfirmed entry can't be cleaned up, Atlas says so and removes it the next time the credential store is available.
 - **Session-only keys** are lost when Atlas stops. The page then says the key is needed again.
 - **Environment key (advanced):** if `ANTHROPIC_API_KEY` is set where Atlas starts, Connect Claude offers "Use the server's environment key". It is managed outside Atlas, used only after you choose it, and Atlas can't remove it.
 - **Terminal alternative:** `npm run live-session -- arm --provider anthropic` still arms a session for a browser to claim. It is bound to the key connected at that moment.
@@ -83,6 +84,8 @@ How a user runs Atlas on their own machine and connects their own Claude access,
 | "Key rejected" | Anthropic refused the key. Check it in the Console and replace it. |
 | "The session can't be used" after a key change | Stop it and start a new one. |
 | "Another `next dev` server is already running" | Next.js allows one development server per checkout. Run the second instance without `--dev` (it uses the production build), or start it from a separate copy of the repository. |
+| "The new key was not connected… your previous connection is unchanged" | The credential store refused or couldn't confirm the write. The earlier key still works. Try again, or keep the key for this server session only. |
+| "An earlier entry couldn't be removed… one may still be there" | Atlas couldn't confirm removing a superseded entry. It retries on the next save or Disconnect; you can also remove the "Atlas Proposal Engine" entries yourself. |
 
 ## What reaches Anthropic
 
@@ -97,15 +100,16 @@ Recorded before coding on [PR #82](https://github.com/tylerbarnard23-PM/atlas-pr
 - **Pairing** (`src/copilot/localPairing.ts`): a one-time token, issued only from a terminal on this machine, is exchanged for an HttpOnly, SameSite=Strict cookie. The token is deleted on use. Only hashes are stored. Pairing is permission to manage the connection; it is separate from a session's allowance.
 - **Every credential change and session start** (`src/copilot/localConnect.ts`) needs all of: a server in local live mode (never hosted); a loopback Host, a same-origin Origin and no cross-site fetch; the pairing cookie; and a CSRF token in a header, which only the paired, same-origin status read hands out. A local address or an Origin header alone authorizes nothing.
 - **The key** is posted once to the local server and kept where the user chose (`src/copilot/credentialStore.ts`): server memory, or the OS credential store through `@napi-rs/keyring` (Windows Credential Manager, macOS Keychain, Linux Secret Service). There is no file store and no plaintext fallback. The key is never returned, logged, or put in the browser, the Atlas store, a backup or a URL.
-- **The connection record** (`src/copilot/localConnection.ts`) holds where the key is kept, a revision, timestamps and a salted fingerprint, never the key. Each save, selection or disconnect is a new revision.
+- **The connection record** (`src/copilot/localConnection.ts`, version 2) holds where the key is kept, which of two account **slots** holds it, slots whose entry may still need removing, a revision, timestamps and a salted fingerprint — never the key. Each save, selection or disconnect is a new revision. A save writes to the free slot and commits only once the entry reads back, so the live entry is never overwritten; a record from before slots existed is migrated in place and its key keeps working.
 - **Sessions** (`src/copilot/liveSessionStore.ts`, record version 3) are bound to their provider and to the credential revision they started under, checked at admission and before every request. Reservations, unknown-usage handling, restart persistence and Stop are the paths reviewed at `538a8fc`.
+- **State paths.** The terminal scripts resolve `ATLAS_LOCAL_DIR` and `ATLAS_LIVE_SESSION_FILE` against the repository they belong to, including relative overrides, and pass the resolved values to the server, so both always use the same files.
 - **Hosted deployments** refuse every local endpoint. The public demo stays scripted and keyless.
 
 **Known limits**
 - Cookies belong to a host, not a port. Other software served from the same loopback host in the same browser receives them, though it can't read Atlas's responses or pass the Origin check from a page.
 - Other software running as the same user can read the same files and credential store. That is outside this design.
 - A development server prints request addresses in its terminal, including a pairing link. The link is dead once used.
-- Only Windows Credential Manager was exercised (with a dummy value, then removed). macOS Keychain and Linux Secret Service were not.
+- Only Windows Credential Manager was exercised: a real save, a staged replacement (the new entry in the free slot, the old one removed) and a Disconnect, with dummy keys since removed. The failure paths — a write that lands but can't be confirmed, a refused write, and a removal that can't be confirmed — are covered by tests against a fake native backend, not against a real store on any platform.
 - The fake provider's session can be rehearsed with or without a key; a saved key is never used or verified there.
 
 ## Preserved
@@ -164,6 +168,14 @@ A read-only review of the onboarding package against the security design above. 
 - **Still open — macOS Keychain and Linux Secret Service:** not exercised. Only Windows Credential Manager has been, with dummy values since removed.
 - **Still open — hosted refusal:** covered by tests, not probed on the deployed preview.
 - **Still open — real-Claude verification:** no real key, and no request has been sent to Anthropic.
+
+### Two defects found while reviewing those fixes (12 November 2026), both fixed
+
+| Defect | Evidence | Fix |
+|---|---|---|
+| **A credential write that landed but couldn't be confirmed was reported as "Nothing was saved".** One installation used a single fixed account name, so the write had already overwritten the live key. A failed replacement left the record on the old revision while the store held the new key (every later request failed `credential_changed`), and a failed first save left `source: "none"`, so even Disconnect never removed the entry. | Reproduced through the real adapter with a fake native backend whose write lands and whose read-back then fails. | **Fixed.** A key is written to the free one of two account slots and committed only once it reads back, so the live entry is never overwritten. The adapter returns an outcome instead of throwing, and reports whether an entry may exist — a native write that throws may still have stored, so only the "store unavailable" path claims nothing was saved. Unconfirmed or superseded slots are recorded by name (never a secret) and removed on the next save or Disconnect; when removal can't be confirmed, the message says an entry may remain. Disconnect clears slots whatever `source` says. |
+| **A relative `ATLAS_LOCAL_DIR` still split the scripts from the server.** The earlier fix anchored only the default. With an explicit relative override, a script run by absolute path from another folder wrote under the caller's directory while the server it spawned looked under the repository root. | Reproduced by running both scripts from another directory with `ATLAS_LOCAL_DIR=relative-state`. | **Fixed.** Both scripts resolve relative `ATLAS_LOCAL_DIR` and `ATLAS_LIVE_SESSION_FILE` against the repository, write the absolute values back into the environment and pass them to the server. Absolute overrides and ordinary `npm run` use are unchanged. |
+
 
 **What held up:** single-use, hash-only pairing tokens; cookie, header token and strict origin on every change (a same-host page on another port is refused); no plaintext credential path; a failed OS-store save changing nothing; no silent switch to the environment key; provider and credential binding at admission and before every request; limits that can only be lowered; local endpoints checking server readiness first; and the native module building on Linux CI and Vercel.
 

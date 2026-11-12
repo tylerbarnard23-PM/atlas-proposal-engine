@@ -17,7 +17,7 @@
 import { spawn } from "node:child_process";
 import { existsSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -37,6 +37,19 @@ function requireSupportedNode() {
   process.exit(1);
 }
 
+/**
+ * Pins this process's state paths to absolute ones under the repository, and
+ * writes them back so the server started from here inherits the same values.
+ * A relative override would otherwise follow whichever directory the command
+ * was run from, while the server resolves it from the repository root — two
+ * different folders for the same setting.
+ */
+function anchorStatePaths(defaultDir) {
+  const anchor = (p) => (isAbsolute(p) ? p : resolve(root, p));
+  process.env.ATLAS_LOCAL_DIR = anchor(process.env.ATLAS_LOCAL_DIR || defaultDir);
+  if (process.env.ATLAS_LIVE_SESSION_FILE) process.env.ATLAS_LIVE_SESSION_FILE = anchor(process.env.ATLAS_LIVE_SESSION_FILE);
+}
+
 let atlas;
 /**
  * The shared modules, loaded only once Node is known to be supported. Loading
@@ -54,7 +67,7 @@ async function load() {
     import("../src/copilot/localConnection.ts"),
     import("../src/copilot/liveSessionStore.ts"),
   ]);
-  process.env.ATLAS_LOCAL_DIR ||= join(root, files.DEFAULT_LOCAL_DIR);
+  anchorStatePaths(files.DEFAULT_LOCAL_DIR);
   atlas = { ...files, ...pairing, ...connection, ...sessions };
   return atlas;
 }

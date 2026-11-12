@@ -10,9 +10,10 @@ import type { CopilotSnapshot } from "@/copilot/snapshot";
 import type { WorkingDraft } from "@/domain/types";
 import { COPILOT_MODEL, type MessagesClient } from "@/copilot/agent";
 import { keychainStore } from "@/copilot/credentialStore";
-import { FIRST_REQUEST_USD, liveCookieName, type LiveDeps } from "@/copilot/liveGate";
+import { execFileSync } from "node:child_process";
+import { FIRST_REQUEST_USD, liveCookieName, resolveCredential, type LiveDeps } from "@/copilot/liveGate";
 import * as sessions from "@/copilot/liveSessionStore";
-import { keyShapeProblem, keychainAccount, readConnection, recordConnection } from "@/copilot/localConnection";
+import { accountFor, keyShapeProblem, keychainAccount, readConnection, recordConnection } from "@/copilot/localConnection";
 import { PAIR_TOKEN_MINUTES, issuePairingToken } from "@/copilot/localPairing";
 import { CSRF_HEADER, pairCookieName } from "@/copilot/localConnect";
 import { instanceId } from "@/copilot/localFiles";
@@ -326,7 +327,7 @@ describe("the key is kept server-side, where the user chose, and never comes bac
       expect(text).not.toContain(CANARY.slice(-8));
       expect(text).not.toContain("CANARY");
     }
-    expect(Object.keys(JSON.parse(readFileSync(t.d.connectionFile, "utf8"))).sort()).toEqual(["fingerprint", "rejectedAt", "revision", "salt", "savedAt", "source", "verifiedAt", "version"]);
+    expect(Object.keys(JSON.parse(readFileSync(t.d.connectionFile, "utf8"))).sort()).toEqual(["fingerprint", "pending", "rejectedAt", "revision", "salt", "savedAt", "slot", "source", "verifiedAt", "version"]);
     expect(s.local!.connection).toMatchObject({ status: "saved" });
     // Loading the screen again changes nothing and still sends nothing.
     await status(t.d, b);
@@ -406,7 +407,8 @@ describe("the key is kept server-side, where the user chose, and never comes bac
   it("the real credential-store adapter fails closed when the component is missing or the store errors, without echoing the key", async () => {
     const missing = keychainStore("Atlas test", async () => null);
     expect(await missing.available()).toMatchObject({ ok: false });
-    await expect(missing.set("a", CANARY)).rejects.toThrow(/isn't available/);
+    // Nothing was attempted, so this is the one case that can honestly say nothing was stored.
+    expect(await missing.set("a", CANARY)).toMatchObject({ ok: false, maybeStored: false, reason: expect.stringMatching(/isn't available/) });
 
     class Locked {
       async setPassword(): Promise<void> {
@@ -420,14 +422,17 @@ describe("the key is kept server-side, where the user chose, and never comes bac
       }
     }
     const locked = keychainStore("Atlas test", async () => ({ AsyncEntry: Locked }));
-    for (const attempt of [locked.set("a", CANARY), locked.get("a"), locked.delete("a")]) {
-      const err = await attempt.then(
-        () => null,
-        (e: Error) => e
-      );
-      expect(err?.message).toMatch(/credential store couldn't/);
-      expect(err?.message).not.toContain("CANARY");
-    }
+    const write = await locked.set("a", CANARY);
+    // A native write that throws may still have stored something, so it is never reported as "nothing stored".
+    expect(write).toMatchObject({ ok: false, maybeStored: true, reason: expect.stringMatching(/credential store couldn't/) });
+    expect(JSON.stringify(write)).not.toContain("CANARY");
+    expect(await locked.delete("a")).toMatchObject({ ok: false, reason: expect.stringMatching(/credential store couldn't/) });
+    const readErr = await locked.get("a").then(
+      () => null,
+      (e: Error) => e
+    );
+    expect(readErr?.message).toMatch(/credential store couldn't/);
+    expect(readErr?.message).not.toContain("CANARY");
     // A write that doesn't read back the same value is never reported as remembered.
     class Forgetful extends Locked {
       async setPassword() {}
@@ -435,7 +440,7 @@ describe("the key is kept server-side, where the user chose, and never comes bac
         return null;
       }
     }
-    await expect(keychainStore("Atlas test", async () => ({ AsyncEntry: Forgetful })).set("a", CANARY)).rejects.toThrow(/couldn't keep/);
+    expect(await keychainStore("Atlas test", async () => ({ AsyncEntry: Forgetful })).set("a", CANARY)).toMatchObject({ ok: false, maybeStored: true, reason: expect.stringMatching(/couldn't keep/) });
   });
 
   it("the environment key is an explicit, externally managed choice; Atlas never switches to it on its own", async () => {
@@ -647,9 +652,9 @@ describe("a session is bound to the key it started under", () => {
     const { b } = await pair(t.d);
     await save(t.d, b);
     await start(t.d, b);
-    const conn = await recordConnection(t.d.connectionFile, clock, "session", `${CANARY}-other`);
+    const conn = await recordConnection(t.d.connectionFile, clock, "session", `${CANARY}-other`, "b");
     t.session.clear();
-    t.session.set(keychainAccount(conn.salt), `${CANARY}-other`);
+    t.session.set(accountFor(conn.salt, conn.slot!), `${CANARY}-other`);
     const res = await ask(t.d, b);
     expect(res.status).toBe(403);
     const body = await res.json();
@@ -664,7 +669,7 @@ describe("a session is bound to the key it started under", () => {
     const paired = await pair(u.d);
     await save(u.d, paired.b);
     await start(u.d, paired.b);
-    swap = () => recordConnection(u.d.connectionFile, clock, "session", `${CANARY}-other`);
+    swap = () => recordConnection(u.d.connectionFile, clock, "session", `${CANARY}-other`, "b");
     const run = await (await ask(u.d, paired.b)).json();
     expect(u.fake.calls).toHaveLength(1);
     expect(run.status).toBe("failed");
@@ -1027,7 +1032,7 @@ describe("fix 2: no credential is read until a session could admit the run", () 
     expect(t.made.count).toBe(0);
     t.keychain.state.locked = false;
     // A key replaced under the running session is still refused by revision, before the store is opened.
-    await recordConnection(t.d.connectionFile, clock, "session", `${CANARY}-other`);
+    await recordConnection(t.d.connectionFile, clock, "session", `${CANARY}-other`, "b");
     const reads = t.keychain.calls.get;
     expect(await (await ask(t.d, b)).json()).toMatchObject({ code: "credential_mismatch" });
     expect(t.keychain.calls.get).toBe(reads);
@@ -1157,4 +1162,231 @@ describe("fix 8: an environment key is normalized and validated like a pasted on
     }
     expect(logged.join("\n")).not.toContain("ENVCANARY");
   });
+});
+
+// --- Partial credential-store writes and relative state overrides (12 November 2026) ----------
+
+/**
+ * A fake of the native credential backend the real adapter talks to, so the
+ * adapter itself is under test. `state` is flipped between calls to stage a
+ * failure: `failWrite` never stores, `failAfterWrite` stores and then throws
+ * (the case that matters), `failRead` and `failDelete` break those steps.
+ */
+function fakeNative(state: { failWrite?: boolean; failAfterWrite?: boolean; failRead?: boolean; failDelete?: boolean } = {}) {
+  const map = new Map<string, string>();
+  const calls = { set: 0, get: 0, delete: 0 };
+  class Entry {
+    account: string;
+    constructor(_service: string, account: string) {
+      this.account = account;
+    }
+    async setPassword(secret: string) {
+      calls.set++;
+      if (state.failWrite) throw new Error("native write failure");
+      map.set(this.account, secret);
+      if (state.failAfterWrite) throw new Error("native failure after the write landed");
+    }
+    async getPassword() {
+      calls.get++;
+      if (state.failRead) throw new Error("native read failure");
+      return map.get(this.account) ?? null;
+    }
+    async deletePassword() {
+      calls.delete++;
+      if (state.failDelete) throw new Error("native delete failure");
+      return map.delete(this.account);
+    }
+  }
+  return { store: keychainStore("Atlas test", async () => ({ AsyncEntry: Entry }) as never), map, calls, state };
+}
+
+/** The gate's own view of whether the connection can be used right now. */
+const credentialNow = async (d: LiveDeps) => resolveCredential(d, undefined, true);
+
+describe("a credential write that lands but can't be confirmed never loses the previous key", () => {
+  it("a failed replacement leaves the earlier key, its revision and its session working", async () => {
+    const native = fakeNative();
+    const t = setup({ keychain: { store: native.store, map: native.map, calls: native.calls, state: {} } as never });
+    const { b } = await pair(t.d);
+    expect((await save(t.d, b, CANARY, "keychain")).status).toBe(200);
+    await start(t.d, b);
+    const before = await readConnection(t.d.connectionFile);
+    const liveBefore = await credentialNow(t.d);
+    expect(liveBefore).toMatchObject({ ok: true, key: CANARY });
+
+    // The replacement is written and then can't be read back.
+    native.state.failAfterWrite = true;
+    const res = await save(t.d, b, `${CANARY}-new`, "keychain");
+    expect(res.status).toBe(503);
+    const body = await res.json();
+    expect(body.error).not.toContain("CANARY");
+    // It must not claim nothing was stored when a write may have landed.
+    expect(body.error).not.toMatch(/Nothing was saved/);
+    expect(body.error).toMatch(/previous|earlier|unchanged/i);
+
+    native.state.failAfterWrite = false;
+    // The connection is exactly as it was, and the old key still resolves.
+    const after = await readConnection(t.d.connectionFile);
+    expect(after.revision).toBe(before.revision);
+    expect(after.fingerprint).toBe(before.fingerprint);
+    expect(await credentialNow(t.d)).toMatchObject({ ok: true, key: CANARY });
+    // The session was never bound to a key that stopped existing.
+    expect((await status(t.d, b)).live.session).toMatchObject({ status: "active" });
+    expect((await ask(t.d, b)).status).toBe(200);
+    expect(t.made.keys).toEqual([CANARY]);
+    // No abandoned entry is left holding the new key.
+    expect([...native.map.values()]).toEqual([CANARY]);
+  });
+
+  it("a failed first save leaves nothing connected, and Disconnect still removes the abandoned entry", async () => {
+    const native = fakeNative({ failAfterWrite: true, failDelete: true });
+    const t = setup({ keychain: { store: native.store, map: native.map, calls: native.calls, state: {} } as never });
+    const { b } = await pair(t.d);
+    const res = await save(t.d, b, CANARY, "keychain");
+    expect(res.status).toBe(503);
+    const body = await res.json();
+    expect(body.error).not.toMatch(/Nothing was saved/);
+    // Cleanup failed too, so the message must say an entry may remain.
+    expect(body.error).toMatch(/may (still )?(be|remain|exist)|couldn't be removed|unconfirmed/i);
+    expect(native.map.size).toBe(1);
+
+    // Nothing is connected, and the abandoned slot is remembered by name only.
+    const conn = await readConnection(t.d.connectionFile);
+    expect(conn).toMatchObject({ source: "none", revision: null });
+    expect(JSON.stringify(conn)).not.toContain("CANARY");
+    expect(everythingOnDisk()).not.toContain("CANARY");
+
+    // Disconnect cleans it up even though the record was never connected.
+    native.state.failDelete = false;
+    native.state.failAfterWrite = false;
+    const off = await connection(t.d, b, { action: "disconnect" });
+    expect(off.status).toBe(200);
+    expect(native.map.size).toBe(0);
+    expect((await readConnection(t.d.connectionFile)).source).toBe("none");
+  });
+
+  it("an entry that can't be cleaned up is reported and cleared by the next successful save", async () => {
+    const native = fakeNative({ failAfterWrite: true, failDelete: true });
+    const t = setup({ keychain: { store: native.store, map: native.map, calls: native.calls, state: {} } as never });
+    const { b } = await pair(t.d);
+    expect((await save(t.d, b, CANARY, "keychain")).status).toBe(503);
+    expect(native.map.size).toBe(1);
+
+    native.state.failAfterWrite = false;
+    native.state.failDelete = false;
+    // A later save succeeds, and the abandoned entry goes with it.
+    expect((await save(t.d, b, `${CANARY}-second`, "keychain")).status).toBe(200);
+    expect([...native.map.values()]).toEqual([`${CANARY}-second`]);
+    expect(await credentialNow(t.d)).toMatchObject({ ok: true, key: `${CANARY}-second` });
+    await start(t.d, b);
+    expect((await ask(t.d, b)).status).toBe(200);
+    expect(t.made.keys).toEqual([`${CANARY}-second`]);
+  });
+
+  it("a record written before slots existed keeps working, and its entry is replaced safely", async () => {
+    const native = fakeNative();
+    const t = setup({ keychain: { store: native.store, map: native.map, calls: native.calls, state: {} } as never });
+    const { b } = await pair(t.d);
+    await save(t.d, b, CANARY, "keychain");
+    // Rewrite the record as the earlier code wrote it: version 1, no slot, key under the un-slotted name.
+    const current = JSON.parse(readFileSync(t.d.connectionFile, "utf8"));
+    const legacyAccount = keychainAccount(current.salt);
+    native.map.clear();
+    native.map.set(legacyAccount, CANARY);
+    const { saveJson } = await import("@/copilot/localFiles");
+    saveJson(t.d.connectionFile, { version: 1, salt: current.salt, source: "keychain", revision: current.revision, fingerprint: current.fingerprint, savedAt: current.savedAt, verifiedAt: null, rejectedAt: null });
+
+    // The remembered key is still found, under the name that record used.
+    const migrated = await readConnection(t.d.connectionFile);
+    expect(migrated).toMatchObject({ version: 2, slot: "legacy", pending: [] });
+    expect(await credentialNow(t.d)).toMatchObject({ ok: true, key: CANARY });
+    expect((await start(t.d, b)).status).toBe(200);
+    expect((await ask(t.d, b)).status).toBe(200);
+
+    // Replacing it writes to a fresh slot and clears the old entry out.
+    expect((await save(t.d, b, `${CANARY}-next`, "keychain")).status).toBe(200);
+    expect(await readConnection(t.d.connectionFile)).toMatchObject({ slot: "a", pending: [] });
+    expect([...native.map.entries()]).toEqual([[accountFor(current.salt, "a"), `${CANARY}-next`]]);
+    expect(await credentialNow(t.d)).toMatchObject({ ok: true, key: `${CANARY}-next` });
+  });
+
+  it("a refused write never claims nothing was stored, and leaves the live key in place", async () => {
+    const native = fakeNative();
+    const t = setup({ keychain: { store: native.store, map: native.map, calls: native.calls, state: {} } as never });
+    const { b } = await pair(t.d);
+    await save(t.d, b, CANARY, "keychain");
+    native.state.failWrite = true;
+    const res = await save(t.d, b, `${CANARY}-new`, "keychain");
+    expect(res.status).toBe(503);
+    const text = await res.text();
+    // The adapter can't know whether a throwing native write stored, so it must not claim it didn't.
+    expect(text).not.toMatch(/Nothing was saved/);
+    expect(text).toMatch(/previous connection is unchanged/i);
+    expect([...native.map.values()]).toEqual([CANARY]);
+    native.state.failWrite = false;
+    expect(await credentialNow(t.d)).toMatchObject({ ok: true, key: CANARY });
+  });
+
+  it("the adapter reports outcomes instead of leaving the caller to guess", async () => {
+    const landed = fakeNative({ failAfterWrite: true });
+    const w = await landed.store.set("slot", CANARY);
+    expect(w).toMatchObject({ ok: false, maybeStored: true });
+    expect(JSON.stringify(w)).not.toContain("CANARY");
+    // A refused write is also "may have stored": the native call gives no way to tell.
+    const never = fakeNative({ failWrite: true });
+    expect(await never.store.set("slot", CANARY)).toMatchObject({ ok: false, maybeStored: true });
+    const good = fakeNative();
+    expect(await good.store.set("slot", CANARY)).toEqual({ ok: true });
+    expect(await good.store.delete("slot")).toEqual({ ok: true });
+    const stuck = fakeNative({ failDelete: true });
+    await stuck.store.set("slot", CANARY);
+    expect(await stuck.store.delete("slot")).toMatchObject({ ok: false });
+  });
+});
+
+describe("a relative state-directory override resolves the same way everywhere", () => {
+  it("both scripts and the server agree when run by absolute path from another folder", () => {
+    const elsewhere = mkdtempSync(join(tmpdir(), "atlas-elsewhere-"));
+    const repo = process.cwd();
+    try {
+      const run = (script: string, args: string[]) =>
+        execFileSync(process.execPath, ["--disable-warning=MODULE_TYPELESS_PACKAGE_JSON", join(repo, "scripts", script), ...args], {
+          cwd: elsewhere,
+          encoding: "utf8",
+          env: { ...process.env, ATLAS_LOCAL_DIR: "relative-state", ATLAS_LIVE_SESSION_FILE: "", COPILOT_MODE: "live", COPILOT_LIVE_PROVIDER: "fake" },
+        });
+
+      // The launcher's own check, and the owner's session script, must use the repository's folder.
+      const report = run("atlas-local.mjs", ["doctor"]);
+      expect(report).toContain(join(repo, "relative-state"));
+      expect(report).not.toContain(join(elsewhere, "relative-state"));
+      run("live-session.mjs", ["arm", "--provider", "fake", "--origin", "http://localhost:3000"]);
+      // The session record went to the repository's folder, where the server looks.
+      expect(existsSync(join(repo, "relative-state", "live-session.json"))).toBe(true);
+      expect(existsSync(join(elsewhere, "relative-state"))).toBe(false);
+      expect(run("live-session.mjs", ["status"])).toMatch(/Session: (unclaimed|active)/);
+      run("live-session.mjs", ["stop"]);
+      // A check leaves no state of its own behind.
+      rmSync(join(repo, "relative-state"), { recursive: true, force: true });
+      run("atlas-local.mjs", ["doctor"]);
+      expect(existsSync(join(repo, "relative-state"))).toBe(false);
+    } finally {
+      rmSync(join(repo, "relative-state"), { recursive: true, force: true });
+      rmSync(elsewhere, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("an absolute override is used as given", () => {
+    const where = mkdtempSync(join(tmpdir(), "atlas-abs-"));
+    try {
+      const out = execFileSync(process.execPath, ["--disable-warning=MODULE_TYPELESS_PACKAGE_JSON", join(process.cwd(), "scripts", "atlas-local.mjs"), "doctor"], {
+        cwd: tmpdir(),
+        encoding: "utf8",
+        env: { ...process.env, ATLAS_LOCAL_DIR: where, ATLAS_LIVE_SESSION_FILE: "" },
+      });
+      expect(out).toContain(where);
+    } finally {
+      rmSync(where, { recursive: true, force: true });
+    }
+  }, 60_000);
 });

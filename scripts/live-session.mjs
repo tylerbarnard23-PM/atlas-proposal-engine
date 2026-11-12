@@ -20,7 +20,7 @@
 // (not a billing ceiling). Each arming is a new allowance: arm only with the
 // owner's approval for that session.
 
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const SUPPORTED_NODE = 24;
@@ -38,8 +38,11 @@ const { connectionFilePath } = files;
 const { LIVE_SESSION_LIMITS, SESSION_PROVIDERS, armSession, providerName, readView, sessionFilePath, stopSession } = sessions;
 const { readConnection } = connection;
 // One state directory for the scripts and the server, even when this script is run by absolute path from another
-// folder. Set before any of the paths above are called, which is what reads it.
-process.env.ATLAS_LOCAL_DIR ||= join(root, files.DEFAULT_LOCAL_DIR);
+// folder, and even when the override is relative: a relative value would otherwise follow the caller's working
+// directory while the server resolves it from the repository root. Set before any of the paths above are called.
+const anchor = (p) => (isAbsolute(p) ? p : resolve(root, p));
+process.env.ATLAS_LOCAL_DIR = anchor(process.env.ATLAS_LOCAL_DIR || files.DEFAULT_LOCAL_DIR);
+if (process.env.ATLAS_LIVE_SESSION_FILE) process.env.ATLAS_LIVE_SESSION_FILE = anchor(process.env.ATLAS_LIVE_SESSION_FILE);
 
 const [command, ...rest] = process.argv.slice(2);
 const flag = (name, fallback) => {

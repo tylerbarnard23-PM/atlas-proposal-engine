@@ -6,7 +6,7 @@ import * as store from "./liveSessionStore";
 import type { SecretStore } from "./credentialStore";
 import { instanceId } from "./localFiles";
 import { normalizeKey } from "./localConnection";
-import { fingerprintOf, keychainAccount, markOutcome, readConnection, type ConnectionState, type CredentialSource } from "./localConnection";
+import { accountFor, fingerprintOf, markOutcome, readConnection, type ConnectionState, type CredentialSource } from "./localConnection";
 
 // The gate every live Copilot request passes before any provider call.
 //
@@ -192,17 +192,18 @@ export async function resolveCredential(deps: LiveDeps, conn?: ConnectionState, 
   const c = conn ?? (await readConnection(deps.connectionFile));
   const fail = (code: CredentialProblem, error: string) => ({ ok: false, code, error, source: c.source, revision: c.revision }) as const;
   if (c.source === "none" || !c.revision || !c.fingerprint) return fail("no_credential", "No API key is connected. Connect one in Atlas (Connect Claude) before starting a session.");
+  const account = c.slot ? accountFor(c.salt, c.slot) : null;
   let key: string | null;
   if (c.source === "environment") {
     key = normalizeKey(deps.env.ANTHROPIC_API_KEY) || null;
     if (!key) return fail("credential_missing", "The environment key was selected, but ANTHROPIC_API_KEY isn't set in the server's environment any more. Set it and restart, or connect a key in Atlas.");
   } else if (c.source === "session") {
-    key = await deps.secrets.session.get(keychainAccount(c.salt));
+    key = account ? await deps.secrets.session.get(account) : null;
     if (!key) return fail("credential_missing", "The key was kept for this server session only, and the server has restarted since. Paste the key again to continue.");
   } else {
     if (!read) return { ok: true, source: c.source, revision: c.revision, key: null };
     try {
-      key = await deps.secrets.keychain.get(keychainAccount(c.salt));
+      key = account ? await deps.secrets.keychain.get(account) : null;
     } catch (err) {
       return fail("credential_unreadable", `${err instanceof Error ? err.message : "The operating system's credential store couldn't be read."} Unlock it and try again, or replace the key.`);
     }

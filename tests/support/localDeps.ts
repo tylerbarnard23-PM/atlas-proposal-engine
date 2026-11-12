@@ -22,8 +22,27 @@ export function fakeKeychain(state: { unsupported?: boolean; locked?: boolean } 
   const store: SecretStore = {
     available: async () => (state.unsupported ? { ok: false, reason: "Secure remembering isn't available on this computer (fake)." } : { ok: true }),
     get: async (a) => (calls.get++, guard(), map.get(a) ?? null),
-    set: async (a, s) => (calls.set++, guard(), void map.set(a, s)),
-    delete: async (a) => (calls.delete++, guard(), void map.delete(a)),
+    // A locked fake refuses before writing, so nothing of ours is stored (the write-then-fail case is in tests/localConnect.test.ts).
+    set: async (a, secret) => {
+      calls.set++;
+      try {
+        guard();
+      } catch (err) {
+        return { ok: false, reason: (err as Error).message, maybeStored: false };
+      }
+      map.set(a, secret);
+      return { ok: true };
+    },
+    delete: async (a) => {
+      calls.delete++;
+      try {
+        guard();
+      } catch (err) {
+        return { ok: false, reason: (err as Error).message };
+      }
+      map.delete(a);
+      return { ok: true };
+    },
   };
   return { store, map, calls, state };
 }
@@ -66,7 +85,7 @@ export function selectEnvironmentKey(d: LiveDeps, at: Date) {
   const key = d.env.ANTHROPIC_API_KEY;
   if (!key) return null;
   const salt = "0123456789abcdef0123456789abcdef";
-  const state: ConnectionState = { version: 1, salt, source: "environment", revision: randomUUID(), fingerprint: fingerprintOf(salt, key), savedAt: at.toISOString(), verifiedAt: null, rejectedAt: null };
+  const state: ConnectionState = { version: 2, salt, source: "environment", slot: null, pending: [], revision: randomUUID(), fingerprint: fingerprintOf(salt, key), savedAt: at.toISOString(), verifiedAt: null, rejectedAt: null };
   saveJson(d.connectionFile, state);
   return state.revision;
 }
