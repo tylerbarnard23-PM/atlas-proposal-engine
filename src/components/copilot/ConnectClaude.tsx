@@ -141,7 +141,7 @@ export function ConnectClaude({ live, local, onChanged }: { live: LiveInfo; loca
                   Select that workspace and set its monthly <strong>spend limit</strong>. This is the control that actually caps what you can be billed; Atlas&apos;s own guard is only an estimate.
                 </li>
                 <li>
-                  Create an <strong>API key in that workspace</strong>. Use a standard key (it starts with <code>sk-ant-</code>). Never use an Admin key (<code>sk-ant-admin…</code>): it manages your whole organization.
+                  Create an <strong>API key in that workspace</strong>. Never use an Admin key (<code>sk-ant-admin…</code>): it manages your whole organization. A Claude subscription token from Claude Code isn&apos;t an API key either.
                 </li>
                 <li>Paste the key below and choose how long Atlas keeps it.</li>
               </ol>
@@ -174,7 +174,7 @@ export function ConnectClaude({ live, local, onChanged }: { live: LiveInfo; loca
                   data-testid="connect-key"
                 />
                 <p id={`${id}-key-help`} className="mt-1 text-2xs text-ink-500">
-                  The key goes to the Atlas server on this machine only. It isn&apos;t kept in the browser, the workspace or backups, and Atlas never shows it again.
+                  The key goes to the Atlas server on this machine only. It isn&apos;t kept in the browser, the workspace or backups, and Atlas never shows it again. Atlas can&apos;t tell a working key from a mistyped one: your first question settles that.
                 </p>
               </div>
               <fieldset className="space-y-1">

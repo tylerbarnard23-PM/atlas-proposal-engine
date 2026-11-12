@@ -20,9 +20,26 @@
 // (not a billing ceiling). Each arming is a new allowance: arm only with the
 // owner's approval for that session.
 
-import { LIVE_SESSION_LIMITS, SESSION_PROVIDERS, armSession, providerName, readView, sessionFilePath, stopSession } from "../src/copilot/liveSessionStore.ts";
-import { readConnection } from "../src/copilot/localConnection.ts";
-import { connectionFilePath } from "../src/copilot/localFiles.ts";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const SUPPORTED_NODE = 24;
+const major = Number(process.versions.node.split(".")[0]);
+// Checked before the TypeScript modules below are loaded: those imports are what an older Node fails on first.
+if (!(Number.isFinite(major) && major >= SUPPORTED_NODE)) {
+  console.error(`Atlas needs Node ${SUPPORTED_NODE} or newer (this is ${process.versions.node}). Install it from nodejs.org, then run: npm install`);
+  process.exit(1);
+}
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+// Loaded together: three sequential awaits would noticeably slow a command that is already paying Node's start-up.
+const [files, sessions, connection] = await Promise.all([import("../src/copilot/localFiles.ts"), import("../src/copilot/liveSessionStore.ts"), import("../src/copilot/localConnection.ts")]);
+const { connectionFilePath } = files;
+const { LIVE_SESSION_LIMITS, SESSION_PROVIDERS, armSession, providerName, readView, sessionFilePath, stopSession } = sessions;
+const { readConnection } = connection;
+// One state directory for the scripts and the server, even when this script is run by absolute path from another
+// folder. Set before any of the paths above are called, which is what reads it.
+process.env.ATLAS_LOCAL_DIR ||= join(root, files.DEFAULT_LOCAL_DIR);
 
 const [command, ...rest] = process.argv.slice(2);
 const flag = (name, fallback) => {

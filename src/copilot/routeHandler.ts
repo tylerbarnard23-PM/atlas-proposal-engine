@@ -8,7 +8,7 @@ import { admitLiveRun, anthropicClient, claimLiveSession, clearedSessionCookie, 
 import { sessionFilePath } from "./liveSessionStore";
 import { keychainStore, memoryStore } from "./credentialStore";
 import { connectionFilePath, pairingFilePath } from "./localFiles";
-import { MAX_KEY_BODY_BYTES, disconnect, localInfo, pairBrowser, pairingCookie, saveKey, startSession, useEnvironmentKey } from "./localConnect";
+import { MAX_KEY_BODY_BYTES, authorizeLocal, disconnect, localInfo, pairBrowser, pairingCookie, saveKey, startSession, useEnvironmentKey } from "./localConnect";
 
 // The Copilot API's request handling, kept out of the route files so tests
 // can drive it with a fake provider. Modes:
@@ -48,13 +48,14 @@ export async function handleCopilotGet(req: Request, deps: LiveDeps = defaultDep
 }
 
 export async function handleCopilotPost(req: Request, deps: LiveDeps = defaultDeps()) {
-  const raw = await req.text();
-  if (raw.length > MAX_BODY_BYTES) {
-    return NextResponse.json({ error: "Workspace too large for one Copilot request." }, { status: 413 });
+  const read = await readLimited(req, MAX_BODY_BYTES);
+  if (!read.ok) {
+    if (read.tooLarge) return NextResponse.json({ error: "Workspace too large for one Copilot request." }, { status: 413 });
+    return NextResponse.json({ error: "Body must be JSON." }, { status: 400 });
   }
   let body: unknown;
   try {
-    body = JSON.parse(raw);
+    body = JSON.parse(read.text);
   } catch {
     return NextResponse.json({ error: "Body must be JSON." }, { status: 400 });
   }
@@ -128,21 +129,60 @@ export async function handleLiveSessionClaim(req: Request, deps: LiveDeps = defa
   }
   // Redirect to the Copilot page on the same origin, without the token in the address.
   const to = new URL("/copilot", `http://${req.headers.get("host")}`);
-  return new NextResponse(null, { status: 303, headers: { location: to.pathname, "set-cookie": sessionCookie(r.cookie, r.expiresAt), "cache-control": "no-store", "referrer-policy": "no-referrer" } });
+  return new NextResponse(null, { status: 303, headers: { location: to.pathname, "set-cookie": sessionCookie(deps.env, r.cookie, r.expiresAt), "cache-control": "no-store", "referrer-policy": "no-referrer" } });
 }
 
 const NO_STORE = { "cache-control": "no-store" };
 const refused = (r: { status: number; code: string; error: string }) => NextResponse.json({ error: r.error, code: r.code }, { status: r.status, headers: NO_STORE });
 
-/** A small JSON object body, or null. Never logged: it may carry a key. */
-async function smallJson(req: Request): Promise<Record<string, unknown> | null> {
+/**
+ * Reads at most `max` bytes of the body, enforcing the limit **as it reads**:
+ * the stream is abandoned once the limit is passed, so neither a missing nor a
+ * misleading Content-Length can make the server buffer more than that. The
+ * text is never logged: it may carry a key.
+ */
+async function readLimited(req: Request, max: number): Promise<{ ok: true; text: string } | { ok: false; tooLarge: boolean }> {
+  const stream = req.body;
+  if (!stream) {
+    try {
+      const text = await req.text();
+      return text.length > max ? { ok: false, tooLarge: true } : { ok: true, text };
+    } catch {
+      return { ok: false, tooLarge: false };
+    }
+  }
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
   try {
-    const raw = await req.text();
-    if (raw.length > MAX_KEY_BODY_BYTES) return null;
-    const body = JSON.parse(raw);
-    return body && typeof body === "object" && !Array.isArray(body) ? body : null;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > max) {
+        await reader.cancel().catch(() => {});
+        return { ok: false, tooLarge: true };
+      }
+      chunks.push(value);
+    }
   } catch {
-    return null;
+    return { ok: false, tooLarge: false };
+  }
+  return { ok: true, text: Buffer.concat(chunks).toString("utf8") };
+}
+
+type SmallJson = { ok: true; body: Record<string, unknown> } | { ok: false; refusal: { status: number; code: string; error: string } };
+
+/** A small JSON object body, read under its limit, or why not. */
+async function smallJson(req: Request): Promise<SmallJson> {
+  const bad = { ok: false, refusal: { status: 400, code: "bad_body", error: "Send a small JSON object." } } as const;
+  const read = await readLimited(req, MAX_KEY_BODY_BYTES);
+  if (!read.ok) return read.tooLarge ? { ok: false, refusal: { status: 413, code: "body_too_large", error: `Send less than ${MAX_KEY_BODY_BYTES} bytes of JSON.` } } : bad;
+  try {
+    const body = JSON.parse(read.text);
+    return body && typeof body === "object" && !Array.isArray(body) ? { ok: true, body } : bad;
+  } catch {
+    return bad;
   }
 }
 
@@ -152,14 +192,19 @@ export async function handleLocalPair(req: Request, deps: LiveDeps = defaultDeps
   const r = await pairBrowser(req, deps, token);
   if (!r.ok) return new NextResponse(`Atlas wasn't paired with this browser: ${r.error}`, { status: r.status, headers: { "content-type": "text/plain; charset=utf-8", ...NO_STORE } });
   // To the Copilot page on the same origin, without the token in the address.
-  return new NextResponse(null, { status: 303, headers: { location: "/copilot", "set-cookie": pairingCookie(r.cookie, r.expiresAt), ...NO_STORE, "referrer-policy": "no-referrer" } });
+  return new NextResponse(null, { status: 303, headers: { location: "/copilot", "set-cookie": pairingCookie(deps.env, r.cookie, r.expiresAt), ...NO_STORE, "referrer-policy": "no-referrer" } });
 }
 
 /** POST /api/copilot/local/connection {"action":"save"|"use_environment"|"disconnect"} : a paired browser manages the key. No provider request. */
 export async function handleLocalConnection(req: Request, deps: LiveDeps = defaultDeps()) {
-  const body = await smallJson(req);
-  if (!body) return NextResponse.json({ error: "Send a small JSON body.", code: "bad_body" }, { status: 400, headers: NO_STORE });
-  const r = body.action === "save" ? await saveKey(req, deps, body) : body.action === "use_environment" ? await useEnvironmentKey(req, deps) : body.action === "disconnect" ? await disconnect(req, deps) : null;
+  // Authorized from its headers and cookies alone, before the body is read: an
+  // unauthorized request never makes the server read what it sent.
+  const auth = await authorizeLocal(req, deps);
+  if (!auth.ok) return refused(auth);
+  const read = await smallJson(req);
+  if (!read.ok) return refused(read.refusal);
+  const body = read.body;
+  const r = body.action === "save" ? await saveKey(deps, auth.provider, body) : body.action === "use_environment" ? await useEnvironmentKey(deps, auth.provider) : body.action === "disconnect" ? await disconnect(deps, auth.provider) : null;
   if (!r) return NextResponse.json({ error: 'The action must be "save", "use_environment" or "disconnect".', code: "bad_action" }, { status: 400, headers: NO_STORE });
   if (!r.ok) return refused(r);
   // The key is never echoed: only where it is kept and its status.
@@ -168,16 +213,23 @@ export async function handleLocalConnection(req: Request, deps: LiveDeps = defau
 
 /** POST /api/copilot/live-session {"action":"start","allowance":{…}} or {"action":"stop"} : the session's Start and Stop controls. */
 export async function handleLiveSessionPost(req: Request, deps: LiveDeps = defaultDeps()) {
-  const body = await smallJson(req);
-  const action = body?.action;
+  // Authorized from headers and cookies first. Starting a session needs that to
+  // pass; Stop stays open to any request from this machine, by design, so that
+  // spending can always be halted — its body is read under the same limit, which
+  // is the only body an unauthorized caller here can make the server hold.
+  const auth = await authorizeLocal(req, deps);
+  const read = await smallJson(req);
+  if (!read.ok) return refused(read.refusal);
+  const action = read.body.action;
   if (action === "start") {
-    const r = await startSession(req, deps, body!);
+    if (!auth.ok) return refused(auth);
+    const r = await startSession(deps, auth.provider, read.body);
     if (!r.ok) return refused(r);
-    return NextResponse.json({ live: { session: r.session } }, { headers: { "set-cookie": sessionCookie(r.cookie, r.expiresAt), ...NO_STORE } });
+    return NextResponse.json({ live: { session: r.session } }, { headers: { "set-cookie": sessionCookie(deps.env, r.cookie, r.expiresAt), ...NO_STORE } });
   }
   if (action !== "stop") return NextResponse.json({ error: 'The action must be "start" or "stop".' }, { status: 400 });
   const r = await stopLiveSession(req, deps, "stopped from the browser");
   if (!r.ok) return NextResponse.json({ error: r.error, code: r.code }, { status: r.status });
   // A stopped session is over: this browser's cookie goes too.
-  return NextResponse.json({ live: { session: r.session } }, { headers: { "set-cookie": clearedSessionCookie() } });
+  return NextResponse.json({ live: { session: r.session } }, { headers: { "set-cookie": clearedSessionCookie(deps.env) } });
 }

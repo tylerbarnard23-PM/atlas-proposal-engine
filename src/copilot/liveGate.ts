@@ -4,6 +4,8 @@ import { pricedUsage, worstRequestCost } from "./eval/budget";
 import { TEST_PROVIDER_MODEL, createTestProvider } from "./testProvider";
 import * as store from "./liveSessionStore";
 import type { SecretStore } from "./credentialStore";
+import { instanceId } from "./localFiles";
+import { normalizeKey } from "./localConnection";
 import { fingerprintOf, keychainAccount, markOutcome, readConnection, type ConnectionState, type CredentialSource } from "./localConnection";
 
 // The gate every live Copilot request passes before any provider call.
@@ -33,7 +35,10 @@ import { fingerprintOf, keychainAccount, markOutcome, readConnection, type Conne
 // provider in place of Anthropic: no key, no provider call, no spend. It
 // exists to check the controls themselves.
 
+/** The base name; the cookie itself is scoped to this installation (see instanceId). */
 export const LIVE_COOKIE = "atlas_live_session";
+/** This instance's session cookie name, so two Atlas instances on one host don't overwrite each other's. */
+export const liveCookieName = (env: Env) => `${LIVE_COOKIE}_${instanceId(env)}`;
 const INPUT_HEADROOM = 30_000;
 
 export type LiveProvider = "anthropic" | "fake";
@@ -95,7 +100,7 @@ export function localRequestProblem(req: Request, kind: "read" | "write" | "navi
   return null;
 }
 
-export function cookieOf(req: Request, name: string = LIVE_COOKIE): string | null {
+export function cookieOf(req: Request, name: string): string | null {
   const raw = req.headers.get("cookie") ?? "";
   for (const part of raw.split(";")) {
     const [k, ...v] = part.trim().split("=");
@@ -110,12 +115,12 @@ export function cookieOf(req: Request, name: string = LIVE_COOKIE): string | nul
   return null;
 }
 
-export function sessionCookie(value: string, expires: Date): string {
-  return `${LIVE_COOKIE}=${encodeURIComponent(value)}; Path=/api/copilot; HttpOnly; SameSite=Strict; Expires=${expires.toUTCString()}`;
+export function sessionCookie(env: Env, value: string, expires: Date): string {
+  return `${liveCookieName(env)}=${encodeURIComponent(value)}; Path=/api/copilot; HttpOnly; SameSite=Strict; Expires=${expires.toUTCString()}`;
 }
 
 /** Removes this browser's session cookie (sent with Stop). */
-export const clearedSessionCookie = () => `${LIVE_COOKIE}=; Path=/api/copilot; HttpOnly; SameSite=Strict; Max-Age=0`;
+export const clearedSessionCookie = (env: Env) => `${liveCookieName(env)}=; Path=/api/copilot; HttpOnly; SameSite=Strict; Max-Age=0`;
 
 /** The worst case the session reserves for one request (the evaluation's estimate, priced for the configured model). */
 export const worstNextRequest = (largestInput: number, maxTokens: number, fallbacks: boolean) => worstRequestCost(COPILOT_MODEL, largestInput + INPUT_HEADROOM, maxTokens, fallbacks);
@@ -189,7 +194,7 @@ export async function resolveCredential(deps: LiveDeps, conn?: ConnectionState, 
   if (c.source === "none" || !c.revision || !c.fingerprint) return fail("no_credential", "No API key is connected. Connect one in Atlas (Connect Claude) before starting a session.");
   let key: string | null;
   if (c.source === "environment") {
-    key = deps.env.ANTHROPIC_API_KEY || null;
+    key = normalizeKey(deps.env.ANTHROPIC_API_KEY) || null;
     if (!key) return fail("credential_missing", "The environment key was selected, but ANTHROPIC_API_KEY isn't set in the server's environment any more. Set it and restart, or connect a key in Atlas.");
   } else if (c.source === "session") {
     key = await deps.secrets.session.get(keychainAccount(c.salt));
@@ -225,24 +230,57 @@ export interface AdmittedRun {
 
 export type Refusal = { ok: false; status: number; code: string; error: string; session?: store.SessionView };
 
+/** The refusal a session's own state implies, without touching a credential, or null when it could admit a run. */
+const SESSION_REFUSAL: Record<Exclude<store.SessionStatus, "active">, { status: number; code: string }> = {
+  unarmed: { status: 403, code: "no_session" },
+  invalid: { status: 403, code: "invalid_session" },
+  unbound: { status: 403, code: "unbound_session" },
+  provider_mismatch: { status: 403, code: "provider_mismatch" },
+  credential_mismatch: { status: 403, code: "credential_mismatch" },
+  unclaimed: { status: 403, code: "not_claimed" },
+  not_this_browser: { status: 403, code: "not_this_browser" },
+  expired: { status: 403, code: "expired" },
+  stopped: { status: 403, code: "stopped" },
+  exhausted: { status: 429, code: "exhausted" },
+};
+
+function sessionRefusal(v: store.SessionView): Omit<Refusal, "session"> | null {
+  if (v.status !== "active") return { ok: false, ...SESSION_REFUSAL[v.status], error: v.message };
+  if (v.runInProgress) return { ok: false, status: 409, code: "run_in_progress", error: "A live run is already in progress; only one runs at a time." };
+  return null;
+}
+
 /** Admits one live run for this request, or says why not. Nothing reaches a provider unless this returns ok. */
 export async function admitLiveRun(req: Request, deps: LiveDeps): Promise<{ ok: true; run: AdmittedRun } | Refusal> {
   const ready = liveReadiness(deps.env);
   if (!ready.ok) return { ok: false, status: 503, code: "live_unavailable", error: `Live testing isn't available: ${ready.reasons.join(" ")}` };
   const local = localRequestProblem(req, "write");
   if (local) return { ok: false, status: 403, code: "not_local", error: local };
-  const cookie = cookieOf(req);
+  const cookie = cookieOf(req, liveCookieName(deps.env));
   const provider = ready.provider;
-  // The key in use now. With Anthropic it must be readable; the fake provider needs none and reads none.
+  // A run abandoned by a crash is finalized first, so the session's own state is
+  // current before it is judged. This reads and writes the session record only.
+  await store.reapAbandonedRun(deps.sessionFile, deps.now());
+  // Which key is in use, from the record alone: this opens no credential store.
   const conn = await readConnection(deps.connectionFile);
-  const cred: ResolvedCredential = provider === "fake" ? { ok: true, source: conn.source, revision: conn.revision, key: null } : await resolveCredential(deps, conn);
-  if (!cred.ok) return { ok: false, status: 403, code: cred.code, error: cred.error, session: await store.readView(deps.sessionFile, deps.now(), cookie, FIRST_REQUEST_USD, provider, cred.revision) };
-  const revision = cred.revision;
-  // The session must have been started for this provider and this credential; checked before any client exists.
+  const revision = conn.revision;
+  const sessionNow = () => store.readView(deps.sessionFile, deps.now(), cookie, FIRST_REQUEST_USD, provider, revision);
+  if (provider === "anthropic" && conn.source === "none")
+    return { ok: false, status: 403, code: "no_credential", error: "No API key is connected. Connect one in Atlas (Connect Claude) before starting a session.", session: await sessionNow() };
+  // A session that could not admit a run is refused HERE, before any credential is read:
+  // a missing, unreadable, stopped, expired, exhausted or another browser's session never
+  // opens the operating system's credential store.
+  const view = await sessionNow();
+  const closed = sessionRefusal(view);
+  if (closed) return { ...closed, session: view };
+  // Only now, for a run the session could admit, is the key read.
+  const cred: ResolvedCredential = provider === "fake" ? { ok: true, source: conn.source, revision, key: null } : await resolveCredential(deps, conn);
+  if (!cred.ok) return { ok: false, status: 403, code: cred.code, error: cred.error, session: view };
+  // Admission itself stays one atomic step, and is authoritative: the check above is only a cheap gate.
   const admitted = await store.admitRun(deps.sessionFile, deps.now(), cookie, FIRST_REQUEST_USD, provider, revision);
   if (!admitted.ok) {
     const status = admitted.code === "run_in_progress" ? 409 : admitted.code === "exhausted" ? 429 : 403;
-    return { ok: false, status, code: admitted.code, error: admitted.error, session: await store.readView(deps.sessionFile, deps.now(), cookie, FIRST_REQUEST_USD, provider, revision) };
+    return { ok: false, status, code: admitted.code, error: admitted.error, session: await sessionNow() };
   }
 
   const runId = admitted.runId;
@@ -329,7 +367,7 @@ export async function liveSessionStatus(req: Request, deps: LiveDeps): Promise<{
   if (!ready.ok) return { provider: null, available: false, reasons: ready.reasons, session: null };
   const local = localRequestProblem(req, "read");
   if (local) return { provider: ready.provider, available: false, reasons: [local], session: null };
-  return { provider: ready.provider, available: true, reasons: [], session: await store.readView(deps.sessionFile, deps.now(), cookieOf(req), FIRST_REQUEST_USD, ready.provider, await currentRevision(deps)) };
+  return { provider: ready.provider, available: true, reasons: [], session: await store.readView(deps.sessionFile, deps.now(), cookieOf(req, liveCookieName(deps.env)), FIRST_REQUEST_USD, ready.provider, await currentRevision(deps)) };
 }
 
 /** Stops the session (from this machine) and cancels its run in progress here. Stopping is always allowed locally. */
@@ -340,7 +378,7 @@ export async function stopLiveSession(req: Request, deps: LiveDeps, reason: stri
   if (!r.ok) return { ok: false, status: 404, code: r.code, error: r.error };
   cancelRunningRuns();
   const ready = liveReadiness(deps.env);
-  return { ok: true, session: await store.readView(deps.sessionFile, deps.now(), cookieOf(req), FIRST_REQUEST_USD, ready.ok ? ready.provider : undefined) };
+  return { ok: true, session: await store.readView(deps.sessionFile, deps.now(), cookieOf(req, liveCookieName(deps.env)), FIRST_REQUEST_USD, ready.ok ? ready.provider : undefined) };
 }
 
 /** Exchanges the one-time claim link for this browser's session cookie. */

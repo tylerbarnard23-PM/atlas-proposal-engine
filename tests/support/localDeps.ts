@@ -45,7 +45,8 @@ export function localDeps(opts: { dir: string; sessionFile?: string; client: Mes
     session,
     keychain,
     d: {
-      env: opts.env,
+      // The state directory travels with the environment, so cookie names and every file path agree.
+      env: { ...opts.env, ATLAS_LOCAL_DIR: opts.dir },
       now: opts.now,
       sessionFile: opts.sessionFile ?? join(opts.dir, "live-session.json"),
       pairingFile: join(opts.dir, "pairing.json"),

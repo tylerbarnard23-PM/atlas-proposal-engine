@@ -18,6 +18,16 @@ export const localDir = (env: Env) => resolve(/*turbopackIgnore: true*/ env.ATLA
 export const pairingFilePath = (env: Env) => join(/*turbopackIgnore: true*/ localDir(env), "pairing.json");
 export const connectionFilePath = (env: Env) => join(/*turbopackIgnore: true*/ localDir(env), "connection.json");
 
+/**
+ * A short, stable marker for this installation's state directory. Cookie names
+ * carry it so two Atlas instances on one host keep their own pairing and
+ * session: browsers scope cookies by host, not by port, so without it the
+ * second instance would overwrite the first one's cookies. It separates
+ * instances and nothing more — it gives no confidentiality from other software
+ * running on this machine, which can read these files anyway.
+ */
+export const instanceId = (env: Env) => hash(`atlas-instance:${localDir(env)}`).slice(0, 8);
+
 export const hash = (s: string) => createHash("sha256").update(s).digest("hex");
 export const sameHash = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 export const randomToken = () => randomBytes(32).toString("base64url");

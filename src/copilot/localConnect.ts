@@ -1,6 +1,7 @@
 import { FIRST_REQUEST_USD, cancelRunningRuns, cookieOf, liveReadiness, localRequestProblem, resolveCredential, type LiveDeps, type LiveProvider, type Refusal } from "./liveGate";
+import { instanceId } from "./localFiles";
 import * as sessions from "./liveSessionStore";
-import { clearConnection, ensureConnection, keyShapeProblem, keychainAccount, readConnection, recordConnection, type ConnectionState, type CredentialSource } from "./localConnection";
+import { clearConnection, ensureConnection, keyShapeProblem, keychainAccount, normalizeKey, readConnection, recordConnection, type ConnectionState, type CredentialSource } from "./localConnection";
 import { PAIR_COOKIE, PAIR_DAYS, csrfMatches, csrfTokenFor, isPaired, redeemPairingToken } from "./localPairing";
 
 // Connect Claude: what a paired browser on this machine may do to the local
@@ -18,7 +19,9 @@ import { PAIR_COOKIE, PAIR_DAYS, csrfMatches, csrfTokenFor, isPaired, redeemPair
 export const CSRF_HEADER = "x-atlas-csrf";
 export const MAX_KEY_BODY_BYTES = 4_096;
 
-export const pairingCookie = (value: string, expires: Date) => `${PAIR_COOKIE}=${encodeURIComponent(value)}; Path=/api/copilot; HttpOnly; SameSite=Strict; Expires=${expires.toUTCString()}`;
+/** This instance's pairing cookie name (see instanceId): one host can run two Atlas instances, each paired on its own. */
+export const pairCookieName = (env: Record<string, string | undefined>) => `${PAIR_COOKIE}_${instanceId(env)}`;
+export const pairingCookie = (env: Record<string, string | undefined>, value: string, expires: Date) => `${pairCookieName(env)}=${encodeURIComponent(value)}; Path=/api/copilot; HttpOnly; SameSite=Strict; Expires=${expires.toUTCString()}`;
 
 export type ConnectionStatus = "none" | "saved" | "verified" | "rejected" | "missing" | "changed" | "unreadable";
 
@@ -81,7 +84,7 @@ const minimumUsd = () => Math.ceil(FIRST_REQUEST_USD * 100) / 100;
 export async function localInfo(req: Request, deps: LiveDeps): Promise<LocalInfo | null> {
   const ready = liveReadiness(deps.env);
   if (!ready.ok || localRequestProblem(req, "read")) return null;
-  const cookie = cookieOf(req, PAIR_COOKIE);
+  const cookie = cookieOf(req, pairCookieName(deps.env));
   const base = { ceilings: ceilings(), minimumUsd: minimumUsd() };
   if (!cookie || !(await isPaired(deps.pairingFile, deps.now(), cookie))) return { ...base, paired: false, csrf: null, connection: null, environmentKey: false, remember: null };
   const remember = await deps.secrets.keychain.available();
@@ -106,14 +109,18 @@ export async function pairBrowser(req: Request, deps: LiveDeps, token: string): 
   return { ok: true, cookie: r.cookie, expiresAt: r.expiresAt };
 }
 
-/** The checks every change passes, in order, before anything is read or changed. */
-async function authorize(req: Request, deps: LiveDeps): Promise<{ ok: true; provider: LiveProvider } | Refusal> {
+/**
+ * The checks every change passes, in order, before anything is read or
+ * changed — the request body included: the handlers call this first, so an
+ * unauthorized request never makes the server read what it sent.
+ */
+export async function authorizeLocal(req: Request, deps: LiveDeps): Promise<{ ok: true; provider: LiveProvider } | Refusal> {
   const ready = liveReadiness(deps.env);
   if (!ready.ok) return { ok: false, status: 503, code: "live_unavailable", error: `Local live mode isn't available: ${ready.reasons.join(" ")}` };
   const local = localRequestProblem(req, "write");
   if (local) return { ok: false, status: 403, code: "not_local", error: local };
   if (!(req.headers.get("content-type") ?? "").toLowerCase().startsWith("application/json")) return { ok: false, status: 415, code: "bad_content_type", error: "Send JSON." };
-  const cookie = cookieOf(req, PAIR_COOKIE);
+  const cookie = cookieOf(req, pairCookieName(deps.env));
   if (!cookie || !(await isPaired(deps.pairingFile, deps.now(), cookie)))
     return { ok: false, status: 401, code: "not_paired", error: "This browser isn't paired with Atlas on this machine. Open Atlas from the launcher (npm run local), or run npm run local:pair and open its link." };
   if (!csrfMatches(cookie, req.headers.get(CSRF_HEADER))) return { ok: false, status: 403, code: "bad_csrf", error: "This request didn't carry the page's security token. Reload the page and try again." };
@@ -143,14 +150,12 @@ async function forgetStored(deps: LiveDeps, conn: ConnectionState, keep: Credent
 type Changed = { ok: true; connection: ConnectionView; warning: string | null } | Refusal;
 
 /** Saves a pasted key where the user chose. Makes no provider request. The key is never echoed back. */
-export async function saveKey(req: Request, deps: LiveDeps, body: { key?: unknown; storage?: unknown }): Promise<Changed> {
-  const auth = await authorize(req, deps);
-  if (!auth.ok) return auth;
+export async function saveKey(deps: LiveDeps, provider: LiveProvider, body: { key?: unknown; storage?: unknown }): Promise<Changed> {
   const problem = keyShapeProblem(body.key);
   if (problem) return { ok: false, status: 400, code: "bad_key", error: problem };
   const storage = body.storage;
   if (storage !== "session" && storage !== "keychain") return { ok: false, status: 400, code: "bad_storage", error: "Choose where to keep the key: this server session only, or the operating system's credential store." };
-  const key = (body.key as string).trim();
+  const key = normalizeKey(body.key);
   const prev = await ensureConnection(deps.connectionFile);
   const account = keychainAccount(prev.salt);
   if (storage === "keychain") {
@@ -168,14 +173,13 @@ export async function saveKey(req: Request, deps: LiveDeps, body: { key?: unknow
   const warning = await forgetStored(deps, prev, storage);
   const conn = await recordConnection(deps.connectionFile, deps.now(), storage, key);
   await endSessionFor(deps, "the API key was replaced");
-  return { ok: true, connection: await connectionView(deps, auth.provider, conn), warning };
+  return { ok: true, connection: await connectionView(deps, provider, conn), warning };
 }
 
 /** Selects the key in the server's environment, explicitly. Atlas doesn't manage it and can't remove it. */
-export async function useEnvironmentKey(req: Request, deps: LiveDeps): Promise<Changed> {
-  const auth = await authorize(req, deps);
-  if (!auth.ok) return auth;
-  const key = deps.env.ANTHROPIC_API_KEY;
+export async function useEnvironmentKey(deps: LiveDeps, provider: LiveProvider): Promise<Changed> {
+  // Normalized and checked exactly like a pasted key, and never echoed in the reason.
+  const key = normalizeKey(deps.env.ANTHROPIC_API_KEY);
   if (!key) return { ok: false, status: 400, code: "no_environment_key", error: "ANTHROPIC_API_KEY isn't set in the server's environment." };
   const problem = keyShapeProblem(key);
   if (problem) return { ok: false, status: 400, code: "bad_key", error: `The key in the server's environment can't be used. ${problem}` };
@@ -183,19 +187,17 @@ export async function useEnvironmentKey(req: Request, deps: LiveDeps): Promise<C
   const warning = await forgetStored(deps, prev, null);
   const conn = await recordConnection(deps.connectionFile, deps.now(), "environment", key);
   await endSessionFor(deps, "the API key was replaced");
-  return { ok: true, connection: await connectionView(deps, auth.provider, conn), warning };
+  return { ok: true, connection: await connectionView(deps, provider, conn), warning };
 }
 
 /** Removes the key Atlas stored and records that none is in use. */
-export async function disconnect(req: Request, deps: LiveDeps): Promise<Changed> {
-  const auth = await authorize(req, deps);
-  if (!auth.ok) return auth;
+export async function disconnect(deps: LiveDeps, provider: LiveProvider): Promise<Changed> {
   const prev = await ensureConnection(deps.connectionFile);
   const stored = await forgetStored(deps, prev, null);
   const conn = await clearConnection(deps.connectionFile);
   await endSessionFor(deps, "the API key was disconnected");
   const env = prev.source === "environment" ? "The key in the server's environment is managed outside Atlas and is still set there; Atlas no longer uses it." : null;
-  return { ok: true, connection: await connectionView(deps, auth.provider, conn), warning: [stored, env].filter(Boolean).join(" ") || null };
+  return { ok: true, connection: await connectionView(deps, provider, conn), warning: [stored, env].filter(Boolean).join(" ") || null };
 }
 
 /**
@@ -204,9 +206,7 @@ export async function disconnect(req: Request, deps: LiveDeps): Promise<Changed>
  * ceiling, never above. Nothing is sent to the provider. One atomic step: of
  * several concurrent starts, one succeeds.
  */
-export async function startSession(req: Request, deps: LiveDeps, body: { allowance?: unknown }): Promise<{ ok: true; cookie: string; expiresAt: Date; session: sessions.SessionView } | Refusal> {
-  const auth = await authorize(req, deps);
-  if (!auth.ok) return auth;
+export async function startSession(deps: LiveDeps, provider: LiveProvider, body: { allowance?: unknown }): Promise<{ ok: true; cookie: string; expiresAt: Date; session: sessions.SessionView } | Refusal> {
   const a = body.allowance as Partial<sessions.AllowanceChoice> | null | undefined;
   if (!a || typeof a !== "object" || !(["minutes", "runs", "requests", "usd"] as const).every((k) => typeof a[k] === "number"))
     return { ok: false, status: 400, code: "bad_allowance", error: "Confirm the session's allowance: its minutes, runs, requests and USD guard." };
@@ -216,15 +216,15 @@ export async function startSession(req: Request, deps: LiveDeps, body: { allowan
     return { ok: false, status: 400, code: "bad_allowance", error: `A USD ${allowance.allowance.usd} guard couldn't admit one request: each is reserved at its worst case first, about USD ${minimumUsd().toFixed(2)}. Choose at least that.` };
   const conn = await readConnection(deps.connectionFile);
   // With Anthropic the key must be readable now; the fake provider needs none and reads none.
-  if (auth.provider === "anthropic") {
+  if (provider === "anthropic") {
     const cred = await resolveCredential(deps, conn);
     if (!cred.ok) return { ok: false, status: 409, code: cred.code, error: cred.error };
   }
   const now = deps.now();
-  const armed = await sessions.armSession(deps.sessionFile, now, auth.provider, { allowance: allowance.allowance, credentialRevision: conn.revision, claim: true });
+  const armed = await sessions.armSession(deps.sessionFile, now, provider, { allowance: allowance.allowance, credentialRevision: conn.revision, claim: true });
   if (!armed.ok) return { ok: false, status: armed.code === "already_armed" ? 409 : 400, code: armed.code, error: armed.error };
   const cookie = armed.cookie!;
-  return { ok: true, cookie, expiresAt: sessions.expiresAt(armed.state), session: await sessions.readView(deps.sessionFile, now, cookie, FIRST_REQUEST_USD, auth.provider, conn.revision) };
+  return { ok: true, cookie, expiresAt: sessions.expiresAt(armed.state), session: await sessions.readView(deps.sessionFile, now, cookie, FIRST_REQUEST_USD, provider, conn.revision) };
 }
 
 export { PAIR_DAYS };

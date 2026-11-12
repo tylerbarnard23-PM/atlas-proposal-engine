@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { resolve } from "node:path";
-import { hash, randomToken, readJson, sameHash, saveJson as save, withLock } from "./localFiles.ts";
+import { join, resolve } from "node:path";
+import { hash, localDir, randomToken, readJson, sameHash, saveJson as save, withLock } from "./localFiles.ts";
 
 // The local live-testing session: the one allowance every live Copilot
 // request draws on. The state is a small JSON file on this machine
@@ -53,7 +53,7 @@ export function allowanceFrom(choice: Partial<AllowanceChoice> | undefined | nul
 }
 /** A run still marked active after the 100-second run deadline plus this grace was abandoned (a crash or restart). */
 export const STALE_RUN_MS = 100_000 + 30_000;
-export const DEFAULT_SESSION_FILE = ".atlas-local/live-session.json";
+export const SESSION_FILE_NAME = "live-session.json";
 
 /** The provider a session is armed for. It must match the server's configured provider on every use. */
 export type SessionProvider = "anthropic" | "fake";
@@ -62,7 +62,9 @@ export const providerName = (p: SessionProvider) => (p === "anthropic" ? "Anthro
 const isProvider = (p: unknown): p is SessionProvider => typeof p === "string" && (SESSION_PROVIDERS as readonly string[]).includes(p);
 
 // Resolved at run time only; the ignore comment stops the bundler tracing the whole project into the server output.
-export const sessionFilePath = (env: Record<string, string | undefined>) => resolve(/*turbopackIgnore: true*/ env.ATLAS_LIVE_SESSION_FILE || DEFAULT_SESSION_FILE);
+// It follows the instance's state directory, so the server and the terminal scripts agree on one file.
+export const sessionFilePath = (env: Record<string, string | undefined>) =>
+  env.ATLAS_LIVE_SESSION_FILE ? resolve(/*turbopackIgnore: true*/ env.ATLAS_LIVE_SESSION_FILE) : join(/*turbopackIgnore: true*/ localDir(env), SESSION_FILE_NAME);
 
 export interface RunTally {
   id: string;
@@ -447,6 +449,21 @@ export async function admitRun(file: string, now: Date, cookie: string | null, n
     s.active = { id: runId, startedAt: now.toISOString(), requests: 0, attempts: 0, usd: 0, retainedUsd: 0, models: [] };
     save(file, s);
     return { ok: true, runId, view: viewOf({ kind: "ok", state: s }, now, cookie, nextRequestUsd, provider, credentialRevision) };
+  });
+}
+
+/**
+ * Ends a run left active by a crash or restart and records it, so its open
+ * reservation is kept as spend instead of staying pending. Reads and writes
+ * the session record only: it touches no credential, so admission can do this
+ * before any credential store is opened.
+ */
+export async function reapAbandonedRun(file: string, now: Date): Promise<void> {
+  await withLock(file, () => {
+    const l = load(file);
+    if (l.kind !== "ok") return;
+    const s = l.state;
+    if (reapStale(s, now)) save(file, s);
   });
 }
 

@@ -15,17 +15,49 @@
 // session.
 
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { connectionFilePath, localDir, pairingFilePath } from "../src/copilot/localFiles.ts";
-import { PAIR_TOKEN_MINUTES, issuePairingToken } from "../src/copilot/localPairing.ts";
-import { readConnection } from "../src/copilot/localConnection.ts";
-import { LIVE_SESSION_LIMITS, readView, sessionFilePath } from "../src/copilot/liveSessionStore.ts";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const HOST = "127.0.0.1";
+const SUPPORTED_NODE = 24;
+
+/**
+ * Checked before any TypeScript module is loaded, because those imports are
+ * what an older Node fails on first: without this the user would see a syntax
+ * or loader error instead of the reason.
+ */
+function requireSupportedNode() {
+  const major = Number(process.versions.node.split(".")[0]);
+  if (Number.isFinite(major) && major >= SUPPORTED_NODE) return;
+  console.error(`Atlas needs Node ${SUPPORTED_NODE} or newer (this is ${process.versions.node}).`);
+  console.error("Install it from nodejs.org, then run: npm install");
+  process.exit(1);
+}
+
+let atlas;
+/**
+ * The shared modules, loaded only once Node is known to be supported. Loading
+ * them also fixes this process's state directory to the repository this script
+ * belongs to, so running it by absolute path from another folder still uses the
+ * same files as the server (a relative default would follow the caller's
+ * working directory instead).
+ */
+async function load() {
+  if (atlas) return atlas;
+  requireSupportedNode();
+  const [files, pairing, connection, sessions] = await Promise.all([
+    import("../src/copilot/localFiles.ts"),
+    import("../src/copilot/localPairing.ts"),
+    import("../src/copilot/localConnection.ts"),
+    import("../src/copilot/liveSessionStore.ts"),
+  ]);
+  process.env.ATLAS_LOCAL_DIR ||= join(root, files.DEFAULT_LOCAL_DIR);
+  atlas = { ...files, ...pairing, ...connection, ...sessions };
+  return atlas;
+}
 const [first, ...restArgs] = process.argv.slice(2);
 const command = first && !first.startsWith("--") ? first : "start";
 const args = command === "start" && first ? [first, ...restArgs] : restArgs;
@@ -64,8 +96,15 @@ export function serverEnv(env, { fake }) {
 
 export const pairingLink = (origin, token) => `${origin}/api/copilot/local/pair?token=${token}`;
 
+/** How this platform opens a URL in the user's default browser. Pure, so it can be checked without opening one. */
+export function openCommand(platform, url) {
+  if (platform === "win32") return ["cmd", ["/c", "start", "", url]];
+  if (platform === "darwin") return ["open", [url]];
+  return ["xdg-open", [url]];
+}
+
 function openBrowser(url) {
-  const [cmd, cmdArgs] = process.platform === "win32" ? ["cmd", ["/c", "start", "", url]] : process.platform === "darwin" ? ["open", [url]] : ["xdg-open", [url]];
+  const [cmd, cmdArgs] = openCommand(process.platform, url);
   try {
     const child = spawn(cmd, cmdArgs, { stdio: "ignore", detached: true, windowsVerbatimArguments: false });
     child.on("error", () => {});
@@ -96,6 +135,7 @@ async function waitForServer(origin, child, timeoutMs = 90_000) {
 
 /** Local checks only. Returns lines to print; `problems` counts the ones that block starting. */
 export async function doctor(env = process.env, cwd = root) {
+  const { connectionFilePath, localDir, readConnection, readView, sessionFilePath, LIVE_SESSION_LIMITS } = await load();
   const lines = [];
   let problems = 0;
   const ok = (text) => lines.push(`  ok       ${text}`);
@@ -103,8 +143,8 @@ export async function doctor(env = process.env, cwd = root) {
   const bad = (text) => (problems++, lines.push(`  PROBLEM  ${text}`));
 
   const major = Number(process.versions.node.split(".")[0]);
-  if (major >= 24) ok(`Node ${process.versions.node}.`);
-  else bad(`Node ${process.versions.node}: Atlas needs Node 24 or newer. Install it from nodejs.org, then run npm install.`);
+  if (major >= SUPPORTED_NODE) ok(`Node ${process.versions.node}.`);
+  else bad(`Node ${process.versions.node}: Atlas needs Node ${SUPPORTED_NODE} or newer. Install it from nodejs.org, then run npm install.`);
 
   if (existsSync(join(cwd, "node_modules", "next", "package.json"))) ok("Dependencies are installed.");
   else bad("Dependencies aren't installed. Run: npm install");
@@ -112,13 +152,14 @@ export async function doctor(env = process.env, cwd = root) {
   if (existsSync(join(cwd, ".next", "BUILD_ID"))) ok("A production build exists.");
   else note("No production build yet. Run: npm run build (or start with: npm run local -- --dev).");
 
+  // Checked without creating anything: a check shouldn't leave state behind.
   const dir = localDir(env);
+  const existed = existsSync(dir);
   try {
-    mkdirSync(dir, { recursive: true });
-    const probe = join(dir, `.doctor-${process.pid}`);
+    const probe = join(existed ? dir : dirname(dir), `.atlas-doctor-${process.pid}`);
     writeFileSync(probe, "");
     rmSync(probe, { force: true });
-    ok(`Local state folder is writable (${dir}). It never holds a key.`);
+    ok(`Local state folder is writable (${dir})${existed ? "" : ", and will be created when it is first needed"}. It never holds a key.`);
   } catch {
     bad(`Can't write to the local state folder (${dir}).`);
   }
@@ -150,12 +191,9 @@ export async function doctor(env = process.env, cwd = root) {
 // --- Commands ---------------------------------------------------------------------
 
 async function start() {
+  const { issuePairingToken, pairingFilePath, PAIR_TOKEN_MINUTES } = await load();
   const dev = has("--dev");
   const fake = has("--fake");
-  if (Number(process.versions.node.split(".")[0]) < 24) {
-    console.error(`Atlas needs Node 24 or newer (this is ${process.versions.node}).`);
-    process.exit(1);
-  }
   const nextBin = join(root, "node_modules", "next", "dist", "bin", "next");
   if (!existsSync(nextBin)) {
     console.error("Dependencies aren't installed. Run: npm install");
@@ -205,6 +243,7 @@ async function start() {
 }
 
 async function pair() {
+  const { issuePairingToken, pairingFilePath } = await load();
   let origin;
   try {
     origin = new URL(value("--origin", "http://127.0.0.1:3000"));
@@ -224,6 +263,7 @@ async function pair() {
 
 // Run only when invoked directly (tests import the helpers above).
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  requireSupportedNode();
   if (command === "start") await start();
   else if (command === "pair") await pair();
   else if (command === "doctor") {

@@ -10,10 +10,12 @@ import type { CopilotSnapshot } from "@/copilot/snapshot";
 import type { WorkingDraft } from "@/domain/types";
 import { COPILOT_MODEL, type MessagesClient } from "@/copilot/agent";
 import { keychainStore } from "@/copilot/credentialStore";
-import { FIRST_REQUEST_USD, LIVE_COOKIE, type LiveDeps } from "@/copilot/liveGate";
+import { FIRST_REQUEST_USD, liveCookieName, type LiveDeps } from "@/copilot/liveGate";
 import * as sessions from "@/copilot/liveSessionStore";
 import { keyShapeProblem, keychainAccount, readConnection, recordConnection } from "@/copilot/localConnection";
-import { PAIR_COOKIE, PAIR_TOKEN_MINUTES, issuePairingToken } from "@/copilot/localPairing";
+import { PAIR_TOKEN_MINUTES, issuePairingToken } from "@/copilot/localPairing";
+import { CSRF_HEADER, pairCookieName } from "@/copilot/localConnect";
+import { instanceId } from "@/copilot/localFiles";
 import { handleCopilotGet, handleCopilotPost, handleLiveSessionPost, handleLocalConnection, handleLocalPair } from "@/copilot/routeHandler";
 import { ConnectClaude } from "@/components/copilot/ConnectClaude";
 import { newWorkingDraft } from "@/engines/allocationDesk";
@@ -23,7 +25,7 @@ import { DISCLOSURE_LIBRARY } from "@/domain/disclosureLibrary";
 import { copilotRequest } from "./support/copilotRequest";
 import { fakeKeychain, localDeps, type TestDeps } from "./support/localDeps";
 // @ts-expect-error a plain .mjs script without types; only its pure helpers are used here
-import { choosePort, doctor, pairingLink, serverEnv } from "../scripts/atlas-local.mjs";
+import { choosePort, doctor, openCommand, pairingLink, serverEnv } from "../scripts/atlas-local.mjs";
 
 // Route 1 local onboarding (11 November 2026): pairing, Connect Claude and
 // in-app sessions, through the real handlers, the real session store and the
@@ -116,11 +118,13 @@ interface Browser {
   csrf: string | null;
 }
 const browser = (): Browser => ({ pair: null, live: null, csrf: null });
-const cookieHeader = (b: Browser) => [b.pair && `${PAIR_COOKIE}=${b.pair}`, b.live && `${LIVE_COOKIE}=${b.live}`].filter(Boolean).join("; ");
+/** One browser's cookie jar, as a header: instance-scoped names, so two Atlas instances don't overwrite each other. */
+const cookieHeader = (b: Browser, env: Record<string, string | undefined> = { ATLAS_LOCAL_DIR: dir }) =>
+  [b.pair && `${pairCookieName(env)}=${b.pair}`, b.live && `${liveCookieName(env)}=${b.live}`].filter(Boolean).join("; ");
 const cookieValue = (res: Response) => decodeURIComponent(res.headers.get("set-cookie")!.split(";")[0].split("=").slice(1).join("="));
 
 async function status(d: LiveDeps, b: Browser, headers: Record<string, string> = { host: HOST, "sec-fetch-site": "same-origin" }) {
-  const res = await handleCopilotGet(new Request(`${ORIGIN}/api/copilot`, { headers: { ...headers, cookie: cookieHeader(b) } }), d);
+  const res = await handleCopilotGet(new Request(`${ORIGIN}/api/copilot`, { headers: { ...headers, cookie: cookieHeader(b, d.env) } }), d);
   return (await res.json()) as { mode: string; live: { available: boolean; session: sessions.SessionView | null }; local: import("@/copilot/localConnect").LocalInfo | null };
 }
 
@@ -139,7 +143,7 @@ const post = (handler: (req: Request, d: LiveDeps) => Promise<Response>, path: s
   return handler(
     new Request(`${ORIGIN}${path}`, {
       method: "POST",
-      headers: { ...(over.headers ?? SAME), "content-type": over.contentType ?? "application/json", ...(csrf ? { "x-atlas-csrf": csrf } : {}), cookie: cookieHeader(b) },
+      headers: { ...(over.headers ?? SAME), "content-type": over.contentType ?? "application/json", ...(csrf ? { "x-atlas-csrf": csrf } : {}), cookie: cookieHeader(b, d.env) },
       body: JSON.stringify(body),
     }),
     d
@@ -156,7 +160,7 @@ async function start(d: LiveDeps, b: Browser, allowance: unknown = FULL) {
 }
 
 const ask = (d: LiveDeps, b: Browser, signal?: AbortSignal) =>
-  handleCopilotPost(new Request(`${ORIGIN}/api/copilot`, { method: "POST", headers: { ...SAME, "content-type": "application/json", cookie: cookieHeader(b) }, body: JSON.stringify(copilotRequest(QUESTION, snap())), signal }), d);
+  handleCopilotPost(new Request(`${ORIGIN}/api/copilot`, { method: "POST", headers: { ...SAME, "content-type": "application/json", cookie: cookieHeader(b, d.env) }, body: JSON.stringify(copilotRequest(QUESTION, snap())), signal }), d);
 
 const view = (d: LiveDeps) => sessions.readView(d.sessionFile, clock, null);
 /** Every file Atlas wrote for this "installation", as text. */
@@ -341,7 +345,8 @@ describe("the key is kept server-side, where the user chose, and never comes bac
     }
     expect((await connection(t.d, b, { action: "save", key: CANARY, storage: "a-file" })).status).toBe(400);
     expect((await connection(t.d, b, { action: "export" })).status).toBe(400);
-    expect((await connection(t.d, b, { action: "save", key: `sk-ant-${"x".repeat(5_000)}`, storage: "session" })).status).toBe(400);
+    // Past the body limit it never reaches the key check: it is refused as oversized.
+    expect((await connection(t.d, b, { action: "save", key: `sk-ant-${"x".repeat(5_000)}`, storage: "session" })).status).toBe(413);
     expect(t.session.size).toBe(0);
     expect(await readConnection(t.d.connectionFile)).toMatchObject({ source: "none" });
   });
@@ -694,7 +699,7 @@ describe("a session is bound to the key it started under", () => {
     vi.resetModules();
     const fresh = await import("@/copilot/routeHandler");
     const restarted = setup({ keychain }); // new process memory, same files and OS store
-    const again = await fresh.handleCopilotPost(new Request(`${ORIGIN}/api/copilot`, { method: "POST", headers: { ...SAME, "content-type": "application/json", cookie: cookieHeader(b) }, body: JSON.stringify(copilotRequest(QUESTION, snap())) }), restarted.d);
+    const again = await fresh.handleCopilotPost(new Request(`${ORIGIN}/api/copilot`, { method: "POST", headers: { ...SAME, "content-type": "application/json", cookie: cookieHeader(b, restarted.d.env) }, body: JSON.stringify(copilotRequest(QUESTION, snap())) }), restarted.d);
     expect(again.status).toBe(200);
     expect((await view(restarted.d)).used).toMatchObject({ runs: 2, requests: 2 });
     expect((await status(restarted.d, b)).local).toMatchObject({ paired: true });
@@ -771,7 +776,7 @@ describe("connecting Claude leaves the proposal contracts alone", () => {
     expect((await save(t.d, b)).status).toBe(200);
     expect((await start(t.d, b)).status).toBe(200);
     const request = m.copilotRequest(store(), "Review this alternative.");
-    const res = await m.handleCopilotPost(new Request(`${ORIGIN}/api/copilot`, { method: "POST", headers: { ...SAME, "content-type": "application/json", cookie: cookieHeader(b) }, body: JSON.stringify(request) }), t.d);
+    const res = await m.handleCopilotPost(new Request(`${ORIGIN}/api/copilot`, { method: "POST", headers: { ...SAME, "content-type": "application/json", cookie: cookieHeader(b, t.d.env) }, body: JSON.stringify(request) }), t.d);
     expect(res.status).toBe(200);
     const result = await res.json();
     expect(result.context).toEqual(request.context);
@@ -865,6 +870,14 @@ describe("the local launcher and doctor", () => {
     }
   });
 
+  it("opens the pairing link with each platform's own command, and nowhere but this machine", () => {
+    const link = pairingLink("http://127.0.0.1:3000", "tok");
+    expect(openCommand("win32", link)).toEqual(["cmd", ["/c", "start", "", link]]);
+    expect(openCommand("darwin", link)).toEqual(["open", [link]]);
+    expect(openCommand("linux", link)).toEqual(["xdg-open", [link]]);
+    for (const [, args] of [openCommand("win32", link), openCommand("darwin", link), openCommand("linux", link)]) expect(args.join(" ")).toContain("127.0.0.1");
+  });
+
   it("the server gets live mode on 127.0.0.1 with no base-URL override; a key in the terminal is passed through unread", () => {
     const env = serverEnv({ PATH: "x", ANTHROPIC_BASE_URL: "https://proxy.example", ANTHROPIC_API_KEY: ENV_CANARY, COPILOT_LIVE_PROVIDER: "fake" }, { fake: false });
     expect(env).toEqual({ PATH: "x", ANTHROPIC_API_KEY: ENV_CANARY, COPILOT_MODE: "live" });
@@ -884,5 +897,264 @@ describe("the local launcher and doctor", () => {
     expect(text).toMatch(/ANTHROPIC_BASE_URL is set/);
     expect(text).toMatch(/Nothing contacted Anthropic/);
     expect((await doctor({ ATLAS_LOCAL_DIR: dir, ATLAS_LIVE_SESSION_FILE: t.d.sessionFile, VERCEL: "1" })).problems).toBeGreaterThan(0);
+  });
+});
+
+// --- Review fixes (12 November 2026) ----------------------------------------------------
+
+describe("fix 1: credential validation refuses what it can identify, and doesn't invent a format", () => {
+  const long = "x".repeat(60);
+
+  it("refuses Admin keys and the Claude Code OAuth/refresh token forms, and stores nothing", async () => {
+    // The one prefix Anthropic documents is the Admin key's; the token forms are community-sourced and refused as a guard.
+    for (const bad of [`sk-ant-admin01-${long}`, `SK-ANT-ADMIN01-${long}`, `sk-ant-oat01-${long}`, `sk-ant-ort01-${long}`, `sk-ant-oat-${long}`]) {
+      expect(keyShapeProblem(bad), bad.slice(0, 16)).toBeTruthy();
+    }
+    expect(keyShapeProblem(`sk-ant-admin01-${long}`)).toMatch(/Admin API key/);
+    expect(keyShapeProblem(`sk-ant-oat01-${long}`)).toMatch(/Claude subscription|Claude Code/i);
+
+    const t = setup();
+    const { b } = await pair(t.d);
+    for (const bad of [`sk-ant-oat01-${long}`, `sk-ant-ort01-${long}`]) {
+      const res = await connection(t.d, b, { action: "save", key: bad, storage: "session" });
+      expect(res.status).toBe(400);
+      expect(await res.text()).not.toContain(long);
+    }
+    expect(t.session.size).toBe(0);
+    expect(await readConnection(t.d.connectionFile)).toMatchObject({ source: "none" });
+  });
+
+  it("accepts a key whose shape the documentation doesn't establish, since a prefix isn't proof", async () => {
+    // Anthropic documents no format for standard API keys: refusing an unfamiliar shape would block a valid key.
+    for (const plausible of [`sk-ant-api03-${long}`, `sk-ant-${long}`, `sk-future-format-${long}`, long + long]) {
+      expect(keyShapeProblem(plausible), plausible.slice(0, 16)).toBeNull();
+    }
+    const t = setup();
+    const { b } = await pair(t.d);
+    const res = await connection(t.d, b, { action: "save", key: `sk-future-format-${long}`, storage: "session" });
+    expect(res.status).toBe(200);
+    expect(await readConnection(t.d.connectionFile)).toMatchObject({ source: "session" });
+    expect(t.made.count).toBe(0);
+  });
+
+  it("still refuses what cannot be a credential at all", () => {
+    for (const bad of ["", "   ", "not a key", `sk-ant-api03-${long} trailing`, "sk-ant\nmultiline", "short", `sk-ant-${"x".repeat(600)}`, 42, null, undefined]) {
+      expect(keyShapeProblem(bad), String(bad).slice(0, 20)).toBeTruthy();
+    }
+  });
+
+  it("neither the guide nor the panel states a standard-key prefix as fact", async () => {
+    const t = setup();
+    const { b } = await pair(t.d);
+    const s = await status(t.d, b);
+    const html = renderToStaticMarkup(React.createElement(ConnectClaude, { live: s.live as never, local: s.local, onChanged: () => {} }));
+    expect(html).toContain("Never use an Admin key");
+    expect(html).not.toMatch(/starts with\s*<code>sk-ant-<\/code>/);
+    expect(html).not.toContain("it starts with");
+    const guide = readFileSync("docs/roadmap/LOCAL_CLAUDE_SETUP.md", "utf8");
+    expect(guide).not.toMatch(/standard key \(it starts with/);
+  });
+});
+
+describe("fix 2: no credential is read until a session could admit the run", () => {
+  const cases: [string, (t: ReturnType<typeof setup>, b: Browser) => Promise<unknown>, string][] = [
+    ["no session at all", async () => {}, "no_session"],
+    ["a stopped session", async (t, b) => void (await session(t.d, b, { action: "stop" })), "stopped"],
+    ["an expired session", async () => void (clock = new Date(T0.getTime() + 31 * 60_000)), "expired"],
+    ["another browser's session", async (t, b) => void (b.live = `${b.live}x`), "not_this_browser"],
+  ];
+
+  for (const [name, breakIt, code] of cases) {
+    it(`${name}: refused without opening the credential store or making a client`, async () => {
+      const t = setup();
+      const { b } = await pair(t.d);
+      await save(t.d, b, CANARY, "keychain");
+      if (name !== "no session at all") await start(t.d, b);
+      await breakIt(t, b);
+      const reads = t.keychain.calls.get;
+      const res = await ask(t.d, b);
+      expect(res.status).toBe(code === "exhausted" ? 429 : 403);
+      expect(await res.json()).toMatchObject({ code });
+      // The decisive assertion: the OS credential store was never opened for a request that couldn't run.
+      expect(t.keychain.calls.get).toBe(reads);
+      expect(t.made.count).toBe(0);
+      expect(t.fake.calls).toHaveLength(0);
+    });
+  }
+
+  it("an exhausted session is refused before the store is opened, and an admitted run still reads the key once", async () => {
+    const t = setup({ script: ["answer"] });
+    const { b } = await pair(t.d);
+    await save(t.d, b, CANARY, "keychain");
+    await start(t.d, b, { minutes: 30, runs: 1, requests: 10, usd: 5 });
+    const before = t.keychain.calls.get;
+    expect((await ask(t.d, b)).status).toBe(200);
+    // One admitted run reads the key; the gate doesn't re-open the store per request.
+    expect(t.keychain.calls.get).toBe(before + 1);
+    expect(t.made.keys).toEqual([CANARY]);
+
+    const reads = t.keychain.calls.get;
+    const used = await ask(t.d, b);
+    expect(used.status).toBe(429);
+    expect(await used.json()).toMatchObject({ code: "exhausted" });
+    expect(t.keychain.calls.get).toBe(reads);
+    expect(t.made.count).toBe(1);
+  });
+
+  it("an unpaired or cross-origin asking request reads no credential and makes no client", async () => {
+    const t = setup();
+    const { b } = await pair(t.d);
+    await save(t.d, b, CANARY, "keychain");
+    await start(t.d, b);
+    const reads = t.keychain.calls.get;
+    for (const headers of [{ host: HOST, origin: "http://evil.example", "sec-fetch-site": "cross-site" }, { host: "atlas.example:3000", origin: "http://atlas.example:3000", "sec-fetch-site": "same-origin" }]) {
+      const res = await handleCopilotPost(new Request(`${ORIGIN}/api/copilot`, { method: "POST", headers: { ...headers, "content-type": "application/json", cookie: cookieHeader(b, t.d.env) }, body: JSON.stringify(copilotRequest(QUESTION, snap())) }), t.d);
+      expect(res.status).toBe(403);
+    }
+    expect(t.keychain.calls.get).toBe(reads);
+    expect(t.made.count).toBe(0);
+  });
+
+  it("the credential revision still binds the session, and a locked store is still reported", async () => {
+    const t = setup();
+    const { b } = await pair(t.d);
+    await save(t.d, b, CANARY, "keychain");
+    await start(t.d, b);
+    t.keychain.state.locked = true;
+    const res = await ask(t.d, b);
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ code: "credential_unreadable" });
+    expect(t.made.count).toBe(0);
+    t.keychain.state.locked = false;
+    // A key replaced under the running session is still refused by revision, before the store is opened.
+    await recordConnection(t.d.connectionFile, clock, "session", `${CANARY}-other`);
+    const reads = t.keychain.calls.get;
+    expect(await (await ask(t.d, b)).json()).toMatchObject({ code: "credential_mismatch" });
+    expect(t.keychain.calls.get).toBe(reads);
+  });
+});
+
+describe("fix 4: two Atlas instances on one host stay separate", () => {
+  it("one browser keeps both pairings and both sessions, each with its own counters", async () => {
+    // Reproduces the collision: fixed cookie names would make the second pairing overwrite the first.
+    const second = mkdtempSync(join(tmpdir(), "atlas-connect-b-"));
+    try {
+      const a = setup();
+      const two = localDeps({ dir: second, client: fakeProvider(["answer"]).client, env: ENV, now: () => clock });
+      // Different state directories, so different cookie names: with one fixed name the second pairing would unseat the first.
+      expect(instanceId(a.d.env)).not.toBe(instanceId(two.d.env));
+      expect(pairCookieName(a.d.env)).not.toBe(pairCookieName(two.d.env));
+      expect(liveCookieName(a.d.env)).not.toBe(liveCookieName(two.d.env));
+
+      const jar = browser();
+      await pair(a.d, jar);
+      const csrfA = jar.csrf;
+      const pairA = jar.pair;
+      // Pairing with the second instance must not unseat the first.
+      const jarB = browser();
+      await pair(two.d, jarB);
+      jar.pair = pairA;
+
+      await save(a.d, jar, CANARY, "session");
+      await save(two.d, jarB, `${CANARY}-two`, "session");
+      expect((await start(a.d, jar)).status).toBe(200);
+      expect((await start(two.d, jarB)).status).toBe(200);
+
+      // One jar holding both instances' cookies: each instance sees its own.
+      const both: Browser = { pair: jar.pair, live: jar.live, csrf: csrfA };
+      expect((await status(a.d, both)).local).toMatchObject({ paired: true });
+      expect((await ask(a.d, both)).status).toBe(200);
+      expect((await ask(two.d, jarB)).status).toBe(200);
+      expect((await view(a.d)).used).toMatchObject({ runs: 1 });
+      expect((await view(two.d)).used).toMatchObject({ runs: 1 });
+      expect(a.made.keys).toEqual([CANARY]);
+    } finally {
+      rmSync(second, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("fix 7: privileged handlers authorize before reading a body, and limit it as they read", () => {
+  const bigBody = (bytes: number) => JSON.stringify({ action: "save", storage: "session", key: `sk-ant-api03-${"x".repeat(bytes)}` });
+
+  it("an unpaired request is refused without its body being read", async () => {
+    const t = setup();
+    let pulled = 0;
+    const body = new ReadableStream({
+      pull(c) {
+        pulled++;
+        c.enqueue(new TextEncoder().encode(bigBody(10_000)));
+        c.close();
+      },
+    });
+    const res = await handleLocalConnection(new Request(`${ORIGIN}/api/copilot/local/connection`, { method: "POST", headers: { ...SAME, "content-type": "application/json" }, body, duplex: "half" } as RequestInit), t.d);
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ code: "not_paired" });
+    // A stream fills its own one-chunk queue before any reader exists; the handler asked for nothing beyond that.
+    expect(pulled).toBeLessThanOrEqual(1);
+    expect(t.session.size).toBe(0);
+  });
+
+  it("a body past the limit is refused while it is read, with a missing or a lying Content-Length", async () => {
+    const t = setup();
+    const { b } = await pair(t.d);
+    let sent = 0;
+    const stream = () =>
+      new ReadableStream({
+        pull(c) {
+          // Far more than the limit, in chunks: a correct reader stops early.
+          sent += 1;
+          c.enqueue(new TextEncoder().encode("x".repeat(8_192)));
+          if (sent > 400) c.close();
+        },
+      });
+    for (const extra of [{}, { "content-length": "12" }]) {
+      sent = 0;
+      const res = await handleLocalConnection(
+        new Request(`${ORIGIN}/api/copilot/local/connection`, { method: "POST", headers: { ...SAME, "content-type": "application/json", ...(b.csrf ? { [CSRF_HEADER]: b.csrf } : {}), cookie: cookieHeader(b, t.d.env), ...extra }, body: stream(), duplex: "half" } as RequestInit),
+        t.d
+      );
+      expect(res.status).toBe(413);
+      expect(await res.json()).toMatchObject({ code: "body_too_large" });
+      // It stopped reading instead of buffering the whole stream.
+      expect(sent).toBeLessThan(100);
+    }
+    expect(t.session.size).toBe(0);
+  });
+
+  it("an ordinary body still works, and a malformed one is a plain refusal", async () => {
+    const t = setup();
+    const { b } = await pair(t.d);
+    expect((await save(t.d, b)).status).toBe(200);
+    const res = await handleLocalConnection(new Request(`${ORIGIN}/api/copilot/local/connection`, { method: "POST", headers: { ...SAME, "content-type": "application/json", [CSRF_HEADER]: b.csrf!, cookie: cookieHeader(b, t.d.env) }, body: "{ not json" }), t.d);
+    expect(res.status).toBe(400);
+  });
+});
+
+describe("fix 8: an environment key is normalized and validated like a pasted one", () => {
+  it("surrounding whitespace is trimmed, and the same values are refused", async () => {
+    const t = setup({ env: { ...ENV, ANTHROPIC_API_KEY: `  ${ENV_CANARY}\n` } });
+    const { b } = await pair(t.d);
+    expect((await connection(t.d, b, { action: "use_environment" })).status).toBe(200);
+    await start(t.d, b);
+    expect((await ask(t.d, b)).status).toBe(200);
+    // The provider gets the trimmed value, and the whitespace never makes it look like a changed key.
+    expect(t.made.keys).toEqual([ENV_CANARY]);
+    expect((await status(t.d, b)).local!.connection).toMatchObject({ source: "environment", status: "verified" });
+
+    // An Admin or subscription token in the environment is refused there too, without being echoed.
+    for (const bad of [`sk-ant-admin01-${"x".repeat(40)}`, `sk-ant-oat01-${"x".repeat(40)}`]) {
+      rmSync(dir, { recursive: true, force: true });
+      dir = mkdtempSync(join(tmpdir(), "atlas-connect-"));
+      const u = setup({ env: { ...ENV, ANTHROPIC_API_KEY: bad } });
+      const paired = await pair(u.d);
+      const res = await connection(u.d, paired.b, { action: "use_environment" });
+      expect(res.status).toBe(400);
+      const text = await res.text();
+      expect(text).not.toContain("xxxx");
+      expect(await readConnection(u.d.connectionFile)).toMatchObject({ source: "none" });
+      expect(u.made.count).toBe(0);
+    }
+    expect(logged.join("\n")).not.toContain("ENVCANARY");
   });
 });

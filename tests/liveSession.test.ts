@@ -8,7 +8,7 @@ import type { CopilotSnapshot } from "@/copilot/snapshot";
 import type { WorkingDraft } from "@/domain/types";
 import { COPILOT_MODEL, DEFAULT_LIMITS, type MessagesClient } from "@/copilot/agent";
 import { costOf } from "@/copilot/eval/budget";
-import { FIRST_REQUEST_USD, LIVE_COOKIE, liveReadiness, localRequestProblem } from "@/copilot/liveGate";
+import { FIRST_REQUEST_USD, liveCookieName, liveReadiness, localRequestProblem } from "@/copilot/liveGate";
 import * as store from "@/copilot/liveSessionStore";
 import { handleCopilotGet, handleCopilotPost, handleLiveSessionClaim, handleLiveSessionPost } from "@/copilot/routeHandler";
 import { newWorkingDraft } from "@/engines/allocationDesk";
@@ -104,7 +104,7 @@ const ask = (d: ReturnType<typeof deps>["d"], cookie: string | null, headers: Re
   handleCopilotPost(
     new Request("http://localhost:3000/api/copilot", {
       method: "POST",
-      headers: { ...headers, ...(cookie ? { cookie: `${LIVE_COOKIE}=${cookie}` } : {}), "content-type": "application/json" },
+      headers: { ...headers, ...(cookie ? { cookie: `${liveCookieName(d.env)}=${cookie}` } : {}), "content-type": "application/json" },
       body: JSON.stringify(copilotRequest(QUESTION, snap())),
       signal,
     }),
@@ -385,7 +385,7 @@ describe("stop, restart and budget", () => {
     expect((await stop({ host: "192.168.1.20:3000", origin: "http://192.168.1.20:3000" })).status).toBe(403);
     const stopped = await stop(LOCAL);
     expect(stopped.status).toBe(200);
-    expect(stopped.headers.get("set-cookie")).toMatch(new RegExp(`^${LIVE_COOKIE}=;.*Max-Age=0`));
+    expect(stopped.headers.get("set-cookie")).toMatch(new RegExp(`^${liveCookieName(d.env)}=;.*Max-Age=0`));
     expect((await (await pending).json()).status).toBe("cancelled");
     const after = await ask(d, cookie);
     expect(after.status).toBe(403);
@@ -408,7 +408,7 @@ describe("stop, restart and budget", () => {
     vi.resetModules();
     const fresh = await import("@/copilot/routeHandler");
     const freshStore = await import("@/copilot/liveSessionStore");
-    const again = (h = LOCAL) => fresh.handleCopilotPost(new Request("http://localhost:3000/api/copilot", { method: "POST", headers: { ...h, cookie: `${LIVE_COOKIE}=${cookie}` }, body: JSON.stringify(copilotRequest(QUESTION, snap())) }), d);
+    const again = (h = LOCAL) => fresh.handleCopilotPost(new Request("http://localhost:3000/api/copilot", { method: "POST", headers: { ...h, cookie: `${liveCookieName(d.env)}=${cookie}` }, body: JSON.stringify(copilotRequest(QUESTION, snap())) }), d);
     expect((await freshStore.readView(file, clock, cookie)).used).toMatchObject({ runs: 2, requests: 2 });
     expect((await again()).status).toBe(409); // still within the run's deadline: in progress
     clock = new Date(T0.getTime() + store.STALE_RUN_MS + 1_000);
@@ -476,7 +476,7 @@ describe("no way around the gate", () => {
     const { d } = deps(fake.client);
     const { cookie } = await armAndClaim(d);
     const { admitLiveRun } = await import("@/copilot/liveGate");
-    const admitted = await admitLiveRun(new Request("http://localhost:3000/api/copilot", { method: "POST", headers: { ...LOCAL, cookie: `${LIVE_COOKIE}=${cookie}` } }), d);
+    const admitted = await admitLiveRun(new Request("http://localhost:3000/api/copilot", { method: "POST", headers: { ...LOCAL, cookie: `${liveCookieName(d.env)}=${cookie}` } }), d);
     if (!admitted.ok) throw new Error(admitted.error);
     await expect(admitted.run.client.beta.messages.create({ model: "claude-haiku-5-5", max_tokens: 100, messages: [] } as never)).rejects.toThrow(/not the configured/);
     await admitted.run.finish("failed");
@@ -521,7 +521,8 @@ describe("what is kept", () => {
     expect(Object.keys(JSON.parse(text)).sort()).toEqual(["active", "armedAt", "attempts", "claimHash", "cookieHash", "credentialRevision", "history", "id", "largestInput", "limits", "pending", "provider", "requests", "retainedUsd", "runs", "spentUsd", "stopped", "version"]);
   });
 
-  it("the owner's terminal script arms, reports and stops, against the same record (no provider call)", () => {
+  // Three Node subprocesses, each paying start-up and type-stripping: slower than the default per-test budget on Windows.
+  it("the owner's terminal script arms, reports and stops, against the same record (no provider call)", { timeout: 30_000 }, () => {
     const env = { ...process.env, ATLAS_LIVE_SESSION_FILE: file, ATLAS_LOCAL_DIR: dir };
     const run = (...args: string[]) => execFileSync(process.execPath, ["--disable-warning=MODULE_TYPELESS_PACKAGE_JSON", "scripts/live-session.mjs", ...args], { env, encoding: "utf8" });
     expect(() => run("arm", "--provider", "fake", "--origin", "http://192.168.1.20:3000")).toThrow();

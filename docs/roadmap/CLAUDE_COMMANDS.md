@@ -55,7 +55,20 @@ Stop for Codex review with exact head, checks, preview association, remaining li
 
 D1 (PR #72, `0381db1`), D2 (PR #75, `073049f`), D2a (PR #79, `c0ee4e9`) and D3 (PR #81, `85b3910`) are released; the D1 command above and the D1–D3 summaries below are historical, so do not rerun them. **D4 is in review (PR #82).** D5 follows its review/release. PR #82 also carries one bounded, owner-approved D5 usability slice (the proposal-flow simplification); it doesn't complete D5. The handoff holds the current checkpoint.
 
+### Next command: review the onboarding fixes
+
+Saved on 12 November 2026; not yet started. Branch `feat/d4-contextual-agent`, PR #82. The handoff names the head. Verify heads, tree and stash first, and preserve any newer work.
+
+1. **Codex** reviews the fixes to findings 1, 2 and 4–8 against the security design and the findings table in [LOCAL_CLAUDE_SETUP.md](LOCAL_CLAUDE_SETUP.md): credential validation and what it does and doesn't claim, the admission order and that no credential is read before a session could admit a run, instance-scoped cookies, state-directory resolution, the authorize-then-read body handling, and environment-key handling.
+2. **The owner** decides on finding 3's recommendation (pairing revocation, idle lifetime, a 24-hour cumulative allowance). Nothing there is built, and no existing limit may be raised without that decision.
+3. **Claude** fixes confirmed findings in one batch, failing regressions first, with fake providers and dummy credentials only; then runs typecheck, full tests, extraction eval and build, and stops.
+4. Only after that: the owner decides whether to approve one real-Claude verification (one key in a dedicated workspace with a spend limit, one session, synthetic data).
+
+Until the owner says otherwise: no real key, no model call, no paid testing, no dependency change, no merge, no deployment.
+
 ### Next command: fix the onboarding review findings
+
+**Done on 12 November 2026; don't rerun.** Findings 1, 2 and 4–8 are fixed with regressions; finding 3's recommendation is in the setup guide.
 
 Saved on 11 November 2026; not yet started. Branch `feat/d4-contextual-agent`, PR #82, reviewed code head `03128df`. Verify heads, tree and stash first, and preserve any newer work. The findings are in [LOCAL_CLAUDE_SETUP.md](LOCAL_CLAUDE_SETUP.md#review-findings-11-november-2026-reviewed-head-03128df).
 

@@ -85,17 +85,29 @@ export async function markOutcome(file: string, now: Date, revision: string, out
   });
 }
 
+/** Normalizes a credential the same way wherever it comes from (pasted, or the server's environment). */
+export const normalizeKey = (key: unknown) => (typeof key === "string" ? key.trim() : "");
+
 /**
- * Checks a pasted key's shape locally; no request is made. A standard
- * Anthropic API key only: Admin keys (sk-ant-admin…) manage an organization
- * and must never be used here.
+ * Why this credential must not be used here, or null. Checked locally; no
+ * request is made, and the value is never echoed in the reason.
+ *
+ * Atlas refuses what it can positively identify as the wrong credential and
+ * accepts the rest. Anthropic's documentation states a format for **Admin API
+ * keys only** (`sk-ant-admin…`); it states none for ordinary API keys, so a
+ * prefix is not evidence that a value is one, and requiring a familiar shape
+ * would reject a valid key. The subscription-token shapes below are
+ * community-sourced, so this list is a best-effort guard, not an exhaustive
+ * format: whether a credential really works is settled by the first request.
  */
 export function keyShapeProblem(key: unknown): string | null {
   if (typeof key !== "string" || !key.trim()) return "Paste an API key.";
-  const k = key.trim();
-  if (/\s/.test(k)) return "That doesn't look like an API key: it contains a space or a line break.";
+  const k = normalizeKey(key);
+  if (/[\s\u0000-\u001f\u007f]/.test(k)) return "That doesn't look like an API key: it contains a space, a line break or a control character.";
+  if (k.length < 20) return "That doesn't look like an API key: it is too short.";
   if (k.length > 512) return "That doesn't look like an API key: it is too long.";
-  if (/^sk-ant-admin/i.test(k)) return "That is an Admin API key, which manages a whole organization. Don't use it here: create a standard API key in a dedicated workspace instead.";
-  if (!k.startsWith("sk-ant-") || k.length < 20) return "That doesn't look like an Anthropic API key (they start with sk-ant-). Copy the key again from the Claude Console.";
+  if (/^sk-ant-admin/i.test(k)) return "That is an Admin API key, which manages a whole organization. Don't use it here: create a key for a single workspace instead.";
+  // `claude setup-token` tokens belong to a Claude subscription, not to the API: using one here isn't a supported way to authenticate an application.
+  if (/^sk-ant-o(at|rt)/i.test(k)) return "That looks like a Claude subscription token from Claude Code, not an API key. Atlas uses an API key from the Claude Console, billed to your Console account.";
   return null;
 }
