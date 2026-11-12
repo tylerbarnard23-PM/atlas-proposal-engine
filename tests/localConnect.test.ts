@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Anthropic from "@anthropic-ai/sdk";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -57,6 +57,8 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.restoreAllMocks();
+  // Each test is its own "process": a transaction one left wedged must not queue the next behind it.
+  delete (globalThis as { __atlasCredentialQueue?: unknown }).__atlasCredentialQueue;
   rmSync(dir, { recursive: true, force: true });
 });
 
@@ -441,6 +443,34 @@ describe("the key is kept server-side, where the user chose, and never comes bac
       }
     }
     expect(await keychainStore("Atlas test", async () => ({ AsyncEntry: Forgetful })).set("a", CANARY)).toMatchObject({ ok: false, maybeStored: true, reason: expect.stringMatching(/couldn't keep/) });
+  });
+
+  it("the adapter stops waiting on a credential store that never answers, and still says an entry may exist", async () => {
+    // A locked macOS or Linux store can sit on a prompt forever. Waiting with it
+    // would hold the credential transaction, and every change behind it, open.
+    class Silent {
+      setPassword(): Promise<void> {
+        return new Promise<never>(() => {});
+      }
+      getPassword(): Promise<string | null> {
+        return new Promise<never>(() => {});
+      }
+      deletePassword(): Promise<boolean> {
+        return new Promise<never>(() => {});
+      }
+    }
+    const silent = keychainStore("Atlas test", async () => ({ AsyncEntry: Silent }), 50);
+    const write = await silent.set("a", CANARY);
+    // The call may still land later, so this is never reported as "nothing stored".
+    expect(write).toMatchObject({ ok: false, maybeStored: true, reason: expect.stringMatching(/didn't answer/) });
+    expect(JSON.stringify(write)).not.toContain("CANARY");
+    expect(await silent.delete("a")).toMatchObject({ ok: false, reason: expect.stringMatching(/didn't answer/) });
+    const readErr = await silent.get("a").then(
+      () => null,
+      (e: Error) => e
+    );
+    expect(readErr?.message).toMatch(/didn't answer/);
+    expect(readErr?.message).not.toContain("CANARY");
   });
 
   it("the environment key is an explicit, externally managed choice; Atlas never switches to it on its own", async () => {
@@ -1470,6 +1500,53 @@ describe("cleanup is tracked per storage backend, not by slot name", () => {
     expect(off.status).toBe(200);
     expect(native.map.size).toBe(0);
   });
+  it("a version 2 record migrates in place: its slot letters become entries in the store that wrote them", async () => {
+    const native = fakeNative();
+    const t = setup({ keychain: { store: native.store, map: native.map, calls: native.calls, state: {} } as never });
+    const { b } = await pair(t.d);
+    await save(t.d, b, CANARY, "keychain");
+    const current = JSON.parse(readFileSync(t.d.connectionFile, "utf8"));
+    const { saveJson } = await import("@/copilot/localFiles");
+
+    // Rewrite it as the earlier code did: the live slot named by letter, and a
+    // pending list whose letters were always OS-store entries.
+    native.map.clear();
+    native.map.set(accountFor(current.salt, "b"), CANARY);
+    native.map.set(accountFor(current.salt, "a"), `${CANARY}-abandoned`);
+    saveJson(t.d.connectionFile, { version: 2, salt: current.salt, source: "keychain", slot: "b", pending: ["a"], revision: current.revision, fingerprint: current.fingerprint, savedAt: current.savedAt, verifiedAt: null, rejectedAt: null });
+
+    expect(await liveOf(t.d)).toBe("keychain:b");
+    expect(await pendingOf(t.d)).toEqual(["keychain:a"]);
+    expect(await credentialNow(t.d)).toMatchObject({ ok: true, key: CANARY });
+
+    // Disconnect reaches both, in the store the migrated record names.
+    expect((await connection(t.d, b, { action: "disconnect" })).status).toBe(200);
+    expect(native.map.size).toBe(0);
+    expect(await pendingOf(t.d)).toEqual([]);
+    expect(await liveOf(t.d)).toBeNull();
+  });
+
+  it("a live entry that can't be removed on Disconnect is remembered, not forgotten with the record", async () => {
+    const native = fakeNative();
+    const t = setup({ keychain: { store: native.store, map: native.map, calls: native.calls, state: {} } as never });
+    const { b } = await pair(t.d);
+    expect((await save(t.d, b, CANARY, "keychain")).status).toBe(200);
+    expect(await liveOf(t.d)).toBe("keychain:a");
+
+    native.state.failDelete = true;
+    const off = await connection(t.d, b, { action: "disconnect" });
+    expect(off.status).toBe(200);
+    expect(JSON.stringify(await off.json())).toMatch(/still be there/i);
+    // Atlas no longer uses it, but it survives the record being cleared so cleanup can finish later.
+    expect(await liveOf(t.d)).toBeNull();
+    expect(await pendingOf(t.d)).toEqual(["keychain:a"]);
+    expect(native.map.size).toBe(1);
+
+    native.state.failDelete = false;
+    expect((await connection(t.d, b, { action: "disconnect" })).status).toBe(200);
+    expect(native.map.size).toBe(0);
+    expect(await pendingOf(t.d)).toEqual([]);
+  });
 });
 
 describe("credential mutations for one installation are one coherent operation", () => {
@@ -1564,6 +1641,57 @@ describe("the credential transaction lock", () => {
     expect(ran).toBe(false);
     expect(String(refused)).toMatch(/still in progress/);
     rmSync(lock, { force: true });
+  }, 60_000);
+
+  it("a holder that is only slow keeps its lock, and a reaped holder never removes the next one's", async () => {
+    const { TXN_STALE_MS, withAsyncLock } = await import("@/copilot/localFiles");
+    const file = join(dir, "slow.json");
+    const lock = `${file}.txn.lock`;
+    delete (globalThis as { __atlasCredentialQueue?: unknown }).__atlasCredentialQueue;
+
+    // A native credential call can sit for a long time behind an OS prompt, so
+    // the lock has to say the holder is still alive, not only when it started.
+    let finish!: () => void;
+    const held = withAsyncLock(file, () => new Promise<void>((r) => (finish = r)));
+    await vi.waitFor(() => expect(existsSync(lock)).toBe(true));
+    const old = new Date(Date.now() - TXN_STALE_MS - 5_000);
+    utimesSync(lock, old, old);
+    await vi.waitFor(() => expect(Date.now() - statSync(lock).mtimeMs).toBeLessThan(TXN_STALE_MS), { timeout: 10_000 });
+
+    // So another process finds it live and is refused, rather than let in beside it.
+    delete (globalThis as { __atlasCredentialQueue?: unknown }).__atlasCredentialQueue;
+    let ran = false;
+    const refused = await withAsyncLock(file, async () => ((ran = true), "ran")).catch((e: Error) => e.message);
+    expect(ran).toBe(false);
+    expect(String(refused)).toMatch(/still in progress/);
+
+    // And a holder whose lock WAS reaped and retaken must not take the new
+    // holder's away when it finishes: a third caller would walk in beside them.
+    rmSync(lock, { force: true });
+    writeFileSync(lock, "another-process");
+    finish();
+    await held;
+    expect(existsSync(lock)).toBe(true);
+    expect(readFileSync(lock, "utf8")).toBe("another-process");
+    rmSync(lock, { force: true });
+  }, 60_000);
+
+  it("a transaction wedged on the credential store refuses the changes behind it instead of leaving them waiting", async () => {
+    const { TXN_WAIT_MS } = await import("@/copilot/localFiles");
+    const native = fakeNative();
+    const wedged = { ...native.store, set: () => new Promise<never>(() => {}) };
+    const t = setup({ keychain: { store: wedged, map: native.map, calls: native.calls, state: native.state } as never });
+    const { b } = await pair(t.d);
+    void save(t.d, b, CANARY, "keychain");
+    await vi.waitFor(() => expect(existsSync(`${t.d.connectionFile}.txn.lock`)).toBe(true), { timeout: 10_000 });
+
+    // Disconnect has to come back — with a refusal — not wait on a store that never answers.
+    const answered = await Promise.race([
+      connection(t.d, b, { action: "disconnect" }).then((r) => r.status as number | string),
+      new Promise<string>((r) => setTimeout(() => r("left waiting"), TXN_WAIT_MS + 10_000)),
+    ]);
+    expect(answered).toBe(409);
+    expect(await pendingOf(t.d)).toEqual(["keychain:a"]);
   }, 60_000);
 });
 

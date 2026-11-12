@@ -1,5 +1,5 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, futimesSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync, writeSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
 // Small files Atlas keeps on this machine for the local Claude connection
@@ -81,26 +81,30 @@ export async function withLock<T>(file: string, fn: () => T, readOnly = false): 
 }
 
 /**
- * Runs an asynchronous transaction alone, across processes. Deliberately a
+ * Runs an asynchronous transaction alone: one at a time in this process, and
+ * one at a time per installation across processes. Deliberately a
  * separate mechanism from `withLock`: it has its own queue and its own lock
  * file, so the short synchronous record writes a transaction performs inside
  * it cannot wait on the transaction itself. Nesting one of these inside
  * another would deadlock, so each caller takes exactly one.
  *
- * Native credential calls can be slow (an OS prompt, a locked store), so this
- * waits longer than the record lock and treats a lock older than a minute as
- * abandoned by a crashed process.
+ * Both waits are bounded. A transaction wedged on a credential store that
+ * never answers must refuse the changes queued behind it, not leave them
+ * waiting with no reply at all: a refusal can be retried, and Disconnect still
+ * has to be able to clean up afterwards.
  */
 export async function withAsyncLock<T>(file: string, fn: () => Promise<T>): Promise<T> {
+  const deadline = Date.now() + TXN_WAIT_MS;
   const prior = ga.__atlasCredentialQueue ?? Promise.resolve();
-  const run = prior.then(async () => {
-    const release = await takeLock(`${file}.txn.lock`, TXN_WAIT_MS, TXN_STALE_MS);
+  const run = (async () => {
+    await queued(prior, deadline);
+    const release = await takeLock(`${file}.txn.lock`, deadline, TXN_STALE_MS);
     try {
       return await fn();
     } finally {
       release();
     }
-  });
+  })();
   ga.__atlasCredentialQueue = run.then(
     () => undefined,
     () => undefined
@@ -109,26 +113,53 @@ export async function withAsyncLock<T>(file: string, fn: () => Promise<T>): Prom
 }
 
 const ga = globalThis as typeof globalThis & { __atlasCredentialQueue?: Promise<unknown> };
+const BUSY = "Another change to the Claude connection is still in progress on this machine.";
 /**
- * How long a caller waits for the lock, and when a lock left by a crashed
- * process is treated as abandoned. Credential writes are not interactive, so a
- * few seconds is generous; waiting longer would only leave someone who clicked
- * twice staring at a spinner before being told to try again.
+ * How long a caller waits for the lock; when a lock nobody is refreshing is
+ * treated as abandoned by a crashed process; and how often a holder refreshes
+ * its own. Credential writes are not interactive, so a few seconds of waiting
+ * is generous: waiting longer would only leave someone who clicked twice
+ * staring at a spinner before being told to try again.
  */
 export const TXN_WAIT_MS = 5_000;
 export const TXN_STALE_MS = 30_000;
+export const TXN_BEAT_MS = 1_000;
 
-/** Takes an exclusive lock file, waiting up to `waitMs`, and returns how to release it. */
-async function takeLock(lock: string, waitMs: number, staleMs: number): Promise<() => void> {
+/** Waits for the transaction ahead of this one, giving up at `deadline`. */
+async function queued(prior: Promise<unknown>, deadline: number) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<"expired">((r) => {
+    timer = setTimeout(() => r("expired"), Math.max(0, deadline - Date.now()));
+    (timer as { unref?: () => void }).unref?.();
+  });
+  try {
+    const first = await Promise.race([prior.then(() => "done" as const, () => "done" as const), expired]);
+    if (first === "expired") throw new Error(BUSY);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Takes an exclusive lock file until `deadline`, and returns how to release it.
+ *
+ * While it is held, its timestamp is refreshed, so "nobody has touched this for
+ * `staleMs`" means the holder is gone rather than merely slow — a native
+ * credential call can sit for a long time behind an OS prompt, and reaping a
+ * live holder's lock would let a second change run beside it.
+ *
+ * The file carries a token of this holder's, and release removes it only while
+ * it still holds that token: a lock that WAS reaped may already belong to
+ * someone else by then, and deleting theirs would let a third caller in beside
+ * them.
+ */
+async function takeLock(lock: string, deadline: number, staleMs: number): Promise<() => void> {
   mkdirSync(dirname(lock), { recursive: true });
-  const deadline = Date.now() + waitMs;
+  const token = randomBytes(16).toString("hex");
   for (;;) {
+    let fd: number;
     try {
-      const fd = openSync(lock, "wx");
-      return () => {
-        closeSync(fd);
-        rmSync(lock, { force: true });
-      };
+      fd = openSync(lock, "wx");
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
       try {
@@ -136,9 +167,36 @@ async function takeLock(lock: string, waitMs: number, staleMs: number): Promise<
       } catch {
         /* the lock was released meanwhile */
       }
-      if (Date.now() > deadline) throw new Error("Another change to the Claude connection is still in progress on this machine.");
+      if (Date.now() > deadline) throw new Error(BUSY);
       await new Promise((r) => setTimeout(r, 15));
+      continue;
     }
+    writeSync(fd, token);
+    const beat = setInterval(() => {
+      try {
+        const now = new Date();
+        futimesSync(fd, now, now);
+      } catch {
+        /* released, or the file is already gone */
+      }
+    }, TXN_BEAT_MS);
+    (beat as { unref?: () => void }).unref?.();
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      clearInterval(beat);
+      try {
+        closeSync(fd);
+      } catch {
+        /* already closed */
+      }
+      try {
+        if (readFileSync(lock, "utf8") === token) rmSync(lock, { force: true });
+      } catch {
+        /* someone else's lock by now, or none */
+      }
+    };
   }
 }
 

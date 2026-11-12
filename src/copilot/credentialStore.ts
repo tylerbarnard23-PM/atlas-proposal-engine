@@ -10,6 +10,12 @@
 // failed may nonetheless have left an entry behind. The OS store is confirmed
 // by reading the value back, and that read can fail after the write has
 // landed, so "it threw" and "nothing was stored" are different facts.
+//
+// Every native call is bounded. A locked store can sit on a prompt nobody
+// answers, and waiting on it would hold the credential transaction — and every
+// change queued behind it, Disconnect included — open until the server is
+// restarted. A call that is given up on is reported like one that threw: it may
+// still land, so the entry may exist.
 
 export type StoreWrite = { ok: true } | { ok: false; reason: string; maybeStored: boolean };
 export type StoreDelete = { ok: true } | { ok: false; reason: string };
@@ -63,7 +69,35 @@ const UNSUPPORTED = "Secure remembering isn't available on this computer: the OS
 /** A reason safe to show: never the secret, never a raw native message. */
 const cannot = (action: string) => `The operating system's credential store couldn't ${action}. It may be locked or unavailable (on Linux it needs a running Secret Service, such as GNOME Keyring).`;
 
-export function keychainStore(service: string = KEYCHAIN_SERVICE, load: () => Promise<KeyringModule | null> = loadKeyring): SecretStore {
+/** How long a native credential call is waited on: generous, because the store may be asking the user to unlock it. */
+export const NATIVE_CALL_MS = 60_000;
+
+type Settled<T> = { state: "ok"; value: T } | { state: "failed" } | { state: "timeout" };
+
+/** Awaits a native call, giving up after `ms`. It may still finish afterwards, which is why giving up still reports `maybeStored`. */
+async function settle<T>(work: Promise<T>, ms: number): Promise<Settled<T>> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<Settled<T>>((r) => {
+    timer = setTimeout(() => r({ state: "timeout" }), ms);
+    (timer as { unref?: () => void }).unref?.();
+  });
+  try {
+    return await Promise.race([
+      work.then(
+        (value): Settled<T> => ({ state: "ok", value }),
+        (): Settled<T> => ({ state: "failed" })
+      ),
+      expired,
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** A reason safe to show when the store never answered. */
+const silent = (action: string) => `The operating system's credential store didn't answer, so Atlas stopped waiting for it to ${action}. It may be locked, or waiting on a prompt that was never answered.`;
+
+export function keychainStore(service: string = KEYCHAIN_SERVICE, load: () => Promise<KeyringModule | null> = loadKeyring, callMs: number = NATIVE_CALL_MS): SecretStore {
   const entry = async (account: string) => {
     const m = await load();
     if (!m) throw new Error(UNSUPPORTED);
@@ -75,11 +109,9 @@ export function keychainStore(service: string = KEYCHAIN_SERVICE, load: () => Pr
     },
     async get(account) {
       const e = await entry(account);
-      try {
-        return await e.getPassword();
-      } catch {
-        throw new Error(cannot("be read"));
-      }
+      const read = await settle(e.getPassword(), callMs);
+      if (read.state === "ok") return read.value;
+      throw new Error(read.state === "timeout" ? silent("be read") : cannot("be read"));
     },
     async set(account, secret) {
       let e: KeyringEntry;
@@ -88,21 +120,15 @@ export function keychainStore(service: string = KEYCHAIN_SERVICE, load: () => Pr
       } catch (err) {
         return { ok: false, reason: err instanceof Error ? err.message : UNSUPPORTED, maybeStored: false };
       }
-      try {
-        await e.setPassword(secret);
-      } catch {
-        // A native write that throws may still have stored something; nothing here can tell.
-        // Saying "nothing was saved" would be a guess, so the caller is told an entry may exist.
-        return { ok: false, reason: cannot("save the key"), maybeStored: true };
-      }
+      // A native write that throws — or never answers — may still have stored something;
+      // nothing here can tell. Saying "nothing was saved" would be a guess, so the caller
+      // is told an entry may exist.
+      const written = await settle(e.setPassword(secret), callMs);
+      if (written.state !== "ok") return { ok: false, reason: written.state === "timeout" ? silent("save the key") : cannot("save the key"), maybeStored: true };
       // The write returned, so an entry exists whatever happens next.
-      let back: string | null;
-      try {
-        back = await e.getPassword();
-      } catch {
-        return { ok: false, reason: cannot("confirm the key it had just saved"), maybeStored: true };
-      }
-      if (back !== secret) return { ok: false, reason: cannot("keep the key"), maybeStored: true };
+      const back = await settle(e.getPassword(), callMs);
+      if (back.state !== "ok") return { ok: false, reason: back.state === "timeout" ? silent("confirm the key it had just saved") : cannot("confirm the key it had just saved"), maybeStored: true };
+      if (back.value !== secret) return { ok: false, reason: cannot("keep the key"), maybeStored: true };
       return { ok: true };
     },
     async delete(account) {
@@ -112,12 +138,9 @@ export function keychainStore(service: string = KEYCHAIN_SERVICE, load: () => Pr
       } catch (err) {
         return { ok: false, reason: err instanceof Error ? err.message : UNSUPPORTED };
       }
-      try {
-        await e.deletePassword();
-        return { ok: true };
-      } catch {
-        return { ok: false, reason: cannot("remove the key") };
-      }
+      const removed = await settle(e.deletePassword(), callMs);
+      if (removed.state === "ok") return { ok: true };
+      return { ok: false, reason: removed.state === "timeout" ? silent("remove the key") : cannot("remove the key") };
     },
   };
 }
