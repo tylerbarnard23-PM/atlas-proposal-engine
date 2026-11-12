@@ -1,6 +1,6 @@
 import { FIRST_REQUEST_USD, cancelRunningRuns, cookieOf, liveReadiness, localRequestProblem, resolveCredential, type LiveDeps, type LiveProvider, type Refusal } from "./liveGate";
-import { KEYCHAIN_SERVICE } from "./credentialStore";
-import { instanceId, withAsyncLock } from "./localFiles";
+import { KEYCHAIN_SERVICE, type SecretStore } from "./credentialStore";
+import { instanceId, withAsyncLock, type KeepOpen } from "./localFiles";
 import * as sessions from "./liveSessionStore";
 import { accountFor, addPending, clearConnection, clearPending, ensureConnection, entryKey, freeSlot, keyShapeProblem, normalizeKey, readConnection, recordConnection, sameEntry, type ConnectionState, type CredentialSource, type EntryStore, type StoredEntry } from "./localConnection";
 import { PAIR_COOKIE, PAIR_DAYS, csrfMatches, csrfTokenFor, isPaired, redeemPairingToken } from "./localPairing";
@@ -135,6 +135,9 @@ async function endSessionFor(deps: LiveDeps, reason: string) {
 }
 
 const LEFT_BEHIND = `An earlier entry couldn't be removed from the operating system's credential store, so one may still be there. Atlas will remove it the next time the store is available, or you can remove the "${KEYCHAIN_SERVICE}" entries there yourself.`;
+/** Not "it couldn't be removed" but "nobody can say yet": the removal is still running, so no claim about it would be safe. */
+const STILL_REMOVING = `The operating system's credential store hasn't finished removing an earlier entry and stopped answering, so Atlas can't confirm it is gone: it may still be there. Nothing else will use that entry, and Atlas will remove it the next time the store is available, or you can remove the "${KEYCHAIN_SERVICE}" entries there yourself.`;
+const STILL_WRITING = "Atlas stopped waiting for the credential store, which may still be writing that entry. It will never be used, and Atlas removes it as soon as the store finishes.";
 
 const storeOf = (deps: LiveDeps, store: EntryStore) => (store === "session" ? deps.secrets.session : deps.secrets.keychain);
 
@@ -146,7 +149,7 @@ const storeOf = (deps: LiveDeps, store: EntryStore) => (store === "session" ? de
  * Stop is deliberately not behind this: halting spending must never wait on a
  * credential store.
  */
-function credentialTransaction<T>(deps: LiveDeps, fn: () => Promise<T>): Promise<T> {
+function credentialTransaction<T>(deps: LiveDeps, fn: (keepOpen: KeepOpen) => Promise<T>): Promise<T> {
   return withAsyncLock(deps.connectionFile, fn);
 }
 
@@ -158,21 +161,48 @@ const busy = (): Refusal => ({ ok: false, status: 409, code: "connection_busy", 
  * belongs to: the previous live entry and anything left pending by an earlier
  * failure or an interrupted write. Entries whose removal can't be confirmed
  * stay pending, and are reported rather than forgotten.
+ *
+ * A removal Atlas stopped waiting for is still running and still owns its
+ * entry, so the transaction keeps that slot until it settles: until then
+ * nothing may reuse it, and cleanup is reported as unfinished rather than done.
  */
-async function forgetStored(deps: LiveDeps, conn: ConnectionState, keep: StoredEntry | null): Promise<{ warning: string | null; stuck: StoredEntry[] }> {
+async function forgetStored(deps: LiveDeps, conn: ConnectionState, keep: StoredEntry | null, keepOpen: KeepOpen): Promise<{ warning: string | null; stuck: StoredEntry[] }> {
   const stuck: StoredEntry[] = [];
   const gone: StoredEntry[] = [];
   const seen = new Set<string>();
+  let unfinished = false;
   for (const entry of [...(conn.live ? [conn.live] : []), ...conn.pending]) {
     if (keep && sameEntry(entry, keep)) continue;
     if (seen.has(entryKey(entry))) continue;
     seen.add(entryKey(entry));
     const r = await storeOf(deps, entry.store).delete(accountFor(conn.salt, entry.slot));
-    (r.ok ? gone : stuck).push(entry);
+    if (r.ok) {
+      gone.push(entry);
+      continue;
+    }
+    stuck.push(entry);
+    if (r.unresolved) {
+      unfinished = true;
+      keepOpen(r.unresolved);
+    }
   }
   if (gone.length) await clearPending(deps.connectionFile, gone);
   if (stuck.length) await addPending(deps.connectionFile, stuck);
-  return { warning: stuck.some((e) => e.store === "keychain") ? LEFT_BEHIND : null, stuck };
+  const left = stuck.some((e) => e.store === "keychain");
+  return { warning: left ? (unfinished ? STILL_REMOVING : LEFT_BEHIND) : null, stuck };
+}
+
+/**
+ * Removes the entry an abandoned write may have left — once that write can no
+ * longer change it. Deleting earlier would race a mutation that hasn't
+ * happened yet, and an entry deleted once can be recreated by a write still in
+ * flight. If removal still can't be confirmed, the entry stays on record for
+ * the next cleanup, and the slot stays reserved until that call settles too.
+ */
+async function forgetAbandoned(deps: LiveDeps, store: SecretStore, salt: string, entry: StoredEntry) {
+  const removed = await store.delete(accountFor(salt, entry.slot));
+  if (removed.ok) await clearPending(deps.connectionFile, [entry]);
+  else if (removed.unresolved) await removed.unresolved;
 }
 
 type Changed = { ok: true; connection: ConnectionView; warning: string | null } | Refusal;
@@ -198,7 +228,7 @@ export async function saveKey(deps: LiveDeps, provider: LiveProvider, body: { ke
     // Never a plaintext fallback: if the OS store can't hold it, nothing is saved and the earlier connection stands.
     if (!usable.ok) return { ok: false, status: 503, code: "remember_unavailable", error: `${usable.reason} Nothing was saved. ${TRY_SESSION}` };
   }
-  return credentialTransaction(deps, async () => {
+  return credentialTransaction(deps, async (keepOpen) => {
     // Inside the transaction, so the free slot can't be chosen twice.
     const prev = await ensureConnection(deps.connectionFile);
     const target: StoredEntry = { store: storage, slot: freeSlot(prev.live) };
@@ -212,6 +242,15 @@ export async function saveKey(deps: LiveDeps, provider: LiveProvider, body: { ke
         await clearPending(deps.connectionFile, [target]);
         return { ok: false, status: 503, code: "remember_unavailable", error: `${written.reason} Nothing was saved. ${KEEP_PREVIOUS} ${TRY_SESSION}` } as const;
       }
+      if (written.unresolved) {
+        // Atlas stopped waiting, but the call is still running and still owns this
+        // entry. Removing it now would race a write that hasn't landed, so the slot
+        // stays this transaction's — and on record in `pending` — until the call
+        // settles, and is cleaned up then. Nothing was committed, so the abandoned
+        // key can never become the live one or be published later.
+        keepOpen(written.unresolved.then(() => forgetAbandoned(deps, store, prev.salt, target)));
+        return { ok: false, status: 503, code: "remember_unavailable", error: `${written.reason} The new key was not connected. ${KEEP_PREVIOUS} ${STILL_WRITING} ${TRY_SESSION}` } as const;
+      }
       // The write may have landed: remove it, and if that can't be confirmed, leave it pending and say so.
       const removed = await store.delete(account);
       if (removed.ok) await clearPending(deps.connectionFile, [target]);
@@ -220,7 +259,7 @@ export async function saveKey(deps: LiveDeps, provider: LiveProvider, body: { ke
     }
     // Confirmed: commit, then clear out what the previous key and any earlier failure left, in each one's own store.
     const conn = await recordConnection(deps.connectionFile, deps.now(), storage, key, target);
-    const { warning } = await forgetStored(deps, { ...prev, live: prev.live, pending: conn.pending }, target);
+    const { warning } = await forgetStored(deps, { ...prev, live: prev.live, pending: conn.pending }, target, keepOpen);
     await endSessionFor(deps, "the API key was replaced");
     return { ok: true, connection: await connectionView(deps, provider, await readConnection(deps.connectionFile)), warning } as const;
   }).catch((err) => (isBusy(err) ? busy() : Promise.reject(err)));
@@ -235,10 +274,10 @@ export async function useEnvironmentKey(deps: LiveDeps, provider: LiveProvider):
   if (!key) return { ok: false, status: 400, code: "no_environment_key", error: "ANTHROPIC_API_KEY isn't set in the server's environment." };
   const problem = keyShapeProblem(key);
   if (problem) return { ok: false, status: 400, code: "bad_key", error: `The key in the server's environment can't be used. ${problem}` };
-  return credentialTransaction(deps, async () => {
+  return credentialTransaction(deps, async (keepOpen) => {
     const prev = await ensureConnection(deps.connectionFile);
     await recordConnection(deps.connectionFile, deps.now(), "environment", key, null);
-    const { warning } = await forgetStored(deps, prev, null);
+    const { warning } = await forgetStored(deps, prev, null, keepOpen);
     await endSessionFor(deps, "the API key was replaced");
     return { ok: true, connection: await connectionView(deps, provider, await readConnection(deps.connectionFile)), warning } as const;
   }).catch((err) => (isBusy(err) ? busy() : Promise.reject(err)));
@@ -246,11 +285,11 @@ export async function useEnvironmentKey(deps: LiveDeps, provider: LiveProvider):
 
 /** Removes the key Atlas stored and records that none is in use. */
 export async function disconnect(deps: LiveDeps, provider: LiveProvider): Promise<Changed> {
-  return credentialTransaction(deps, async () => {
+  return credentialTransaction(deps, async (keepOpen) => {
     // Everything Atlas stored goes, in whichever store it is in, including an entry
     // left behind by a failed first save or an interrupted write.
     const prev = await ensureConnection(deps.connectionFile);
-    const { warning: stored, stuck } = await forgetStored(deps, prev, null);
+    const { warning: stored, stuck } = await forgetStored(deps, prev, null, keepOpen);
     const conn = await clearConnection(deps.connectionFile, stuck);
     await endSessionFor(deps, "the API key was disconnected");
     const env = prev.source === "environment" ? "The key in the server's environment is managed outside Atlas and is still set there; Atlas no longer uses it." : null;

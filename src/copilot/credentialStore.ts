@@ -16,9 +16,16 @@
 // change queued behind it, Disconnect included — open until the server is
 // restarted. A call that is given up on is reported like one that threw: it may
 // still land, so the entry may exist.
+//
+// Giving up on waiting is not cancellation. The native call keeps running and
+// still owns the account it was given, so a call that timed out is handed back
+// as `unresolved`: the caller has to keep that account to itself until the call
+// settles, because deleting the entry or reusing the slot meanwhile would race
+// a mutation that has not happened yet.
 
-export type StoreWrite = { ok: true } | { ok: false; reason: string; maybeStored: boolean };
-export type StoreDelete = { ok: true } | { ok: false; reason: string };
+/** `unresolved` is present only when the call is still running: it settles when the call can no longer change the account. */
+export type StoreWrite = { ok: true } | { ok: false; reason: string; maybeStored: boolean; unresolved?: Promise<unknown> };
+export type StoreDelete = { ok: true } | { ok: false; reason: string; unresolved?: Promise<unknown> };
 
 export interface SecretStore {
   /** Whether the store can be used at all here, and if not, why (shown to the user). */
@@ -72,23 +79,25 @@ const cannot = (action: string) => `The operating system's credential store coul
 /** How long a native credential call is waited on: generous, because the store may be asking the user to unlock it. */
 export const NATIVE_CALL_MS = 60_000;
 
-type Settled<T> = { state: "ok"; value: T } | { state: "failed" } | { state: "timeout" };
+type Settled<T> = { state: "ok"; value: T } | { state: "failed" } | { state: "timeout"; work: Promise<unknown> };
 
-/** Awaits a native call, giving up after `ms`. It may still finish afterwards, which is why giving up still reports `maybeStored`. */
+/**
+ * Awaits a native call, giving up after `ms`. Giving up stops the waiting, not
+ * the call, so a timeout hands back the call itself — settled either way, never
+ * rejecting — for the caller to keep the account reserved until it finishes.
+ */
 async function settle<T>(work: Promise<T>, ms: number): Promise<Settled<T>> {
+  const outcome = work.then(
+    (value): Settled<T> => ({ state: "ok", value }),
+    (): Settled<T> => ({ state: "failed" })
+  );
   let timer: ReturnType<typeof setTimeout> | undefined;
   const expired = new Promise<Settled<T>>((r) => {
-    timer = setTimeout(() => r({ state: "timeout" }), ms);
+    timer = setTimeout(() => r({ state: "timeout", work: outcome }), ms);
     (timer as { unref?: () => void }).unref?.();
   });
   try {
-    return await Promise.race([
-      work.then(
-        (value): Settled<T> => ({ state: "ok", value }),
-        (): Settled<T> => ({ state: "failed" })
-      ),
-      expired,
-    ]);
+    return await Promise.race([outcome, expired]);
   } finally {
     clearTimeout(timer);
   }
@@ -124,7 +133,8 @@ export function keychainStore(service: string = KEYCHAIN_SERVICE, load: () => Pr
       // nothing here can tell. Saying "nothing was saved" would be a guess, so the caller
       // is told an entry may exist.
       const written = await settle(e.setPassword(secret), callMs);
-      if (written.state !== "ok") return { ok: false, reason: written.state === "timeout" ? silent("save the key") : cannot("save the key"), maybeStored: true };
+      if (written.state === "timeout") return { ok: false, reason: silent("save the key"), maybeStored: true, unresolved: written.work };
+      if (written.state !== "ok") return { ok: false, reason: cannot("save the key"), maybeStored: true };
       // The write returned, so an entry exists whatever happens next.
       const back = await settle(e.getPassword(), callMs);
       if (back.state !== "ok") return { ok: false, reason: back.state === "timeout" ? silent("confirm the key it had just saved") : cannot("confirm the key it had just saved"), maybeStored: true };
@@ -140,7 +150,8 @@ export function keychainStore(service: string = KEYCHAIN_SERVICE, load: () => Pr
       }
       const removed = await settle(e.deletePassword(), callMs);
       if (removed.state === "ok") return { ok: true };
-      return { ok: false, reason: removed.state === "timeout" ? silent("remove the key") : cannot("remove the key") };
+      if (removed.state === "timeout") return { ok: false, reason: silent("remove the key"), unresolved: removed.work };
+      return { ok: false, reason: cannot("remove the key") };
     },
   };
 }

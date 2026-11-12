@@ -1202,7 +1202,7 @@ describe("fix 8: an environment key is normalized and validated like a pasted on
  * failure: `failWrite` never stores, `failAfterWrite` stores and then throws
  * (the case that matters), `failRead` and `failDelete` break those steps.
  */
-function fakeNative(state: { failWrite?: boolean; failAfterWrite?: boolean; failRead?: boolean; failDelete?: boolean } = {}) {
+function fakeNative(state: { failWrite?: boolean; failAfterWrite?: boolean; failRead?: boolean; failDelete?: boolean; holdWrite?: Promise<void>; holdDelete?: Promise<void> } = {}, callMs?: number) {
   const map = new Map<string, string>();
   const calls = { set: 0, get: 0, delete: 0 };
   class Entry {
@@ -1212,6 +1212,8 @@ function fakeNative(state: { failWrite?: boolean; failAfterWrite?: boolean; fail
     }
     async setPassword(secret: string) {
       calls.set++;
+      // Still running after Atlas gave up on it, and still owning this account.
+      if (state.holdWrite) await state.holdWrite;
       if (state.failWrite) throw new Error("native write failure");
       map.set(this.account, secret);
       if (state.failAfterWrite) throw new Error("native failure after the write landed");
@@ -1223,11 +1225,12 @@ function fakeNative(state: { failWrite?: boolean; failAfterWrite?: boolean; fail
     }
     async deletePassword() {
       calls.delete++;
+      if (state.holdDelete) await state.holdDelete;
       if (state.failDelete) throw new Error("native delete failure");
       return map.delete(this.account);
     }
   }
-  return { store: keychainStore("Atlas test", async () => ({ AsyncEntry: Entry }) as never), map, calls, state };
+  return { store: keychainStore("Atlas test", async () => ({ AsyncEntry: Entry }) as never, callMs), map, calls, state };
 }
 
 /** The gate's own view of whether the connection can be used right now. */
@@ -1769,4 +1772,113 @@ describe("staging intent is recorded before the external write", () => {
     expect(await credentialNow(t.d)).toMatchObject({ ok: true, key: CANARY });
     expect((await status(t.d, b)).live.session).toMatchObject({ status: "active" });
   });
+});
+
+describe("a native credential call that finishes after Atlas stopped waiting", () => {
+  /** Atlas gives up on the call; the call keeps running and still owns the account it was given. */
+  const held = () => {
+    let land!: () => void;
+    return { gate: new Promise<void>((r) => (land = r)), land: () => land() };
+  };
+  const settled = (t: TestDeps) => vi.waitFor(async () => expect(await pendingOf(t.d)).toEqual([]), { timeout: 15_000 });
+
+  it("a write it stopped waiting for can't put a credential back after a Disconnect", async () => {
+    const w = held();
+    const native = fakeNative({ holdWrite: w.gate }, 50);
+    const t = setup({ keychain: { store: native.store, map: native.map, calls: native.calls, state: native.state } as never });
+    const { b } = await pair(t.d);
+
+    const res = await save(t.d, b, CANARY, "keychain");
+    expect(res.status).toBe(503);
+    const body = JSON.stringify(await res.json());
+    expect(body).toMatch(/didn't answer/);
+    expect(body).not.toContain("CANARY");
+    // The intent is on record, and nothing has been written yet.
+    expect(await pendingOf(t.d)).toEqual(["keychain:a"]);
+    expect(native.map.size).toBe(0);
+
+    // Cleanup can't be claimed while that write may still land.
+    expect((await connection(t.d, b, { action: "disconnect" })).status).toBe(409);
+    expect(await liveOf(t.d)).toBeNull();
+
+    // The write lands late. Nothing untracked may be left behind once it has.
+    w.land();
+    await settled(t);
+    expect(native.map.size).toBe(0);
+    expect(await liveOf(t.d)).toBeNull();
+    const off = await connection(t.d, b, { action: "disconnect" });
+    expect(off.status).toBe(200);
+    expect(native.map.size).toBe(0);
+    expect(await pendingOf(t.d)).toEqual([]);
+    expect(readFileSync(t.d.connectionFile, "utf8")).not.toContain("CANARY");
+  }, 60_000);
+
+  it("a write it stopped waiting for can't overwrite the key saved after it", async () => {
+    const w = held();
+    const native = fakeNative({ holdWrite: w.gate }, 50);
+    const t = setup({ keychain: { store: native.store, map: native.map, calls: native.calls, state: native.state } as never });
+    const { b } = await pair(t.d);
+    expect((await save(t.d, b, `${CANARY}-abandoned`, "keychain")).status).toBe(503);
+
+    // The slot that write still owns can't be handed to another save.
+    expect((await save(t.d, b, `${CANARY}-new`, "keychain")).status).toBe(409);
+
+    w.land();
+    await settled(t);
+
+    // Only now is the slot free — and the abandoned key never became the live one.
+    expect((await save(t.d, b, `${CANARY}-new`, "keychain")).status).toBe(200);
+    expect([...native.map.values()]).toEqual([`${CANARY}-new`]);
+    expect(await credentialNow(t.d)).toMatchObject({ ok: true, key: `${CANARY}-new` });
+    expect(JSON.stringify([...native.map.values()])).not.toContain("abandoned");
+  }, 60_000);
+
+  it("a delete it stopped waiting for can't remove the key saved into that slot afterwards", async () => {
+    const d = held();
+    const native = fakeNative({}, 50);
+    const t = setup({ keychain: { store: native.store, map: native.map, calls: native.calls, state: native.state } as never });
+    const { b } = await pair(t.d);
+    expect((await save(t.d, b, CANARY, "keychain")).status).toBe(200);
+    expect(await liveOf(t.d)).toBe("keychain:a");
+
+    native.state.holdDelete = d.gate;
+    const off = await connection(t.d, b, { action: "disconnect" });
+    expect(off.status).toBe(200);
+    // Removal was not confirmed, so it is reported as possibly still there, never as done.
+    expect(JSON.stringify(await off.json())).toMatch(/may still be there/i);
+    expect(await pendingOf(t.d)).toEqual(["keychain:a"]);
+    expect(native.map.size).toBe(1);
+
+    // That slot can't be reused while the delete may still land.
+    expect((await save(t.d, b, `${CANARY}-new`, "keychain")).status).toBe(409);
+
+    d.land();
+    await vi.waitFor(() => expect(native.map.size).toBe(0), { timeout: 15_000 });
+
+    // Reused only now, and the new key survives the call that had been running.
+    expect((await save(t.d, b, `${CANARY}-new`, "keychain")).status).toBe(200);
+    expect([...native.map.values()]).toEqual([`${CANARY}-new`]);
+    expect(await credentialNow(t.d)).toMatchObject({ ok: true, key: `${CANARY}-new` });
+    expect((await status(t.d, b)).local!.connection).toMatchObject({ source: "keychain" });
+  }, 60_000);
+
+  it("the response stays bounded and Stop still answers while a call is unresolved", async () => {
+    const w = held();
+    const native = fakeNative({ holdWrite: w.gate }, 50);
+    const t = setup({ keychain: { store: native.store, map: native.map, calls: native.calls, state: native.state } as never });
+    const { b } = await pair(t.d);
+    await save(t.d, b, CANARY, "session");
+    await start(t.d, b);
+
+    const begun = Date.now();
+    expect((await save(t.d, b, `${CANARY}-os`, "keychain")).status).toBe(503);
+    // Answered on the adapter's deadline, not on the native call.
+    expect(Date.now() - begun).toBeLessThan(5_000);
+    // Stop is not behind the credential lock, even with a call still running.
+    expect((await session(t.d, b, { action: "stop" })).status).toBe(200);
+
+    w.land();
+    await settled(t);
+    expect(native.map.size).toBe(0);
+  }, 60_000);
 });

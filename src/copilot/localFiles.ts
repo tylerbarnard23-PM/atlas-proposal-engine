@@ -92,25 +92,55 @@ export async function withLock<T>(file: string, fn: () => T, readOnly = false): 
  * never answers must refuse the changes queued behind it, not leave them
  * waiting with no reply at all: a refusal can be retried, and Disconnect still
  * has to be able to clean up afterwards.
+ *
+ * The value — the user's answer — is produced as soon as `fn` returns, so
+ * responses stay bounded. The lock is released later, once every native
+ * mutation the transaction started has actually settled. Giving up on waiting
+ * for such a call does not end it: it still owns the entry it was given and
+ * can still change it, so that entry's slot must not be reused and no cleanup
+ * may be run against it meanwhile. `fn` registers one with `keepOpen`.
  */
-export async function withAsyncLock<T>(file: string, fn: () => Promise<T>): Promise<T> {
+export async function withAsyncLock<T>(file: string, fn: (keepOpen: KeepOpen) => Promise<T>): Promise<T> {
   const deadline = Date.now() + TXN_WAIT_MS;
   const prior = ga.__atlasCredentialQueue ?? Promise.resolve();
-  const run = (async () => {
-    await queued(prior, deadline);
-    const release = await takeLock(`${file}.txn.lock`, deadline, TXN_STALE_MS);
+  // Claimed synchronously, so a caller in this same tick queues behind us.
+  let freed!: () => void;
+  ga.__atlasCredentialQueue = new Promise<void>((r) => (freed = r));
+  return (async () => {
+    let release: () => void;
     try {
-      return await fn();
+      await queued(prior, deadline);
+      release = await takeLock(`${file}.txn.lock`, deadline, TXN_STALE_MS);
+    } catch (err) {
+      freed();
+      throw err;
+    }
+    const outstanding: Promise<unknown>[] = [];
+    const keepOpen: KeepOpen = (work) =>
+      void outstanding.push(
+        work.then(
+          () => undefined,
+          () => undefined
+        )
+      );
+    const letGo = () => {
+      const after = outstanding.length ? Promise.all(outstanding) : Promise.resolve();
+      // Deliberately not awaited: the answer is already on its way.
+      void after.then(
+        () => (release(), freed()),
+        () => (release(), freed())
+      );
+    };
+    try {
+      return await fn(keepOpen);
     } finally {
-      release();
+      letGo();
     }
   })();
-  ga.__atlasCredentialQueue = run.then(
-    () => undefined,
-    () => undefined
-  );
-  return run;
 }
+
+/** Registers a native call this transaction started and has stopped waiting for. */
+export type KeepOpen = (work: Promise<unknown>) => void;
 
 const ga = globalThis as typeof globalThis & { __atlasCredentialQueue?: Promise<unknown> };
 const BUSY = "Another change to the Claude connection is still in progress on this machine.";
