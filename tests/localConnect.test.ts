@@ -1881,4 +1881,42 @@ describe("a native credential call that finishes after Atlas stopped waiting", (
     await settled(t);
     expect(native.map.size).toBe(0);
   }, 60_000);
+
+  it("a cleanup removal it stopped waiting for keeps the slot until that call ends", async () => {
+    // The write lands and then can't be read back, so cleanup tries to undo it —
+    // and the removal itself outlives the adapter's deadline.
+    const d = held();
+    const native = fakeNative({ failAfterWrite: true, holdDelete: d.gate }, 50);
+    const t = setup({ keychain: { store: native.store, map: native.map, calls: native.calls, state: native.state } as never });
+    const { b } = await pair(t.d);
+
+    const begun = Date.now();
+    const res = await save(t.d, b, `${CANARY}-abandoned`, "keychain");
+    expect(res.status).toBe(503);
+    // Answered on the adapter's deadline, never on the native removal.
+    expect(Date.now() - begun).toBeLessThan(5_000);
+    const body = JSON.stringify(await res.json());
+    // Truthful: the removal is still running, so it is not reported as finished.
+    expect(body).toMatch(/can't confirm it is gone/i);
+    expect(body).not.toMatch(/was removed/);
+    expect(body).not.toContain("CANARY");
+    // The entry stays on record, and the write did land before its read-back failed.
+    expect(await pendingOf(t.d)).toEqual(["keychain:a"]);
+    expect(await liveOf(t.d)).toBeNull();
+    expect(native.map.size).toBe(1);
+
+    native.state.failAfterWrite = false;
+    // That slot can't be reused while the removal may still land on it.
+    expect((await save(t.d, b, `${CANARY}-new`, "keychain")).status).toBe(409);
+
+    d.land();
+    await vi.waitFor(() => expect(native.map.size).toBe(0), { timeout: 15_000 });
+
+    // Reused only now, and the new key survives the removal that had been running.
+    expect((await save(t.d, b, `${CANARY}-new`, "keychain")).status).toBe(200);
+    expect([...native.map.values()]).toEqual([`${CANARY}-new`]);
+    expect(await credentialNow(t.d)).toMatchObject({ ok: true, key: `${CANARY}-new` });
+    expect(JSON.stringify([...native.map.values()])).not.toContain("abandoned");
+    expect(readFileSync(t.d.connectionFile, "utf8")).not.toContain("CANARY");
+  }, 60_000);
 });

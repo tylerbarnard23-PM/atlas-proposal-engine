@@ -138,6 +138,8 @@ const LEFT_BEHIND = `An earlier entry couldn't be removed from the operating sys
 /** Not "it couldn't be removed" but "nobody can say yet": the removal is still running, so no claim about it would be safe. */
 const STILL_REMOVING = `The operating system's credential store hasn't finished removing an earlier entry and stopped answering, so Atlas can't confirm it is gone: it may still be there. Nothing else will use that entry, and Atlas will remove it the next time the store is available, or you can remove the "${KEYCHAIN_SERVICE}" entries there yourself.`;
 const STILL_WRITING = "Atlas stopped waiting for the credential store, which may still be writing that entry. It will never be used, and Atlas removes it as soon as the store finishes.";
+/** The same truth as STILL_REMOVING, for the entry this save had just started writing rather than an earlier one. */
+const STILL_UNDOING = "Atlas stopped waiting for the credential store, which hasn't finished removing the entry it had started to write, so Atlas can't confirm it is gone. Nothing else will use that entry, and Atlas will remove it the next time the store is available.";
 
 const storeOf = (deps: LiveDeps, store: EntryStore) => (store === "session" ? deps.secrets.session : deps.secrets.keychain);
 
@@ -254,7 +256,12 @@ export async function saveKey(deps: LiveDeps, provider: LiveProvider, body: { ke
       // The write may have landed: remove it, and if that can't be confirmed, leave it pending and say so.
       const removed = await store.delete(account);
       if (removed.ok) await clearPending(deps.connectionFile, [target]);
-      const left = removed.ok ? "The entry it had started to write was removed." : LEFT_BEHIND;
+      // A removal Atlas stopped waiting for is still running and still owns this
+      // entry, so the slot stays this transaction's until that call settles.
+      // Releasing it here would let the next save take the slot only to have the
+      // removal land on its key. Not awaited: the answer is already decided.
+      else if (removed.unresolved) keepOpen(removed.unresolved);
+      const left = removed.ok ? "The entry it had started to write was removed." : removed.unresolved ? STILL_UNDOING : LEFT_BEHIND;
       return { ok: false, status: 503, code: "remember_unavailable", error: `${written.reason} The new key was not connected. ${KEEP_PREVIOUS} ${left} ${TRY_SESSION}` } as const;
     }
     // Confirmed: commit, then clear out what the previous key and any earlier failure left, in each one's own store.
