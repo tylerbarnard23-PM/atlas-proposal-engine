@@ -12,8 +12,15 @@ import { hash, readJson, saveJson, withLock } from "./localFiles.ts";
 // written to the FREE one. Only once the new entry is confirmed does the
 // record point at it, so a write that fails — or lands without being
 // confirmable — leaves the previous key, its revision and its session exactly
-// as they were. Slots whose entry may still exist are listed in `pending` so
-// they can be removed later; those are names, never secrets.
+// as they were.
+//
+// An entry is identified by the store it is in AND its slot, never by the slot
+// alone: the two stores use the same slot names, so a live memory entry must
+// not be able to hide, protect or displace an abandoned OS entry called the
+// same thing. `pending` lists entries that may exist and are not the live one,
+// so they can be removed later — store names and slot letters, never secrets.
+// The intent to write one is recorded BEFORE the write is attempted, so a
+// process interrupted mid-write still leaves the entry discoverable.
 // Node built-ins only (through localFiles.ts), so the scripts can load it.
 
 /** Where the key is kept: nowhere; this server process's memory; the OS credential store; or the server's environment (managed outside Atlas). */
@@ -23,15 +30,33 @@ export type CredentialSource = "none" | "session" | "keychain" | "environment";
 export type Slot = "a" | "b" | "legacy";
 const SLOTS: readonly Slot[] = ["a", "b", "legacy"];
 
+/** Where Atlas itself can put a key. The environment is managed outside Atlas, so it is never an entry. */
+export type EntryStore = "session" | "keychain";
+
+/** One entry Atlas wrote, identified by its store and its slot. Never a secret. */
+export interface StoredEntry {
+  store: EntryStore;
+  slot: Slot;
+}
+
+/** Whether two entries are the same account in the same store. */
+export const sameEntry = (a: StoredEntry, b: StoredEntry) => a.store === b.store && a.slot === b.slot;
+export const entryKey = (e: StoredEntry) => `${e.store}:${e.slot}`;
+const isEntry = (v: unknown): v is StoredEntry => {
+  const e = v as StoredEntry;
+  return !!e && typeof e === "object" && (e.store === "session" || e.store === "keychain") && isSlot(e.slot);
+};
+const dedupe = (entries: StoredEntry[]) => [...new Map(entries.map((e) => [entryKey(e), e])).values()];
+
 export interface ConnectionState {
-  version: 2;
+  version: 3;
   /** Random per installation: salts the fingerprint and names this installation's credential entries. */
   salt: string;
   source: CredentialSource;
-  /** Which slot holds the live credential (null when nothing of ours is stored). */
-  slot: Slot | null;
-  /** Slots whose entry may still exist and should be removed: names only, never secrets. Always OS-store slots. */
-  pending: Slot[];
+  /** The entry holding the live credential (null when nothing of ours is stored). */
+  live: StoredEntry | null;
+  /** Entries that may exist and are not the live one, to be removed when the store allows it. */
+  pending: StoredEntry[];
   revision: string | null;
   fingerprint: string | null;
   savedAt: string | null;
@@ -44,26 +69,42 @@ const SOURCES: readonly CredentialSource[] = ["none", "session", "keychain", "en
 const strOrNull = (v: unknown) => v === null || (typeof v === "string" && v.length > 0);
 const isSlot = (v: unknown): v is Slot => typeof v === "string" && (SLOTS as readonly string[]).includes(v);
 
-const fresh = (): ConnectionState => ({ version: 2, salt: randomBytes(16).toString("hex"), source: "none", slot: null, pending: [], revision: null, fingerprint: null, savedAt: null, verifiedAt: null, rejectedAt: null });
+const fresh = (): ConnectionState => ({ version: 3, salt: randomBytes(16).toString("hex"), source: "none", live: null, pending: [], revision: null, fingerprint: null, savedAt: null, verifiedAt: null, rejectedAt: null });
 
+type AnyRecord = { version: number; salt: string; source: CredentialSource; slot?: unknown; live?: unknown; pending?: unknown; revision: string | null; fingerprint: string | null; savedAt: string | null; verifiedAt: string | null; rejectedAt: string | null };
+
+/**
+ * The record, with versions 1 and 2 migrated in place. A v1 record kept its
+ * key under the un-slotted account name; a v2 record named slots by letter
+ * and its pending list was always OS-store entries.
+ */
 function load(file: string): ConnectionState {
-  const raw = readJson(file) as (Omit<ConnectionState, "version"> & { version: number }) | null | undefined;
+  const raw = readJson(file) as AnyRecord | null | undefined;
   // A missing or unreadable record means no connection: nothing is ever guessed.
   if (!raw || typeof raw !== "object" || typeof raw.salt !== "string" || raw.salt.length < 16 || !SOURCES.includes(raw.source)) return fresh();
-  if (raw.version !== 1 && raw.version !== 2) return { ...fresh(), salt: raw.salt };
+  if (![1, 2, 3].includes(raw.version)) return { ...fresh(), salt: raw.salt };
   if (![raw.revision, raw.fingerprint, raw.savedAt, raw.verifiedAt, raw.rejectedAt].every(strOrNull)) return { ...fresh(), salt: raw.salt };
   if (raw.source !== "none" && (!raw.revision || !raw.fingerprint)) return { ...fresh(), salt: raw.salt };
-  // A record written before slots existed keeps its key under the un-slotted name.
-  if (raw.version === 1) return { ...raw, version: 2, slot: raw.source === "session" || raw.source === "keychain" ? "legacy" : null, pending: [] };
-  const pending = Array.isArray(raw.pending) ? raw.pending.filter(isSlot) : [];
-  const slot = isSlot(raw.slot) ? raw.slot : null;
-  // A stored source with no usable slot can't be read, so it is no connection at all; its slots stay pending for cleanup.
-  if ((raw.source === "session" || raw.source === "keychain") && !slot) return { ...fresh(), salt: raw.salt, pending };
-  return { ...raw, version: 2, slot, pending: pending.filter((p) => p !== slot) };
+  const stored = raw.source === "session" || raw.source === "keychain" ? (raw.source as EntryStore) : null;
+  const base = { salt: raw.salt, source: raw.source, revision: raw.revision, fingerprint: raw.fingerprint, savedAt: raw.savedAt, verifiedAt: raw.verifiedAt, rejectedAt: raw.rejectedAt };
+  if (raw.version === 1) return { ...base, version: 3, live: stored ? { store: stored, slot: "legacy" } : null, pending: [] };
+  if (raw.version === 2) {
+    const slot = isSlot(raw.slot) ? raw.slot : null;
+    const pending = (Array.isArray(raw.pending) ? raw.pending.filter(isSlot) : []).map((s): StoredEntry => ({ store: "keychain", slot: s }));
+    // A stored source with no usable slot can't be read, so it is no connection at all; its entries stay pending.
+    if (stored && !slot) return { ...fresh(), salt: raw.salt, pending };
+    const live = stored && slot ? { store: stored, slot } : null;
+    return { ...base, version: 3, live, pending: dedupe(pending).filter((e) => !(live && sameEntry(e, live))) };
+  }
+  const pending = dedupe(Array.isArray(raw.pending) ? raw.pending.filter(isEntry) : []);
+  const live = isEntry(raw.live) ? raw.live : null;
+  if (stored && !live) return { ...fresh(), salt: raw.salt, pending };
+  if (!stored && live) return { ...fresh(), salt: raw.salt, pending: dedupe([...pending, live]) };
+  return { ...base, version: 3, live, pending: pending.filter((e) => !(live && sameEntry(e, live))) };
 }
 
 /** The slot a replacement is written to: never the live one, so the live entry is never overwritten. */
-export const freeSlot = (c: Pick<ConnectionState, "slot">): Slot => (c.slot === "a" ? "b" : "a");
+export const freeSlot = (live: StoredEntry | null): Slot => (live?.slot === "a" ? "b" : "a");
 
 export const fingerprintOf = (salt: string, key: string) => hash(`${salt}:${key}`).slice(0, 32);
 /** This installation's base account name; `accountFor` adds the slot. */
@@ -89,16 +130,17 @@ export async function ensureConnection(file: string): Promise<ConnectionState> {
  * slot the previous key used stays pending until it is removed, so a stored
  * entry is never forgotten about.
  */
-export async function recordConnection(file: string, now: Date, source: Exclude<CredentialSource, "none">, key: string, slot: Slot | null): Promise<ConnectionState> {
+export async function recordConnection(file: string, now: Date, source: Exclude<CredentialSource, "none">, key: string, live: StoredEntry | null): Promise<ConnectionState> {
   return withLock(file, () => {
     const prev = load(file);
-    const stale = [...prev.pending, ...(prev.slot && prev.source === "keychain" ? [prev.slot] : [])];
+    // Everything that was stored before stays pending until its removal is confirmed — in either store.
+    const stale = [...prev.pending, ...(prev.live ? [prev.live] : [])];
     const next: ConnectionState = {
-      version: 2,
+      version: 3,
       salt: prev.salt,
       source,
-      slot,
-      pending: [...new Set(stale)].filter((p) => p !== slot),
+      live,
+      pending: dedupe(stale).filter((e) => !(live && sameEntry(e, live))),
       revision: randomUUID(),
       fingerprint: fingerprintOf(prev.salt, key),
       savedAt: now.toISOString(),
@@ -110,31 +152,35 @@ export async function recordConnection(file: string, now: Date, source: Exclude<
   });
 }
 
-/** Records that no key is in use. Slots that may still hold an entry stay pending for cleanup. */
-export async function clearConnection(file: string, pending: Slot[] = []): Promise<ConnectionState> {
+/** Records that no key is in use. Entries that may still exist stay pending for cleanup. */
+export async function clearConnection(file: string, pending: StoredEntry[] = []): Promise<ConnectionState> {
   return withLock(file, () => {
     const prev = load(file);
-    const next: ConnectionState = { ...fresh(), salt: prev.salt, pending: [...new Set(pending)] };
+    const next: ConnectionState = { ...fresh(), salt: prev.salt, pending: dedupe(pending) };
     saveJson(file, next);
     return next;
   });
 }
 
-/** Notes that a slot may hold an entry Atlas no longer uses, so it can be removed later. Stores no secret. */
-export async function addPending(file: string, slots: Slot[]): Promise<ConnectionState> {
+/**
+ * Notes that an entry may exist that isn't the live credential — the intent to
+ * write one, recorded before the write is attempted, or one left behind by a
+ * failure. Stores the store name and slot, never a secret.
+ */
+export async function addPending(file: string, entries: StoredEntry[]): Promise<ConnectionState> {
   return withLock(file, () => {
     const prev = load(file);
-    const next: ConnectionState = { ...prev, pending: [...new Set([...prev.pending, ...slots])].filter((p) => p !== prev.slot) };
-    if (readJson(file) === undefined || next.pending.length !== prev.pending.length) saveJson(file, next);
+    const next: ConnectionState = { ...prev, pending: dedupe([...prev.pending, ...entries]).filter((e) => !(prev.live && sameEntry(e, prev.live))) };
+    saveJson(file, next);
     return next;
   });
 }
 
-/** Drops slots from `pending` once their entry is known to be gone. */
-export async function clearPending(file: string, slots: Slot[]): Promise<void> {
+/** Drops entries from `pending` once they are known to be gone, or have become the live credential. */
+export async function clearPending(file: string, entries: StoredEntry[]): Promise<void> {
   await withLock(file, () => {
     const prev = load(file);
-    const pending = prev.pending.filter((p) => !slots.includes(p));
+    const pending = prev.pending.filter((e) => !entries.some((x) => sameEntry(x, e)));
     if (pending.length !== prev.pending.length) saveJson(file, { ...prev, pending });
   });
 }

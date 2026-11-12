@@ -192,7 +192,7 @@ export async function resolveCredential(deps: LiveDeps, conn?: ConnectionState, 
   const c = conn ?? (await readConnection(deps.connectionFile));
   const fail = (code: CredentialProblem, error: string) => ({ ok: false, code, error, source: c.source, revision: c.revision }) as const;
   if (c.source === "none" || !c.revision || !c.fingerprint) return fail("no_credential", "No API key is connected. Connect one in Atlas (Connect Claude) before starting a session.");
-  const account = c.slot ? accountFor(c.salt, c.slot) : null;
+  const account = c.live ? accountFor(c.salt, c.live.slot) : null;
   let key: string | null;
   if (c.source === "environment") {
     key = normalizeKey(deps.env.ANTHROPIC_API_KEY) || null;

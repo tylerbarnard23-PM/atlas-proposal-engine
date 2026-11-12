@@ -80,6 +80,68 @@ export async function withLock<T>(file: string, fn: () => T, readOnly = false): 
   return run;
 }
 
+/**
+ * Runs an asynchronous transaction alone, across processes. Deliberately a
+ * separate mechanism from `withLock`: it has its own queue and its own lock
+ * file, so the short synchronous record writes a transaction performs inside
+ * it cannot wait on the transaction itself. Nesting one of these inside
+ * another would deadlock, so each caller takes exactly one.
+ *
+ * Native credential calls can be slow (an OS prompt, a locked store), so this
+ * waits longer than the record lock and treats a lock older than a minute as
+ * abandoned by a crashed process.
+ */
+export async function withAsyncLock<T>(file: string, fn: () => Promise<T>): Promise<T> {
+  const prior = ga.__atlasCredentialQueue ?? Promise.resolve();
+  const run = prior.then(async () => {
+    const release = await takeLock(`${file}.txn.lock`, TXN_WAIT_MS, TXN_STALE_MS);
+    try {
+      return await fn();
+    } finally {
+      release();
+    }
+  });
+  ga.__atlasCredentialQueue = run.then(
+    () => undefined,
+    () => undefined
+  );
+  return run;
+}
+
+const ga = globalThis as typeof globalThis & { __atlasCredentialQueue?: Promise<unknown> };
+/**
+ * How long a caller waits for the lock, and when a lock left by a crashed
+ * process is treated as abandoned. Credential writes are not interactive, so a
+ * few seconds is generous; waiting longer would only leave someone who clicked
+ * twice staring at a spinner before being told to try again.
+ */
+export const TXN_WAIT_MS = 5_000;
+export const TXN_STALE_MS = 30_000;
+
+/** Takes an exclusive lock file, waiting up to `waitMs`, and returns how to release it. */
+async function takeLock(lock: string, waitMs: number, staleMs: number): Promise<() => void> {
+  mkdirSync(dirname(lock), { recursive: true });
+  const deadline = Date.now() + waitMs;
+  for (;;) {
+    try {
+      const fd = openSync(lock, "wx");
+      return () => {
+        closeSync(fd);
+        rmSync(lock, { force: true });
+      };
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+      try {
+        if (Date.now() - statSync(lock).mtimeMs > staleMs) rmSync(lock, { force: true });
+      } catch {
+        /* the lock was released meanwhile */
+      }
+      if (Date.now() > deadline) throw new Error("Another change to the Claude connection is still in progress on this machine.");
+      await new Promise((r) => setTimeout(r, 15));
+    }
+  }
+}
+
 async function crossProcess<T>(file: string, fn: () => T): Promise<T> {
   mkdirSync(dirname(file), { recursive: true });
   const lock = `${file}.lock`;

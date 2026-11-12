@@ -85,7 +85,7 @@ export function selectEnvironmentKey(d: LiveDeps, at: Date) {
   const key = d.env.ANTHROPIC_API_KEY;
   if (!key) return null;
   const salt = "0123456789abcdef0123456789abcdef";
-  const state: ConnectionState = { version: 2, salt, source: "environment", slot: null, pending: [], revision: randomUUID(), fingerprint: fingerprintOf(salt, key), savedAt: at.toISOString(), verifiedAt: null, rejectedAt: null };
+  const state: ConnectionState = { version: 3, salt, source: "environment", live: null, pending: [], revision: randomUUID(), fingerprint: fingerprintOf(salt, key), savedAt: at.toISOString(), verifiedAt: null, rejectedAt: null };
   saveJson(d.connectionFile, state);
   return state.revision;
 }

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Anthropic from "@anthropic-ai/sdk";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,10 +13,10 @@ import { keychainStore } from "@/copilot/credentialStore";
 import { execFileSync } from "node:child_process";
 import { FIRST_REQUEST_USD, liveCookieName, resolveCredential, type LiveDeps } from "@/copilot/liveGate";
 import * as sessions from "@/copilot/liveSessionStore";
-import { accountFor, keyShapeProblem, keychainAccount, readConnection, recordConnection } from "@/copilot/localConnection";
+import { accountFor, ensureConnection, keyShapeProblem, keychainAccount, readConnection, recordConnection } from "@/copilot/localConnection";
 import { PAIR_TOKEN_MINUTES, issuePairingToken } from "@/copilot/localPairing";
 import { CSRF_HEADER, pairCookieName } from "@/copilot/localConnect";
-import { instanceId } from "@/copilot/localFiles";
+import { instanceId, readJson } from "@/copilot/localFiles";
 import { handleCopilotGet, handleCopilotPost, handleLiveSessionPost, handleLocalConnection, handleLocalPair } from "@/copilot/routeHandler";
 import { ConnectClaude } from "@/components/copilot/ConnectClaude";
 import { newWorkingDraft } from "@/engines/allocationDesk";
@@ -327,7 +327,7 @@ describe("the key is kept server-side, where the user chose, and never comes bac
       expect(text).not.toContain(CANARY.slice(-8));
       expect(text).not.toContain("CANARY");
     }
-    expect(Object.keys(JSON.parse(readFileSync(t.d.connectionFile, "utf8"))).sort()).toEqual(["fingerprint", "pending", "rejectedAt", "revision", "salt", "savedAt", "slot", "source", "verifiedAt", "version"]);
+    expect(Object.keys(JSON.parse(readFileSync(t.d.connectionFile, "utf8"))).sort()).toEqual(["fingerprint", "live", "pending", "rejectedAt", "revision", "salt", "savedAt", "source", "verifiedAt", "version"]);
     expect(s.local!.connection).toMatchObject({ status: "saved" });
     // Loading the screen again changes nothing and still sends nothing.
     await status(t.d, b);
@@ -652,9 +652,9 @@ describe("a session is bound to the key it started under", () => {
     const { b } = await pair(t.d);
     await save(t.d, b);
     await start(t.d, b);
-    const conn = await recordConnection(t.d.connectionFile, clock, "session", `${CANARY}-other`, "b");
+    const conn = await recordConnection(t.d.connectionFile, clock, "session", `${CANARY}-other`, { store: "session", slot: "b" });
     t.session.clear();
-    t.session.set(accountFor(conn.salt, conn.slot!), `${CANARY}-other`);
+    t.session.set(accountFor(conn.salt, conn.live!.slot), `${CANARY}-other`);
     const res = await ask(t.d, b);
     expect(res.status).toBe(403);
     const body = await res.json();
@@ -669,7 +669,7 @@ describe("a session is bound to the key it started under", () => {
     const paired = await pair(u.d);
     await save(u.d, paired.b);
     await start(u.d, paired.b);
-    swap = () => recordConnection(u.d.connectionFile, clock, "session", `${CANARY}-other`, "b");
+    swap = () => recordConnection(u.d.connectionFile, clock, "session", `${CANARY}-other`, { store: "session", slot: "b" });
     const run = await (await ask(u.d, paired.b)).json();
     expect(u.fake.calls).toHaveLength(1);
     expect(run.status).toBe("failed");
@@ -1032,7 +1032,7 @@ describe("fix 2: no credential is read until a session could admit the run", () 
     expect(t.made.count).toBe(0);
     t.keychain.state.locked = false;
     // A key replaced under the running session is still refused by revision, before the store is opened.
-    await recordConnection(t.d.connectionFile, clock, "session", `${CANARY}-other`, "b");
+    await recordConnection(t.d.connectionFile, clock, "session", `${CANARY}-other`, { store: "session", slot: "b" });
     const reads = t.keychain.calls.get;
     expect(await (await ask(t.d, b)).json()).toMatchObject({ code: "credential_mismatch" });
     expect(t.keychain.calls.get).toBe(reads);
@@ -1298,14 +1298,14 @@ describe("a credential write that lands but can't be confirmed never loses the p
 
     // The remembered key is still found, under the name that record used.
     const migrated = await readConnection(t.d.connectionFile);
-    expect(migrated).toMatchObject({ version: 2, slot: "legacy", pending: [] });
+    expect(migrated).toMatchObject({ version: 3, live: { store: "keychain", slot: "legacy" }, pending: [] });
     expect(await credentialNow(t.d)).toMatchObject({ ok: true, key: CANARY });
     expect((await start(t.d, b)).status).toBe(200);
     expect((await ask(t.d, b)).status).toBe(200);
 
     // Replacing it writes to a fresh slot and clears the old entry out.
     expect((await save(t.d, b, `${CANARY}-next`, "keychain")).status).toBe(200);
-    expect(await readConnection(t.d.connectionFile)).toMatchObject({ slot: "a", pending: [] });
+    expect(await readConnection(t.d.connectionFile)).toMatchObject({ live: { store: "keychain", slot: "a" }, pending: [] });
     expect([...native.map.entries()]).toEqual([[accountFor(current.salt, "a"), `${CANARY}-next`]]);
     expect(await credentialNow(t.d)).toMatchObject({ ok: true, key: `${CANARY}-next` });
   });
@@ -1389,4 +1389,256 @@ describe("a relative state-directory override resolves the same way everywhere",
       rmSync(where, { recursive: true, force: true });
     }
   }, 60_000);
+});
+
+// --- Credential transactions: cross-backend cleanup, atomicity, early intent (12 November 2026) ---
+
+/**
+ * What a restart gives a new process: fresh modules, no in-process queue, and
+ * whatever the crashed process left on disk. Its abandoned transaction lock is
+ * removed here; that a new process reaps a stale one itself is covered by its
+ * own test below.
+ */
+async function simulateRestart(d: LiveDeps) {
+  vi.resetModules();
+  delete (globalThis as { __atlasCredentialQueue?: unknown }).__atlasCredentialQueue;
+  rmSync(`${d.connectionFile}.txn.lock`, { force: true });
+  return import("@/copilot/routeHandler");
+}
+
+/** The entries the record says may exist, as "store:slot", so a memory slot can't be mistaken for an OS one. */
+const pendingOf = async (d: LiveDeps) => {
+  const c = await readConnection(d.connectionFile);
+  return (c.pending as { store: string; slot: string }[]).map((e) => `${e.store}:${e.slot}`).sort();
+};
+const liveOf = async (d: LiveDeps) => {
+  const c = await readConnection(d.connectionFile);
+  const e = c.live as { store: string; slot: string } | null;
+  return e ? `${e.store}:${e.slot}` : null;
+};
+
+describe("cleanup is tracked per storage backend, not by slot name", () => {
+  it("a live memory slot never hides an abandoned OS entry with the same name", async () => {
+    const native = fakeNative({ failAfterWrite: true, failDelete: true });
+    const t = setup({ keychain: { store: native.store, map: native.map, calls: native.calls, state: {} } as never });
+    const { b } = await pair(t.d);
+
+    // An OS write lands, can't be confirmed, and can't be removed: the entry stays pending.
+    expect((await save(t.d, b, CANARY, "keychain")).status).toBe(503);
+    expect(native.map.size).toBe(1);
+    const osAccount = [...native.map.keys()][0];
+    expect(await pendingOf(t.d)).toEqual(["keychain:a"]);
+
+    // A session-only key now takes slot "a" in its own store. The OS marker must survive.
+    const res = await save(t.d, b, `${CANARY}-session`, "session");
+    expect(res.status).toBe(200);
+    expect(await liveOf(t.d)).toBe("session:a");
+    expect(await pendingOf(t.d)).toEqual(["keychain:a"]);
+    // The user is told the OS entry is still there.
+    expect(JSON.stringify(await res.json())).toMatch(/credential store|still be there/i);
+    expect(native.map.has(osAccount)).toBe(true);
+
+    // The session key works, and Disconnect still reaches the OS entry.
+    expect(await credentialNow(t.d)).toMatchObject({ ok: true, key: `${CANARY}-session` });
+    native.state.failDelete = false;
+    native.state.failAfterWrite = false;
+    const off = await connection(t.d, b, { action: "disconnect" });
+    expect(off.status).toBe(200);
+    expect(native.map.size).toBe(0);
+    expect(t.session.size).toBe(0);
+    expect(await pendingOf(t.d)).toEqual([]);
+    expect(await liveOf(t.d)).toBeNull();
+  });
+
+  it("cleanup survives a storage-mode change and a restart", async () => {
+    const native = fakeNative({ failAfterWrite: true, failDelete: true });
+    const t = setup({ keychain: { store: native.store, map: native.map, calls: native.calls, state: {} } as never });
+    const { b } = await pair(t.d);
+    expect((await save(t.d, b, CANARY, "keychain")).status).toBe(503);
+    expect(await pendingOf(t.d)).toEqual(["keychain:a"]);
+
+    // "Restart": fresh modules, the same files and the same fake store.
+    const fresh = await simulateRestart(t.d);
+    const again = setup({ keychain: { store: native.store, map: native.map, calls: native.calls, state: native.state } as never });
+    expect(await pendingOf(again.d)).toEqual(["keychain:a"]);
+    native.state.failDelete = false;
+    native.state.failAfterWrite = false;
+    const off = await fresh.handleLocalConnection(
+      new Request(`${ORIGIN}/api/copilot/local/connection`, { method: "POST", headers: { ...SAME, "content-type": "application/json", [CSRF_HEADER]: b.csrf!, cookie: cookieHeader(b, again.d.env) }, body: JSON.stringify({ action: "disconnect" }) }),
+      again.d
+    );
+    expect(off.status).toBe(200);
+    expect(native.map.size).toBe(0);
+  });
+});
+
+describe("credential mutations for one installation are one coherent operation", () => {
+  it("two concurrent saves don't choose the same slot or delete each other's key", async () => {
+    // Native writes are held until both requests are inside, so both would pick the same free slot.
+    let release!: () => void;
+    const held = new Promise<void>((r) => (release = r));
+    let waiting = 0;
+    const native = fakeNative();
+    const slow = {
+      ...native.store,
+      set: async (account: string, secret: string) => {
+        waiting++;
+        await held;
+        return native.store.set(account, secret);
+      },
+    };
+    const t = setup({ keychain: { store: slow, map: native.map, calls: native.calls, state: native.state } as never });
+    const { b } = await pair(t.d);
+
+    const first = save(t.d, b, `${CANARY}-one`, "keychain");
+    const second = save(t.d, b, `${CANARY}-two`, "keychain");
+    // Only one may be inside the native write at a time; the other waits its turn.
+    await vi.waitFor(() => expect(waiting).toBe(1));
+    release();
+    const [r1, r2] = await Promise.all([first, second]);
+
+    // Both finished coherently, and exactly one key survives as the live one.
+    expect([r1.status, r2.status].filter((s) => s === 200).length).toBeGreaterThanOrEqual(1);
+    const live = await credentialNow(t.d);
+    expect(live.ok).toBe(true);
+    expect([`${CANARY}-one`, `${CANARY}-two`]).toContain((live as { key: string }).key);
+    // The surviving connection is usable: its key is actually in the store.
+    expect([...native.map.values()]).toContain((live as { key: string }).key);
+    // Nothing was left pending that still exists, once a cleanup pass runs.
+    expect((await pendingOf(t.d)).length).toBeLessThanOrEqual(1);
+    await start(t.d, b);
+    expect((await ask(t.d, b)).status).toBe(200);
+    expect(t.made.keys).toEqual([(live as { key: string }).key]);
+  });
+
+  it("a Disconnect overlapping a save doesn't run half-way, and Stop stays immediate", async () => {
+    let release!: () => void;
+    const held = new Promise<void>((r) => (release = r));
+    const native = fakeNative();
+    const slow = {
+      ...native.store,
+      set: async (account: string, secret: string) => {
+        await held;
+        return native.store.set(account, secret);
+      },
+    };
+    const t = setup({ keychain: { store: slow, map: native.map, calls: native.calls, state: native.state } as never });
+    const { b } = await pair(t.d);
+    await save(t.d, b, CANARY, "session");
+    await start(t.d, b);
+
+    const saving = save(t.d, b, `${CANARY}-os`, "keychain");
+    const off = connection(t.d, b, { action: "disconnect" });
+    // Stop is not behind the credential lock: it answers while the save is still in flight.
+    const stopped = await session(t.d, b, { action: "stop" });
+    expect(stopped.status).toBe(200);
+    release();
+    const [a, d] = await Promise.all([saving, off]);
+    expect([a.status, d.status].every((x) => x === 200 || x === 409 || x === 503)).toBe(true);
+    // Whatever the order, the record and the stores agree: no key is live without an entry, and none is orphaned.
+    const liveEntry = await liveOf(t.d);
+    const stored = [...native.map.values(), ...t.session.values()];
+    if (liveEntry === null) expect(stored).toHaveLength(0);
+    else expect(stored).toHaveLength(1);
+  });
+});
+
+describe("the credential transaction lock", () => {
+  it("a lock left by a crashed process is reaped, and a live one refuses rather than running half-way", async () => {
+    const { TXN_STALE_MS, withAsyncLock } = await import("@/copilot/localFiles");
+    const file = join(dir, "connection.json");
+    const lock = `${file}.txn.lock`;
+
+    // A crashed process's lock, old enough to be abandoned: the next caller takes it.
+    writeFileSync(lock, "");
+    const old = new Date(Date.now() - TXN_STALE_MS - 5_000);
+    utimesSync(lock, old, old);
+    expect(await withAsyncLock(file, async () => "taken")).toBe("taken");
+    expect(existsSync(lock)).toBe(false);
+
+    // A fresh lock from another process is respected; the waiting caller is refused, not run.
+    writeFileSync(lock, "");
+    delete (globalThis as { __atlasCredentialQueue?: unknown }).__atlasCredentialQueue;
+    let ran = false;
+    const refused = await withAsyncLock(file, async () => ((ran = true), "ran")).catch((e: Error) => e.message);
+    expect(ran).toBe(false);
+    expect(String(refused)).toMatch(/still in progress/);
+    rmSync(lock, { force: true });
+  }, 60_000);
+});
+
+describe("staging intent is recorded before the external write", () => {
+  it("an interrupted write is already named in the record, and Disconnect finds it", async () => {
+    const seen: string[] = [];
+    const native = fakeNative();
+    let connectionFile = "";
+    const interrupting = {
+      ...native.store,
+      set: async (account: string, secret: string) => {
+        // The write lands, then this "process" never returns: nothing confirms or commits it.
+        native.map.set(account, secret);
+        seen.push(JSON.stringify((readJson(connectionFile) as { pending?: unknown })?.pending ?? null));
+        return new Promise<never>(() => {});
+      },
+    };
+    const t = setup({ keychain: { store: interrupting, map: native.map, calls: native.calls, state: native.state } as never });
+    connectionFile = t.d.connectionFile;
+    const { b } = await pair(t.d);
+    await ensureConnection(t.d.connectionFile);
+
+    void save(t.d, b, CANARY, "keychain");
+    await vi.waitFor(() => expect(seen).toHaveLength(1));
+    // The intent was persisted BEFORE the native write, so an interrupted write is discoverable.
+    expect(seen[0]).toContain("keychain");
+    expect(seen[0]).toContain("\"a\"");
+    expect(seen[0]).not.toContain("CANARY");
+    expect(native.map.size).toBe(1);
+
+    // "Restart": fresh modules read the same files and clean the orphan up.
+    const fresh = await simulateRestart(t.d);
+    const after = setup({ keychain: { store: native.store, map: native.map, calls: native.calls, state: native.state } as never });
+    expect(await pendingOf(after.d)).toEqual(["keychain:a"]);
+    expect(await liveOf(after.d)).toBeNull();
+    const off = await fresh.handleLocalConnection(
+      new Request(`${ORIGIN}/api/copilot/local/connection`, { method: "POST", headers: { ...SAME, "content-type": "application/json", [CSRF_HEADER]: b.csrf!, cookie: cookieHeader(b, after.d.env) }, body: JSON.stringify({ action: "disconnect" }) }),
+      after.d
+    );
+    expect(off.status).toBe(200);
+    expect(native.map.size).toBe(0);
+    expect(await pendingOf(after.d)).toEqual([]);
+  });
+
+  it("an interrupted replacement leaves the previous key live and working", async () => {
+    const native = fakeNative();
+    let connectionFile = "";
+    const state = { stall: false };
+    const interrupting = {
+      ...native.store,
+      set: async (account: string, secret: string) => {
+        if (!state.stall) return native.store.set(account, secret);
+        native.map.set(account, secret);
+        void connectionFile;
+        return new Promise<never>(() => {});
+      },
+    };
+    const t = setup({ keychain: { store: interrupting, map: native.map, calls: native.calls, state: native.state } as never });
+    connectionFile = t.d.connectionFile;
+    const { b } = await pair(t.d);
+    expect((await save(t.d, b, CANARY, "keychain")).status).toBe(200);
+    await start(t.d, b);
+    const before = await readConnection(t.d.connectionFile);
+
+    state.stall = true;
+    void save(t.d, b, `${CANARY}-new`, "keychain");
+    await vi.waitFor(() => expect(native.map.size).toBe(2));
+    // The stalled transaction still holds the lock; reading the record doesn't wait on it.
+
+    // The previous key is still the live one, its revision is unchanged, and its session still runs.
+    const after = await readConnection(t.d.connectionFile);
+    expect(after.revision).toBe(before.revision);
+    expect(await liveOf(t.d)).toBe("keychain:a");
+    expect(await pendingOf(t.d)).toEqual(["keychain:b"]);
+    expect(await credentialNow(t.d)).toMatchObject({ ok: true, key: CANARY });
+    expect((await status(t.d, b)).live.session).toMatchObject({ status: "active" });
+  });
 });
