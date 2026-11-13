@@ -131,18 +131,24 @@ Use an isolated state folder and a port other than your existing server's. One c
    npm run local -- --fake --port 3107
    ```
 
-5. In Atlas: **Settings → Backup & restore → Restore from backup…**, choose the walkthrough file, read the preview, leave "Also replace firm & branding" unticked, then **Replace current workspace**. This replaces only this origin's workspace.
-6. Open **Proposal Copilot**, paste the question, and ask. Check, in order:
-   - **Preview first:** the answer shows the simulated before/after (60,000 → 54,000; 10,000 → 16,000) and a draft *preview*. Nothing has been added yet.
+5. In Atlas, check the page names the **fake provider** ("Live session · Fake provider · atlas-test-provider"), then go to **Settings → Backup & restore → Restore from backup…**, choose the walkthrough file and read the preview (Walkthrough Household (synthetic), 2 accounts, 4 holdings, net worth $500,000). If a checkbox offers to replace firm & branding, leave it unticked. Press **Replace current workspace**. This replaces only this origin's workspace.
+6. Open **Proposal Copilot**. It should say "Scope 1 of 2 accounts: Story — Investment Account" (the USD 400,000 home stays outside it as context). **Start a limited session before asking** — nothing can be asked until a session is active:
+   - Under Connect Claude, press **Start a session…**. Lower **Copilot runs to 1** with the drop-down if you want to match Part B, then press **Confirm and start**. Starting sends nothing anywhere.
+   - The Live test session panel should read **ACTIVE** with "HTTP requests left 10 of 10" and "Estimated USD left USD 5.00 of USD 5.00".
+7. Paste the question and ask (the Ask button, or Ctrl+Enter). Check, in order:
+   - **Preview first:** the answer shows the simulated before/after (Equity ETF A 60,000 → 54,000; scope 100,000 → 100,000) and a draft *preview* labelled "Preview only — nothing added." At this point the workspace has no recommendation and the working draft no member.
    - **Explicit Add:** click **Add to working draft**. Only then does the action join the draft.
-   - **Unapproved:** the new action reads "Not approved" and is left out of the PDF; in the Allocation desk's Current draft view the proposed values are equity 54,000, bonds 30,000, cash 16,000.
-   - **Current holdings unchanged:** Accounts & assets still shows 60,000 / 30,000 / 10,000. A draft never edits observed holdings.
-   - Press **Stop live session**, then in Connect Claude press **Disconnect**.
-7. Stop Atlas with Ctrl+C in that window. Remove the rehearsal state if you like (it holds only hashes and counters, never a key):
+   - **Unapproved:** open the **Allocation desk**. The action reads "Not approved" and "awaiting approval and not in the final PDF"; the Draft changes view shows proposed equity **54,000**, bonds **30,000**, cash **16,000**, with scope 100,000 and the home 400,000 as "Context only". Switch to **Approved changes (0)**: it shows 60,000 / 30,000 / 10,000, because nothing is approved.
+   - **Current holdings unchanged:** Accounts & assets still shows 60,000 / 30,000 / 10,000 (and the home 400,000). A draft never edits observed holdings.
+   - Back on Copilot, the counters should read about "Runs left 0 of 1" and "HTTP requests left 6 of 10".
+   - Press **Stop live session**; the panel reads STOPPED and keeps its counters. **Disconnect** appears in Connect Claude only once a key has been saved, so with the fake provider and no key there is nothing to disconnect; you will use it in Part B.
+8. Stop Atlas with Ctrl+C in that window. Remove the rehearsal state if you like (it holds only hashes and counters, never a key). **This does not clear the workspace in your browser:** the Part A draft lives in that origin's browser storage, not in the state folder. Part B step B3 restores the original file again to remove it.
 
    ```powershell
    Remove-Item -Recurse -Force .atlas-local/walkthrough-state
    ```
+
+**Part A as run (13 November 2026, runtime head `8f715d6`, production build, fake provider, no key).** Passed on a fresh origin (`walk.localhost:3107`) with isolated state: the page identified the fake provider; the restore preview and replacement worked; a session started and ran; the preview added nothing; Add created one action (not approved, not in the PDF, `needs_review`); the Draft view showed 54,000 / 30,000 / 16,000 on a 100,000 scope with the 400,000 home as context; the Approved view and Accounts & assets stayed 60,000 / 30,000 / 10,000; counters were 4 requests used and survived navigation; Stop left STOPPED; no console errors and no key or secret in the state files. **Limits of that run:** the fake provider is deterministic and does not read the question — it trims 10% of the largest non-cash position, which happens to be USD 6,000 here — so Part A shows the flow and the engine figures, not that a model understands the wording. The restore file was attached through the page's file input by script rather than the native file picker, with the same validation. Disconnect was not exercised (no key was saved); its behaviour is covered by tests only.
 
 ### Part B: the real-Claude verification (only after approval)
 
@@ -157,15 +163,15 @@ Use an isolated state folder and a port other than your existing server's. One c
 npm run local -- --port 3107
 ```
 
-**B3. Restore the walkthrough file** exactly as in Part A step 5 (a fresh state folder needs it again).
+**B3. Restore the walkthrough file again, even on the same browser origin.** Deleting the state folder does not clear the browser's workspace data, so Part A's draft is still there and would make the Part B result ambiguous. Restoring replaces the whole workspace and removes it. Before asking, check the Allocation desk shows no draft action (Draft changes (0)) and Accounts & assets shows 60,000 / 30,000 / 10,000.
 
 **B4. Enter the key privately.** In Connect Claude press **Add a key**, paste the key into the masked field yourself, choose **for this server session only** (recommended for a one-off: it is gone when Atlas stops), and press **Save key**. Expect "Key saved; connection not yet verified": Atlas has not contacted Anthropic. Nothing has been spent.
 
 **B5. Start one limited session.** Press **Start a session…**, lower the allowance to **1 run, 10 requests, 30 minutes, USD 5**, and confirm.
 
-**B6. Ask the one question** and check the same four points as Part A step 6. Expect about four provider requests. If anything looks wrong, press **Stop live session**. Do not ask a second question.
+**B6. Ask the one question** and check the same points as Part A step 7. Expect about four provider requests. If anything looks wrong, press **Stop live session**. Do not ask a second question.
 
-**B7. Clean up:** **Stop live session**, then **Disconnect**, stop Atlas, delete the API key in the Console (and the workspace if you want), and remove the state folder as in Part A step 7.
+**B7. Clean up:** **Stop live session**, then **Disconnect**, stop Atlas, delete the API key in the Console (and the workspace if you want), and remove the state folder as in Part A step 8.
 
 ### The exact test proposed for approval
 

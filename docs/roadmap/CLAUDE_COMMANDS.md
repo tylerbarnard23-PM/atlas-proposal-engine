@@ -59,9 +59,9 @@ D1 (PR #72, `0381db1`), D2 (PR #75, `073049f`), D2a (PR #79, `c0ee4e9`) and D3 (
 
 Saved on 12 November 2026; the walkthrough is prepared and **the real step is not approved**. Branch `feat/d4-contextual-agent`, PR #82. Verify heads, tree and stash first, and preserve any newer work.
 
-1. **The owner** runs Part A of the walkthrough in [LOCAL_CLAUDE_SETUP.md](LOCAL_CLAUDE_SETUP.md#owner-operated-verification-walkthrough-prepared-12-november-2026-the-real-claude-step-is-not-approved) with the fake provider (no key, no cost) and checks preview, explicit Add, unapproved draft, unchanged holdings, Stop and Disconnect.
+1. **Part A is done and passed (13 November 2026, fake provider; see the handoff)** — the owner may repeat it by hand to see it first. The corrected guide starts a limited session before asking.
 2. **The owner** decides whether to approve the exact real test: one interactive run, synthetic data, model/effort/fallback unchanged, at most 10 requests, 30 minutes, a USD 5 estimate-based guard (not a billing ceiling), a Console workspace spend limit, no reruns.
-3. **Only if approved:** the owner creates the workspace, limit and key, and enters the key privately in Connect Claude. Claude never asks for it in chat, reads it or puts it in a command; Claude may help read the outcome afterwards (status, counters, the draft), then stops.
+3. **Only if approved:** the owner creates the workspace, limit and key, and enters the key privately in Connect Claude, after restoring the walkthrough file again (Part A's draft survives in the browser). Claude never asks for it in chat, reads it or puts it in a command; Claude may help read the outcome afterwards (status, counters, the draft), then stops.
 4. Afterwards, still open: finding 3's pairing policy (owner decision), [#83](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/83), the full 27-trial evaluation and real-model browser checks (unperformed, budget unapproved), the PR #80 reconciliation and the zod fix.
 
 Until the owner says otherwise: no real key, no model call, no paid testing, no dependency change, no merge, no deployment.
