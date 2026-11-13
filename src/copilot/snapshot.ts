@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { AgentContext } from "./context";
 import type {
   Account,
   AdvisorProfile,
@@ -47,12 +48,21 @@ export const CopilotRequestSchema = z.object({
     disclosures: z.array(record).max(200),
     sourceDocuments: z.array(record.and(z.object({ id: z.string(), fileName: z.string() }))).max(500).optional(),
     fxConfirmation: record.nullable().optional(),
-    workingDraft: record.and(z.object({ name: z.string(), memberIds: z.array(z.string()) })).optional(),
+    // D4: the active alternative the answer is about (its scope, actions and targets).
+    workingDraft: record.and(z.object({ id: z.string(), name: z.string(), memberIds: z.array(z.string()), scopeAccountIds: z.array(z.string()).nullable() })),
     alternatives: z.array(record.and(z.object({ name: z.string(), memberIds: z.array(z.string()) }))).max(50).optional(),
+  }),
+  // D4: what the browser says the request is about; the route checks it against the snapshot.
+  context: z.object({
+    clientId: z.string().max(200),
+    alternativeId: z.string().max(200),
+    alternativeName: z.string().max(200),
+    scopeAccountIds: z.array(z.string().max(200)).max(200).nullable(),
+    inputRevision: z.string().max(64),
   }),
 });
 
-export type CopilotRequest = { question: string; snapshot: CopilotSnapshot };
+export type CopilotRequest = { question: string; snapshot: CopilotSnapshot & { workingDraft: WorkingDraft }; context: AgentContext };
 
 export function parseCopilotRequest(body: unknown):
   | { ok: true; value: CopilotRequest }

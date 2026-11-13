@@ -26,7 +26,7 @@ Inspect → make a short design/contract note in the issue/implementation PR (fo
 
 ## Historical D1 command — delivered in PR #72
 
-**Status:** released (PR #72, `0381db1`). D2 (PR #75, `073049f`) and D2a (PR #79, `c0ee4e9`) are released too; D3 is in review (PR #81). Kept for reference.
+**Status:** released (PR #72, `0381db1`). D2 (PR #75, `073049f`), D2a (PR #79, `c0ee4e9`) and D3 (PR #81, `85b3910`) are released too; D4 is in review (PR #82). Kept for reference.
 
 **Opus 5.5 · High effort.** Use after the approved planning change is available in the implementation base; do not implement from the old stand-alone R11-first prompt. If a planning PR is still unmerged, verify it and obtain/execute only an explicitly owner-authorized pinned merge first. Do not silently merge it merely because this template exists.
 
@@ -53,16 +53,112 @@ Stop for Codex review with exact head, checks, preview association, remaining li
 
 ## Active sequencing: D3 → D4 → D5
 
-D1 (PR #72, `0381db1`), D2 (PR #75, `073049f`) and D2a (PR #79, `c0ee4e9`) are released; the D1 command above and the D1/D2/D2a summaries below are historical, so do not rerun them. **D3 is in review (PR #81).** D4 is next after its review/release. The handoff holds the current checkpoint.
+D1 (PR #72, `0381db1`), D2 (PR #75, `073049f`), D2a (PR #79, `c0ee4e9`) and D3 (PR #81, `85b3910`) are released; the D1 command above and the D1–D3 summaries below are historical, so do not rerun them. **D4 is in review (PR #82).** D5 follows its review/release. PR #82 also carries one bounded, owner-approved D5 usability slice (the proposal-flow simplification); it doesn't complete D5. The handoff holds the current checkpoint.
+
+### Next command: owner-operated local Claude verification
+
+Saved on 12 November 2026; the walkthrough is prepared and **the real step is not approved**. Branch `feat/d4-contextual-agent`, PR #82. Verify heads, tree and stash first, and preserve any newer work.
+
+1. **Part A is done and passed (13 November 2026, fake provider; see the handoff)** — the owner may repeat it by hand to see it first. The corrected guide starts a limited session before asking.
+2. **The owner** decides whether to approve the exact real test: one interactive run, synthetic data, model/effort/fallback unchanged, at most 10 requests, 30 minutes, a USD 5 estimate-based guard (not a billing ceiling), a Console workspace spend limit, no reruns.
+3. **Only if approved:** the owner creates the workspace, limit and key, and enters the key privately in Connect Claude, after restoring the walkthrough file again (Part A's draft survives in the browser). Claude never asks for it in chat, reads it or puts it in a command; Claude may help read the outcome afterwards (status, counters, the draft), then stops.
+4. Afterwards, still open: finding 3's pairing policy (owner decision), [#83](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/83), the full 27-trial evaluation and real-model browser checks (unperformed, budget unapproved), the PR #80 reconciliation and the zod fix.
+
+Until the owner says otherwise: no real key, no model call, no paid testing, no dependency change, no merge, no deployment.
+
+### Previous command (done 12 November 2026, don't rerun): review the onboarding fixes
+
+
+
+Saved on 12 November 2026; the review and its fixes finished (owner-reported), so don't rerun. Branch `feat/d4-contextual-agent`, PR #82. The handoff names the head. Verify heads, tree and stash first, and preserve any newer work.
+
+1. **Codex** reviews the fixes to findings 1, 2 and 4–8 **and the four rounds of defects found while reviewing them** — staged credential writes over two account slots, relative state-path overrides, per-backend cleanup tracking, the credential transaction, its lock's liveness, ownership and bounded waits, the deadline on native credential calls, **ownership of a native call that finishes after Atlas stopped waiting for it, on every write and removal path**, and intent recorded before the external write — against the security design and the findings tables in [LOCAL_CLAUDE_SETUP.md](LOCAL_CLAUDE_SETUP.md): credential validation and what it does and doesn't claim, the admission order, the credential write/commit/cleanup lifecycle and its failure, late-completion and interruption paths, instance-scoped cookies, state-path resolution, the authorize-then-read body handling, and environment-key handling.
+2. **The owner** decides on finding 3's recommendation (pairing revocation, idle lifetime, a 24-hour cumulative allowance). Nothing there is built, and no existing limit may be raised without that decision.
+3. **Claude** fixes confirmed findings in one batch, failing regressions first, with fake providers and dummy credentials only; then runs typecheck, full tests, extraction eval and build, and stops.
+4. Only after that: the owner decides whether to approve one real-Claude verification (one key in a dedicated workspace with a spend limit, one session, synthetic data).
+
+Until the owner says otherwise: no real key, no model call, no paid testing, no dependency change, no merge, no deployment.
+
+### Next command: fix the onboarding review findings
+
+**Done on 12 November 2026; don't rerun.** Findings 1, 2 and 4–8 are fixed with regressions; finding 3's recommendation is in the setup guide.
+
+Saved on 11 November 2026; not yet started. Branch `feat/d4-contextual-agent`, PR #82, reviewed code head `03128df`. Verify heads, tree and stash first, and preserve any newer work. The findings are in [LOCAL_CLAUDE_SETUP.md](LOCAL_CLAUDE_SETUP.md#review-findings-11-november-2026-reviewed-head-03128df).
+
+> Reproduce and batch-fix confirmed onboarding findings on PR #82, with meaningful failing regressions first. Resolve findings 1 and 2 before real credentials are used. Verify official credential guidance rather than treating a prefix as proof of authentication. Prepare a concrete recommendation for pairing revocation/lifetime and cumulative allowances. Include confirmed fixes 4–8 in the same coherent batch. Use fake providers and dummy credentials only, then run the required checks and isolated browser verification. Stop for Codex review.
+
+Until the owner says otherwise: no real key, no model call, no paid testing, no session arming for a paid provider, no dependency change, no merge, no deployment.
+
+### Next command: review the local Claude onboarding
+
+**Step 1 done on 11 November 2026 (a read-only review at `03128df`); don't rerun it.** Steps 2 and 3 are carried by the command above.
+
+
+Saved on 11 November 2026; not yet started. Branch `feat/d4-contextual-agent`, PR #82. The handoff names the head. Verify heads, tree and stash first, and preserve any newer work.
+
+1. **Codex** reviews the Route 1 onboarding package against the security design in [LOCAL_CLAUDE_SETUP.md](LOCAL_CLAUDE_SETUP.md): pairing and CSRF, credential handling and its lifecycle, session binding and accounting, hosted and cross-origin refusals, and the preserved proposal contracts.
+2. **Claude** fixes confirmed findings together, failing tests first, with fake providers and fake credential stores only; then runs typecheck, full tests, extraction eval and build, and stops.
+3. Only after that: the owner decides whether to approve one real-Claude verification (one key in a dedicated workspace with a spend limit, one session, synthetic data).
+
+Until the owner says otherwise: no real key, no model call, no paid testing, no merge, no deployment.
+
+### Next command: settle the local Claude connection
+
+**Done on 11 November 2026; don't rerun.** The owner chose Route 1, guided key entry in Atlas, optional OS-backed remembering and in-app session starts, and the package was implemented.
+
+Saved on 11 November 2026. Branch `feat/d4-contextual-agent`, PR #82, reviewed runtime head `538a8fc`. Verify heads, tree and stash first, and preserve any newer work.
+
+1. Read [LOCAL_CLAUDE_SETUP.md](LOCAL_CLAUDE_SETUP.md).
+2. With the owner, settle the connection route and the setup experience. The pending decisions are listed there: the route, session controls, and whether to draft a question to Anthropic. Contact nobody.
+3. Prepare the selected work as one coherent implementation: impact note first, failing tests first, fake providers only.
+
+Until the owner says otherwise: no paid testing (the earlier pilot approval was withdrawn), no real session arming, no model call, no merge, no deployment.
+
+### Next command: review, pilot accounting fix, then approval
+
+**Done on 11 November 2026; don't rerun.** The pilot accounting fix is at `538a8fc`, and the joint Codex review of it and the session fixes finished with no new blocking findings. Step 4 never happened: the paid-pilot approval was withdrawn.
+
+Saved on 10 November 2026. Branch `feat/d4-contextual-agent`, PR #82. Verify heads, tree and stash first, and preserve any newer work.
+
+**Progress (10 November 2026):** step 2's pilot-runner accounting fix is done ahead of the review, at the owner's instruction; the handoff names the head. Next is step 1 for both batches together: Codex reviews the session fixes (`d45dae1`) and the pilot accounting. Then Claude fixes any confirmed blockers (step 2), runs step 3, and stops.
+
+1. **Codex** reviews runtime head `d45dae1` (the provider-bound session and unknown-usage fixes) and its regression coverage.
+2. **Claude** fixes the pilot-runner accounting gap together with any confirmed review blockers, writing failing regressions first. The gap: `budgetedClient` treats missing usage as a known USD 0. It must:
+   - reuse `pricedUsage`;
+   - keep a conservative reservation when usage is unknown;
+   - report the condition clearly.
+
+   Valid zero usage stays valid. Use fake providers only.
+3. Run the appropriate final validation (typecheck, full tests, extraction eval, build), push, read CI once, and stop for review.
+4. Only after that review comes the owner's explicit approval of any paid test. Until then: no real session arming, no paid call, no merge, no deployment.
+
+### Next command: D4/D5 usability review-fix
+
+**Done on 10 November 2026 (PR #82); don't rerun.** The evidence is in the handoff and on the PR. The next step is Codex review.
+
+Use **Opus 5.5 High**. On `feat/d4-contextual-agent` (PR #82; the last passing code head is `97b65e3`), verify local and GitHub heads, the working tree and the stash first. Then fix the four open Codex UX findings listed in the [handoff](../CLAUDE_HANDOFF.md) as one batch: the new record hidden from the Current draft view, the outdated "Added to working draft" message, the same-page desk link leaving the narrow overlay open, and modal semantics for the narrow panel (the wide column stays nonmodal; cover resize cleanup).
+
+- Write meaningful regression coverage and do actual UI checks.
+- Preserve the financial engines, context and acceptance safeguards, store/backup v10, and the runtime model, prompt, fallback and spending settings.
+- Never re-add, re-approve or change membership automatically.
+- After the code settles, run typecheck, full tests, extraction eval and build. In the browser, check desktop, the narrow layout, keyboard cycling, resizing and same-page navigation, on an isolated `*.localhost` origin with synthetic data.
+- Push, read CI once, and stop for Codex review.
+
+Gates stay as they are:
+- No paid live evaluation or real-model browser test; the budget is not approved.
+- PR #80 is untouched.
+- The zod advisory needs a separate tested dependency change; never run `npm audit fix --force`.
+- D5 is incomplete.
+- No merge or deployment without explicit owner authorization.
 
 ## Package prompt summaries
 
-D1, D2 and D2a are delivered (historical, kept for reference). D3 is implemented and in review (PR #81). D4–D5 follow once D3 is released.
+D1, D2, D2a and D3 are delivered (historical, kept for reference). D4 is in review (PR #82); D5 follows once D4 is released.
 
 - **D2 — delivered (PR #75), historical — Opus 5.5 High:** use D1's delivered contracts; implement supported new destination/atomic replacement, explicit eligible funding/reserve enforcement and two independent named alternatives. Avoid a broad catalog, optimizer and unsupported transfer workflows. Stop at one reviewed package/justified split.
 - **D2a — delivered (PR #79), historical — Opus 5.5 High:** after D2, implement [MODEL_AND_MANAGER_PROPOSALS.md](MODEL_AND_MANAGER_PROPOSALS.md): a small versioned model library, funded manager/strategy sleeves, known minimums/fees and explicit unknown exposure. Keep sleeve grouping separate from asset-class exposure; no double-counting or implicit trades. Use D2's delivered contracts (see the plan's "Delivered D2 contracts" section): designated eligible cash with no fallback, `reserveCurrency`, declared unresolved funding, atomic units and independent alternatives, plus real migrations and supported backup upgrades. Follow the committed synthetic fixtures and stop for Codex review; no manager feeds, execution or UMA administration.
-- **D3 — in review (PR #81) — Opus 5.5 High:** capture the whole reviewed economic package, including D2a model/strategy revisions and sleeve/exposure/fee coverage and use it for local presentation/PDF. Preserve new-final-request server gates and old-version isolation. One template; known/unknown coverage, no remote sharing or financial forecast detour.
-- **D4 — Opus 5.5 High:** contextual engine-backed draft agent, real offline orchestration tests and a prepared capped synthetic live runner. No spend without explicit budget, no second provider, no public live key. Report offline/fake/browser/live evidence separately.
+- **D3 — delivered (PR #81), historical — Opus 5.5 High:** capture the whole reviewed economic package, including D2a model/strategy revisions and sleeve/exposure/fee coverage and use it for local presentation/PDF. Preserve new-final-request server gates and old-version isolation. One template; known/unknown coverage, no remote sharing or financial forecast detour.
+- **D4 — in review (PR #82) — Opus 5.5 High:** contextual engine-backed draft agent, real offline orchestration tests and a prepared capped synthetic live runner. No spend without explicit budget, no second provider, no public live key. Report offline/fake/browser/live evidence separately.
 - **D5 — Opus 5.5 Medium:** run the complete supported story, critical keyboard/error checks, README/demo narrative and owner-selected screened branding. Preserve links/keys; no fabricated study or production-ready claim. Real advisor recruitment and final name choice are explicit owner activities.
 
 These summaries are expanded into one concrete command when that package becomes next. Do not execute all packages from this file or invent evidence for later packages.

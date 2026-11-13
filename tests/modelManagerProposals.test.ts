@@ -331,8 +331,9 @@ describe("Copilot and persistence", () => {
     approveAll(m);
     const s = JSON.parse(JSON.stringify(m.useAtlasStore.getState()));
     const { parseCopilotRequest } = await import("@/copilot/snapshot");
+    const { copilotRequest } = await import("./support/copilotRequest");
     const { CopilotContext, executeTool } = await import("@/copilot/tools");
-    const parsed = parseCopilotRequest({ question: "ready?", snapshot: { client: s.client, advisor: s.advisor, accounts: s.accounts, holdings: s.holdings, fxRates: s.fxRates, recommendations: s.recommendations, disclosures: s.disclosures, workingDraft: s.workingDraft, alternatives: s.alternatives } });
+    const parsed = parseCopilotRequest({ ...copilotRequest("ready?", { client: s.client, advisor: s.advisor, accounts: s.accounts, holdings: s.holdings, fxRates: s.fxRates, recommendations: s.recommendations, disclosures: s.disclosures, workingDraft: s.workingDraft, alternatives: s.alternatives }) });
     if (!parsed.ok) throw new Error(parsed.error);
     const out = JSON.parse(executeTool(new CopilotContext(parsed.value.snapshot), "check_proposal_readiness", {}).content);
     expect(out.checks.find((c: { check: string }) => c.check === "Strategy minimums supplied or reviewed")).toMatchObject({ passed: false });

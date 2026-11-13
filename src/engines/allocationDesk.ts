@@ -95,6 +95,25 @@ export function deskActions(recommendations: Recommendation[], draft: WorkingDra
   return recommendations.filter((r) => members.has(r.id) && (r.status !== "excluded" || r.approvedByAdvisor));
 }
 
+/** How many actions each view applies, from `deskActions` itself. Counting changes nothing. */
+export function deskViewCounts(recommendations: Recommendation[], draft: WorkingDraft): Record<DeskView, number> {
+  return { draft: deskActions(recommendations, draft, "draft").length, approved: deskActions(recommendations, draft, "approved").length };
+}
+
+/**
+ * Every recommendation sorted by where it sits: in the active alternative,
+ * in another alternative, or in none. Nothing is left out (rejected ones
+ * included), so the groups always add up to the whole list.
+ */
+export function draftMembership(recommendations: Recommendation[], draft: WorkingDraft, alternatives: WorkingDraft[]) {
+  const members = new Set(draft.memberIds);
+  const elsewhere = new Set(alternatives.flatMap((a) => a.memberIds));
+  const current = recommendations.filter((r) => members.has(r.id));
+  const otherAlternatives = recommendations.filter((r) => !members.has(r.id) && elsewhere.has(r.id));
+  const unassigned = recommendations.filter((r) => !members.has(r.id) && !elsewhere.has(r.id));
+  return { current, otherAlternatives, unassigned };
+}
+
 export interface DeskRow {
   assetClass: AssetClass;
   label: string;
@@ -465,6 +484,54 @@ export function previewDraftEdit(input: {
     unresolved: after.unresolved,
     applied: blocked.length === 0 && !after.unresolved.some((u) => ids.has(u.recommendationId)),
   };
+}
+
+const PURCHASE_TYPES = new Set<Recommendation["type"]>(["buy", "increase"]);
+
+/**
+ * D4: why adding these actions to the draft (last, in the given order) isn't
+ * safe to accept, or an empty list. The shared evaluator runs the draft
+ * without and with them. A problem is: one of them left out (blocked) or
+ * unconverted; a new or deeper cash shortfall; or eligible cash below its
+ * reserve where there was none before, or in an account one of them buys
+ * into. (The engine drops an atomic unit that breaches a reserve but only
+ * reports the breach of an ordinary position edit, so a gate needs this.)
+ */
+export function candidateProblems(input: {
+  holdings: NormalizedHolding[];
+  accounts: Account[];
+  recommendations: Recommendation[];
+  draft: WorkingDraft;
+  candidates: Recommendation[];
+  fx: FxContext;
+}): string[] {
+  const { holdings, accounts, recommendations, draft, candidates, fx } = input;
+  const ids = new Set(candidates.map((c) => c.id));
+  const before = evaluateDesk({ holdings, accounts, recommendations: recommendations.filter((r) => !ids.has(r.id)), draft: { ...draft, memberIds: draft.memberIds.filter((x) => !ids.has(x)) }, fx, view: "draft" });
+  const after = evaluateDesk({
+    holdings,
+    accounts,
+    recommendations: [...recommendations.filter((r) => !ids.has(r.id)), ...candidates],
+    draft: { ...draft, memberIds: [...draft.memberIds.filter((x) => !ids.has(x)), ...ids] },
+    fx,
+    view: "draft",
+  });
+  const problems: string[] = [];
+  for (const b of after.blocked) if (b.recommendationIds.some((x) => ids.has(x))) problems.push(b.reason);
+  for (const u of after.unresolved) if (ids.has(u.recommendationId)) problems.push(`An exchange rate is missing (${u.currency}/${u.reportingCurrency}), so it can't be applied.`);
+  const shortBefore = new Map(before.shortfalls.map((s) => [s.accountId, s.shortfall] as const));
+  for (const s of after.shortfalls) if (s.shortfall > (shortBefore.get(s.accountId) ?? 0) + 0.005) problems.push(`It would leave a cash shortfall in ${s.accountName}.`);
+  const holdingAccount = new Map(holdings.map((h) => [h.id, h.accountId] as const));
+  const buysInto = new Set(
+    candidates.filter((c) => PURCHASE_TYPES.has(c.type)).map((c) => (c.destination && !c.relatedHoldingId ? c.destination.accountId : c.relatedHoldingId ? holdingAccount.get(c.relatedHoldingId) : c.relatedAccountId))
+  );
+  const breachedBefore = new Set(before.reserves.filter((r) => r.breached).map((r) => r.accountId));
+  for (const r of after.reserves) {
+    if (!r.breached || (breachedBefore.has(r.accountId) && !buysInto.has(r.accountId))) continue;
+    const left = r.available == null ? "an unknown amount" : `${r.currency ?? ""} ${r.available.toLocaleString("en-US", { maximumFractionDigits: 2 })}`.trim();
+    problems.push(`It would leave the eligible cash in ${r.accountName} at ${left}, below its ${r.reserveCurrency ?? ""} ${r.reserve.toLocaleString("en-US", { maximumFractionDigits: 2 })} reserve.`);
+  }
+  return [...new Set(problems)];
 }
 
 /**

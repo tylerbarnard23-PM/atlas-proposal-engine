@@ -1,6 +1,6 @@
 # R22 — Embed contextual Copilot with clear demo/live mode
 
-Accepted for planning: 22 October 2026. **Status: Planned; not implemented by this document.**
+Accepted for planning: 22 October 2026. **Status: Planned; not implemented by this document.** **D4 minimum in review (PR #82):** context-bound Copilot (client, alternative, scope, input revision), scoped simulation through the shared desk evaluator, preview-then-explicit-acceptance of unapproved drafts, labelled demo/test/live modes, bounded orchestration with offline tests and a prepared, unperformed capped live evaluation. Full contextual entry points, additional providers and live evidence remain outstanding.
 Tracking issue: #54. Parent roadmap: #36. Original review recommendation: **22 of 25**.
 Phase: P4. Relative scope: M; no calendar estimate is committed.
 Canonical plan: [R22-contextual-copilot.md](R22-contextual-copilot.md).

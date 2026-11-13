@@ -28,7 +28,7 @@ Atlas is built for advisors at RIAs and wealth platforms, and for the people bui
 | **Analyze** | A rules engine flags concentration, currency and country exposure, illiquidity, cash drag, high fees, manual valuations and data-quality problems. | Insights |
 | **Recommend** | The advisor writes or converts recommendations; approved ones reshape the Before/After allocation, with sale proceeds flowing to cash in the same account. Amounts keep the currency they were entered in and are converted into the reporting currency at the workspace's current rates, with the rate, source and date shown; changing a recommendation's currency means converting its amounts or entering new ones, and editing an approved recommendation's amounts clears the approval. The editor shows a live preview simulated with the full proposal engine: current and proposed value, signed and percentage change, the cash it actually moves (including household cash for debt paydowns) and any shortfall, without saving anything. | Recommendations |
 | **Design** | The Allocation desk sets the investment scope (context assets and liabilities stay out of the weights), shows current, proposed and target asset-class weights with drift and actual cash, and previews one working draft of explicit position edits through the same proposal engine. Targets create no trades; previews change no holdings or approvals. It also builds funded alternatives: replace into a new investment with linked sell/buy legs applied together, fund purchases only from an account's chosen eligible cash, keep a minimum reserve, and compare named alternatives. | Allocation desk |
-| **Ask the Copilot** | Claude investigates the portfolio through the engines and drafts recommendations for review. See below. | Proposal Copilot |
+| **Ask the Copilot** | Claude investigates the portfolio through the engines and drafts recommendations for review. See below. | Proposal Copilot, or beside the Allocation desk |
 | **Brand** | White-label: the adviser's firm name, advisor of record, logo and accent color brand every proposal. Set once and kept when starting a new client. Logos are uploaded raster images re-encoded in the browser; the PDF server never fetches a URL. | Firm & Branding |
 | **Check & publish** | A readiness checklist (unverified holdings, stale prices, approvals, required disclosures) gates the final PDF, in the UI and on the server. Each open item links to the page where it's fixed. PDFs are rendered with headless Chromium and marked as samples. | Proposal Builder, PDF Preview |
 
@@ -44,25 +44,33 @@ The Copilot is a Claude agent (`claude-opus-5-5`) whose tools are Atlas's existi
 | `list_insights` | insight engine |
 | `get_holding` | normalized holding, data-quality issues, verification status |
 | `simulate_recommendation` | `applyRecToValue`, the same function behind the proposal's Before/After view |
+| `get_scope_overview` | the allocation desk's evaluator over the active alternative: scope totals and weights, household context, blocked actions, shortfalls, reserves, input revision (D4) |
+| `simulate_scope_change` | `previewDraftEdit` + `evaluateDesk`: one position change in the active alternative, before and after; reports blocks, new shortfalls and reserve breaches (D4) |
 | `check_proposal_readiness` | compliance readiness engine (same inputs as PDF Preview) |
-| `draft_recommendation` | creates a recommendation draft (the only write the agent can make) |
+| `draft_recommendation` | creates an unapproved draft (the only write the agent can make); a position change must be the exact action a scope simulation evaluated |
 
-**Two modes.** The public demo never calls a model.
+**Three labelled modes.** The public demo never calls a model, and the page shows which mode answered before and with every answer.
 
 - **Demo mode** (the default, and what the live site runs): a scripted planner calls *the same tools* in a fixed order and writes its answer and draft rationales from fixed templates filled with the values those tools return. It costs nothing to run and gives the tool layer a deterministic regression baseline. It also applies a few rules of its own: it won't draft a sale of an illiquid position (a primary residence, an LP interest), and it skips holdings that already have a recommendation.
-- **Live mode** (opt-in and intended for local use, because `/api/copilot` has no authentication; see Quickstart): Claude chooses which tools to call and writes the answer and the draft text itself.
+- **Test provider** (`COPILOT_MODE=test`): a deterministic scripted client runs through the *real* agent loop and tools. It is labelled "Test provider · not a model", makes no API calls and exists for end-to-end checks; it is never evidence of model behaviour.
+- **Live mode** (local only; see [Local Claude setup](docs/roadmap/LOCAL_CLAUDE_SETUP.md)): Claude chooses which tools to call and writes the answer and the draft text itself. The page shows the requested and actual model (a server-side refusal fallback is shown as such). You connect your own Anthropic API key under **Connect Claude** and start a limited session there: at most 30 minutes, 3 runs, 10 HTTP requests, one run at a time and a USD 5 estimate-based guard. Without a connected key and a session, live requests are refused before any provider call. **Not yet verified against real Claude:** this path has only been exercised with fake providers.
 
 **Enforced in code** (both modes, covered by tests):
 
 - **Draft-only authority.** The only write the agent can make is `draft_recommendation`, which hard-codes `approvedByAdvisor: false`, `includeInPdf: false` and `status: "needs_review"`. Fields a model adds to try to approve its own draft are stripped by schema validation; a test sends them and checks they're ignored.
 - **Schema validation.** Requests and every tool input are validated with Zod; unknown holding ids and invalid values come back as tool errors.
-- **Execution limits.** At most 10 agent turns and 5 drafts per request; request bodies are capped at 1 MB. Live mode needs both `ANTHROPIC_API_KEY` and `COPILOT_MODE=live`.
+- **Execution limits.** At most 10 agent turns, 24 tool calls, 48,000 output tokens, 100 seconds, 2 retries of a failed request (tools never re-run) and 5 drafts per request; request bodies are capped at 1 MB. Every run ends with an explicit status (completed, refused, truncated, a limit, cancelled or failed) and lists the drafts prepared so far (previews until the advisor adds them). Live mode needs a local server and request, a key connected by a paired browser, and that browser's session with allowance left.
+- **Context-bound (D4).** Each request names the client, the active alternative, its scope and an input revision; the server rejects a mismatch (409), and accepting a draft re-checks the revision, so an answer about changed inputs or another alternative can't be accepted.
+- **Preview, then explicit acceptance (D4).** Drafts are a preview computed with the desk's evaluator ("Preview only — nothing added"); nothing is saved until the advisor chooses **Add to working draft**, which adds them to the active alternative as unapproved actions ("Added to working draft — awaiting approval"), with a link to find them on Recommendations. Acceptance is idempotent (deterministic draft IDs) and never touches holdings, approvals or approved versions. Simulations fail closed on out-of-scope positions, cash, missing values or rates, incomplete imports, blocked units, new shortfalls, reserve breaches and duplicates. Tools to approve, finalize, share or execute don't exist; calls to them are refused and counted.
+- **Figures are checked.** Amounts and percentages in an answer and in draft rationales are matched against typed tool results from that run, by value, unit, currency and any written sign. Figures inside workspace text (holding, account and file names, notes, titles, rationales) are neither evidence nor claims. Unsupported figures are flagged. Claims that can't be decided (a bare number, or an unsigned amount the engine has only as a negative change) are listed as unchecked, never as matched.
+- **Minimized and unlogged.** The client's and household's names, the advisor's name and email, and import file names are replaced where Atlas recognizes them in model-bound text, the question included. This is minimization, not anonymization: holdings, values, account details and anything else typed into a question still reach the model. Prompts, tool payloads, reasoning and keys are not logged.
+- **The key stays on the local server.** A key pasted under Connect Claude is kept in the server's memory or the operating system's credential store, as the user chooses. It is never returned to the browser, written to the workspace or a backup, or logged. Saving it makes no provider request.
 - **The engines do the math.** Tools compute every figure with the same deterministic engines as the Before/After view and the PDF, and the tools are read-only apart from creating drafts.
 - **Nothing is persisted server-side.** The workspace lives in the browser; each request sends the slice the agent needs.
 
 **Required by the system prompt, not validated by code** (live mode):
 
-- **Numbers come from tool results.** The prompt tells the model to state only figures the tools returned and not to do its own portfolio arithmetic. Nothing checks the numbers in its prose yet. A draft's rationale is free text, and once the advisor approves it and includes it in the PDF it is printed as written, so the advisor should check its figures against the tool trace ("What the agent did") shown under every answer.
+- **Numbers come from tool results.** The prompt tells the model to state only figures the tools returned and not to do its own portfolio arithmetic. Figures in the answer and in draft rationales are checked against that run's tool results and flagged when unsupported (above), but a flagged answer is still shown, and wording around a figure isn't validated. A draft's rationale is free text, and once the advisor approves it and includes it in the PDF it is printed as written, so the advisor should check its figures against the tool trace ("What the agent did") shown under every answer.
 - **Behavioral instructions.** Not claiming a recommendation is approved, final or suitable; not projecting returns; treating holding names and statement text as data rather than instructions; flagging compliance and tax questions. The tools never execute text from documents, but the model's own wording isn't validated.
 
 ## Architecture
@@ -107,8 +115,9 @@ tests/            unit tests + extraction eval
 ## Tests and evals
 
 ```bash
-npm test        # 512 tests in 28 files (2 need the private UBS PDF and are skipped without it, as in CI): proposal math and currency handling, calendar dates across time zones, workspace backup and restore, recommendation currencies and previews, cash flows, readiness, insights, CSV/Excel/PDF import, import completeness, Copilot tools (demo mode) + the extraction eval
+npm test        # 684 tests in 39 files (2 need the private UBS PDF and are skipped without it, as in CI): the Copilot agent loop with an injected fake provider (no key, no spend), local pairing, key handling and sessions with fake credential stores, proposal math and currency handling, calendar dates across time zones, workspace backup and restore, recommendation currencies and previews, cash flows, readiness, insights, CSV/Excel/PDF import and import completeness
 npm run eval    # statement-extraction accuracy scorecard
+npm run eval:agent:live   # opt-in PAID live agent evaluation; refuses to run without explicit flags, a key and a spend cap. The cap is an estimate-based guard, not a guaranteed ceiling (see docs/roadmap/AGENT_EVALUATION.md)
 ```
 
 CI runs the type check, tests, eval and production build on every pull request.
@@ -154,11 +163,18 @@ npm run dev
 
 Open http://localhost:3000. The app loads with a sample client (the Blackwell Family Office); **Settings** resets the sample or clears to a blank workspace.
 
-To try the Copilot with Claude locally, copy `.env.example` to `.env.local` and set `ANTHROPIC_API_KEY` and `COPILOT_MODE=live`. The public demo deliberately runs without a key: `/api/copilot` has no authentication, so don't enable live mode on a public deployment. Everything else is optional:
+To use the Copilot with your own Claude API key on this machine:
+
+```bash
+npm run build
+npm run local
+```
+
+`npm run local` starts Atlas on `127.0.0.1` only and opens it paired with your browser. Then follow **Connect Claude** on the Proposal Copilot page: create a dedicated Console workspace with a spend limit, paste a standard API key, choose whether Atlas remembers it, and start a limited session. `npm run local:doctor` checks the machine without contacting Anthropic. The full guide, limits and security design are in [Local Claude setup](docs/roadmap/LOCAL_CLAUDE_SETUP.md). API usage is billed to your Console account. The public demo deliberately runs without a key, and live mode refuses on a hosted deployment. This path has been exercised with fake providers only; it is not yet verified against real Claude. Everything else is optional:
 
 | Variable | Purpose |
 |---|---|
-| `ANTHROPIC_API_KEY` + `COPILOT_MODE=live` | Both required for the live Copilot. Otherwise, demo mode. |
+| `ANTHROPIC_API_KEY` | Advanced, optional: a key managed outside Atlas. It is used only after you choose "Use the server's environment key" under Connect Claude. `npm run local` sets `COPILOT_MODE=live` for you; `COPILOT_MODE=test` runs the deterministic test provider; anything else is demo mode. |
 | `FINNHUB_API_KEY`, `TWELVE_DATA_API_KEY`, `ALPHA_VANTAGE_API_KEY`, `FRED_API_KEY` | Optional legacy security-quote enrichment, not a proposal requirement: no page calls the quote routes, and proposals use statement, advisor-entered and approved values. Leave them unset; their retirement is planned (R18). |
 
 ## White-label and sample output
