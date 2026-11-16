@@ -35,7 +35,7 @@ export interface CopilotSnapshot {
 
 // Structural guard only: the engines are defensive about optional fields, so
 // we check shape and size limits here rather than re-declaring every domain type.
-const record = z.record(z.unknown());
+const record = z.record(z.string(), z.unknown());
 export const CopilotRequestSchema = z.object({
   question: z.string().trim().min(1).max(2000),
   snapshot: z.object({

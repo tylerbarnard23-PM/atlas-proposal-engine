@@ -409,7 +409,7 @@ function schemas(strict: boolean) {
     name: text(),
     scopeAccountIds: z.array(id).nullable(),
     memberIds: z.array(id),
-    targets: z.record(assetClass, finite.min(0).max(100)),
+    targets: z.partialRecord(assetClass, finite.min(0).max(100)),
     inputBasis: obj({ recordedAt: date, reportingCurrency: currency, fingerprint: text(), values: z.array(inputValue), rates: z.array(inputRate) }).nullable(),
     createdAt: date,
     updatedAt: date,
@@ -439,7 +439,7 @@ function schemas(strict: boolean) {
     currency,
     minimum: finite.min(0).nullable(),
     fees: z.array(obj({ kind: z.enum(["manager", "platform", "advisor", "instrument", "all_in"]), rateBps: finite.min(0), basis: text() })),
-    mix: obj({ weights: z.record(assetClass, finite.min(0).max(100)), source: text(), asOf: text() }).nullable(),
+    mix: obj({ weights: z.partialRecord(assetClass, finite.min(0).max(100)), source: text(), asOf: text() }).nullable(),
     provenance,
     createdAt: date,
   });
@@ -448,7 +448,7 @@ function schemas(strict: boolean) {
     revision,
     name: text(),
     kind: z.enum(["asset_class", "strategy"]),
-    assetWeights: z.record(assetClass, finite.min(0).max(100)).optional(),
+    assetWeights: z.partialRecord(assetClass, finite.min(0).max(100)).optional(),
     strategyWeights: z.array(obj({ strategyId: id, strategyRevision: revision, weight: finite.min(0).max(100) })).optional(),
     cashWeight: finite.min(0).max(100).optional(),
     provenance,
@@ -487,7 +487,7 @@ function schemas(strict: boolean) {
       id,
       name: text(),
       scopeAccountIds: z.array(id).nullable(),
-      targets: z.record(assetClass, finite.min(0).max(100)),
+      targets: z.partialRecord(assetClass, finite.min(0).max(100)),
       model: obj({ id, revision }).nullable(),
       inputBasis: obj({ recordedAt: date, reportingCurrency: currency, fingerprint: text(), values: z.array(inputValue), rates: z.array(inputRate) }),
     }),
@@ -550,12 +550,18 @@ export type BackupEngagement = WorkspaceBackup["engagement"];
 // Export
 // ---------------------------------------------------------------------------
 
-/** Keeps only the fields a schema names, at every depth (the export allowlist). */
+/**
+ * Keeps only the fields a schema names, at every depth (the export allowlist).
+ * Zod 4 keeps `.refine`/`.superRefine` on the schema itself rather than wrapping
+ * it, so an object with a refinement is still walked as that object; a
+ * transform becomes a pipe, which is walked by the shape it accepts (`in`), as
+ * Zod 3's `ZodEffects.innerType()` was.
+ */
 function allowlisted(schema: z.ZodTypeAny, value: unknown): unknown {
   if (value === undefined || value === null) return value;
-  if (schema instanceof z.ZodOptional || schema instanceof z.ZodNullable) return allowlisted(schema.unwrap(), value);
-  if (schema instanceof z.ZodEffects) return allowlisted(schema.innerType(), value);
-  if (schema instanceof z.ZodArray) return Array.isArray(value) ? value.map((v) => allowlisted(schema.element, v)) : value;
+  if (schema instanceof z.ZodOptional || schema instanceof z.ZodNullable) return allowlisted(schema.unwrap() as z.ZodTypeAny, value);
+  if (schema instanceof z.ZodPipe) return allowlisted((schema.in instanceof z.ZodTransform ? schema.out : schema.in) as z.ZodTypeAny, value);
+  if (schema instanceof z.ZodArray) return Array.isArray(value) ? value.map((v) => allowlisted(schema.element as z.ZodTypeAny, v)) : value;
   if (schema instanceof z.ZodObject) {
     if (typeof value !== "object") return value;
     const out: Record<string, unknown> = {};
