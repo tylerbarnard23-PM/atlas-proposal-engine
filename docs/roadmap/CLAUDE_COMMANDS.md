@@ -55,16 +55,17 @@ Stop for Codex review with exact head, checks, preview association, remaining li
 
 D1 (PR #72, `0381db1`), D2 (PR #75, `073049f`), D2a (PR #79, `c0ee4e9`) and D3 (PR #81, `85b3910`) are released; the D1 command above and the D1–D3 summaries below are historical, so do not rerun them. **D4 is in review (PR #82).** D5 follows its review/release. PR #82 also carries one bounded, owner-approved D5 usability slice (the proposal-flow simplification); it doesn't complete D5. The handoff holds the current checkpoint.
 
-### Next command: owner-operated local Claude verification
+### Next command: after the real-Claude check
 
-Saved on 12 November 2026; the walkthrough is prepared and **the real step is not approved**. Branch `feat/d4-contextual-agent`, PR #82. Verify heads, tree and stash first, and preserve any newer work.
+Saved on 16 November 2026. The owner-operated verification (Part A fake rehearsal, then Part B, one real run) is **done and passed**; the result is in the handoff and in [LOCAL_CLAUDE_SETUP.md](LOCAL_CLAUDE_SETUP.md). Branch `feat/d4-contextual-agent`, PR #82. Verify heads, tree and stash first, and preserve any newer work. Don't rerun Part B.
 
-1. **Part A is done and passed (13 November 2026, fake provider; see the handoff)** — the owner may repeat it by hand to see it first. The corrected guide starts a limited session before asking.
-2. **The owner** decides whether to approve the exact real test: one interactive run, synthetic data, model/effort/fallback unchanged, at most 10 requests, 30 minutes, a USD 5 estimate-based guard (not a billing ceiling), a Console workspace spend limit, no reruns.
-3. **Only if approved:** the owner creates the workspace, limit and key, and enters the key privately in Connect Claude, after restoring the walkthrough file again (Part A's draft survives in the browser). Claude never asks for it in chat, reads it or puts it in a command; Claude may help read the outcome afterwards (status, counters, the draft), then stops.
-4. Afterwards, still open: finding 3's pairing policy (owner decision), [#83](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/83), the full 27-trial evaluation and real-model browser checks (unperformed, budget unapproved), the PR #80 reconciliation and the zod fix.
+1. **Owner/Codex** review the result: one run, 4 requests, USD 0.0658 estimated, matching figures, an unapproved draft only on explicit Add. Confirm the actual charge in the Console if you want it checked (Atlas's figure is an estimate).
+2. **The owner decides**, separately and explicitly: whether any further paid run is wanted (none is approved); finding 3's pairing policy; whether to triage [#84](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/84) (a markdown table in the answer possibly shown raw) and [#83](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/83); and when to merge.
+3. **Still unperformed and required before any broader claim:** the full 27-trial agent evaluation and the real-model browser checks (budget unapproved). One run is not a pass of either.
+4. **Not part of this:** the PR #80 reconciliation, the zod fix, D5 beyond the usability slice. Merge and deployment only on the owner's explicit authorization, pinned to the reviewed head.
 
 Until the owner says otherwise: no real key, no model call, no paid testing, no dependency change, no merge, no deployment.
+
 
 ### Previous command (done 12 November 2026, don't rerun): review the onboarding fixes
 
