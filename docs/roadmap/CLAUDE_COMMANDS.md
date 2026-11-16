@@ -65,7 +65,7 @@ Saved on 16 November 2026. PR #88 (the D5 security and dependency gate) is merge
    - the Copilot's nested-list limits;
    - `tests/requestLimits.test.ts`.
 2. **Claude** fixes confirmed findings in one batch, failing regressions first, then runs the full checks and the browser check, and stops.
-3. **Owner decisions remain separate:** merging the fix (pinned to the reviewed head); [#85](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/85); [#87](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/87); Vercel access; closing PR #80; confirming main CI and the Production deployment for `ba5f6ce`.
+3. **Owner decisions remain separate:** merging the fix (pinned to the reviewed head); [#85](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/85); [#87](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/87); Vercel access; closing PR #80.
 4. **After merge:** the D5 package — golden-path, keyboard and viewport evidence; the R25 protocol and empty scorecard; the README and demo narrative; the #35 name decision.
 
 Until the owner says otherwise: no paid testing, no real key, no model call, no dependency change, no pairing-policy change, no repository or Vercel setting change, no merge, no deployment.
