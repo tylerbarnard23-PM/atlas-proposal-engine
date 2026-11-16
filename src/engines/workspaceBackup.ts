@@ -8,6 +8,7 @@ import { completenessOf } from "./importCompleteness";
 import { linksNeedingReview, unresolvedFundingOf, unresolvedRecommendationLinks } from "./recommendationLinks";
 import { legacyWorkingDraft } from "./allocationDesk";
 import { findRevision, modelProblems, strategyProblems } from "./strategyProposals";
+import { describeIssues } from "@/server/requestLimits";
 import { localCalendarDay } from "@/utils/formatting";
 import { snapshotIntegrity } from "./snapshotRecord";
 
@@ -612,7 +613,7 @@ export type SnapshotCheck = { ok: true; snapshot: ApprovedSnapshot } | { ok: fal
  */
 export function checkSnapshot(raw: unknown): SnapshotCheck {
   const parsed = STRICT.snapshot.safeParse(raw);
-  if (!parsed.success) return { ok: false, error: `Not a valid approved version: ${parsed.error.issues.slice(0, 3).map((i) => `${i.path.join(".") || "version"}: ${i.message}`).join("; ")}.` };
+  if (!parsed.success) return { ok: false, error: `Not a valid approved version: ${describeIssues(parsed.error.issues, "version")}.` };
   const snapshot = parsed.data as ApprovedSnapshot;
   const problem = snapshotIntegrity(snapshot);
   return problem ? { ok: false, error: `${problem} It may have been changed outside Atlas.` } : { ok: true, snapshot };
@@ -759,7 +760,8 @@ export function parseBackup(text: string, opts: { disclosureIds: string[] }): Pa
   if (head.schemaVersion !== BACKUP_SCHEMA_VERSION || (head.workspaceVersion !== BACKUP_WORKSPACE_VERSION && !older)) {
     return { ok: false, errors: [`This backup's version (${String(head.schemaVersion)}/${String(head.workspaceVersion)}) is not supported. Nothing was restored.`] };
   }
-  const issues = (e: z.ZodError) => ({ ok: false as const, errors: e.issues.slice(0, 20).map((i) => `${i.path.join(".") || "file"}: ${i.message}`) });
+  // Each line bounded, so a hostile file can't produce an unbounded message (#86).
+  const issues = (e: z.ZodError) => ({ ok: false as const, errors: e.issues.slice(0, 20).map((i) => describeIssues([i], "file")) });
   let backup: WorkspaceBackup;
   if (head.workspaceVersion === 6) {
     // A v6 backup is validated as v6 (unknown fields still rejected), then

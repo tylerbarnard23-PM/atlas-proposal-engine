@@ -8,6 +8,7 @@ import { admitLiveRun, anthropicClient, claimLiveSession, clearedSessionCookie, 
 import { sessionFilePath } from "./liveSessionStore";
 import { keychainStore, memoryStore } from "./credentialStore";
 import { connectionFilePath, pairingFilePath } from "./localFiles";
+import { COPILOT_MAX_BODY_BYTES, SHAPE_LIMITS, readBodyLimited, shapeProblem } from "../server/requestLimits";
 import { MAX_KEY_BODY_BYTES, authorizeLocal, disconnect, localInfo, pairBrowser, pairingCookie, saveKey, startSession, useEnvironmentKey } from "./localConnect";
 
 // The Copilot API's request handling, kept out of the route files so tests
@@ -20,8 +21,6 @@ import { MAX_KEY_BODY_BYTES, authorizeLocal, disconnect, localInfo, pairBrowser,
 //     browser with allowance left, every live request is refused before any
 //     provider call. The key and the session are managed by a paired browser
 //     (localConnect.ts); none of that contacts the provider.
-
-const MAX_BODY_BYTES = 1_000_000;
 
 export function copilotMode(env: Record<string, string | undefined>): CopilotMode {
   if (env.COPILOT_MODE === "live") return "live";
@@ -48,7 +47,7 @@ export async function handleCopilotGet(req: Request, deps: LiveDeps = defaultDep
 }
 
 export async function handleCopilotPost(req: Request, deps: LiveDeps = defaultDeps()) {
-  const read = await readLimited(req, MAX_BODY_BYTES);
+  const read = await readBodyLimited(req, COPILOT_MAX_BODY_BYTES);
   if (!read.ok) {
     if (read.tooLarge) return NextResponse.json({ error: "Workspace too large for one Copilot request." }, { status: 413 });
     return NextResponse.json({ error: "Body must be JSON." }, { status: 400 });
@@ -59,6 +58,9 @@ export async function handleCopilotPost(req: Request, deps: LiveDeps = defaultDe
   } catch {
     return NextResponse.json({ error: "Body must be JSON." }, { status: 400 });
   }
+  // #86: oversized input is refused before the schema, the engines and any provider call.
+  const tooLarge = shapeProblem(body, SHAPE_LIMITS);
+  if (tooLarge) return NextResponse.json({ error: tooLarge, code: "request_too_large" }, { status: 400 });
   const parsed = parseCopilotRequest(body);
   if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
   const { question, snapshot, context } = parsed.value;
@@ -135,48 +137,12 @@ export async function handleLiveSessionClaim(req: Request, deps: LiveDeps = defa
 const NO_STORE = { "cache-control": "no-store" };
 const refused = (r: { status: number; code: string; error: string }) => NextResponse.json({ error: r.error, code: r.code }, { status: r.status, headers: NO_STORE });
 
-/**
- * Reads at most `max` bytes of the body, enforcing the limit **as it reads**:
- * the stream is abandoned once the limit is passed, so neither a missing nor a
- * misleading Content-Length can make the server buffer more than that. The
- * text is never logged: it may carry a key.
- */
-async function readLimited(req: Request, max: number): Promise<{ ok: true; text: string } | { ok: false; tooLarge: boolean }> {
-  const stream = req.body;
-  if (!stream) {
-    try {
-      const text = await req.text();
-      return text.length > max ? { ok: false, tooLarge: true } : { ok: true, text };
-    } catch {
-      return { ok: false, tooLarge: false };
-    }
-  }
-  const reader = stream.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      size += value.byteLength;
-      if (size > max) {
-        await reader.cancel().catch(() => {});
-        return { ok: false, tooLarge: true };
-      }
-      chunks.push(value);
-    }
-  } catch {
-    return { ok: false, tooLarge: false };
-  }
-  return { ok: true, text: Buffer.concat(chunks).toString("utf8") };
-}
-
 type SmallJson = { ok: true; body: Record<string, unknown> } | { ok: false; refusal: { status: number; code: string; error: string } };
 
 /** A small JSON object body, read under its limit, or why not. */
 async function smallJson(req: Request): Promise<SmallJson> {
   const bad = { ok: false, refusal: { status: 400, code: "bad_body", error: "Send a small JSON object." } } as const;
-  const read = await readLimited(req, MAX_KEY_BODY_BYTES);
+  const read = await readBodyLimited(req, MAX_KEY_BODY_BYTES);
   if (!read.ok) return read.tooLarge ? { ok: false, refusal: { status: 413, code: "body_too_large", error: `Send less than ${MAX_KEY_BODY_BYTES} bytes of JSON.` } } : bad;
   try {
     const body = JSON.parse(read.text);
