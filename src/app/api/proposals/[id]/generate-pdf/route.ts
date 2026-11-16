@@ -22,6 +22,7 @@ import { evaluateWorkspaceReadiness, readinessOk } from "@/engines/complianceEng
 import { checkLogoDataUrl, isValidAccentColor } from "@/domain/branding";
 import { isValidTimeZone } from "@/utils/formatting";
 import { checkSnapshot } from "@/engines/workspaceBackup";
+import { PDF_MAX_BODY_BYTES, SHAPE_LIMITS, readBodyLimited, shapeProblem } from "@/server/requestLimits";
 import { snapshotFileName, snapshotReadiness, snapshotTemplateProps } from "@/engines/approvedSnapshot";
 import type { ProposalPdfTemplateProps } from "@/pdf/templates/ProposalPdfTemplate";
 
@@ -67,7 +68,27 @@ interface RequestBody {
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const url = new URL(req.url);
   const variant = (url.searchParams.get("variant") as "draft" | "final") ?? "draft";
-  const body = (await req.json()) as RequestBody;
+  // #86: the body is limited while it is read, and its shape before anything
+  // else runs — schema checks, readiness, the financial engines or Chromium —
+  // so an oversized request costs a bounded amount of work on both paths.
+  const read = await readBodyLimited(req, PDF_MAX_BODY_BYTES);
+  if (!read.ok) {
+    return read.tooLarge
+      ? NextResponse.json({ error: `The request is larger than ${PDF_MAX_BODY_BYTES / 1_000_000} MB, so Atlas didn't read it.`, code: "body_too_large" }, { status: 413 })
+      : NextResponse.json({ error: "The request body couldn't be read." }, { status: 400 });
+  }
+  let parsedBody: unknown;
+  try {
+    parsedBody = JSON.parse(read.text);
+  } catch {
+    return NextResponse.json({ error: "The request body must be JSON." }, { status: 400 });
+  }
+  if (!parsedBody || typeof parsedBody !== "object" || Array.isArray(parsedBody)) {
+    return NextResponse.json({ error: "Invalid proposal state in request body." }, { status: 400 });
+  }
+  const tooLarge = shapeProblem(parsedBody, SHAPE_LIMITS);
+  if (tooLarge) return NextResponse.json({ error: tooLarge, code: "request_too_large" }, { status: 400 });
+  const body = parsedBody as RequestBody;
   const timeZone = isValidTimeZone(body?.timeZone) ? body.timeZone : undefined;
 
   if (body?.snapshot !== undefined) {

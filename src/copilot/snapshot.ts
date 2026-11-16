@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LIST_LIMITS, describeIssues } from "../server/requestLimits";
 import type { AgentContext } from "./context";
 import type {
   Account,
@@ -36,6 +37,11 @@ export interface CopilotSnapshot {
 // Structural guard only: the engines are defensive about optional fields, so
 // we check shape and size limits here rather than re-declaring every domain type.
 const record = z.record(z.string(), z.unknown());
+// #86: the nested lists carry the same limits as the collections they refer to
+// (a member is a recommendation, a scope entry an account), so a request the
+// snapshot already accepts can't be refused by them.
+const memberIds = z.array(z.string().max(200)).max(LIST_LIMITS.memberIds);
+const scopeIds = z.array(z.string().max(200)).max(LIST_LIMITS.scopeAccountIds);
 export const CopilotRequestSchema = z.object({
   question: z.string().trim().min(1).max(2000),
   snapshot: z.object({
@@ -49,8 +55,8 @@ export const CopilotRequestSchema = z.object({
     sourceDocuments: z.array(record.and(z.object({ id: z.string(), fileName: z.string() }))).max(500).optional(),
     fxConfirmation: record.nullable().optional(),
     // D4: the active alternative the answer is about (its scope, actions and targets).
-    workingDraft: record.and(z.object({ id: z.string(), name: z.string(), memberIds: z.array(z.string()), scopeAccountIds: z.array(z.string()).nullable() })),
-    alternatives: z.array(record.and(z.object({ name: z.string(), memberIds: z.array(z.string()) }))).max(50).optional(),
+    workingDraft: record.and(z.object({ id: z.string(), name: z.string(), memberIds, scopeAccountIds: scopeIds.nullable() })),
+    alternatives: z.array(record.and(z.object({ name: z.string(), memberIds }))).max(50).optional(),
   }),
   // D4: what the browser says the request is about; the route checks it against the snapshot.
   context: z.object({
@@ -69,7 +75,7 @@ export function parseCopilotRequest(body: unknown):
   | { ok: false; error: string } {
   const parsed = CopilotRequestSchema.safeParse(body);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") };
+    return { ok: false, error: describeIssues(parsed.error.issues) };
   }
   return { ok: true, value: parsed.data as unknown as CopilotRequest };
 }
