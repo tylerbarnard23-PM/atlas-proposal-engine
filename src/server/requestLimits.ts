@@ -59,11 +59,56 @@ export const COPILOT_MAX_BODY_BYTES = 1_000_000;
 export type BodyRead = { ok: true; text: string } | { ok: false; tooLarge: boolean };
 
 /**
+ * Collects a body's bytes into one contiguous store that grows by doubling,
+ * never past `maxBytes`. Each fragment is copied in as it arrives and not kept,
+ * so memory follows the number of bytes, not the number of fragments: a body
+ * delivered one byte at a time costs the same as one delivered whole. Copying
+ * at once also means a source that reuses its buffers can't change bytes
+ * already received.
+ */
+export class ByteAccumulator {
+  private store = new Uint8Array(0);
+  private size = 0;
+  // A plain field, not a parameter property: Node's type stripping (used by the scripts) can't load those.
+  private readonly maxBytes: number;
+  constructor(maxBytes: number) {
+    this.maxBytes = maxBytes;
+  }
+
+  get length() {
+    return this.size;
+  }
+  get capacity() {
+    return this.store.byteLength;
+  }
+
+  /** Adds a fragment; false (and nothing stored) if it would pass `maxBytes`. */
+  append(fragment: Uint8Array): boolean {
+    const needed = this.size + fragment.byteLength;
+    if (needed > this.maxBytes) return false;
+    if (needed > this.store.byteLength) {
+      const grown = new Uint8Array(Math.min(this.maxBytes, Math.max(needed, this.store.byteLength * 2, 1024)));
+      grown.set(this.store.subarray(0, this.size));
+      this.store = grown;
+    }
+    this.store.set(fragment, this.size);
+    this.size = needed;
+    return true;
+  }
+
+  /** The bytes as UTF-8, decoded once over the whole body so a character split across fragments is intact. */
+  text(): string {
+    return Buffer.from(this.store.buffer, this.store.byteOffset, this.size).toString("utf8");
+  }
+}
+
+/**
  * Reads a request body, refusing it once it passes `maxBytes`. A declared
  * Content-Length over the limit is refused without reading; otherwise the
  * stream is counted as it arrives and abandoned once the limit is passed, so
  * neither a missing nor a misleading Content-Length can make the server
- * buffer more than that. The text is never logged: it may carry a key.
+ * buffer more than that. Fragments are copied into a `ByteAccumulator` and
+ * released as they arrive. The text is never logged: it may carry a key.
  */
 export async function readBodyLimited(req: Request, maxBytes: number): Promise<BodyRead> {
   const declared = Number(req.headers.get("content-length"));
@@ -81,23 +126,20 @@ export async function readBodyLimited(req: Request, maxBytes: number): Promise<B
     }
   }
   const reader = stream.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
+  const body = new ByteAccumulator(maxBytes);
   try {
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
-      size += value.byteLength;
-      if (size > maxBytes) {
+      if (!body.append(value)) {
         await reader.cancel().catch(() => {});
         return { ok: false, tooLarge: true };
       }
-      chunks.push(value);
     }
   } catch {
     return { ok: false, tooLarge: false };
   }
-  return { ok: true, text: Buffer.concat(chunks).toString("utf8") };
+  return { ok: true, text: body.text() };
 }
 
 const n = (x: number) => x.toLocaleString("en-US");

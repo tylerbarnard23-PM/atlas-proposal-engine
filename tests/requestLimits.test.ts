@@ -318,3 +318,96 @@ describe("the limits themselves", () => {
     expect(text).toMatch(/more/);
   });
 });
+
+// Codex (16 November 2026): a 200 KB upload in 200,000 one-byte fragments kept
+// every fragment alive until the end — retained memory scaled with the number
+// of fragments, not bytes. These checks are structural and deterministic; no
+// heap thresholds (the measured comparison is recorded on PR #89).
+describe("fragmented uploads: bytes are kept, fragments are not", () => {
+  /** A pull stream of `parts`, optionally overwriting each fragment after handing it over (a pooled source). */
+  function fragmented(parts: Uint8Array[], opts: { reuse?: boolean; onCancel?: () => void } = {}) {
+    let i = 0;
+    let previous: Uint8Array | null = null;
+    return new ReadableStream<Uint8Array>({
+      pull(c) {
+        // A source that reuses its buffers: the last fragment is overwritten once the reader asks for more.
+        if (opts.reuse && previous) previous.fill(0x58); // "X"
+        if (i >= parts.length) return c.close();
+        previous = parts[i++];
+        c.enqueue(previous);
+      },
+      cancel() {
+        opts.onCancel?.();
+      },
+    });
+  }
+  const req = (stream: ReadableStream<Uint8Array>, contentLength?: number) =>
+    new Request("http://127.0.0.1:3000/x", { method: "POST", headers: contentLength === undefined ? {} : { "content-length": String(contentLength) }, body: stream, duplex: "half" } as RequestInit);
+  const oneByte = (text: string) => Array.from(new TextEncoder().encode(text), (b) => Uint8Array.of(b));
+
+  it("200,000 one-byte fragments are read whole and exactly", async () => {
+    const { readBodyLimited } = await import("@/server/requestLimits");
+    const text = JSON.stringify({ pad: "a".repeat(199_980) });
+    expect(text.length).toBeGreaterThanOrEqual(199_990);
+    const r = await readBodyLimited(req(fragmented(oneByte(text))), 1_000_000);
+    expect(r).toEqual({ ok: true, text });
+  }, 60_000);
+
+  it("each fragment is copied as it arrives, so a source that reuses its buffers can't corrupt the body", async () => {
+    const { readBodyLimited } = await import("@/server/requestLimits");
+    const text = JSON.stringify({ question: "fragmented synthetic body", n: 12345 });
+    const r = await readBodyLimited(req(fragmented(oneByte(text), { reuse: true })), 1_000_000);
+    // A reader that holds on to fragments until the end reads "XXXX…" here.
+    expect(r).toEqual({ ok: true, text });
+  });
+
+  it("multi-byte characters split across fragments still decode as UTF-8", async () => {
+    const { readBodyLimited } = await import("@/server/requestLimits");
+    const text = JSON.stringify({ name: "Zürich — 東京 — 💶 €" });
+    const r = await readBodyLimited(req(fragmented(oneByte(text), { reuse: true })), 1_000_000);
+    expect(r).toEqual({ ok: true, text });
+  });
+
+  it("the limit is enforced fragment by fragment and the stream is cancelled", async () => {
+    const { readBodyLimited } = await import("@/server/requestLimits");
+    let cancelled = false;
+    const parts = oneByte("a".repeat(5_000));
+    const r = await readBodyLimited(req(fragmented(parts, { onCancel: () => (cancelled = true) })), 4_096);
+    expect(r).toEqual({ ok: false, tooLarge: true });
+    expect(cancelled).toBe(true);
+    // Exactly at the limit is accepted.
+    expect(await readBodyLimited(req(fragmented(oneByte("b".repeat(4_096)))), 4_096)).toEqual({ ok: true, text: "b".repeat(4_096) });
+  });
+
+  it("a misleading Content-Length doesn't change any of this", async () => {
+    const { readBodyLimited } = await import("@/server/requestLimits");
+    expect(await readBodyLimited(req(fragmented(oneByte("c".repeat(5_000))), 10), 4_096)).toEqual({ ok: false, tooLarge: true });
+    expect(await readBodyLimited(req(fragmented(oneByte("{}")), 50_000_000), 4_096)).toEqual({ ok: false, tooLarge: true });
+  });
+
+  it("storage grows with bytes, never with the number of fragments, and never past the limit", async () => {
+    const { ByteAccumulator } = await import("@/server/requestLimits");
+    const acc = new ByteAccumulator(1_000_000);
+    for (let i = 0; i < 200_000; i++) expect(acc.append(Uint8Array.of(97))).toBe(true);
+    expect(acc.length).toBe(200_000);
+    // One contiguous store, at most twice the bytes held.
+    expect(acc.capacity).toBeLessThanOrEqual(2 * acc.length);
+    expect(acc.text()).toBe("a".repeat(200_000));
+    const capped = new ByteAccumulator(1_000);
+    expect(capped.append(new Uint8Array(900))).toBe(true);
+    expect(capped.append(new Uint8Array(101))).toBe(false);
+    expect(capped.capacity).toBeLessThanOrEqual(1_000);
+  });
+});
+
+describe("routes still take fragmented uploads", () => {
+  it("a Copilot request arriving in one-byte fragments is answered", async () => {
+    const { handleCopilotPost } = await copilot();
+    const text = JSON.stringify(await copilotBody());
+    const bytes = new TextEncoder().encode(text);
+    let i = 0;
+    const stream = new ReadableStream<Uint8Array>({ pull(c) { if (i >= bytes.length) return c.close(); c.enqueue(bytes.slice(i, i + 1)); i++; } });
+    const r = await handleCopilotPost(new Request("http://127.0.0.1:3000/api/copilot", { method: "POST", headers: { "content-type": "application/json" }, body: stream, duplex: "half" } as RequestInit), DEMO);
+    expect(r.status).toBe(200);
+  }, 60_000);
+});
