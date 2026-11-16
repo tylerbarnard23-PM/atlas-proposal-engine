@@ -55,7 +55,22 @@ Stop for Codex review with exact head, checks, preview association, remaining li
 
 D1 (PR #72, `0381db1`), D2 (PR #75, `073049f`), D2a (PR #79, `c0ee4e9`), D3 (PR #81, `85b3910`) and **D4 (PR #82, `3738588`, 16 November 2026)** are released; the commands below the next one are historical, so do not rerun them. **D5 is in progress:** its security and dependency gate is in review on `feat/d5-security-dependency-gate`.
 
-### Next command: review the D5 security and dependency gate
+### Next command: review the #86 request limits
+
+Saved on 16 November 2026. PR #88 (the D5 security and dependency gate) is merged as `ba5f6ce`. Branch `fix/86-request-resource-limits`; the handoff names the PR and head. Verify heads, tree and stash first, and preserve any newer work.
+
+1. **Codex** reviews the fix against [#86](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/86) and its impact note:
+   - `src/server/requestLimits.ts`: the body reader, the shape guard and its limits, and the bounded error text;
+   - its use on both PDF paths and in the Copilot handler before any schema, engine, readiness, Chromium or provider call;
+   - the Copilot's nested-list limits;
+   - `tests/requestLimits.test.ts`.
+2. **Claude** fixes confirmed findings in one batch, failing regressions first, then runs the full checks and the browser check, and stops.
+3. **Owner decisions remain separate:** merging the fix (pinned to the reviewed head); [#85](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/85); [#87](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/87); Vercel access; closing PR #80; confirming main CI and the Production deployment for `ba5f6ce`.
+4. **After merge:** the D5 package — golden-path, keyboard and viewport evidence; the R25 protocol and empty scorecard; the README and demo narrative; the #35 name decision.
+
+Until the owner says otherwise: no paid testing, no real key, no model call, no dependency change, no pairing-policy change, no repository or Vercel setting change, no merge, no deployment.
+
+### Previous command (done 16 November 2026, don't rerun): review the D5 security and dependency gate
 
 Saved on 16 November 2026. Branch `feat/d5-security-dependency-gate` (from main `3738588`); the handoff names the PR and head. Verify heads, tree and stash first, and preserve any newer work.
 
