@@ -1,6 +1,6 @@
 # R21 — Present approved proposals digitally and share fixed versions
 
-Accepted for planning: 22 October 2026. **Status: Planned; not implemented by this document.** **D3 minimum in review (PR #81):** a local read-only meeting view of an approved version, matching its final PDF. Remote sharing, links and client acknowledgement remain later.
+Accepted for planning: 22 October 2026. **Status: Planned; not implemented by this document.** **D3 minimum released (PR #81, `85b3910`):** a local read-only meeting view of an approved version, matching its final PDF. Remote sharing, links and client acknowledgement remain later.
 Tracking issue: #16. Parent roadmap: #36. Original review recommendation: **21 of 25**.
 Phase: P4 local presentation; P5 protected sharing. Relative scope: L; no calendar estimate is committed.
 Canonical plan: [R21-client-presentation-and-sharing.md](R21-client-presentation-and-sharing.md).

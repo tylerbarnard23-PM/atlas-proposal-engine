@@ -1,23 +1,49 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
-import type { Recommendation, RecommendationType } from "@/domain/types";
+import type { Recommendation, RecommendationType, WorkingDraft } from "@/domain/types";
 import { normalizeHoldings, type NormalizedHolding } from "@/engines/normalizationEngine";
 import { generateInsights, summarizeAllocation } from "@/engines/insightEngine";
-import { applyRecToValue } from "@/engines/proposalEngine";
 import { previewRecommendation } from "@/engines/recommendationPreview";
+import { candidateProblems, evaluateDesk, newWorkingDraft, positionEditRecommendation, previewDraftEdit, type DeskResult } from "@/engines/allocationDesk";
+import { contentHash } from "@/engines/snapshotRecord";
 import { describeLeg, fxFreshness, utcDate, utcMinute, type FxFreshness } from "@/engines/fxPolicy";
 import { amountsInReporting, describeConversion } from "@/engines/recommendationAmounts";
 import { missingPairs, reportingValue, valuationSummary, valuationTotal, type ValuedTotal } from "@/engines/valuationTotals";
 import { evaluateWorkspaceReadiness, readinessOk } from "@/engines/complianceEngine";
-import { safeId, todayIso } from "@/utils/formatting";
+import { todayIso } from "@/utils/formatting";
 import { describeImportIssue, importIssues, type ImportIssue } from "@/engines/importCompleteness";
+import { agentContextOf, type AgentContext } from "./context";
+import { figuresIn, type EvidenceValue } from "./evidence";
 import type { CopilotSnapshot } from "./snapshot";
 
 // Every tool here is a thin, read-only wrapper over the deterministic engines.
 // The model never computes a number itself; it asks the engines. The single
-// write path, draft_recommendation, can only produce unapproved drafts.
+// write path, draft_recommendation, can only produce unapproved drafts, and a
+// draft that changes a position must be the exact action a scope simulation
+// in the same run evaluated (D4). Nothing here approves, finalizes, shares or
+// executes anything.
 
 export const MAX_DRAFTS_PER_RUN = 5;
+
+/** A tool result kept as engine evidence: a safe summary for the trace, and its numbers for checking the answer's figures. */
+export interface EvidenceRecord {
+  id: string;
+  tool: string;
+  summary: string;
+  /** Typed figures (value, unit, currency, sign) for checking the figures an answer states. */
+  numbers: EvidenceValue[];
+}
+
+/** A scope simulation the run may draft from: the exact candidate the shared evaluator ran. */
+interface Simulation {
+  candidate: Recommendation;
+  draftable: boolean;
+  reason: string | null;
+}
+
+// Tools that would take authority the Copilot doesn't have. They don't exist;
+// a call to one is refused and counted so the run can report it.
+const FORBIDDEN_TOOL = /^(approve|finali[sz]e|share|send|execute|place|submit|issue|generate_pdf|publish|delete|include_in_pdf)/i;
 
 const REC_TYPES = [
   "buy", "sell", "hold", "reduce", "increase", "rebalance", "transfer",
@@ -34,12 +60,101 @@ export class CopilotContext {
   readonly holdings: NormalizedHolding[];
   readonly reportingCurrency: string;
   readonly drafts: Recommendation[] = [];
+  readonly evidence: EvidenceRecord[] = [];
+  readonly simulations = new Map<string, Simulation>();
+  /** Calls to tools that would approve, finalize, share or execute: refused, and counted here. */
+  forbiddenAttempts = 0;
+  /** The active alternative: the scope and actions the evaluator reads. */
+  readonly draft: WorkingDraft;
+  /** What this run is about (client, alternative, scope, input revision). */
+  readonly context: AgentContext;
 
-  readonly now = new Date();
+  readonly now: Date;
 
-  constructor(readonly snapshot: CopilotSnapshot) {
+  constructor(readonly snapshot: CopilotSnapshot, now: Date = new Date()) {
+    this.now = now;
     this.reportingCurrency = snapshot.client.proposalOutputCurrency || "USD";
     this.holdings = normalizeHoldings(snapshot.holdings, snapshot.fxRates, this.reportingCurrency);
+    this.draft = snapshot.workingDraft ?? newWorkingDraft(now.toISOString());
+    this.context = agentContextOf({ ...snapshot, workingDraft: this.draft });
+  }
+
+  get fxContext() {
+    return { reportingCurrency: this.reportingCurrency, rates: this.snapshot.fxRates };
+  }
+
+  /** The active alternative through the shared desk evaluator (its draft view), optionally with extra actions added last. */
+  desk(extra: Recommendation[] = []): DeskResult {
+    const ids = new Set(extra.map((r) => r.id));
+    return evaluateDesk({
+      holdings: this.holdings,
+      accounts: this.snapshot.accounts,
+      recommendations: [...this.snapshot.recommendations.filter((r) => !ids.has(r.id)), ...extra],
+      draft: { ...this.draft, memberIds: [...this.draft.memberIds.filter((x) => !ids.has(x)), ...ids] },
+      fx: this.fxContext,
+      view: "draft",
+    });
+  }
+
+  /** Keeps a tool result as evidence and returns its reference. */
+  record(tool: string, result: unknown, summary: string): string {
+    const id = `ev_${this.evidence.length + 1}`;
+    this.evidence.push({ id, tool, summary, numbers: evidenceIn(result, (s) => this.withoutUntrusted(s), this.reportingCurrency) });
+    return id;
+  }
+
+  // Text that comes from the workspace, not the engines: names, notes, titles
+  // and rationales anyone (or an imported statement) could have written.
+  // Engine wording can quote it ("Bond ETF A is 30% of ..."); figures inside
+  // it are never evidence. Longest first, so a name inside a longer one goes too.
+  private untrustedCache: string[] | null = null;
+  private get untrusted(): string[] {
+    if (!this.untrustedCache) {
+      const s = this.snapshot;
+      const texts = [
+        ...s.holdings.flatMap((h) => [h.assetName, h.identifier?.value, h.advisorNotes, h.subAssetClass]),
+        ...s.accounts.flatMap((a) => [a.name, a.institution]),
+        ...(s.sourceDocuments ?? []).map((d) => d.fileName),
+        ...s.recommendations.flatMap((r) => [r.title, r.rationale, r.clientBenefit, r.riskTradeoff, r.taxNote, r.implementationStep, r.complianceNote, r.destination?.name]),
+        s.client.fullName,
+        s.client.householdName,
+        s.client.investmentObjective,
+        s.client.specialInstructions,
+        ...(s.client.restrictedSecurities ?? []),
+      ];
+      this.untrustedCache = [...new Set(texts.filter((t): t is string => typeof t === "string" && t.trim().length > 0))].sort((a, b) => b.length - a.length);
+    }
+    return this.untrustedCache;
+  }
+
+  withoutUntrusted(text: string): string {
+    let out = text;
+    for (const t of this.untrusted) if (out.includes(t)) out = out.split(t).join(" ");
+    return out;
+  }
+
+  /**
+   * Model-bound text with identity removed (#59): the client's and household's
+   * names, the advisor's name and email, and import file names (which often
+   * carry a client's name) are replaced, wherever they appear, including
+   * inside account names, notes and the advisor's question. Applied to the
+   * JSON a tool returns, so names are matched in their escaped form.
+   */
+  redact(text: string, json = false): string {
+    const s = this.snapshot;
+    const pairs: [string | undefined, string][] = [
+      [s.client.householdName, "[client household]"],
+      [s.client.fullName, "[client]"],
+      [s.advisor.email, "[advisor email]"],
+      [s.advisor.name, "[advisor]"],
+      ...(s.sourceDocuments ?? []).map((d, i) => [d.fileName, `[import ${i + 1}]`] as [string, string]),
+    ];
+    let out = text;
+    for (const [raw, label] of pairs.filter(([r]) => typeof r === "string" && r.trim().length >= 3).sort((a, b) => b[0]!.length - a[0]!.length)) {
+      const needle = json ? JSON.stringify(raw).slice(1, -1) : raw!;
+      out = out.split(needle).join(label);
+    }
+    return out;
   }
 
   /** Age and confirmation of the rates in use (#26). Reported, never a reason to refuse a draft. */
@@ -173,8 +288,8 @@ function getPortfolioOverview(ctx: CopilotContext) {
     }));
   return {
     reporting_currency: ctx.reportingCurrency,
+    // The profile the advice depends on; the client's name and identity stay out of model-bound data (#59).
     client: {
-      name: client.fullName || "(not set)",
       risk_tolerance: client.riskTolerance,
       objective: client.investmentObjective,
       time_horizon_years: client.timeHorizonYears,
@@ -302,13 +417,11 @@ function toolAmounts(ctx: CopilotContext, input: { type: Recommendation["type"];
   return r.amounts;
 }
 
-function simulate(ctx: CopilotContext, input: z.infer<typeof SimulateInput>) {
-  const h = ctx.holding(input.holding_id);
-  if (!h) throw new ToolInputError(`No holding with id ${input.holding_id}`);
-  // The same isolated engine simulation as the editor's live preview: actual
-  // cash offsets, household funding, missing rates and shortfalls. Tool
-  // amounts are in the reporting currency. Nothing is saved.
-  const preview = previewRecommendation({
+// The same isolated engine simulation as the editor's live preview: actual
+// cash offsets, household funding, missing rates and shortfalls. Tool amounts
+// are in the reporting currency. Nothing is saved.
+function enginePreview(ctx: CopilotContext, h: NormalizedHolding, input: { type: Recommendation["type"]; action_amount?: number; action_amount_unit?: "amount" | "percent"; proposed_value?: number }) {
+  return previewRecommendation({
     rec: {
       id: "copilot_simulation",
       title: "Simulation",
@@ -333,6 +446,12 @@ function simulate(ctx: CopilotContext, input: z.infer<typeof SimulateInput>) {
     fx: { reportingCurrency: ctx.reportingCurrency, rates: ctx.snapshot.fxRates },
     sourceDocuments: ctx.snapshot.sourceDocuments ?? [],
   });
+}
+
+function simulate(ctx: CopilotContext, input: z.infer<typeof SimulateInput>) {
+  const h = ctx.holding(input.holding_id);
+  if (!h) throw new ToolInputError(`No holding with id ${input.holding_id}`);
+  const preview = enginePreview(ctx, h, input);
   const position = preview.standalone?.applied ? preview.standalone.position : null;
   if (!position) {
     return {
@@ -407,8 +526,144 @@ function checkReadiness(ctx: CopilotContext) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// D4: the active alternative through the shared desk evaluator
+// ---------------------------------------------------------------------------
+
+const money2 = (n: number | null) => (n == null ? null : cents(n));
+
+/** Why a position-sizing change can't be evaluated honestly right now, or null. */
+function sizingBlocked(ctx: CopilotContext): string | null {
+  if (!ctx.valuationComplete) {
+    return `Valuation is incomplete (${missingPairs(valuationSummary(ctx.holdings).net, ctx.reportingCurrency).join(", ")} rate missing), so allocation-changing drafts are paused. Draft an advisory recommendation instead, or ask the advisor to add the missing rate in Exchange rates.`;
+  }
+  if (!ctx.importsComplete) {
+    return `An import is incomplete or its completeness is unknown (${ctx.importIssues.map(describeImportIssue).join("; ")}), so trade-sizing drafts are paused. Draft an advisory recommendation instead (for example, to obtain a complete statement).`;
+  }
+  return null;
+}
+
+function scopeSummary(d: DeskResult) {
+  return {
+    totals: { current: money2(d.totals.current), proposed: money2(d.totals.proposed) },
+    allocation: d.rows.map((r) => ({
+      asset_class: r.assetClass,
+      current: money2(r.current),
+      proposed: money2(r.proposed),
+      current_pct: r.currentPct == null ? null : Math.round(r.currentPct * 10) / 10,
+      proposed_pct: r.proposedPct == null ? null : Math.round(r.proposedPct * 10) / 10,
+      target_pct: r.targetPct,
+      drift_pts: r.driftPts == null ? null : Math.round(r.driftPts * 10) / 10,
+    })),
+  };
+}
+
+function scopeOverview(ctx: CopilotContext) {
+  const d = ctx.desk();
+  return {
+    context: {
+      alternative: ctx.draft.name,
+      input_revision: ctx.context.inputRevision,
+      scope: d.scope.chosen ? "selected accounts" : "every investment account",
+    },
+    reporting_currency: ctx.reportingCurrency,
+    scope_accounts: d.scope.accounts.map((a) => ({ account_id: a.id, name: a.name, current: money2(a.current), proposed: money2(a.proposed) })),
+    ...scopeSummary(d),
+    // In-scope positions; only these can be simulated or drafted here.
+    positions: d.positions.map((p) => ({
+      holding_id: p.id,
+      name: p.name,
+      account: p.accountName,
+      asset_class: p.assetClass,
+      current: money2(p.current),
+      proposed: money2(p.proposed),
+      proposed_only: p.proposedOnly,
+    })),
+    // Outside the scope: shown as context, never in the weights.
+    household_context: {
+      outside_scope_total: money2(d.context.total),
+      outside_scope_accounts: d.context.accounts.map((a) => ({ name: a.name, value: money2(a.value) })),
+      liabilities_total: money2(d.liabilities.total),
+    },
+    alternative_actions: d.actions.map((r) => ({ title: r.title, approved: r.approvedByAdvisor })),
+    unvalued_in_scope: d.unvalued.map((u) => ({ holding_id: u.id, name: u.name })),
+    blocked: d.blocked.map((b) => ({ reason: b.reason, actions: b.recommendationIds.length })),
+    shortfalls: d.shortfalls.map((s) => ({ account: s.accountName, shortfall: cents(s.shortfall) })),
+    reserves: d.reserves.map((r) => ({ account: r.accountName, reserve: r.reserve, reserve_currency: r.reserveCurrency, available: r.available == null ? null : cents(r.available), currency: r.currency, breached: r.breached })),
+    completeness: completenessNote(ctx),
+    note: d.scope.chosen ? "Weights and totals cover the selected investment scope only; household context is listed separately and is never in a denominator." : undefined,
+  };
+}
+
+const ScopeChangeInput = z.object({
+  holding_id: z.string(),
+  change: z.enum(["reduce", "increase", "exit"]),
+  amount: z.number().finite().positive().optional(),
+});
+
+function simulateScopeChange(ctx: CopilotContext, input: z.infer<typeof ScopeChangeInput>) {
+  const h = ctx.holding(input.holding_id);
+  if (!h) throw new ToolInputError(`No holding with id ${input.holding_id}`);
+  const before = ctx.desk();
+  if (!before.scope.accountIds.includes(h.accountId)) {
+    throw new ToolInputError(`${h.assetName} is outside the selected investment scope (${ctx.accountName(h.accountId)} is household context). Only in-scope positions can be simulated or drafted.`);
+  }
+  const blocked = sizingBlocked(ctx);
+  if (blocked) throw new ToolInputError(blocked);
+  if (input.change !== "exit" && input.amount == null) throw new ToolInputError("A reduce or increase needs an amount in the reporting currency.");
+  const amount = input.change === "exit" ? undefined : cents(input.amount!);
+  const key = { revision: ctx.context.inputRevision, holding: h.id, change: input.change, amount: amount ?? null };
+  const id = `rec_ai_${contentHash(key)}`;
+  let candidate: Recommendation;
+  try {
+    candidate = positionEditRecommendation({ holding: h, kind: input.change, amount, reportingCurrency: ctx.reportingCurrency, id, now: ctx.now.toISOString() });
+  } catch (err) {
+    throw new ToolInputError((err as Error).message);
+  }
+  // Drafts already saved in this run that change a position: each simulation
+  // builds on them, as accepting them together would.
+  const prior = ctx.drafts.filter((d) => d.relatedHoldingId && (d.actionAmount != null || d.proposedValue != null));
+  const base = { recommendations: [...ctx.snapshot.recommendations, ...prior], draft: { ...ctx.draft, memberIds: [...ctx.draft.memberIds, ...prior.map((d) => d.id)] } };
+  const start = ctx.desk(prior);
+  const preview = previewDraftEdit({ holdings: ctx.holdings, accounts: ctx.snapshot.accounts, ...base, candidate, fx: ctx.fxContext });
+  const after = ctx.desk([...prior, candidate]);
+  // The same gate acceptance applies: blocked or unconverted, a new or deeper
+  // shortfall, or eligible cash below its reserve (a purchase into an account
+  // already below it included).
+  const problems = candidateProblems({ holdings: ctx.holdings, accounts: ctx.snapshot.accounts, ...base, candidates: [candidate], fx: ctx.fxContext });
+  const shortfallBefore = new Map(start.shortfalls.map((s) => [s.accountId, s.shortfall] as const));
+  const newShortfalls = after.shortfalls.filter((s) => s.shortfall > (shortfallBefore.get(s.accountId) ?? 0) + 0.005);
+  const breachedBefore = new Set(start.reserves.filter((r) => r.breached).map((r) => r.accountId));
+  const reserveBreaches = after.reserves.filter((r) => r.breached && (!breachedBefore.has(r.accountId) || (candidate.type === "increase" && r.accountId === h.accountId)));
+  const duplicate = ctx.snapshot.recommendations.find(
+    (r) => r.status !== "excluded" && r.relatedHoldingId === h.id && r.type === candidate.type && r.actionAmountUnit === candidate.actionAmountUnit && r.actionAmount === candidate.actionAmount
+  );
+  const reason = problems.length > 0 ? problems.join(" ") : duplicate ? `The same action is already on file ("${duplicate.title}").` : null;
+  const simulationId = `sim_${contentHash(key)}`;
+  ctx.simulations.set(simulationId, { candidate, draftable: reason == null, reason });
+  return {
+    simulation_id: simulationId,
+    holding: h.assetName,
+    change: input.change,
+    amount,
+    currency: ctx.reportingCurrency,
+    position: { before: money2(preview.position.before), after: money2(preview.position.after) },
+    cash: preview.cash.map((c) => ({ holding: c.name, account: c.accountName, before: cents(c.before), after: cents(c.after) })),
+    blocked: preview.blocked.map((b) => b.reason),
+    new_shortfalls: newShortfalls.map((s) => ({ account: s.accountName, shortfall: cents(s.shortfall) })),
+    reserve_breaches: reserveBreaches.map((r) => ({ account: r.accountName, reserve: r.reserve, reserve_currency: r.reserveCurrency, available: r.available == null ? null : cents(r.available), currency: r.currency })),
+    drafts_already_included: prior.map((d) => d.title),
+    scope_before: scopeSummary(start),
+    scope_after: scopeSummary(after),
+    draftable: reason == null,
+    not_draftable_reason: reason,
+    note: "Simulated in the active alternative with the shared evaluator; nothing was saved.",
+  };
+}
+
 const DraftInput = z.object({
   ...RecShape,
+  simulation_id: z.string().optional(),
   title: z.string().min(3).max(160),
   priority: z.enum(["low", "medium", "high"]),
   rationale: z.string().min(10).max(2000),
@@ -425,32 +680,34 @@ function draftRecommendation(ctx: CopilotContext, input: z.infer<typeof DraftInp
   if (input.holding_id && !ctx.holding(input.holding_id)) {
     throw new ToolInputError(`No holding with id ${input.holding_id}`);
   }
-  // While any holding is unvalued, a trade can't be sized against the
-  // portfolio honestly, so drafts that would change the allocation are
-  // refused here, in code. Advisory drafts (no holding, or no value change)
-  // still go through.
-  // The same holds while an import is incomplete: the portfolio the trade is
-  // sized against may be missing positions.
-  if (input.holding_id && (!ctx.valuationComplete || !ctx.importsComplete)) {
+  let sized: Recommendation | null = null;
+  if (input.simulation_id) {
+    const sim = ctx.simulations.get(input.simulation_id);
+    if (!sim) throw new ToolInputError(`No simulation with id ${input.simulation_id} in this request. Run simulate_scope_change first.`);
+    if (!sim.draftable) throw new ToolInputError(`That simulation can't become a draft: ${sim.reason}`);
+    sized = sim.candidate;
+  } else if (input.holding_id) {
+    // While any holding is unvalued or an import is incomplete, a trade can't
+    // be sized honestly. Otherwise a position-changing draft must be the
+    // exact action a scope simulation evaluated. Advisory drafts (no value
+    // change) still go through.
+    // Advisory only when the shared engine finds no effect at all: its preview
+    // treats a half-cent move of the position or any cash line as a change.
     const h = ctx.holding(input.holding_id)!;
-    const before = reportingValue(h);
-    const rec = toolAmounts(ctx, input);
-    const changes = before == null || input.proposed_value != null || Math.abs(applyRecToValue(before, rec, !!h.isLiability) - before) >= 1;
-    if (changes && !ctx.valuationComplete) {
-      throw new ToolInputError(
-        `Valuation is incomplete (${missingPairs(valuationSummary(ctx.holdings).net, ctx.reportingCurrency).join(", ")} rate missing), so allocation-changing drafts are paused. Draft an advisory recommendation instead, or ask the advisor to add the missing rate in Exchange rates.`
-      );
-    }
+    toolAmounts(ctx, input);
+    const changes = enginePreview(ctx, h, input).state !== "no_change";
     if (changes) {
-      throw new ToolInputError(
-        `An import is incomplete or its completeness is unknown (${ctx.importIssues.map(describeImportIssue).join("; ")}), so trade-sizing drafts are paused. Draft an advisory recommendation instead (for example, to obtain a complete statement).`
-      );
+      const blocked = sizingBlocked(ctx);
+      if (blocked) throw new ToolInputError(blocked);
+      throw new ToolInputError("A draft that changes a position must come from a simulation: run simulate_scope_change for this change and pass its simulation_id.");
     }
   }
   const now = todayIso();
-  const rec: Recommendation = {
-    id: safeId("rec"),
-    title: input.title,
+  const id = sized?.id ?? `rec_ai_${contentHash({ revision: ctx.context.inputRevision, type: input.type, holding: input.holding_id ?? null, title: input.title })}`;
+  if (ctx.drafts.some((d) => d.id === id)) throw new ToolInputError("That draft was already saved in this request.");
+  if (ctx.snapshot.recommendations.some((r) => r.id === id)) throw new ToolInputError("That draft was already accepted into the workspace.");
+  const base = sized ?? {
+    id,
     type: input.type,
     relatedHoldingId: input.holding_id,
     relatedAccountId: input.holding_id ? ctx.holding(input.holding_id)?.accountId : undefined,
@@ -458,12 +715,17 @@ function draftRecommendation(ctx: CopilotContext, input: z.infer<typeof DraftInp
     actionAmountUnit: input.action_amount_unit,
     proposedValue: input.proposed_value,
     currency: ctx.reportingCurrency,
+  };
+  const rec: Recommendation = {
+    ...base,
+    id,
+    title: input.title,
     rationale: input.rationale,
     clientBenefit: input.client_benefit,
     riskTradeoff: input.risk_tradeoff,
     taxNote: input.tax_note,
     implementationStep: input.implementation_step,
-    complianceNote: "Drafted by Proposal Copilot. Requires advisor review and approval before client use.",
+    complianceNote: `Drafted by Proposal Copilot for "${ctx.draft.name}" (input revision ${ctx.context.inputRevision}). Requires advisor review and approval before client use.`,
     priority: input.priority,
     // Hard-coded, not model-controlled: AI drafts are never approved and never
     // reach the client PDF until the advisor flips these in the UI.
@@ -472,12 +734,13 @@ function draftRecommendation(ctx: CopilotContext, input: z.infer<typeof DraftInp
     includeInPdf: false,
     createdAt: now,
     updatedAt: now,
-  };
+  } as Recommendation;
   ctx.drafts.push(rec);
   return {
     draft_id: rec.id,
     status: "needs_review (advisor approval required)",
-    effect: input.holding_id ? simulate(ctx, { ...input, holding_id: input.holding_id }) : "Advisory only: no allocation impact.",
+    sized_from: input.simulation_id ?? null,
+    effect: sized ? "As simulated; see the simulation result." : input.holding_id ? "Advisory: no position change." : "Advisory only: no allocation impact.",
   };
 }
 
@@ -556,14 +819,41 @@ const TOOLS: Record<string, ToolSpec> = {
     },
     run: (ctx) => checkReadiness(ctx),
   },
+  get_scope_overview: {
+    definition: {
+      name: "get_scope_overview",
+      description:
+        "The active alternative through the Atlas allocation desk: its investment scope, current and proposed totals and asset-class weights (scope only), target drift, in-scope positions, household context outside the scope, the alternative's actions, blocked actions, shortfalls and reserves, and the input revision. Use it before simulating a change.",
+      input_schema: { type: "object", properties: {} },
+    },
+    run: (ctx) => scopeOverview(ctx),
+  },
+  simulate_scope_change: {
+    definition: {
+      name: "simulate_scope_change",
+      description:
+        "Evaluate one position change (reduce or increase by an amount in the reporting currency, or exit) in the active alternative with the shared desk evaluator: the position and cash before and after, any blocked unit or new shortfall, and the scope's totals and weights before and after. Only in-scope, valued, non-cash positions. Changes nothing. Returns a simulation_id; a position-changing draft must cite one that is draftable.",
+      input_schema: {
+        type: "object",
+        properties: {
+          holding_id: recProperties.holding_id,
+          change: { type: "string", enum: ["reduce", "increase", "exit"] },
+          amount: { type: "number", description: "Amount in the reporting currency (omit for exit)." },
+        },
+        required: ["holding_id", "change"],
+      },
+    },
+    run: (ctx, input) => simulateScopeChange(ctx, ScopeChangeInput.parse(input)),
+  },
   draft_recommendation: {
     definition: {
       name: "draft_recommendation",
-      description: `Save a recommendation draft for the advisor to review. Drafts are always unapproved and excluded from the client PDF until the advisor approves them. At most ${MAX_DRAFTS_PER_RUN} per request. Simulate first so the rationale cites engine numbers. While any holding can't be valued (see valuation in the overview), drafts that would change the allocation are refused; advisory drafts are still accepted.`,
+      description: `Save a recommendation draft for the advisor to review. Drafts are always unapproved and excluded from the client PDF; they appear as a preview the advisor may accept into the active alternative. At most ${MAX_DRAFTS_PER_RUN} per request. A draft that changes a position must pass the simulation_id of a draftable simulate_scope_change result; its type and amount come from that simulation. Advisory drafts (no position change) need no simulation. While any holding can't be valued or an import is incomplete, position-changing drafts are refused.`,
       input_schema: {
         type: "object",
         properties: {
           ...recProperties,
+          simulation_id: { type: "string", description: "From simulate_scope_change, for a draft that changes a position." },
           holding_id: { ...recProperties.holding_id, description: "Omit for advisory-only recommendations." },
           title: { type: "string" },
           priority: { type: "string", enum: ["low", "medium", "high"] },
@@ -587,21 +877,91 @@ export interface ToolCallRecord {
   input: unknown;
   ok: boolean;
   summary: string;
+  /** The evidence reference of a successful result. */
+  evidenceId?: string;
+  /** A refused call to a tool that would take authority the Copilot doesn't have. */
+  forbidden?: boolean;
 }
+
+// What each numeric field of a tool result measures, by its key. Money in the
+// reporting currency unless the field is in its own currency (stated in a
+// sibling field); percentages; fractions; anything else (rates, counts, days,
+// IDs) supports no money or percentage claim.
+// Every percentage below is in percentage points, as its producer returns it:
+// pct (summarizeAllocation, ×100), pct_of_investible* (this file's pct helper),
+// current/proposed_pct and drift_pts (evaluateDesk rows), target_pct (draft
+// targets, 0-100), expense_ratio_pct (the holding's ratio in percent), and
+// pct_change (recommendationPreview's pctChange: 60,000 → 54,000 is -10).
+const PERCENT_KEYS = new Set(["pct", "pct_of_investible", "pct_of_investible_before", "pct_of_investible_after", "current_pct", "proposed_pct", "target_pct", "drift_pts", "expense_ratio_pct", "pct_change"]);
+/** Fractions (0.1 = 10%). No tool returns one today; the checker still reads a fraction as its percentage. */
+const RATIO_KEYS = new Set<string>();
+/** Signed changes, not levels or sizes: the only fields that support a written "+" or "-". */
+const CHANGE_KEYS = new Set(["delta", "change", "drift_pts", "pct_change"]);
+const MONEY_REPORTING_KEYS = new Set([
+  "value", "current", "proposed", "before", "after", "delta", "change", "shortfall", "gross_assets", "liabilities", "net",
+  "outside_scope_total", "liabilities_total", "reporting_value", "action_amount_in_reporting", "proposed_value_in_reporting", "amount", "position_after",
+]);
+/** Money in its own currency, named by this sibling field. */
+const MONEY_OWN_KEYS: Record<string, string> = { native_value: "currency", action_amount: "currency", proposed_value: "currency", cost_basis: "currency", reserve: "reserve_currency", available: "currency" };
+
+function classify(value: number, key: string | undefined, parent: Record<string, unknown> | undefined, reporting: string): EvidenceValue {
+  const typed = classifyUnit(value, key, parent, reporting);
+  return key && CHANGE_KEYS.has(key) ? { ...typed, change: true } : typed;
+}
+
+function classifyUnit(value: number, key: string | undefined, parent: Record<string, unknown> | undefined, reporting: string): EvidenceValue {
+  if (key && RATIO_KEYS.has(key)) return { value, unit: "ratio" };
+  if (key && PERCENT_KEYS.has(key)) return { value, unit: "percent" };
+  if (key === "action_amount" && parent?.action_amount_unit === "percent") return { value, unit: "percent" };
+  if (key && key in MONEY_OWN_KEYS) {
+    const currency = parent?.[MONEY_OWN_KEYS[key]];
+    return typeof currency === "string" ? { value, unit: "money", currency } : { value, unit: "other" };
+  }
+  if (key && MONEY_REPORTING_KEYS.has(key)) return { value, unit: "money", currency: reporting };
+  return { value, unit: "other" };
+}
+
+/**
+ * The typed figures in a tool result: each numeric field by what its key
+ * measures (signs kept), and the figures in engine-written text once
+ * untrusted workspace text is removed (`clean`).
+ */
+export function evidenceIn(value: unknown, clean: (s: string) => string, reporting: string, key?: string, parent?: Record<string, unknown>, out: EvidenceValue[] = []): EvidenceValue[] {
+  if (typeof value === "number" && Number.isFinite(value)) out.push(classify(value, key, parent, reporting));
+  else if (typeof value === "string") out.push(...figuresIn(clean(value)));
+  else if (Array.isArray(value)) for (const v of value) evidenceIn(v, clean, reporting, key, parent, out);
+  else if (value && typeof value === "object") for (const [k, v] of Object.entries(value)) evidenceIn(v, clean, reporting, k, value as Record<string, unknown>, out);
+  return out;
+}
+
+const AUTHORITY_REFUSAL =
+  "Refused: Proposal Copilot has no authority to approve, finalize, include in the PDF, share, issue or execute anything. It can investigate, simulate and save unapproved drafts; the advisor decides in Atlas.";
 
 // Runs one tool call and returns the JSON string handed back to the model.
 // Errors become is_error tool results instead of exceptions so the model can
-// correct itself (wrong id, bad enum) without aborting the run.
-export function executeTool(ctx: CopilotContext, name: string, input: unknown): { content: string; isError: boolean } {
-  const spec = TOOLS[name];
-  if (!spec) return { content: `Unknown tool: ${name}`, isError: true };
+// correct itself (wrong id, bad enum) without aborting the run. A successful
+// result is kept as evidence.
+export function executeTool(ctx: CopilotContext, name: string, input: unknown): { content: string; isError: boolean; evidenceId?: string; forbidden?: boolean } {
+  const spec = Object.prototype.hasOwnProperty.call(TOOLS, name) ? TOOLS[name] : undefined;
+  if (!spec) {
+    if (FORBIDDEN_TOOL.test(name)) {
+      ctx.forbiddenAttempts += 1;
+      return { content: AUTHORITY_REFUSAL, isError: true, forbidden: true };
+    }
+    return { content: `Unknown tool: ${name}`, isError: true };
+  }
   try {
-    return { content: JSON.stringify(spec.run(ctx, input ?? {})), isError: false };
+    const result = spec.run(ctx, input ?? {});
+    const content = JSON.stringify(result);
+    const evidenceId = ctx.record(name, result, `${content.length.toLocaleString()} chars of engine output`);
+    return { content, isError: false, evidenceId };
   } catch (err) {
     if (err instanceof z.ZodError) {
       return { content: `Invalid input: ${err.issues.map((i) => `${i.path.join(".")} ${i.message}`).join("; ")}`, isError: true };
     }
     if (err instanceof ToolInputError) return { content: err.message, isError: true };
-    throw err;
+    // Anything else (a workspace record the engines can't read) is reported,
+    // without its message or stack, and the run carries on truthfully.
+    return { content: `The ${name} tool failed unexpectedly: Atlas couldn't read part of the workspace for it. Nothing was changed; tell the advisor rather than estimating.`, isError: true };
   }
 }

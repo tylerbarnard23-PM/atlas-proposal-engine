@@ -2,6 +2,7 @@ import type { AssetClass } from "@/domain/types";
 import { ASSET_CLASS_LABELS } from "@/domain/assetTaxonomy";
 import { formatCurrency } from "@/utils/formatting";
 import type { CopilotResult } from "./agent";
+import { checkFigures } from "./evidence";
 import type { CopilotSnapshot } from "./snapshot";
 import { CopilotContext, executeTool, type ToolCallRecord } from "./tools";
 
@@ -28,8 +29,8 @@ export function runDemoCopilot(snapshot: CopilotSnapshot, question: string): Cop
   const ctx = new CopilotContext(snapshot);
   const trace: ToolCallRecord[] = [];
   const call = <T,>(name: string, input: Record<string, unknown> = {}): T | null => {
-    const { content, isError } = executeTool(ctx, name, input);
-    trace.push({ name, input, ok: !isError, summary: isError ? content : `${content.length.toLocaleString()} chars of engine output` });
+    const { content, isError, evidenceId } = executeTool(ctx, name, input);
+    trace.push({ name, input, ok: !isError, summary: isError ? content : `${content.length.toLocaleString()} chars of engine output`, evidenceId });
     return isError ? null : (JSON.parse(content) as T);
   };
   const money = (n: number) => formatCurrency(n, ctx.reportingCurrency, { compact: true });
@@ -69,9 +70,11 @@ export function runDemoCopilot(snapshot: CopilotSnapshot, question: string): Cop
       ""
     );
   }
+  // The name comes from the advisor's own workspace, not from model-bound tool data.
+  const clientName = ctx.snapshot.client.fullName || "This client";
   if (v.complete) {
     lines.push(
-      `**${overview.client.name}**: net worth ${money(overview.net_worth.net!)} across ${overview.counts.accounts} accounts and ${overview.counts.holdings} holdings, reported in ${overview.reporting_currency}.`,
+      `**${clientName}**: net worth ${money(overview.net_worth.net!)} across ${overview.counts.accounts} accounts and ${overview.counts.holdings} holdings, reported in ${overview.reporting_currency}.`,
       `Largest asset classes: ${overview.allocation_by_asset_class.slice(0, 3).map((a) => `${ASSET_CLASS_LABELS[a.label as AssetClass] ?? a.label} ${a.pct}%`).join(", ")}.`,
       ""
     );
@@ -79,7 +82,7 @@ export function runDemoCopilot(snapshot: CopilotSnapshot, question: string): Cop
     // Never a partial figure presented as the whole: say what's missing first.
     const names = v.unvalued.map((u) => `${u.name} (${u.currency})`).join(", ");
     lines.push(
-      `**${overview.client.name}: valuation is incomplete.** ${v.unvalued.length} of ${v.holdings_total} holdings can't be valued in ${overview.reporting_currency} because the ${v.missing_rates.join(", ")} exchange rate is missing: ${names}.`,
+      `**${clientName}: valuation is incomplete.** ${v.unvalued.length} of ${v.holdings_total} holdings can't be valued in ${overview.reporting_currency} because the ${v.missing_rates.join(", ")} exchange rate is missing: ${names}.`,
       overview.net_worth.net == null
         ? "No total is available until they're valued."
         : `Valued holdings only (${v.holdings_valued} of ${v.holdings_total}) come to ${money(overview.net_worth.net)} net; that is not the household's full net worth.`,
@@ -119,10 +122,12 @@ export function runDemoCopilot(snapshot: CopilotSnapshot, question: string): Cop
       if (trim <= 0) continue;
       const sim = call<Simulation>("simulate_recommendation", { holding_id: holdingId, type: "reduce_concentration", action_amount: trim });
       if (!sim || sim.before == null || sim.after == null) continue;
+      // The draft is the exact change the active alternative's evaluator ran (D4); out of scope or blocked, it isn't drafted.
+      const scoped = call<ScopeSimulation>("simulate_scope_change", { holding_id: holdingId, change: "reduce", amount: trim });
+      if (!scoped?.draftable) continue;
       call("draft_recommendation", {
-        holding_id: holdingId,
-        type: "reduce_concentration",
-        action_amount: trim,
+        simulation_id: scoped.simulation_id,
+        type: "reduce",
         priority: i.severity === "critical" ? "high" : "medium",
         title: `Trim ${h.name} to reduce single-issuer concentration`,
         rationale: `${h.name} is ${sim.pct_of_investible_before}% of investible assets. Trimming ${money(trim)} brings it to ${sim.pct_of_investible_after}% (${money(sim.before)} to ${money(sim.after)}), with proceeds held as cash in the same account.`,
@@ -170,21 +175,31 @@ export function runDemoCopilot(snapshot: CopilotSnapshot, question: string): Cop
         : "No warning-level findings map to a standard recommendation, so I didn't draft any. The portfolio looks clean on the rules Atlas checks."
     );
   } else {
-    lines.push(`**I saved ${ctx.drafts.length} draft recommendation${ctx.drafts.length === 1 ? "" : "s"}**, sized with the proposal engine:`);
+    lines.push(`**I prepared ${ctx.drafts.length} draft recommendation${ctx.drafts.length === 1 ? "" : "s"} to preview**, sized with the proposal engine:`);
     for (const d of ctx.drafts) lines.push(`- ${d.title}`);
-    lines.push("", "Each draft is marked *needs review*, is not approved, and is excluded from the client PDF. Add them to Recommendations, then edit and approve the ones you agree with.");
+    lines.push("", "Nothing is added yet. Add the ones you agree with to the working draft: they join it marked *needs review*, unapproved and excluded from the client PDF, and you approve them on Recommendations.");
   }
   return result(ctx, trace, lines.join("\n"));
 }
 
 function result(ctx: CopilotContext, trace: ToolCallRecord[], answer: string): CopilotResult {
-  return { mode: "demo", answer, drafts: ctx.drafts, trace };
+  return {
+    mode: "demo",
+    status: "completed",
+    answer,
+    drafts: ctx.drafts,
+    trace,
+    evidence: ctx.evidence.map(({ id, tool, summary }) => ({ id, tool, summary })),
+    // The scripted prose is checked the same way as a model's.
+    figures: checkFigures([answer, ...ctx.drafts.map((d) => d.rationale)].map((t) => ctx.withoutUntrusted(t)), ctx.evidence.map((e) => e.numbers)),
+    context: ctx.context,
+    forbiddenAttempts: ctx.forbiddenAttempts,
+  };
 }
 
 // Shapes of the tool outputs this file reads (see tools.ts).
 interface Overview {
   reporting_currency: string;
-  client: { name: string };
   net_worth: { status: "complete" | "partial" | "unavailable"; net: number | null };
   valuation: {
     complete: boolean;
@@ -208,6 +223,10 @@ interface HoldingDetail {
   pct_of_investible: number | null;
   reporting_value: number | null;
   cost_basis: number | null;
+}
+interface ScopeSimulation {
+  simulation_id: string;
+  draftable: boolean;
 }
 interface Simulation {
   before: number | null;

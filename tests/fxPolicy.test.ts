@@ -358,7 +358,10 @@ describe("honest status in the outputs", () => {
     const ctx = new CopilotContext({ client: SEED_CLIENT, advisor: SEED_ADVISOR, accounts: s.accounts, holdings: s.holdings, fxRates: s.fxRates, recommendations: [], disclosures: DISCLOSURE_LIBRARY } as never);
     const o = JSON.parse(executeTool(ctx, "get_portfolio_overview", {}).content);
     expect(o.fx_freshness).toMatchObject({ policy_days: 7, current: false, stale_in_use: [expect.objectContaining({ pair: "EUR/USD", age_days: 175 })] });
-    const draft = executeTool(ctx, "draft_recommendation", { holding_id: "eur_eq", type: "sell", action_amount: 100, title: "Trim", priority: "medium", rationale: "Testing a trade draft." });
+    // D4: a sized draft comes from a scope simulation; a stale rate is disclosed, not a reason to refuse it.
+    const sim = JSON.parse(executeTool(ctx, "simulate_scope_change", { holding_id: "eur_eq", change: "reduce", amount: 100 }).content);
+    expect(sim).toMatchObject({ draftable: true, not_draftable_reason: null });
+    const draft = executeTool(ctx, "draft_recommendation", { simulation_id: sim.simulation_id, type: "reduce", title: "Trim", priority: "medium", rationale: "Testing a trade draft." });
     expect(draft.isError).toBe(false);
   });
 });
