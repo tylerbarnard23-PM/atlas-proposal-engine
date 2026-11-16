@@ -51,11 +51,22 @@ Include the handoff/roadmap progress update in this feature branch. Link the PR 
 Stop for Codex review with exact head, checks, preview association, remaining limitations and next command. Do not merge/deploy, add new investments/alternative duplication before D2, retire providers, enable live AI, implement remote sharing or process real client data.
 ```
 
-## Active sequencing: D3 → D4 → D5
+## Active sequencing: D4 released → D5
 
-D1 (PR #72, `0381db1`), D2 (PR #75, `073049f`), D2a (PR #79, `c0ee4e9`) and D3 (PR #81, `85b3910`) are released; the D1 command above and the D1–D3 summaries below are historical, so do not rerun them. **D4 is in review (PR #82).** D5 follows its review/release. PR #82 also carries one bounded, owner-approved D5 usability slice (the proposal-flow simplification); it doesn't complete D5. The handoff holds the current checkpoint.
+D1 (PR #72, `0381db1`), D2 (PR #75, `073049f`), D2a (PR #79, `c0ee4e9`), D3 (PR #81, `85b3910`) and **D4 (PR #82, `3738588`, 16 November 2026)** are released; the commands below the next one are historical, so do not rerun them. **D5 is in progress:** its security and dependency gate is in review on `feat/d5-security-dependency-gate`.
 
-### Next command: after the real-Claude check
+### Next command: review the D5 security and dependency gate
+
+Saved on 16 November 2026. Branch `feat/d5-security-dependency-gate` (from main `3738588`); the handoff names the PR and head. Verify heads, tree and stash first, and preserve any newer work.
+
+1. **Codex** reviews the batch against [D5_SECURITY_DEPENDENCY_GATE.md](D5_SECURITY_DEPENDENCY_GATE.md): the Zod 4.6.7 upgrade and its compatibility changes (`z.partialRecord` for the asset-class maps, the `snapshot.ts` record key, the export-allowlist walker), `tests/dependencySecurity.test.ts`, the coverage matrix and the findings' severities.
+2. **Claude** fixes confirmed review findings in one batch, failing regressions first; then typecheck, full tests, extraction eval, build and the browser round trip; then stops.
+3. **The owner** decides separately: enabling secret scanning and push protection ([#85](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/85)); PDF-route abuse controls ([#87](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/87)); whether to grant Vercel access so its configuration can be covered; closing PR #80 as superseded; merging this PR (pinned to the reviewed head).
+4. **After merge:** the bounded fix for [#86](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/86) (limits on arrays parsed by public routes), then the D5 package: golden-path/keyboard/viewport evidence, the R25 protocol and empty scorecard, the README and demo narrative, and the #35 name decision.
+
+Until the owner says otherwise: no paid testing (the 27-trial evaluation budget is unapproved), no real key, no model call, no further dependency change, no pairing-policy change, no merge, no deployment.
+
+### Previous command (done 16 November 2026, don't rerun): after the real-Claude check
 
 Saved on 16 November 2026. The owner-operated verification (Part A fake rehearsal, then Part B, one real run) is **done and passed**; the result is in the handoff and in [LOCAL_CLAUDE_SETUP.md](LOCAL_CLAUDE_SETUP.md). Branch `feat/d4-contextual-agent`, PR #82. Verify heads, tree and stash first, and preserve any newer work. Don't rerun Part B.
 
