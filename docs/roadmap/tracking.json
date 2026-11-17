@@ -1022,7 +1022,7 @@
     "status": "planned",
     "trackingIssue": 36,
     "mode": "synthetic-employer-demo-first",
-    "nextMilestone": "D5: Codex review of the stability batch (meeting-view fit; reset not reproduced), then the D5 package (golden path, R25 protocol, README/demo); counsel's clearance of Stratovell before any announcement; agent 27-trial evaluation budget still undecided",
+    "nextMilestone": "D5: Codex review of the demo package (docs only), then the owner's merge decision, counsel's clearance of Stratovell and the announcement gate; separate bounded fixes for #92, #93, #94; R25 study when participants exist; agent 27-trial evaluation budget still undecided",
     "supersedes": "Serial P0–P5 implementation and standalone R11-first cleanup command; original feature contracts retained",
     "observedMain": "569b96f89efef60bc6c9d90fd92cc5745e90cb96",
     "developmentAssistant": {
@@ -1278,7 +1278,7 @@
           }
         },
         "stabilityBatch": {
-          "status": "in_review",
+          "status": "released",
           "branch": "fix/d5-stability-reset-meeting",
           "workspaceReset": {
             "reproduced": false,
@@ -1298,6 +1298,39 @@
             "templateChanged": false,
             "pdfRouteChanged": false,
             "printOutputComparedEqual": true
+          },
+          "released": {
+            "pr": 91,
+            "mergeCommit": "b2eb2de375dc5fe9669a72b4e7a868767e70f694",
+            "reviewedHead": "64e8b2ad2b3a95d598139d8b41b9705dd2f59e09",
+            "productionDeployment": 7864581288,
+            "productionVerified": "2026-11-17"
+          }
+        },
+        "demoPackage": {
+          "status": "in_review",
+          "branch": "docs/d5-demo-package",
+          "files": [
+            "docs/roadmap/D5_DEMO_WALKTHROUGH.md",
+            "docs/roadmap/R25_USABILITY_PROTOCOL.md",
+            "docs/roadmap/R25_SCORECARD.md",
+            "README.md"
+          ],
+          "rehearsal": {
+            "freshProfiles": 3,
+            "provider": "scripted demo, no model",
+            "paidCalls": 0,
+            "realClientData": false
+          },
+          "usabilityStudy": {
+            "performed": false,
+            "participants": 0,
+            "scorecard": "empty"
+          },
+          "findings": {
+            "92": "no navigation below 768px",
+            "93": "no skip link",
+            "94": "sample notice absent from PDF continuation pages"
           }
         }
       }
