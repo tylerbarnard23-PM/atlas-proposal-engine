@@ -1022,7 +1022,7 @@
     "status": "planned",
     "trackingIssue": 36,
     "mode": "synthetic-employer-demo-first",
-    "nextMilestone": "D5: Codex review of PR #90 (Stratovell visible rename), then the owner's merge decision and counsel's clearance; D5 package (golden path, R25 protocol, README/demo); agent 27-trial evaluation budget still undecided",
+    "nextMilestone": "D5: Codex review of the stability batch (meeting-view fit; reset not reproduced), then the D5 package (golden path, R25 protocol, README/demo); counsel's clearance of Stratovell before any announcement; agent 27-trial evaluation budget still undecided",
     "supersedes": "Serial P0–P5 implementation and standalone R11-first cleanup command; original feature contracts retained",
     "observedMain": "569b96f89efef60bc6c9d90fd92cc5745e90cb96",
     "developmentAssistant": {
@@ -1197,7 +1197,7 @@
         },
         "namingGate": {
           "issue": 35,
-          "status": "selected_rename_in_review",
+          "status": "released_publication_gated",
           "report": "D5_NAMING_SCREENING.md",
           "checklist": "D5_BRANDING_IMPLEMENTATION_CHECKLIST.md",
           "rounds": [
@@ -1267,7 +1267,38 @@
             "pr": 90
           },
           "visibleRenameOnly": true,
-          "screenshotsRetaken": true
+          "screenshotsRetaken": true,
+          "released": {
+            "pr": 90,
+            "mergeCommit": "3c40cf7089f76cf8dac1511d70448c0b8aed59d2",
+            "reviewedHead": "e813e7a868f853ca04953a01b8f713ac8c99011a",
+            "productionDeployment": 7862665970,
+            "productionVerified": "2026-11-17",
+            "vercelApiReadable": false
+          }
+        },
+        "stabilityBatch": {
+          "status": "in_review",
+          "branch": "fix/d5-stability-reset-meeting",
+          "workspaceReset": {
+            "reproduced": false,
+            "profilesOnMain": 3,
+            "rehearsalProfilesOnBranch": 2,
+            "relaunchesPerProfile": 3,
+            "relaunchesKept": "15 of 15",
+            "persistenceCodeChanged": false
+          },
+          "meetingViewSmallScreens": {
+            "fixed": true,
+            "viewportsChecked": [
+              375,
+              768,
+              1360
+            ],
+            "templateChanged": false,
+            "pdfRouteChanged": false,
+            "printOutputComparedEqual": true
+          }
         }
       }
     ],

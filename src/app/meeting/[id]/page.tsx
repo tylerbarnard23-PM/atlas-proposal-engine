@@ -6,6 +6,7 @@ import { useAtlasStore } from "@/store/useStore";
 import { ProposalPdfTemplate } from "@/pdf/templates/ProposalPdfTemplate";
 import { ClientOnly } from "@/components/layout/ClientOnly";
 import { snapshotTemplateProps } from "@/engines/approvedSnapshot";
+import { MEETING_SCREEN_CSS, MeetingDocumentRegion, useFitScale, type MeetingFitMode } from "./meetingFit";
 
 // D3: the read-only meeting view of one approved version. It renders the
 // shared template from the version's frozen inputs at its approval time,
@@ -33,6 +34,17 @@ const bar: React.CSSProperties = {
   color: "white",
   fontFamily: "ui-sans-serif, system-ui, sans-serif",
   fontSize: 13,
+  flexWrap: "wrap",
+};
+
+const toggle: React.CSSProperties = {
+  background: "transparent",
+  color: "white",
+  border: "1px solid rgba(255,255,255,0.6)",
+  borderRadius: 6,
+  padding: "4px 10px",
+  font: "inherit",
+  cursor: "pointer",
 };
 
 function Inner() {
@@ -42,6 +54,9 @@ function Inner() {
     () => (snapshot ? snapshotTemplateProps(snapshot, { variant: "final", presentation: "meeting", timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }) : null),
     [snapshot]
   );
+  const region = React.useRef<HTMLDivElement>(null);
+  const scale = useFitScale(region, props !== null);
+  const [mode, setMode] = React.useState<MeetingFitMode>("fit");
   if (!snapshot || !props) {
     return (
       <div style={{ padding: 24, fontFamily: "ui-sans-serif, system-ui, sans-serif" }}>
@@ -55,11 +70,21 @@ function Inner() {
         <span>
           Approved version {snapshot.version} · read-only meeting view, not an issued document
         </span>
-        <a href="/review" style={{ color: "white", textDecoration: "underline" }}>
-          Back to Review &amp; present
-        </a>
+        <span style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          {scale < 1 && (
+            <button type="button" style={toggle} onClick={() => setMode(mode === "fit" ? "actual" : "fit")}>
+              {mode === "fit" ? "Actual size" : "Fit to screen"}
+            </button>
+          )}
+          <a href="/review" style={{ color: "white", textDecoration: "underline" }}>
+            Back to Review &amp; present
+          </a>
+        </span>
       </div>
-      <ProposalPdfTemplate {...props} />
+      <style dangerouslySetInnerHTML={{ __html: MEETING_SCREEN_CSS }} />
+      <MeetingDocumentRegion ref={region} scale={scale} mode={mode}>
+        <ProposalPdfTemplate {...props} />
+      </MeetingDocumentRegion>
     </>
   );
 }

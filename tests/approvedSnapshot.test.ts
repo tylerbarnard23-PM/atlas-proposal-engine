@@ -288,6 +288,32 @@ describe("one template: meeting view, issued PDF and draft copy agree", () => {
     expect(t).not.toMatch(/NaN|undefined/);
   });
 
+  it("the meeting view's small-screen wrapper holds the same document, unchanged, in a focusable region; its scaling is screen-only", async () => {
+    const m = await load();
+    approvedStory(m);
+    const v1 = approve(m);
+    const meeting = await render(m, v1, "meeting");
+    const fit = await import("@/app/meeting/[id]/meetingFit");
+    const React = await import("react");
+    const { renderToStaticMarkup } = await import("react-dom/server");
+    const props = m.snapshotTemplateProps(v1, { variant: "final", presentation: "meeting", timeZone: "UTC" });
+    const wrapped = (mode: "fit" | "actual", scale: number) =>
+      renderToStaticMarkup(React.createElement(fit.MeetingDocumentRegion, { mode, scale }, React.createElement(m.ProposalPdfTemplate, props)));
+    // A 375px phone: fitted, the document is scaled; at actual size it is not, and the region scrolls.
+    const phone = fit.fitScale(375);
+    expect(phone).toBeCloseTo(375 / fit.DOCUMENT_WIDTH_PX, 2);
+    for (const [mode, scale] of [["fit", String(phone)], ["actual", "1"]] as const) {
+      const html = wrapped(mode, phone);
+      expect(html.startsWith('<div class="meeting-doc-region" role="region" aria-label="Approved version document" tabindex="0">')).toBe(true);
+      expect(html).toContain(`--meeting-scale:${scale}`);
+      // The document inside is byte-for-byte the meeting view the template renders.
+      expect(html.slice(html.indexOf(">", html.indexOf('class="meeting-doc"')) + 1, html.length - "</div></div>".length)).toBe(meeting);
+    }
+    // The scale only applies on screen: printing ignores it.
+    expect(fit.MEETING_SCREEN_CSS.trim().startsWith("@media screen {")).toBe(true);
+    expect(fit.MEETING_SCREEN_CSS).not.toMatch(/@media print/);
+  });
+
   it("shows the D2a package: pinned model, target versus funded, minimums and reviews, supplied fees, exposure with coverage", async () => {
     const m = await load();
     approvedStory(m);
