@@ -74,7 +74,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const read = await readBodyLimited(req, PDF_MAX_BODY_BYTES);
   if (!read.ok) {
     return read.tooLarge
-      ? NextResponse.json({ error: `The request is larger than ${PDF_MAX_BODY_BYTES / 1_000_000} MB, so Atlas didn't read it.`, code: "body_too_large" }, { status: 413 })
+      ? NextResponse.json({ error: `The request is larger than ${PDF_MAX_BODY_BYTES / 1_000_000} MB, so Stratovell didn't read it.`, code: "body_too_large" }, { status: 413 })
       : NextResponse.json({ error: "The request body couldn't be read." }, { status: 400 });
   }
   let parsedBody: unknown;

@@ -7,7 +7,7 @@ Tracking epic: [#36](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/
 
 ## Delivery decision — 24 October 2026
 
-Build the employer-facing **synthetic advisor demo first** using [delivery packages with the approved D2a model/manager slice](docs/roadmap/DEMO_DELIVERY_PLAN.md) and the [Claude command playbook](docs/roadmap/CLAUDE_COMMANDS.md). **D1 (allocation desk) is released (PR #72, `0381db1`). D2 (funded alternatives) is released (PR #75, `073049f`).** **D2a (model/manager proposals) is released (PR #79, `c0ee4e9`).** **D3 (review once, present consistently) is released (PR #81, `85b3910`).** **D4 (the bounded contextual agent) is in review as PR #82.** Its live evaluation is prepared but not performed (owner budget decision pending). D5 follows D4's review/release. The small review-copy/optional-identifier cleanup is already delivered (PR #70 (merged `8b06b6a`)); D1 builds on it and must not repeat it. The prior stand-alone R11-first prompt is superseded. Routine design choices are authorized within the accepted scope; don't insert another approval-only planning round.
+Build the employer-facing **synthetic advisor demo first** using [delivery packages with the approved D2a model/manager slice](docs/roadmap/DEMO_DELIVERY_PLAN.md) and the [Claude command playbook](docs/roadmap/CLAUDE_COMMANDS.md). **D1 (allocation desk) is released (PR #72, `0381db1`). D2 (funded alternatives) is released (PR #75, `073049f`).** **D2a (model/manager proposals) is released (PR #79, `c0ee4e9`).** **D3 (review once, present consistently) is released (PR #81, `85b3910`).** **D4 (the bounded contextual agent) is released (PR #82, `3738588`, 16 November 2026).** One owner-operated real-Claude run passed; the 27-trial evaluation and real-model browser checks are not performed (budget unapproved). **D5 is in progress:** its security and dependency gate (PR #88, `ba5f6ce`) and the #86 request-limit fix (PR #89, `569b96f`) are released and production-verified; the naming screening for #35 is saved and awaits the owner's choice. The small review-copy/optional-identifier cleanup is already delivered (PR #70 (merged `8b06b6a`)); D1 builds on it and must not repeat it. The prior stand-alone R11-first prompt is superseded. Routine design choices are authorized within the accepted scope; don't insert another approval-only planning round.
 
 All 25 directions remain accepted, but only their listed minimum slices are on the demo critical path. Broader features are explicitly later, not cancelled or marked complete. This sequence supersedes the old P0–P5 queue. No provider-deletion, advanced-analytics, full exception-queue, multi-client or remote-sharing prerequisite holds up the workspace. The financial contracts and #59 real-client gate remain.
 
@@ -34,7 +34,7 @@ The approved [valuation scope and safe-retirement plan](docs/roadmap/VALUATION_S
 - PR #34 (the precise live preview) is complete. R08 is a separate follow-up that reuses it, not a duplicate preview.
 - #26 FX work is complete and live (PR #60, merge `e54d56e3d381a65715bedcf686bf7d59935591bf`). #28 date rendering is complete and live (PR #63, merge `23db797c58b2241e8b0c229818ebeecb06755d47`); follow-up #64 (UTC "today" writes) is logged.
 - R23a is complete and live: PR #66 (Codex-reviewed head `d088dab657c802d18c8e34882f245603f31ab75e`) merged as `e56335e5fdb4f2f343cdea605333b16cda9ad932` on 23 October 2026 (production `dpl_DUsfyjnmjxaUaLNfBhrNfHixwqsy`). It precedes persisted-schema migrations: each later store version needs a matching backup migration step. R23b is not started; #55 stays open.
-- Naming #35 is a separate pre-LinkedIn task; no name has been selected. Preserve browser storage and working links during that transition.
+- Naming #35: **Stratovell** (Stratovell Proposal System, formerly Atlas Proposal Engine) was selected by Tyler on 17 November 2026; the visible rename is in PR #90 ([screening](docs/roadmap/D5_NAMING_SCREENING.md); not trademark or legal clearance). Counsel's clearance and the announcement gate remain before LinkedIn. Technical identities keep the `atlas-proposal-engine` name; preserve browser storage and working links.
 - This roadmap does not merge, deploy, change hosting, run a new live model, purchase data or authorize external trading.
 
 ## Client-data privacy prerequisite
@@ -119,7 +119,7 @@ These are coordinated contracts, not seven competing copies of portfolio state. 
 - #15 projections remain included as a later R15 extension, with documented data and assumptions first.
 - #26/#28 support R18. The existing accepted FX policy remains in force. #26 is complete (PR #60, merged `e54d56e`, live); R18 slice 1 is released (PR #69, `7d5999f`); provider retirement and candidate FX review remain later; optional security repricing is deferred; #28 is complete (PR #63, merged `23db797`, live).
 - #33/#34 deliver the precise preview; R08 (#43) separately connects it to the working portfolio.
-- #35 naming remains separate before LinkedIn publication.
+- #35 naming is a publication gate: the owner's choice, then counsel's clearance, before LinkedIn publication.
 
 Original issue bodies/history are retained when expanded. No existing feature issue is closed by saving the plan.
 

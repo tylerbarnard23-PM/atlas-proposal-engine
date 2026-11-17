@@ -67,11 +67,11 @@ export function Sidebar() {
       <div className="px-5 pt-5 pb-4 border-b border-ink-100">
         <Link href="/" className="flex items-center gap-2.5">
           <div className="h-8 w-8 rounded-md bg-navy-900 text-gold-300 flex items-center justify-center font-serif text-base shadow-card">
-            A
+            S
           </div>
           <div>
-            <div className="text-[15px] font-serif text-ink-900 leading-none">Atlas</div>
-            <div className="text-2xs uppercase tracking-widest text-ink-500 mt-1">Proposal Engine</div>
+            <div className="text-[15px] font-serif text-ink-900 leading-none">Stratovell</div>
+            <div className="text-2xs uppercase tracking-widest text-ink-500 mt-1">Proposal System</div>
           </div>
         </Link>
       </div>

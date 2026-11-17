@@ -13,7 +13,7 @@ export const MockMarketDataProvider: MarketDataProvider = {
   id: "mock",
   name: "Mock Market Data (offline)",
   sourceType: "mock",
-  attributionLine: "Atlas Proposal Engine — local fallback values",
+  attributionLine: "Stratovell Proposal System — local fallback values",
   supportedAssetTypes: [
     "stock",
     "etf",

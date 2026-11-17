@@ -104,7 +104,7 @@ async function settle<T>(work: Promise<T>, ms: number): Promise<Settled<T>> {
 }
 
 /** A reason safe to show when the store never answered. */
-const silent = (action: string) => `The operating system's credential store didn't answer, so Atlas stopped waiting for it to ${action}. It may be locked, or waiting on a prompt that was never answered.`;
+const silent = (action: string) => `The operating system's credential store didn't answer, so Stratovell stopped waiting for it to ${action}. It may be locked, or waiting on a prompt that was never answered.`;
 
 export function keychainStore(service: string = KEYCHAIN_SERVICE, load: () => Promise<KeyringModule | null> = loadKeyring, callMs: number = NATIVE_CALL_MS): SecretStore {
   const entry = async (account: string) => {

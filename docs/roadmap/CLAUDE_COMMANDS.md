@@ -55,7 +55,22 @@ Stop for Codex review with exact head, checks, preview association, remaining li
 
 D1 (PR #72, `0381db1`), D2 (PR #75, `073049f`), D2a (PR #79, `c0ee4e9`), D3 (PR #81, `85b3910`) and **D4 (PR #82, `3738588`, 16 November 2026)** are released; the commands below the next one are historical, so do not rerun them. **D5 is in progress:** its security and dependency gate is in review on `feat/d5-security-dependency-gate`.
 
-### Next command: review the #86 request limits
+### Next command: review the Stratovell branding PR
+
+Saved on 17 November 2026. Tyler selected **Stratovell** on [#35](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/35); PR #90 now holds the visible rename (**Stratovell Proposal System**, formerly Atlas Proposal Engine) and the naming records. Verify heads, tree and stash first, and preserve newer work.
+
+1. **Codex** reviews PR #90: that only display text changed, every retained technical identity is intact, the `Atlas` references that remain are intended (listed in [the handoff](../CLAUDE_HANDOFF.md)), approved versions and backups still load, and the PDF sample notice and demo disclaimers stay accurate.
+2. **The owner** decides on merge (pinned: `gh pr merge 90 --merge --match-head-commit <reviewed head>`), counsel's clearance of the name, and whether the model-facing prompt and credential-store service name get their own later change (they are retained; see [the checklist](D5_BRANDING_IMPLEMENTATION_CHECKLIST.md) section 2).
+3. **Claude** then records the post-merge production check. The README screenshots were retaken and the approved-version meeting view, a draft copy and a final PDF were read on 17 November 2026 (see [the handoff](../CLAUDE_HANDOFF.md)).
+4. **Separate owner decisions:** [#85](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/85), [#87](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/87), Vercel access, closing PR #80. **Then the D5 package:** golden-path, keyboard and viewport evidence, the R25 protocol and scorecard, the README and demo narrative.
+
+Until the owner says otherwise: no merge, announcement or LinkedIn publication, no purchase (domains, handles, trademarks), settings change or paid call.
+
+### Previous command (done 17 November 2026, don't rerun): apply the chosen name
+
+Superseded by the one above: the name is chosen and the rename is in PR #90.
+
+### Previous command (done 16 November 2026, don't rerun): review the #86 request limits
 
 Saved on 16 November 2026. PR #88 (the D5 security and dependency gate) is merged as `ba5f6ce`. Branch `fix/86-request-resource-limits`; the handoff names the PR and head. Verify heads, tree and stash first, and preserve any newer work.
 

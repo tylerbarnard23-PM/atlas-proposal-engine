@@ -27,7 +27,7 @@ const SUPPORTED_NODE = 24;
 const major = Number(process.versions.node.split(".")[0]);
 // Checked before the TypeScript modules below are loaded: those imports are what an older Node fails on first.
 if (!(Number.isFinite(major) && major >= SUPPORTED_NODE)) {
-  console.error(`Atlas needs Node ${SUPPORTED_NODE} or newer (this is ${process.versions.node}). Install it from nodejs.org, then run: npm install`);
+  console.error(`Stratovell needs Node ${SUPPORTED_NODE} or newer (this is ${process.versions.node}). Install it from nodejs.org, then run: npm install`);
   process.exit(1);
 }
 
@@ -82,7 +82,7 @@ if (command === "arm") {
   // The key connection in use now (never the key): the session is bound to it.
   const connection = await readConnection(connectionFilePath(process.env));
   if (provider === "anthropic" && connection.source === "none") {
-    console.error("No API key is connected yet. Open Atlas (npm run local), connect a key under Connect Claude, then arm the session, or start it there.");
+    console.error("No API key is connected yet. Open Stratovell (npm run local), connect a key under Connect Claude, then arm the session, or start it there.");
     process.exit(1);
   }
   const r = await armSession(file, now, provider, { credentialRevision: connection.revision });

@@ -1,47 +1,47 @@
 # Local Claude setup
 
-How a user runs Atlas on their own machine and connects their own Claude access, with Proposal Copilot staying inside Atlas. Updated 11 November 2026 on PR #82.
+How a user runs Stratovell on their own machine and connects their own Claude access, with Proposal Copilot staying inside Stratovell. Updated 11 November 2026 on PR #82. Product name: Stratovell (formerly Atlas Proposal Engine); the record below keeps the names it was written with.
 
 ## Status
 
-- **Route 1 is chosen by the owner and implemented:** the existing Claude API integration with a user-owned Console API key, guided key entry in Atlas, optional remembering in the operating system's credential store, and sessions started inside Atlas.
+- **Route 1 is chosen by the owner and implemented:** the existing Claude API integration with a user-owned Console API key, guided key entry in Stratovell, optional remembering in the operating system's credential store, and sessions started inside Stratovell.
 - **Reviewed at `03128df` (11 November 2026); the confirmed findings fixed (12 November), then four rounds of defects found while reviewing those fixes closed the same day. The latest focused review passed (owner-reported, 12 November 2026; runtime head `8f715d6`).** Finding 3 is a design decision with a recommendation below.
 - **One owner-operated real-Claude verification has occurred (16 November 2026) and passed** — one run, one question, synthetic data; see "Part B as run" below. It is **not** the 27-trial evaluation and not the broader real-model browser checks, which remain unperformed. Before that run everything was built and checked with fake providers, made-up keys and synthetic data.
 - **No further paid testing is authorized.** The earlier paid-pilot approval was withdrawn, and the owner's approval on 16 November 2026 covered that single interactive check only — not the 27-trial evaluation, further paid runs, model changes, merge or deployment.
 - **No Anthropic permission or legal clearance has been sought or obtained.** Route 1 uses a customer-owned API key, which Anthropic's documentation allows; the other routes are not part of this work.
 - **API cost estimates are unmeasured.**
-- **Subscriber-credit eligibility is distinct from subscription login.** A Max, Ultra or Team plan's API credits fund an API key. They do not make it possible to sign in to Atlas with a Claude plan.
+- **Subscriber-credit eligibility is distinct from subscription login.** A Max, Ultra or Team plan's API credits fund an API key. They do not make it possible to sign in to Stratovell with a Claude plan.
 
-## Set up Atlas with Claude
+## Set up Stratovell with Claude
 
 **Requirements:** Node 24 or newer, and this repository with `npm install` run once. Check a machine with `npm run local:doctor`; it only looks at this machine and never contacts Anthropic or reads a key.
 
-1. **Build once** (again after updating Atlas):
+1. **Build once** (again after updating Stratovell):
 
    ```bash
    npm run build
    ```
 
-2. **Start Atlas:**
+2. **Start Stratovell:**
 
    ```bash
    npm run local
    ```
 
-   - Atlas listens on `127.0.0.1` only. If port 3000 is busy it uses the next free port and says so; it never stops another program. `--port N` chooses another starting port.
+   - Stratovell listens on `127.0.0.1` only. If port 3000 is busy it uses the next free port and says so; it never stops another program. `--port N` chooses another starting port.
    - Your browser opens through a one-time pairing link. Pairing lets that browser manage the Claude connection. It starts no session and spends nothing.
    - `--dev` uses the development server (no build needed). `--no-open` prints the link instead. `--fake` rehearses everything with the fake provider: no key, no API calls.
-   - If Atlas is already running, `npm run local:pair -- --origin http://127.0.0.1:3000` prints a new pairing link.
+   - If Stratovell is already running, `npm run local:pair -- --origin http://127.0.0.1:3000` prints a new pairing link.
 
 3. **In the Claude Console** (platform.claude.com):
-   - Create a workspace just for Atlas (**Workspaces**). The Default Workspace can't have a spend limit.
-   - Set that workspace's monthly **spend limit**. This is what actually caps charges; Atlas's own guard is an estimate.
-   - Create an **API key in that workspace**. Never use an Admin key (`sk-ant-admin…`) or a Claude subscription token from `claude setup-token`; Atlas refuses both. Anthropic documents no format for ordinary API keys, so Atlas can't confirm a key by looking at it: your first question settles whether it works.
+   - Create a workspace just for Stratovell (**Workspaces**). The Default Workspace can't have a spend limit.
+   - Set that workspace's monthly **spend limit**. This is what actually caps charges; Stratovell's own guard is an estimate.
+   - Create an **API key in that workspace**. Never use an Admin key (`sk-ant-admin…`) or a Claude subscription token from `claude setup-token`; Stratovell refuses both. Anthropic documents no format for ordinary API keys, so Stratovell can't confirm a key by looking at it: your first question settles whether it works.
 
-4. **In Atlas, open Proposal Copilot → Connect Claude:**
+4. **In Stratovell, open Proposal Copilot → Connect Claude:**
    - Paste the key into the masked field.
-   - Choose where Atlas keeps it: **for this server session only** (memory; pasted again after a restart) or **remembered securely** in the operating system's credential store.
-   - The status reads "Key saved; connection not yet verified". Atlas has not contacted Anthropic.
+   - Choose where Stratovell keeps it: **for this server session only** (memory; pasted again after a restart) or **remembered securely** in the operating system's credential store.
+   - The status reads "Key saved; connection not yet verified". Stratovell has not contacted Anthropic.
 
 5. **Start a limited session.** Review the allowance, lower it if you want, and confirm. Then ask a question. The first question is the first request to Anthropic; a successful answer changes the status to "Connected".
 
@@ -67,11 +67,11 @@ How a user runs Atlas on their own machine and connects their own Claude access,
 ### Managing the key
 
 - **Replace key** and **Disconnect** stop the current session and cancel a run in progress. The stopped session keeps its counters.
-- **A replacement is staged.** A new key is written to a second entry and only becomes the live one once it reads back, so a failed save leaves the previous key, its revision and its session exactly as they were. Atlas records the entry it is about to write **before** writing it, so a change interrupted by a crash is still found and cleaned up afterwards. If an unconfirmed entry can't be removed, Atlas says so and removes it the next time the credential store is available.
+- **A replacement is staged.** A new key is written to a second entry and only becomes the live one once it reads back, so a failed save leaves the previous key, its revision and its session exactly as they were. Stratovell records the entry it is about to write **before** writing it, so a change interrupted by a crash is still found and cleaned up afterwards. If an unconfirmed entry can't be removed, Stratovell says so and removes it the next time the credential store is available.
 - **One change at a time.** Saving, selecting the environment key and disconnecting each run as a single operation per installation, across processes, so two changes can't interleave. A second change that can't start within a few seconds is refused with "Another change to the Claude connection is still in progress" rather than running half-way — including while an earlier change is still waiting on the credential store, so a store that never answers never leaves you with no reply at all. **Stop live session is never held up by this**: halting spending never waits on a credential store.
-- **A store that stops answering is given up on — but the entry it was given is not.** A locked credential store can sit on a prompt nobody answers. Atlas waits a minute, then tells you it stopped waiting. Giving up ends the waiting, not the call: it may still write or remove that entry afterwards. So Atlas keeps that entry to itself until the call actually finishes — nothing else may use it, and no other change to the connection starts meanwhile — and removes it then. An abandoned save is never connected, whenever its write lands. Your previous key stays live throughout.
-- **Session-only keys** are lost when Atlas stops. The page then says the key is needed again.
-- **Environment key (advanced):** if `ANTHROPIC_API_KEY` is set where Atlas starts, Connect Claude offers "Use the server's environment key". It is managed outside Atlas, used only after you choose it, and Atlas can't remove it.
+- **A store that stops answering is given up on — but the entry it was given is not.** A locked credential store can sit on a prompt nobody answers. Stratovell waits a minute, then tells you it stopped waiting. Giving up ends the waiting, not the call: it may still write or remove that entry afterwards. So Stratovell keeps that entry to itself until the call actually finishes — nothing else may use it, and no other change to the connection starts meanwhile — and removes it then. An abandoned save is never connected, whenever its write lands. Your previous key stays live throughout.
+- **Session-only keys** are lost when Stratovell stops. The page then says the key is needed again.
+- **Environment key (advanced):** if `ANTHROPIC_API_KEY` is set where Stratovell starts, Connect Claude offers "Use the server's environment key". It is managed outside Stratovell, used only after you choose it, and Stratovell can't remove it.
 - **Terminal alternative:** `npm run live-session -- arm --provider anthropic` still arms a session for a browser to claim. It is bound to the key connected at that moment.
 
 ### Troubleshooting
@@ -82,14 +82,14 @@ How a user runs Atlas on their own machine and connects their own Claude access,
 | "Local live mode isn't available" | The server isn't in live mode, looks hosted, or has `ANTHROPIC_BASE_URL` set. Use `npm run local`, which sets this up. |
 | "Secure remembering isn't available" or the credential store "may be locked" | Nothing was saved. Unlock the store, or keep the key for this server session only. On Linux a Secret Service (such as GNOME Keyring) must be running. |
 | "Key needed again" | A session-only key was lost at restart. Paste it again. |
-| "Key changed" | The stored or environment key was changed outside Atlas. Replace or reselect it. |
+| "Key changed" | The stored or environment key was changed outside Stratovell. Replace or reselect it. |
 | "Key rejected" | Anthropic refused the key. Check it in the Console and replace it. |
 | "The session can't be used" after a key change | Stop it and start a new one. |
 | "Another `next dev` server is already running" | Next.js allows one development server per checkout. Run the second instance without `--dev` (it uses the production build), or start it from a separate copy of the repository. |
 | "The new key was not connected… your previous connection is unchanged" | The credential store refused or couldn't confirm the write. The earlier key still works. Try again, or keep the key for this server session only. |
-| "An earlier entry couldn't be removed… one may still be there" | Atlas couldn't confirm removing a superseded entry. It retries on the next save or Disconnect; you can also remove the "Atlas Proposal Engine" entries yourself. |
+| "An earlier entry couldn't be removed… one may still be there" | Stratovell couldn't confirm removing a superseded entry. It retries on the next save or Disconnect; you can also remove the "Stratovell Proposal System" entries yourself. |
 | "Another change to the Claude connection is still in progress" | Two changes arrived at once (often a double-click). Nothing was half-applied; try again. |
-| "The operating system's credential store didn't answer" | The store is locked, or a prompt is waiting unanswered. Unlock it (on Linux, start the Secret Service) and try again. Nothing replaced your previous key, and the entry Atlas had started is cleaned up as soon as the store finishes with it. |
+| "The operating system's credential store didn't answer" | The store is locked, or a prompt is waiting unanswered. Unlock it (on Linux, start the Secret Service) and try again. Nothing replaced your previous key, and the entry Stratovell had started is cleaned up as soon as the store finishes with it. |
 
 ## Owner-operated verification walkthrough (prepared 12 November 2026; the real-Claude step is NOT approved)
 
@@ -125,13 +125,13 @@ Use an isolated state folder and a port other than your existing server's. One c
    npm run local:doctor
    ```
 
-4. Start Atlas with the fake provider (it binds 127.0.0.1 and opens a one-time pairing link; the port is a different browser origin from your existing server, so your saved workspace there is not touched):
+4. Start Stratovell with the fake provider (it binds 127.0.0.1 and opens a one-time pairing link; the port is a different browser origin from your existing server, so your saved workspace there is not touched):
 
    ```powershell
    npm run local -- --fake --port 3107
    ```
 
-5. In Atlas, check the page names the **fake provider** ("Live session · Fake provider · atlas-test-provider"), then go to **Settings → Backup & restore → Restore from backup…**, choose the walkthrough file and read the preview (Walkthrough Household (synthetic), 2 accounts, 4 holdings, net worth $500,000). If a checkbox offers to replace firm & branding, leave it unticked. Press **Replace current workspace**. This replaces only this origin's workspace.
+5. In Stratovell, check the page names the **fake provider** ("Live session · Fake provider · atlas-test-provider"), then go to **Settings → Backup & restore → Restore from backup…**, choose the walkthrough file and read the preview (Walkthrough Household (synthetic), 2 accounts, 4 holdings, net worth $500,000). If a checkbox offers to replace firm & branding, leave it unticked. Press **Replace current workspace**. This replaces only this origin's workspace.
 6. Open **Proposal Copilot**. It should say "Scope 1 of 2 accounts: Story — Investment Account" (the USD 400,000 home stays outside it as context). **Start a limited session before asking** — nothing can be asked until a session is active:
    - Under Connect Claude, press **Start a session…**. Lower **Copilot runs to 1** with the drop-down if you want to match Part B, then press **Confirm and start**. Starting sends nothing anywhere.
    - The Live test session panel should read **ACTIVE** with "HTTP requests left 10 of 10" and "Estimated USD left USD 5.00 of USD 5.00".
@@ -142,7 +142,7 @@ Use an isolated state folder and a port other than your existing server's. One c
    - **Current holdings unchanged:** Accounts & assets still shows 60,000 / 30,000 / 10,000 (and the home 400,000). A draft never edits observed holdings.
    - Back on Copilot, the counters should read about "Runs left 0 of 1" and "HTTP requests left 6 of 10".
    - Press **Stop live session**; the panel reads STOPPED and keeps its counters. **Disconnect** appears in Connect Claude only once a key has been saved, so with the fake provider and no key there is nothing to disconnect; you will use it in Part B.
-8. Stop Atlas with Ctrl+C in that window. Remove the rehearsal state if you like (it holds only hashes and counters, never a key). **This does not clear the workspace in your browser:** the Part A draft lives in that origin's browser storage, not in the state folder. Part B step B3 restores the original file again to remove it.
+8. Stop Stratovell with Ctrl+C in that window. Remove the rehearsal state if you like (it holds only hashes and counters, never a key). **This does not clear the workspace in your browser:** the Part A draft lives in that origin's browser storage, not in the state folder. Part B step B3 restores the original file again to remove it.
 
    ```powershell
    Remove-Item -Recurse -Force .atlas-local/walkthrough-state
@@ -154,10 +154,10 @@ Use an isolated state folder and a port other than your existing server's. One c
 
 **B1. In the Claude Console** (platform.claude.com), in the organization you want billed:
 - **Workspaces → create a workspace just for this test** (the Default Workspace can't have a spend limit).
-- Set that workspace's monthly **spend limit** low (for example USD 5). This, not Atlas's guard, is what actually caps charges.
-- **Create an API key in that workspace.** Never an Admin key (`sk-ant-admin…`) and never a `claude setup-token` subscription token; Atlas refuses both. Keep the key out of chat, files and commands.
+- Set that workspace's monthly **spend limit** low (for example USD 5). This, not Stratovell's guard, is what actually caps charges.
+- **Create an API key in that workspace.** Never an Admin key (`sk-ant-admin…`) and never a `claude setup-token` subscription token; Stratovell refuses both. Keep the key out of chat, files and commands.
 
-**B2. Start Atlas without `--fake`** (same isolated state, same port; stop any Part A server first):
+**B2. Start Stratovell without `--fake`** (same isolated state, same port; stop any Part A server first):
 
 ```powershell
 npm run local -- --port 3107
@@ -165,13 +165,13 @@ npm run local -- --port 3107
 
 **B3. Restore the walkthrough file again, even on the same browser origin.** Deleting the state folder does not clear the browser's workspace data, so Part A's draft is still there and would make the Part B result ambiguous. Restoring replaces the whole workspace and removes it. Before asking, check the Allocation desk shows no draft action (Draft changes (0)) and Accounts & assets shows 60,000 / 30,000 / 10,000.
 
-**B4. Enter the key privately.** In Connect Claude press **Add a key**, paste the key into the masked field yourself, choose **for this server session only** (recommended for a one-off: it is gone when Atlas stops), and press **Save key**. Expect "Key saved; connection not yet verified": Atlas has not contacted Anthropic. Nothing has been spent.
+**B4. Enter the key privately.** In Connect Claude press **Add a key**, paste the key into the masked field yourself, choose **for this server session only** (recommended for a one-off: it is gone when Stratovell stops), and press **Save key**. Expect "Key saved; connection not yet verified": Stratovell has not contacted Anthropic. Nothing has been spent.
 
 **B5. Start one limited session.** Press **Start a session…**, set **Copilot runs to 1** (the default is 3) with the drop-down, check the confirmation says 1 run, 10 requests, 30 minutes and USD 5, and confirm. **Then check the panel reads "Runs left 1 of 1" before asking.** If the Browser pane is hidden, show it first.
 
 **B6. Ask the one question** and check the same points as Part A step 7. Expect about four provider requests. If anything looks wrong, press **Stop live session**. Do not ask a second question.
 
-**B7. Clean up:** **Stop live session**, then **Disconnect**, stop Atlas, delete the API key in the Console (and the workspace if you want), and remove the state folder as in Part A step 8.
+**B7. Clean up:** **Stop live session**, then **Disconnect**, stop Stratovell, delete the API key in the Console (and the workspace if you want), and remove the state folder as in Part A step 8.
 
 **Part B as run (16 November 2026, runtime head `8f715d6`, saved head `2407d8a`, production build, real mode, owner-operated) — passed.** The owner approved exactly this one interactive check. A dedicated Console workspace `atlas-verification` had a USD 5 spend limit and (owner-reported) USD 5 of credit; a temporary key was created in it and entered by the owner in Connect Claude, **session-only**, so the OS credential store was never used. Claude never saw, read or logged the key; the page was not read while the field was in use. The synthetic workspace was restored again first (Draft changes (0), scope USD 100,000, home as context). The page identified the provider as **Claude · claude-opus-5-5**. **One run: 4 provider requests, 4 model attempts, USD 0.0658 estimated from usage, nothing retained, model `claude-opus-5-5` only (no fallback used), about 16 seconds.** The answer was COMPLETED; the status moved to "Connected: Anthropic accepted this key on a request"; "28 figures checked against this run's engine results… all matched". It simulated the reduction (equity 60,000 → 54,000, cash 10,000 → 16,000, fixed income unchanged at 30%, scope 100,000, home outside it, no reserve breach), saved one draft preview and flagged tax review, no target allocation and cash drag. **The preview alone added nothing** (0 recommendations, 0 draft members). After the owner's explicit **Add**: one `reduce` action of 6,000 on Equity ETF A, not approved, excluded from the PDF, `needs_review`, no snapshot; the Allocation desk showed equity 54,000, bonds 30,000, cash 16,000; holdings stayed 60,000 / 30,000 / 10,000 / 400,000. The owner then pressed Stop and Disconnect (the record read `source: none`, nothing pending, session `stopped`) and deleted the Console key (owner-reported). No key-like string was found in the state files, the launcher logs or the repository; the credential store held nothing. **What happened that wasn't planned:** the first session was started with the default **3 runs**, not 1. It was caught from the panel before any question and nothing had been spent, so it was stopped and replaced by a 1-run session. The panel's counters ("Runs left 1 of 1") are the thing to check. The Browser pane was also hidden at first, so the owner could not see the key form until the pane was shown. **Limits:** this is one run on one question. It replaces neither the full 27-trial agent evaluation nor the broader real-model browser checks, which remain unperformed. Actual Console charges were not read by Claude; the estimate is Atlas's (list prices, not a billing figure). The answer text contained a markdown table written with pipe characters, which may have been displayed as raw text; this was seen in the page text and not confirmed visually (follow-up [#84](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/84)).
 
@@ -194,8 +194,8 @@ npm run local -- --port 3107
 
 ## What reaches Anthropic
 
-- Only when you ask a question: the question, the system prompt, the tool definitions, and the results the Atlas engines return to Claude's tool calls.
-- The client's and household's names, the advisor's name and email, and import file names are replaced where Atlas recognizes them. **This is minimization, not anonymization:** holdings, values, account details and anything else typed into a question still reach the model.
+- Only when you ask a question: the question, the system prompt, the tool definitions, and the results the Stratovell engines return to Claude's tool calls.
+- The client's and household's names, the advisor's name and email, and import file names are replaced where Stratovell recognizes them. **This is minimization, not anonymization:** holdings, values, account details and anything else typed into a question still reach the model.
 - Nothing is sent when the page opens, a key is saved or a session starts.
 
 ## Security design

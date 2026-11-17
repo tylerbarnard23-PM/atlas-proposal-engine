@@ -56,7 +56,7 @@ function Inner() {
       <PageHeader
         eyebrow="Workspace · White-label"
         title="Firm & Branding"
-        description="Your firm, not Atlas, is what clients see. These details brand every proposal and stay in place when you start a new client."
+        description="Your firm, not Stratovell, is what clients see. These details brand every proposal and stay in place when you start a new client."
         actions={
           <Badge tone={custom ? "positive" : "gold"}>{custom ? "Using your firm" : "Using the sample firm"}</Badge>
         }
@@ -88,7 +88,7 @@ function Inner() {
               </p>
               <p className="sm:col-span-2 text-2xs text-ink-500 leading-relaxed border-t border-ink-100 pt-3">
                 The advisor of record remains responsible for the suitability and implementation of every recommendation in a
-                proposal. Atlas does not autonomously provide financial, tax, legal, or investment advice.
+                proposal. Stratovell does not autonomously provide financial, tax, legal, or investment advice.
               </p>
             </CardBody>
           </Card>

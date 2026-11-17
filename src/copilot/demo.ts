@@ -172,7 +172,7 @@ export function runDemoCopilot(snapshot: CopilotSnapshot, question: string): Cop
     lines.push(
       skippedCovered > 0
         ? "Every tradeable finding already has a recommendation on file, so I didn't draft new ones. Review the existing drafts in Recommendations."
-        : "No warning-level findings map to a standard recommendation, so I didn't draft any. The portfolio looks clean on the rules Atlas checks."
+        : "No warning-level findings map to a standard recommendation, so I didn't draft any. The portfolio looks clean on the rules Stratovell checks."
     );
   } else {
     lines.push(`**I prepared ${ctx.drafts.length} draft recommendation${ctx.drafts.length === 1 ? "" : "s"} to preview**, sized with the proposal engine:`);

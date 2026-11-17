@@ -246,7 +246,7 @@ async function crossProcess<T>(file: string, fn: () => T): Promise<T> {
       } catch {
         /* the lock was released meanwhile */
       }
-      if (Date.now() > deadline) throw new Error("The local Atlas record is busy.");
+      if (Date.now() > deadline) throw new Error("The local Stratovell record is busy.");
       await new Promise((r) => setTimeout(r, 15));
     }
   }

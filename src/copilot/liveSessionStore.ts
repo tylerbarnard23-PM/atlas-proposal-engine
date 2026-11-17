@@ -176,7 +176,7 @@ function load(file: string): Loaded {
   return state ? { kind: "ok", state } : { kind: "invalid" };
 }
 
-const HOW_TO_START = "Start a new session in Atlas (Connect Claude on the Copilot page), or arm a new session in a terminal: npm run live-session -- arm --provider anthropic (or fake).";
+const HOW_TO_START = "Start a new session in Stratovell (Connect Claude on the Copilot page), or arm a new session in a terminal: npm run live-session -- arm --provider anthropic (or fake).";
 const UNBOUND_ERROR = `This live session was armed before sessions were bound to a provider and a key, so it can't be used. ${HOW_TO_START}`;
 
 /** The refusal for a record that isn't a usable session, or null when it is one. */
@@ -356,7 +356,7 @@ export async function armSession(file: string, now: Date, provider: SessionProvi
       const s = prev.state;
       reapStale(s, now);
       if (!s.stopped && now < expiresAt(s) && (s.active || s.runs < s.limits.runs))
-        return { ok: false, code: "already_armed", error: `A live session is armed until ${expiresAt(s).toISOString()}. Stop it first (Stop live session in Atlas, or npm run live-session -- stop).` } as const;
+        return { ok: false, code: "already_armed", error: `A live session is armed until ${expiresAt(s).toISOString()}. Stop it first (Stop live session in Stratovell, or npm run live-session -- stop).` } as const;
     }
     const token = randomToken();
     const cookie = opts.claim ? randomToken() : null;

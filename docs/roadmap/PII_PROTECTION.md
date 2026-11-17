@@ -22,7 +22,7 @@ Read-only source review of main at `1d6f0c0a67dac79c2a6a3bbe498fba79793a452c`: b
 | Supported PDF import tab | PDF bytes are read in the browser; extracted holdings, names, filenames and row/source traces become workspace data | Minimize persisted identity/raw traces; source access and lifecycle explicit |
 | CSV, Excel, pasted text, images and OFX intake | The UI posts text or file content to /api/ingest | Tell the user what leaves the browser; minimize payloads and authenticate/authorize real-data processing |
 | Browser workspace | Zustand persist stores client/advisor, accounts, holdings, recommendations and source-document state under the existing browser key | No plaintext sensitive workspace in persistent browser storage for a real-client deployment; migration and recovery plan |
-| Copilot in demo or live mode | Browser posts client, advisor, accounts, holdings and recommendations to Atlas's API; completeness metadata is reduced through forReadiness | An explicit allowlisted task projection instead of the entire workspace; server and browser data-flow controls |
+| Copilot in demo or live mode | Browser posts client, advisor, accounts, holdings and recommendations to Stratovell's API; completeness metadata is reduced through forReadiness | An explicit allowlisted task projection instead of the entire workspace; server and browser data-flow controls |
 | Copilot in live mode | The question and selected engine tool results are sent to Anthropic; overview/holding tools include names, account labels and sensitive portfolio information | Pseudonymous handles, minimized fields, free-text review and approved vendor/feature retention settings |
 | PDF generation | Client/portfolio state is posted to the server for rendering; client name enters the download filename; successful response already uses no-store | Minimal render projection, authentication/authorization, generic/alias filenames, controlled output and renderer isolation |
 | Errors/logging | PDF route logs caught exceptions; ingestion/PDF routes can return exception messages | Bound and sanitize errors/log fields; inspect host telemetry configuration without assuming a leak occurred |
@@ -61,7 +61,7 @@ Tax/government IDs and full account numbers are not necessary for the proposal d
 3. Preserve financial semantics and stable action/holding references when tokenizing; never modify prices/values to make a privacy filter pass.
 4. Show the advisor a useful description of the data shared and the active demo/live mode. Do not claim data stays on-device when the API receives a snapshot.
 5. Approve the vendor, region/features, processing agreement, retention and any zero-retention eligibility before real-data live mode. Commercial no-training defaults are not the same as zero retention.
-6. Uploads made directly to Claude Desktop/Claude Code are a separate channel governed by the account/organization settings. Atlas cannot redact a document before it is attached directly to another app.
+6. Uploads made directly to Claude Desktop/Claude Code are a separate channel governed by the account/organization settings. Stratovell cannot redact a document before it is attached directly to another app.
 7. Public live Copilot stays disabled while the endpoint has no application authentication. Do not enable it as part of this planning work.
 
 ### D. Authentication, authorization and secure storage

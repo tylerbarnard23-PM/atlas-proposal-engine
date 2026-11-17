@@ -1022,9 +1022,9 @@
     "status": "planned",
     "trackingIssue": 36,
     "mode": "synthetic-employer-demo-first",
-    "nextMilestone": "D5: security and dependency gate in review (feat/d5-security-dependency-gate), then the D5 package; agent 27-trial evaluation budget still undecided",
+    "nextMilestone": "D5: Codex review of PR #90 (Stratovell visible rename), then the owner's merge decision and counsel's clearance; D5 package (golden path, R25 protocol, README/demo); agent 27-trial evaluation budget still undecided",
     "supersedes": "Serial P0–P5 implementation and standalone R11-first cleanup command; original feature contracts retained",
-    "observedMain": "3738588056b9351308d03374ce5fbf0e9587ada7",
+    "observedMain": "569b96f89efef60bc6c9d90fd92cc5745e90cb96",
     "developmentAssistant": {
       "application": "Claude Code Desktop",
       "model": "Opus 5.5",
@@ -1171,18 +1171,103 @@
           35
         ],
         "effort": "medium",
-        "note": "A live-agent claim requires recorded live evidence; public deployment stays scripted/synthetic",
+        "note": "A live-agent claim requires recorded live evidence; public deployment stays scripted/synthetic. Naming (#35) is a publication gate: the owner's chosen name, then counsel's clearance, before LinkedIn publication.",
         "securityGate": {
           "plan": "D5_SECRETS_EXPOSURE_REVIEW.md (PR #80, open)",
           "report": "D5_SECURITY_DEPENDENCY_GATE.md",
           "branch": "feat/d5-security-dependency-gate",
-          "status": "in_review",
+          "status": "released",
           "findings": [
             85,
             86,
             87
           ],
-          "dependencyFix": "GHSA-mrhx-c7xc-m3w5 (zod 4.6.7)"
+          "dependencyFix": "GHSA-mrhx-c7xc-m3w5 (zod 4.6.7)",
+          "pr": 88,
+          "mergeCommit": "ba5f6ce87ce0f81336e0defd5c86efadf385b43c",
+          "reviewedHead": "1ac6658c10d1dabd5009cb65699bf3901cff8092",
+          "requestLimits": {
+            "issue": 86,
+            "pr": 89,
+            "reviewedHead": "284c69086032f0bc9332e32f7390d231c68b3bea",
+            "mergeCommit": "569b96f89efef60bc6c9d90fd92cc5745e90cb96",
+            "productionDeployment": 7831453301,
+            "productionSmoke": "passed_2026-11-17"
+          }
+        },
+        "namingGate": {
+          "issue": 35,
+          "status": "selected_rename_in_review",
+          "report": "D5_NAMING_SCREENING.md",
+          "checklist": "D5_BRANDING_IMPLEMENTATION_CHECKLIST.md",
+          "rounds": [
+            {
+              "round": 1,
+              "researchedAt": "2026-11-17",
+              "recommendation": "Cartouche",
+              "outcome": "rejected_by_owner",
+              "shortlist": [
+                "Cartouche",
+                "Theodolite",
+                "Scriptorium",
+                "Portolan",
+                "Plumbline"
+              ]
+            },
+            {
+              "round": 2,
+              "researchedAt": "2026-11-17",
+              "recommendation": "Clearpage",
+              "runnerUp": "Fairdraft",
+              "finalists": [
+                "Clearpage",
+                "Fairdraft",
+                "Clearwork",
+                "Casebook"
+              ],
+              "outcome": "withdrawn_existing_same_name_products",
+              "withdrawnReason": "first-party same-name products found after round 2 (Clearpage, Clearwork via Codex; Fairdraft, Casebook on re-screen)"
+            },
+            {
+              "round": 3,
+              "researchedAt": "2026-11-17",
+              "correctionOf": 2,
+              "recommendation": "Plainbrief",
+              "strongOptions": [
+                "Plainbrief"
+              ],
+              "consideredNotStrong": [
+                "Keybrief",
+                "Wellbrief",
+                "Truebrief",
+                "Proposewell",
+                "Clientready"
+              ],
+              "method": [
+                "exact_name_alone_first",
+                "registered_domain_pages_inspected",
+                "second_search_source_bing",
+                "github_and_domains_supporting_only",
+                "coverage_labelled"
+              ],
+              "outcome": "superseded_by_owner_selection"
+            }
+          ],
+          "trademarkClearance": "not_performed",
+          "applied": true,
+          "publicationGate": true,
+          "trademarksScreened": false,
+          "selected": {
+            "name": "Stratovell Proposal System",
+            "shortName": "Stratovell",
+            "descriptor": "Advisor Proposal Workspace",
+            "formerName": "Atlas Proposal Engine",
+            "selectedBy": "owner",
+            "selectedAt": "2026-11-17",
+            "pr": 90
+          },
+          "visibleRenameOnly": true,
+          "screenshotsRetaken": true
         }
       }
     ],
