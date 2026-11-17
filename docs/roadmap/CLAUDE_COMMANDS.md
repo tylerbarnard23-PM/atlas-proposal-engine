@@ -55,16 +55,20 @@ Stop for Codex review with exact head, checks, preview association, remaining li
 
 D1 (PR #72, `0381db1`), D2 (PR #75, `073049f`), D2a (PR #79, `c0ee4e9`), D3 (PR #81, `85b3910`) and **D4 (PR #82, `3738588`, 16 November 2026)** are released; the commands below the next one are historical, so do not rerun them. **D5 is in progress:** its security and dependency gate is in review on `feat/d5-security-dependency-gate`.
 
-### Next command: review the Stratovell branding PR
+### Next command: review the D5 stability batch
 
-Saved on 17 November 2026. Tyler selected **Stratovell** on [#35](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/35); PR #90 now holds the visible rename (**Stratovell Proposal System**, formerly Atlas Proposal Engine) and the naming records. Verify heads, tree and stash first, and preserve newer work.
+Saved on 17 November 2026. The Stratovell rename is released and production-verified (PR #90 → `3c40cf7`; evidence on [PR #90](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/90#issuecomment-6957672889)). The stability batch is on branch `fix/d5-stability-reset-meeting`. Verify heads, tree and stash first, and preserve newer work.
 
-1. **Codex** reviews PR #90: that only display text changed, every retained technical identity is intact, the `Atlas` references that remain are intended (listed in [the handoff](../CLAUDE_HANDOFF.md)), approved versions and backups still load, and the PDF sample notice and demo disclaimers stay accurate.
-2. **The owner** decides on merge (pinned: `gh pr merge 90 --merge --match-head-commit <reviewed head>`), counsel's clearance of the name, and whether the model-facing prompt and credential-store service name get their own later change (they are retained; see [the checklist](D5_BRANDING_IMPLEMENTATION_CHECKLIST.md) section 2).
-3. **Claude** then records the post-merge production check. The README screenshots were retaken and the approved-version meeting view, a draft copy and a final PDF were read on 17 November 2026 (see [the handoff](../CLAUDE_HANDOFF.md)).
-4. **Separate owner decisions:** [#85](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/85), [#87](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/87), Vercel access, closing PR #80. **Then the D5 package:** golden-path, keyboard and viewport evidence, the R25 protocol and scorecard, the README and demo narrative.
+1. **Codex** reviews the batch PR: the meeting view fits 375 and 768 px screens and stays keyboard-reachable; the change is limited to `/meeting/[id]`; `ProposalPdfTemplate`, the PDF route, print output and approved-version contents and fingerprints are unchanged (fixed-input comparison in [D5_STABILITY_BATCH.md](D5_STABILITY_BATCH.md)); the reset investigation's conclusion (not reproduced, no persistence change) is supported by its evidence.
+2. **The owner** decides on merge (pinned: `gh pr merge <N> --merge --match-head-commit <reviewed head>`). After a merge, Claude reads main CI and the production deployment once and checks the meeting view on production at 375 px with synthetic data.
+3. **If the reset recurs:** capture the saved value before any app script runs and after hydration (the harness in the stability record), note how the browser was closed, and only then consider an app change, with the failing test first.
+4. **Then the D5 package:** golden-path, keyboard and viewport evidence, the R25 protocol and empty scorecard, the README and demo narrative. **Separate owner decisions:** counsel's clearance of Stratovell, [#85](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/85), [#87](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/87), Vercel access, closing PR #80.
 
-Until the owner says otherwise: no merge, announcement or LinkedIn publication, no purchase (domains, handles, trademarks), settings change or paid call.
+Until the owner says otherwise: no merge, announcement or LinkedIn publication, purchase, settings change or paid call.
+
+### Previous command (done 17 November 2026, don't rerun): review the Stratovell branding PR
+
+Done: Codex approved PR #90; it was merged pinned to `e813e7a` and verified in production.
 
 ### Previous command (done 17 November 2026, don't rerun): apply the chosen name
 
