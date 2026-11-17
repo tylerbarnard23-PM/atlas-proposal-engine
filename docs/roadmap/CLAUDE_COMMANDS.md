@@ -61,7 +61,7 @@ Saved on 17 November 2026. Tyler selected **Stratovell** on [#35](https://github
 
 1. **Codex** reviews PR #90: that only display text changed, every retained technical identity is intact, the `Atlas` references that remain are intended (listed in [the handoff](../CLAUDE_HANDOFF.md)), approved versions and backups still load, and the PDF sample notice and demo disclaimers stay accurate.
 2. **The owner** decides on merge (pinned: `gh pr merge 90 --merge --match-head-commit <reviewed head>`), counsel's clearance of the name, and whether the model-facing prompt and credential-store service name get their own later change (they are retained; see [the checklist](D5_BRANDING_IMPLEMENTATION_CHECKLIST.md) section 2).
-3. **Claude** then retakes `docs/screenshots/dashboard.jpg` and `copilot.jpg` (they still show the old wordmark) and records the post-merge production check.
+3. **Claude** then records the post-merge production check. The README screenshots were retaken and the approved-version meeting view, a draft copy and a final PDF were read on 17 November 2026 (see [the handoff](../CLAUDE_HANDOFF.md)).
 4. **Separate owner decisions:** [#85](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/85), [#87](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/87), Vercel access, closing PR #80. **Then the D5 package:** golden-path, keyboard and viewport evidence, the R25 protocol and scorecard, the README and demo narrative.
 
 Until the owner says otherwise: no merge, announcement or LinkedIn publication, no purchase (domains, handles, trademarks), settings change or paid call.
