@@ -329,9 +329,9 @@ describe("restore is validated in full before anything is written", () => {
   it("corrupt, foreign, oversized and future files", async () => {
     const { m, good } = await setup();
     reject(m, "{ not json", /isn't valid JSON/);
-    reject(m, JSON.stringify({ hello: "world" }), /not an Atlas workspace backup/);
-    reject(m, mutate(good, (b) => (b.schemaVersion = 2)), /newer version of Atlas/);
-    reject(m, mutate(good, (b) => (b.workspaceVersion = 11)), /newer version of Atlas/);
+    reject(m, JSON.stringify({ hello: "world" }), /not a Stratovell workspace backup/);
+    reject(m, mutate(good, (b) => (b.schemaVersion = 2)), /newer version of Stratovell/);
+    reject(m, mutate(good, (b) => (b.workspaceVersion = 11)), /newer version of Stratovell/);
     reject(m, mutate(good, (b) => (b.workspaceVersion = 5)), /not supported/);
     reject(m, mutate(good, (b) => (b.schemaVersion = "1")), /not supported/);
     reject(m, " ".repeat(m.BACKUP_MAX_BYTES + 1), /larger than/);

@@ -1,6 +1,6 @@
-# Atlas Proposal Engine: Claude entry point
+# Stratovell Proposal System (formerly Atlas Proposal Engine): Claude entry point
 
-Atlas is a synthetic-data wealth-proposal demo (Next.js, TypeScript, Zustand, Vitest). This file is the short start page; the linked documents are the maintained instructions. Do not copy their policies here.
+Stratovell is a synthetic-data wealth-proposal demo (Next.js, TypeScript, Zustand, Vitest). This file is the short start page; the linked documents are the maintained instructions. Do not copy their policies here.
 
 ## Start here
 - Read [docs/CLAUDE_HANDOFF.md](docs/CLAUDE_HANDOFF.md) first: it holds the current checkpoint, open follow-ups and the next task.

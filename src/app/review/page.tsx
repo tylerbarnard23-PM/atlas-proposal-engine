@@ -221,7 +221,7 @@ function Inner() {
                 Issuing a final PDF re-checks readiness on the version&apos;s own inputs with the server&apos;s clock. Nothing is refreshed: if its exchange
                 rates have aged past policy, approve a new version.
               </p>
-              <p>Versions are local Atlas records, kept in this browser and in workspace backups. They are not tamper-proof and record no client acknowledgement.</p>
+              <p>Versions are local Stratovell records, kept in this browser and in workspace backups. They are not tamper-proof and record no client acknowledgement.</p>
             </CardBody>
           </Card>
         </div>

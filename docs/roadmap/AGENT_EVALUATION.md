@@ -5,7 +5,7 @@ Accepted for planning: 22 October 2026. **Planned; the D4 minimum is implemented
 
 ## Product decision and honest positioning
 
-Keep Anthropic/Claude as the first supported live provider. Atlas runs without a model key in scripted demo mode; Claude Desktop and Claude Code are development tools, not installation prerequisites for Atlas. Current live code uses Anthropic and a fixed model; configurability and the evaluation suite below are future work.
+Keep Anthropic/Claude as the first supported live provider. Stratovell runs without a model key in scripted demo mode; Claude Desktop and Claude Code are development tools, not installation prerequisites for Stratovell. Current live code uses Anthropic and a fixed model; configurability and the evaluation suite below are future work.
 
 Demonstrate bounded authority, engine evidence, observability and measured behavior. Do not claim production readiness from the presence of an agent, a passing parser eval or multiple provider integrations. The public deployment stays synthetic-only and scripted until its access/security requirements are met.
 
@@ -387,8 +387,8 @@ exit
 ### Local live-testing session (interactive) — not armed; paid use NOT approved
 
 **Update, 11 November 2026: local onboarding (Route 1) is implemented on PR #82 and awaits Codex review.** [LOCAL_CLAUDE_SETUP.md](LOCAL_CLAUDE_SETUP.md) is now the setup guide and the security design. What changed in this section's contract:
-- **A key is connected in Atlas** by a paired browser (session-only, or remembered in the OS credential store). A key in the environment is used only after it is selected there. A key is no longer part of the server's set-up check, so live without one is refused as `no_credential` (403), not `live_unavailable`.
-- **A session can be started in Atlas** after its allowance is confirmed. The limits below are now ceilings: a session may lower them, never raise them. Terminal arming remains.
+- **A key is connected in Stratovell** by a paired browser (session-only, or remembered in the OS credential store). A key in the environment is used only after it is selected there. A key is no longer part of the server's set-up check, so live without one is refused as `no_credential` (403), not `live_unavailable`.
+- **A session can be started in Stratovell** after its allowance is confirmed. The limits below are now ceilings: a session may lower them, never raise them. Terminal arming remains.
 - **Sessions are also bound to the credential revision** (record version 3). Replacing or removing the key stops the session; version-2 records are refused like version-1 ones.
 - **Evidence:** `tests/localConnect.test.ts` (34 tests) and the updated `tests/liveSession.test.ts` (45), fake providers and fake credential stores only. Local final checks: typecheck clean; 684 passed, 0 skipped (39 files, private fixture present); eval 2/2; build passed.
 - **Still true:** no paid call has been made, no real key has been used, and paid testing is not authorized.

@@ -191,12 +191,12 @@ export type ResolvedCredential =
 export async function resolveCredential(deps: LiveDeps, conn?: ConnectionState, read = true): Promise<ResolvedCredential> {
   const c = conn ?? (await readConnection(deps.connectionFile));
   const fail = (code: CredentialProblem, error: string) => ({ ok: false, code, error, source: c.source, revision: c.revision }) as const;
-  if (c.source === "none" || !c.revision || !c.fingerprint) return fail("no_credential", "No API key is connected. Connect one in Atlas (Connect Claude) before starting a session.");
+  if (c.source === "none" || !c.revision || !c.fingerprint) return fail("no_credential", "No API key is connected. Connect one in Stratovell (Connect Claude) before starting a session.");
   const account = c.live ? accountFor(c.salt, c.live.slot) : null;
   let key: string | null;
   if (c.source === "environment") {
     key = normalizeKey(deps.env.ANTHROPIC_API_KEY) || null;
-    if (!key) return fail("credential_missing", "The environment key was selected, but ANTHROPIC_API_KEY isn't set in the server's environment any more. Set it and restart, or connect a key in Atlas.");
+    if (!key) return fail("credential_missing", "The environment key was selected, but ANTHROPIC_API_KEY isn't set in the server's environment any more. Set it and restart, or connect a key in Stratovell.");
   } else if (c.source === "session") {
     key = account ? await deps.secrets.session.get(account) : null;
     if (!key) return fail("credential_missing", "The key was kept for this server session only, and the server has restarted since. Paste the key again to continue.");
@@ -210,7 +210,7 @@ export async function resolveCredential(deps: LiveDeps, conn?: ConnectionState, 
     if (!key) return fail("credential_missing", "The remembered key is no longer in the operating system's credential store. Paste the key again to continue.");
   }
   if (fingerprintOf(c.salt, key) !== c.fingerprint)
-    return fail("credential_changed", c.source === "environment" ? "ANTHROPIC_API_KEY in the server's environment changed after it was selected. Select it again to use the new key." : "The stored key changed outside Atlas. Replace the key in Atlas to continue.");
+    return fail("credential_changed", c.source === "environment" ? "ANTHROPIC_API_KEY in the server's environment changed after it was selected. Select it again to use the new key." : "The stored key changed outside Stratovell. Replace the key in Stratovell to continue.");
   return { ok: true, source: c.source, revision: c.revision, key };
 }
 
@@ -267,7 +267,7 @@ export async function admitLiveRun(req: Request, deps: LiveDeps): Promise<{ ok: 
   const revision = conn.revision;
   const sessionNow = () => store.readView(deps.sessionFile, deps.now(), cookie, FIRST_REQUEST_USD, provider, revision);
   if (provider === "anthropic" && conn.source === "none")
-    return { ok: false, status: 403, code: "no_credential", error: "No API key is connected. Connect one in Atlas (Connect Claude) before starting a session.", session: await sessionNow() };
+    return { ok: false, status: 403, code: "no_credential", error: "No API key is connected. Connect one in Stratovell (Connect Claude) before starting a session.", session: await sessionNow() };
   // A session that could not admit a run is refused HERE, before any credential is read:
   // a missing, unreadable, stopped, expired, exhausted or another browser's session never
   // opens the operating system's credential store.

@@ -38,9 +38,9 @@ export const BACKUP_NOTICE =
   "Not encrypted: this file holds the engagement's client and portfolio data in plain text. Use it with synthetic (demo) data only; real client data needs encrypted storage and the other protections in issue #59 first.";
 
 export const BACKUP_OMISSIONS = [
-  "Original source files (PDF, CSV and other uploads) are not included: Atlas never stores them. Each document's name, dates, completeness and reconciliation are kept.",
+  "Original source files (PDF, CSV and other uploads) are not included: Stratovell never stores them. Each document's name, dates, completeness and reconciliation are kept.",
   "Extracted rows and raw text of imported documents (Statement Workbench row review) are not included. The imported holdings, with their own source trace, are.",
-  "The legacy security-quote cache is not included; Atlas no longer uses it. Each holding keeps its own recorded value source and date.",
+  "The legacy security-quote cache is not included; Stratovell no longer uses it. Each holding keeps its own recorded value source and date.",
   "Generated insights are not included; they're recalculated.",
   "The disclosure library comes from the app, not the file; the proposal's selected disclosures are kept.",
   "Credentials and API keys are never part of a workspace or a backup.",
@@ -616,7 +616,7 @@ export function checkSnapshot(raw: unknown): SnapshotCheck {
   if (!parsed.success) return { ok: false, error: `Not a valid approved version: ${describeIssues(parsed.error.issues, "version")}.` };
   const snapshot = parsed.data as ApprovedSnapshot;
   const problem = snapshotIntegrity(snapshot);
-  return problem ? { ok: false, error: `${problem} It may have been changed outside Atlas.` } : { ok: true, snapshot };
+  return problem ? { ok: false, error: `${problem} It may have been changed outside Stratovell.` } : { ok: true, snapshot };
 }
 
 /** The backup of a workspace at `now`. */
@@ -720,7 +720,7 @@ function withRecordName(error: string, backup: WorkspaceBackup): string {
 /** Reads and validates a chosen file; never throws (an unreadable file is reported). */
 export async function readBackupFile(file: Pick<File, "size" | "name" | "text">, opts: { disclosureIds: string[] }): Promise<ParsedBackup> {
   if (file.size > BACKUP_MAX_BYTES) {
-    return { ok: false, errors: [`${file.name} is larger than ${BACKUP_MAX_BYTES / 1024 / 1024} MB, so it isn't an Atlas workspace backup.`] };
+    return { ok: false, errors: [`${file.name} is larger than ${BACKUP_MAX_BYTES / 1024 / 1024} MB, so it isn't a Stratovell workspace backup.`] };
   }
   let text: string;
   try {
@@ -743,19 +743,19 @@ export type ParsedBackup = { ok: true; backup: WorkspaceBackup } | { ok: false; 
 const byteLength = (s: string) => new TextEncoder().encode(s).length;
 
 export function parseBackup(text: string, opts: { disclosureIds: string[] }): ParsedBackup {
-  if (byteLength(text) > BACKUP_MAX_BYTES) return { ok: false, errors: [`The file is larger than ${BACKUP_MAX_BYTES / 1024 / 1024} MB, so it isn't an Atlas workspace backup.`] };
+  if (byteLength(text) > BACKUP_MAX_BYTES) return { ok: false, errors: [`The file is larger than ${BACKUP_MAX_BYTES / 1024 / 1024} MB, so it isn't a Stratovell workspace backup.`] };
   let raw: unknown;
   try {
     raw = JSON.parse(text);
   } catch {
-    return { ok: false, errors: ["The file isn't valid JSON, so it can't be an Atlas workspace backup."] };
+    return { ok: false, errors: ["The file isn't valid JSON, so it can't be a Stratovell workspace backup."] };
   }
   const head = raw as Record<string, unknown> | null;
-  if (!head || typeof head !== "object" || head.format !== BACKUP_FORMAT) return { ok: false, errors: ["This is not an Atlas workspace backup."] };
+  if (!head || typeof head !== "object" || head.format !== BACKUP_FORMAT) return { ok: false, errors: ["This is not a Stratovell workspace backup."] };
   const newer =
     (typeof head.schemaVersion === "number" && head.schemaVersion > BACKUP_SCHEMA_VERSION) ||
     (typeof head.workspaceVersion === "number" && head.workspaceVersion > BACKUP_WORKSPACE_VERSION);
-  if (newer) return { ok: false, errors: ["This backup was made by a newer version of Atlas. Nothing was restored."] };
+  if (newer) return { ok: false, errors: ["This backup was made by a newer version of Stratovell. Nothing was restored."] };
   const older = (SUPPORTED_OLDER_WORKSPACE_VERSIONS as readonly unknown[]).includes(head.workspaceVersion);
   if (head.schemaVersion !== BACKUP_SCHEMA_VERSION || (head.workspaceVersion !== BACKUP_WORKSPACE_VERSION && !older)) {
     return { ok: false, errors: [`This backup's version (${String(head.schemaVersion)}/${String(head.workspaceVersion)}) is not supported. Nothing was restored.`] };
@@ -843,7 +843,7 @@ function referenceErrors(e: BackupEngagement, disclosureIds: Set<string>): strin
   const p = e.proposal;
   if (p.clientId !== e.client.id) errors.push(`The proposal belongs to client ${p.clientId}, not the backup's client ${e.client.id}.`);
   for (const r of p.recommendationIds) if (!recs.has(r)) errors.push(`The proposal lists recommendation ${r}, which isn't in the backup.`);
-  for (const d of p.disclosureIds) if (!disclosureIds.has(d)) errors.push(`The proposal includes disclosure ${d}, which this version of Atlas doesn't have.`);
+  for (const d of p.disclosureIds) if (!disclosureIds.has(d)) errors.push(`The proposal includes disclosure ${d}, which this version of Stratovell doesn't have.`);
   for (const j of e.pdfHistory) if (j.proposalId !== p.id) errors.push(`PDF job ${j.id} belongs to proposal ${j.proposalId}, not this proposal.`);
   const drafts = [e.workingDraft, ...e.alternatives];
   unique("alternative ID", drafts.map((x) => x.id));

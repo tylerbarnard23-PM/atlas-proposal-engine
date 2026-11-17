@@ -492,7 +492,7 @@ describe("the key is kept server-side, where the user chose, and never comes bac
     expect(chosen.status).toBe(200);
     const text = await chosen.text();
     expect(text).not.toContain("ENVCANARY");
-    expect(JSON.parse(text).connection).toMatchObject({ source: "environment", message: expect.stringMatching(/managed outside Atlas/) });
+    expect(JSON.parse(text).connection).toMatchObject({ source: "environment", message: expect.stringMatching(/managed outside Stratovell/) });
     expect((await start(t.d, b)).status).toBe(200);
     expect((await ask(t.d, b)).status).toBe(200);
     expect(t.made.keys).toEqual([ENV_CANARY]);
@@ -848,7 +848,7 @@ describe("the Connect Claude panel", () => {
   it("an unpaired browser is told how to pair, and is offered no key field", async () => {
     const t = setup();
     const html = await render(t, browser());
-    expect(html).toContain("isn&#x27;t paired with Atlas");
+    expect(html).toContain("isn&#x27;t paired with Stratovell");
     expect(html).toContain("npm run local");
     expect(html).not.toContain('type="password"');
   });
@@ -857,7 +857,7 @@ describe("the Connect Claude panel", () => {
     const t = setup({ keychain: fakeKeychain({ unsupported: true }) });
     const { b } = await pair(t.d);
     const html = await render(t, b);
-    for (const text of ["create a workspace just for Atlas", "spend limit", "Never use an Admin key", "billed to your Console organization", "Max, Ultra and Team plans include monthly API credits", "Free, Pro and Enterprise", "For this server session only", "Atlas never falls back to a plain file", "not complete anonymization"]) expect(html, text).toContain(text);
+    for (const text of ["create a workspace just for Stratovell", "spend limit", "Never use an Admin key", "billed to your Console organization", "Max, Ultra and Team plans include monthly API credits", "Free, Pro and Enterprise", "For this server session only", "Stratovell never falls back to a plain file", "not complete anonymization"]) expect(html, text).toContain(text);
     expect(html).toMatch(/<input[^>]*type="password"[^>]*autoComplete="off"/);
     expect(html).toMatch(/<input[^>]*type="radio"[^>]*disabled=""[^>]*data-testid="connect-storage-keychain"/);
     expect(html).not.toContain("Start a limited session");

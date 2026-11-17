@@ -49,7 +49,7 @@ export const MODE_LABEL: Record<CopilotMode, string> = {
 export const MODE_HINT: Record<CopilotMode, string> = {
   demo: "A fixed script calls the same engine tools as the live agent. No model writes these answers.",
   test: "A deterministic test provider runs through the real agent loop and tools. It is not a model and makes no API calls.",
-  live: "A Claude model plans and writes; every figure comes from the Atlas engines.",
+  live: "A Claude model plans and writes; every figure comes from the Stratovell engines.",
 };
 
 const STATUS_LABEL: Record<RunStatus, string> = {
@@ -342,7 +342,7 @@ function RunDetails({ result }: { result: CopilotResult }) {
           Context: {result.context.alternativeName}, revision <code>{result.context.inputRevision}</code>
         </div>
       </dl>
-      <p className="mt-2 text-2xs text-ink-500 leading-relaxed">Every figure should come from a deterministic Atlas engine; the model plans and writes, it does not do the math.</p>
+      <p className="mt-2 text-2xs text-ink-500 leading-relaxed">Every figure should come from a deterministic Stratovell engine; the model plans and writes, it does not do the math.</p>
     </details>
   );
 }

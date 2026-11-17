@@ -54,7 +54,7 @@ const SOURCE_LABEL: Record<CredentialSource, string> = {
   none: "No key",
   session: "this server session only",
   keychain: "the operating system's credential store",
-  environment: "the server's environment (managed outside Atlas)",
+  environment: "the server's environment (managed outside Stratovell)",
 };
 
 function viewOf(conn: ConnectionState, problem: { code: string; error: string } | null, provider: LiveProvider): ConnectionView {
@@ -68,7 +68,7 @@ function viewOf(conn: ConnectionState, problem: { code: string; error: string } 
   if (provider === "fake") return { ...base, status: "saved", message: `Key saved. ${where} The fake provider is running, so the key isn't used and can't be verified here.` };
   if (conn.rejectedAt && (!conn.verifiedAt || conn.rejectedAt > conn.verifiedAt)) return { ...base, status: "rejected", message: `Anthropic rejected this key on the last request. ${where} Check it in the Claude Console, then replace it.` };
   if (conn.verifiedAt) return { ...base, status: "verified", message: `Connected: Anthropic accepted this key on a request. ${where}` };
-  return { ...base, status: "saved", message: `Key saved; connection not yet verified. ${where} Atlas hasn't contacted Anthropic: your first question will be the first request.` };
+  return { ...base, status: "saved", message: `Key saved; connection not yet verified. ${where} Stratovell hasn't contacted Anthropic: your first question will be the first request.` };
 }
 
 async function connectionView(deps: LiveDeps, provider: LiveProvider, conn?: ConnectionState): Promise<ConnectionView> {
@@ -123,7 +123,7 @@ export async function authorizeLocal(req: Request, deps: LiveDeps): Promise<{ ok
   if (!(req.headers.get("content-type") ?? "").toLowerCase().startsWith("application/json")) return { ok: false, status: 415, code: "bad_content_type", error: "Send JSON." };
   const cookie = cookieOf(req, pairCookieName(deps.env));
   if (!cookie || !(await isPaired(deps.pairingFile, deps.now(), cookie)))
-    return { ok: false, status: 401, code: "not_paired", error: "This browser isn't paired with Atlas on this machine. Open Atlas from the launcher (npm run local), or run npm run local:pair and open its link." };
+    return { ok: false, status: 401, code: "not_paired", error: "This browser isn't paired with Stratovell on this machine. Open Stratovell from the launcher (npm run local), or run npm run local:pair and open its link." };
   if (!csrfMatches(cookie, req.headers.get(CSRF_HEADER))) return { ok: false, status: 403, code: "bad_csrf", error: "This request didn't carry the page's security token. Reload the page and try again." };
   return { ok: true, provider: ready.provider };
 }
@@ -134,12 +134,12 @@ async function endSessionFor(deps: LiveDeps, reason: string) {
   await sessions.stopSession(deps.sessionFile, deps.now(), reason);
 }
 
-const LEFT_BEHIND = `An earlier entry couldn't be removed from the operating system's credential store, so one may still be there. Atlas will remove it the next time the store is available, or you can remove the "${KEYCHAIN_SERVICE}" entries there yourself.`;
+const LEFT_BEHIND = `An earlier entry couldn't be removed from the operating system's credential store, so one may still be there. Stratovell will remove it the next time the store is available, or you can remove the "${KEYCHAIN_SERVICE}" entries there yourself.`;
 /** Not "it couldn't be removed" but "nobody can say yet": the removal is still running, so no claim about it would be safe. */
-const STILL_REMOVING = `The operating system's credential store hasn't finished removing an earlier entry and stopped answering, so Atlas can't confirm it is gone: it may still be there. Nothing else will use that entry, and Atlas will remove it the next time the store is available, or you can remove the "${KEYCHAIN_SERVICE}" entries there yourself.`;
-const STILL_WRITING = "Atlas stopped waiting for the credential store, which may still be writing that entry. It will never be used, and Atlas removes it as soon as the store finishes.";
+const STILL_REMOVING = `The operating system's credential store hasn't finished removing an earlier entry and stopped answering, so Stratovell can't confirm it is gone: it may still be there. Nothing else will use that entry, and Stratovell will remove it the next time the store is available, or you can remove the "${KEYCHAIN_SERVICE}" entries there yourself.`;
+const STILL_WRITING = "Stratovell stopped waiting for the credential store, which may still be writing that entry. It will never be used, and Stratovell removes it as soon as the store finishes.";
 /** The same truth as STILL_REMOVING, for the entry this save had just started writing rather than an earlier one. */
-const STILL_UNDOING = "Atlas stopped waiting for the credential store, which hasn't finished removing the entry it had started to write, so Atlas can't confirm it is gone. Nothing else will use that entry, and Atlas will remove it the next time the store is available.";
+const STILL_UNDOING = "Stratovell stopped waiting for the credential store, which hasn't finished removing the entry it had started to write, so Stratovell can't confirm it is gone. Nothing else will use that entry, and Stratovell will remove it the next time the store is available.";
 
 const storeOf = (deps: LiveDeps, store: EntryStore) => (store === "session" ? deps.secrets.session : deps.secrets.keychain);
 
@@ -299,7 +299,7 @@ export async function disconnect(deps: LiveDeps, provider: LiveProvider): Promis
     const { warning: stored, stuck } = await forgetStored(deps, prev, null, keepOpen);
     const conn = await clearConnection(deps.connectionFile, stuck);
     await endSessionFor(deps, "the API key was disconnected");
-    const env = prev.source === "environment" ? "The key in the server's environment is managed outside Atlas and is still set there; Atlas no longer uses it." : null;
+    const env = prev.source === "environment" ? "The key in the server's environment is managed outside Stratovell and is still set there; Stratovell no longer uses it." : null;
     return { ok: true, connection: await connectionView(deps, provider, conn), warning: [stored, env].filter(Boolean).join(" ") || null } as const;
   }).catch((err) => (isBusy(err) ? busy() : Promise.reject(err)));
 }

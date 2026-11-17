@@ -582,7 +582,7 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
           Readiness at approval: {passed} of {snap.readiness.length} checks passed{passed === snap.readiness.length ? "." : `; not passed: ${snap.readiness.filter((c) => !c.passed).map((c) => c.label).join("; ")}.`}
         </p>
         <p className="pdf-text">
-          This version is a local Atlas record: later edits to the workspace or library don&apos;t change it, and a changed proposal needs a new approved version. It is not a tamper-proof record, and it records no client acknowledgement or implementation.
+          This version is a local Stratovell record: later edits to the workspace or library don&apos;t change it, and a changed proposal needs a new approved version. It is not a tamper-proof record, and it records no client acknowledgement or implementation.
         </p>
       </PageWrap>
     );
@@ -1140,7 +1140,7 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
     pages.push(
       <PageWrap key="md" title={titleOf("market_data_sources")} eyebrow="12">
         <p className="pdf-text">
-          Each value is the one used in this proposal: an advisor-approved value where one was locked, otherwise an advisor override, otherwise the holding&apos;s statement, advisor-entered or manual value. Atlas does not reprice securities from market data. A value carried over from an earlier market-data record is shown with the provider and date recorded at the time. Privately held, illiquid, or alternative investments are valued using advisor-entered or sponsor-reported figures.
+          Each value is the one used in this proposal: an advisor-approved value where one was locked, otherwise an advisor override, otherwise the holding&apos;s statement, advisor-entered or manual value. Stratovell does not reprice securities from market data. A value carried over from an earlier market-data record is shown with the provider and date recorded at the time. Privately held, illiquid, or alternative investments are valued using advisor-entered or sponsor-reported figures.
         </p>
         {valueDates && <p className="pdf-text">{valueDates}</p>}
         <table className="pdf-table" style={{ marginTop: 12 }}>
@@ -1290,7 +1290,7 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
     pages.push(
       <PageWrap key="apx_m" title={titleOf("appendix_market_data")} eyebrow="A3">
         <p className="pdf-text">
-          The sources of the values and exchange rates this proposal uses. Atlas does not use a security-price feed: values come from statements, advisor entry or advisor-approved values, and exchange rates are reference rates.
+          The sources of the values and exchange rates this proposal uses. Stratovell does not use a security-price feed: values come from statements, advisor entry or advisor-approved values, and exchange rates are reference rates.
         </p>
         <table className="pdf-table" style={{ marginTop: 8 }}>
           <thead>

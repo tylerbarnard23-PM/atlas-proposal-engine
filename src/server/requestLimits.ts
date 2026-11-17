@@ -156,7 +156,7 @@ export function shapeProblem(value: unknown, limits: ShapeLimits = SHAPE_LIMITS)
   let values = 0;
   while (stack.length) {
     const [v, depth, key] = stack.pop()!;
-    if (++values > limits.maxValues) return `The request has more than ${n(limits.maxValues)} values; that is more than Atlas accepts.`;
+    if (++values > limits.maxValues) return `The request has more than ${n(limits.maxValues)} values; that is more than Stratovell accepts.`;
     if (depth > limits.maxDepth) return `The request is nested more than ${n(limits.maxDepth)} levels deep.`;
     if (typeof v === "string") {
       if (v.length > limits.maxStringLength) return `A text value in ${named(key)} is longer than ${n(limits.maxStringLength)} characters.`;

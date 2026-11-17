@@ -218,6 +218,6 @@ export function keyShapeProblem(key: unknown): string | null {
   if (k.length > 512) return "That doesn't look like an API key: it is too long.";
   if (/^sk-ant-admin/i.test(k)) return "That is an Admin API key, which manages a whole organization. Don't use it here: create a key for a single workspace instead.";
   // `claude setup-token` tokens belong to a Claude subscription, not to the API: using one here isn't a supported way to authenticate an application.
-  if (/^sk-ant-o(at|rt)/i.test(k)) return "That looks like a Claude subscription token from Claude Code, not an API key. Atlas uses an API key from the Claude Console, billed to your Console account.";
+  if (/^sk-ant-o(at|rt)/i.test(k)) return "That looks like a Claude subscription token from Claude Code, not an API key. Stratovell uses an API key from the Claude Console, billed to your Console account.";
   return null;
 }

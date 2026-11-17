@@ -1,22 +1,24 @@
-# Atlas Proposal Engine
+# Stratovell Proposal System
 
-**A demonstration of AI-assisted wealth-proposal tooling.** Atlas takes an advisor from a pile of messy client statements to a branded sample PDF proposal gated by a readiness checklist, with a Claude-powered Copilot that drafts recommendations and leaves every decision to the advisor.
+> **Formerly Atlas Proposal Engine.** The repository, live-demo URL, package name and browser-storage and backup identifiers keep the `atlas-proposal-engine` name, so existing links, saved workspaces and backups keep working.
+
+**A demonstration of AI-assisted wealth-proposal tooling.** Stratovell takes an advisor from a pile of messy client statements to a branded sample PDF proposal gated by a readiness checklist, with a Claude-powered Copilot that drafts recommendations and leaves every decision to the advisor.
 
 [![CI](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/actions/workflows/ci.yml)
 
 **[Live demo →](https://atlas-proposal-engine.vercel.app/)** · runs on a sample family office, no sign-up, no API key needed
 
-> **Disclaimer.** Atlas is a demonstration project. It is not a registered investment adviser or broker-dealer and is not affiliated with, reviewed, or endorsed by the SEC, FINRA, or any regulator. Sample clients and advisors are fictional. Nothing here is investment, tax, or legal advice. Do not upload real client data.
+> **Disclaimer.** Stratovell is a demonstration project. It is not a registered investment adviser or broker-dealer and is not affiliated with, reviewed, or endorsed by the SEC, FINRA, or any regulator. Sample clients and advisors are fictional. Nothing here is investment, tax, or legal advice. Do not upload real client data.
 >
-> Atlas is a reference implementation, not production software, and has not been reviewed for compliance with SEC, FINRA or any other regulator's advertising, suitability or recordkeeping rules.
+> Stratovell is a reference implementation, not production software, and has not been reviewed for compliance with SEC, FINRA or any other regulator's advertising, suitability or recordkeeping rules.
 
-![Atlas dashboard](docs/screenshots/dashboard.jpg)
+![Stratovell dashboard](docs/screenshots/dashboard.jpg)
 
 ## The problem
 
 Before an advisor can propose anything, someone has to rebuild the client's balance sheet by hand: brokerage CSVs, a private-bank PDF in CHF, a screenshot of a crypto wallet, a K-1 capital account, a mortgage statement. Then they value it all in one currency, spot the problems, write the recommendations and check the disclosures. Most of that is clerical work, and the clerical work is where errors get in.
 
-Atlas is built for advisors at RIAs and wealth platforms, and for the people building tools for them. It turns that prep into a pipeline you can review step by step.
+Stratovell is built for advisors at RIAs and wealth platforms, and for the people building tools for them. It turns that prep into a pipeline you can review step by step.
 
 ## What it does
 
@@ -24,7 +26,7 @@ Atlas is built for advisors at RIAs and wealth platforms, and for the people bui
 |---|---|---|
 | **Ingest** | CSV, Excel, PDF, OFX/QFX, pasted text and screenshots (OCR via Tesseract) are parsed into candidate holdings, each with a confidence level and a source trace back to the raw line. PDFs are read in the browser with pdf.js (nothing is uploaded) and rebuilt into layout-aware lines; financial plans with a Balance Sheet (LifeView-style) are recognized and loaded as a client with one account per asset or liability, **reconciled against the document's own totals**. | Import Center, Statement Workbench |
 | **Normalize** | Asset class, currency and identifier detection (ticker, CUSIP, ISIN, SEDOL); duplicate and data-quality checks; advisor verification status per holding. | Accounts & Assets |
-| **Value** | Multi-currency valuation into the proposal's reporting currency. Holding values come from statements, advisor entry and advisor-approved values, each shown with its own source and recorded date; Atlas doesn't reprice securities. Exchange rates come from Frankfurter (ECB reference rates) or rates added by hand, with no key needed. A holding with no usable exchange rate is shown as *not valued* (never converted at 1:1 or counted as zero): totals say what they exclude, portfolio-wide conclusions pause, and the final PDF stays blocked until it's valued. An FX refresh merges by currency pair and keeps rates the provider didn't return with their own dates; rates in use older than 7 days (an initial product policy) are flagged and need a refresh or the advisor's expiring confirmation before the final PDF, which lists the rates it used. | Exchange rates |
+| **Value** | Multi-currency valuation into the proposal's reporting currency. Holding values come from statements, advisor entry and advisor-approved values, each shown with its own source and recorded date; Stratovell doesn't reprice securities. Exchange rates come from Frankfurter (ECB reference rates) or rates added by hand, with no key needed. A holding with no usable exchange rate is shown as *not valued* (never converted at 1:1 or counted as zero): totals say what they exclude, portfolio-wide conclusions pause, and the final PDF stays blocked until it's valued. An FX refresh merges by currency pair and keeps rates the provider didn't return with their own dates; rates in use older than 7 days (an initial product policy) are flagged and need a refresh or the advisor's expiring confirmation before the final PDF, which lists the rates it used. | Exchange rates |
 | **Analyze** | A rules engine flags concentration, currency and country exposure, illiquidity, cash drag, high fees, manual valuations and data-quality problems. | Insights |
 | **Recommend** | The advisor writes or converts recommendations; approved ones reshape the Before/After allocation, with sale proceeds flowing to cash in the same account. Amounts keep the currency they were entered in and are converted into the reporting currency at the workspace's current rates, with the rate, source and date shown; changing a recommendation's currency means converting its amounts or entering new ones, and editing an approved recommendation's amounts clears the approval. The editor shows a live preview simulated with the full proposal engine: current and proposed value, signed and percentage change, the cash it actually moves (including household cash for debt paydowns) and any shortfall, without saving anything. | Recommendations |
 | **Design** | The Allocation desk sets the investment scope (context assets and liabilities stay out of the weights), shows current, proposed and target asset-class weights with drift and actual cash, and previews one working draft of explicit position edits through the same proposal engine. Targets create no trades; previews change no holdings or approvals. It also builds funded alternatives: replace into a new investment with linked sell/buy legs applied together, fund purchases only from an account's chosen eligible cash, keep a minimum reserve, and compare named alternatives. | Allocation desk |
@@ -36,7 +38,7 @@ Atlas is built for advisors at RIAs and wealth platforms, and for the people bui
 
 ![Proposal Copilot](docs/screenshots/copilot.jpg)
 
-The Copilot is a Claude agent (`claude-opus-5-5`) whose tools are Atlas's existing deterministic engines. The design rule is simple: **the model plans and writes; the engines do the math; the advisor decides.**
+The Copilot is a Claude agent (`claude-opus-5-5`) whose tools are Stratovell's existing deterministic engines. The design rule is simple: **the model plans and writes; the engines do the math; the advisor decides.**
 
 | Tool | Backed by |
 |---|---|
@@ -63,7 +65,7 @@ The Copilot is a Claude agent (`claude-opus-5-5`) whose tools are Atlas's existi
 - **Context-bound (D4).** Each request names the client, the active alternative, its scope and an input revision; the server rejects a mismatch (409), and accepting a draft re-checks the revision, so an answer about changed inputs or another alternative can't be accepted.
 - **Preview, then explicit acceptance (D4).** Drafts are a preview computed with the desk's evaluator ("Preview only — nothing added"); nothing is saved until the advisor chooses **Add to working draft**, which adds them to the active alternative as unapproved actions ("Added to working draft — awaiting approval"), with a link to find them on Recommendations. Acceptance is idempotent (deterministic draft IDs) and never touches holdings, approvals or approved versions. Simulations fail closed on out-of-scope positions, cash, missing values or rates, incomplete imports, blocked units, new shortfalls, reserve breaches and duplicates. Tools to approve, finalize, share or execute don't exist; calls to them are refused and counted.
 - **Figures are checked.** Amounts and percentages in an answer and in draft rationales are matched against typed tool results from that run, by value, unit, currency and any written sign. Figures inside workspace text (holding, account and file names, notes, titles, rationales) are neither evidence nor claims. Unsupported figures are flagged. Claims that can't be decided (a bare number, or an unsigned amount the engine has only as a negative change) are listed as unchecked, never as matched.
-- **Minimized and unlogged.** The client's and household's names, the advisor's name and email, and import file names are replaced where Atlas recognizes them in model-bound text, the question included. This is minimization, not anonymization: holdings, values, account details and anything else typed into a question still reach the model. Prompts, tool payloads, reasoning and keys are not logged.
+- **Minimized and unlogged.** The client's and household's names, the advisor's name and email, and import file names are replaced where Stratovell recognizes them in model-bound text, the question included. This is minimization, not anonymization: holdings, values, account details and anything else typed into a question still reach the model. Prompts, tool payloads, reasoning and keys are not logged.
 - **The key stays on the local server.** A key pasted under Connect Claude is kept in the server's memory or the operating system's credential store, as the user chooses. It is never returned to the browser, written to the workspace or a backup, or logged. Saving it makes no provider request.
 - **The engines do the math.** Tools compute every figure with the same deterministic engines as the Before/After view and the PDF, and the tools are read-only apart from creating drafts.
 - **Nothing is persisted server-side.** The workspace lives in the browser; each request sends the slice the agent needs.
@@ -170,20 +172,20 @@ npm run build
 npm run local
 ```
 
-`npm run local` starts Atlas on `127.0.0.1` only and opens it paired with your browser. Then follow **Connect Claude** on the Proposal Copilot page: create a dedicated Console workspace with a spend limit, paste a standard API key, choose whether Atlas remembers it, and start a limited session. `npm run local:doctor` checks the machine without contacting Anthropic. The full guide, limits and security design are in [Local Claude setup](docs/roadmap/LOCAL_CLAUDE_SETUP.md). API usage is billed to your Console account. The public demo deliberately runs without a key, and live mode refuses on a hosted deployment. This path has been exercised with fake providers only; it is not yet verified against real Claude. Everything else is optional:
+`npm run local` starts Stratovell on `127.0.0.1` only and opens it paired with your browser. Then follow **Connect Claude** on the Proposal Copilot page: create a dedicated Console workspace with a spend limit, paste a standard API key, choose whether Stratovell remembers it, and start a limited session. `npm run local:doctor` checks the machine without contacting Anthropic. The full guide, limits and security design are in [Local Claude setup](docs/roadmap/LOCAL_CLAUDE_SETUP.md). API usage is billed to your Console account. The public demo deliberately runs without a key, and live mode refuses on a hosted deployment. This path has been exercised with fake providers only; it is not yet verified against real Claude. Everything else is optional:
 
 | Variable | Purpose |
 |---|---|
-| `ANTHROPIC_API_KEY` | Advanced, optional: a key managed outside Atlas. It is used only after you choose "Use the server's environment key" under Connect Claude. `npm run local` sets `COPILOT_MODE=live` for you; `COPILOT_MODE=test` runs the deterministic test provider; anything else is demo mode. |
+| `ANTHROPIC_API_KEY` | Advanced, optional: a key managed outside Stratovell. It is used only after you choose "Use the server's environment key" under Connect Claude. `npm run local` sets `COPILOT_MODE=live` for you; `COPILOT_MODE=test` runs the deterministic test provider; anything else is demo mode. |
 | `FINNHUB_API_KEY`, `TWELVE_DATA_API_KEY`, `ALPHA_VANTAGE_API_KEY`, `FRED_API_KEY` | Optional legacy security-quote enrichment, not a proposal requirement: no page calls the quote routes, and proposals use statement, advisor-entered and approved values. Leave them unset; their retirement is planned (R18). |
 
 ## White-label and sample output
 
-Atlas is white-label: clients see the adviser's firm, logo and colors, not Atlas. The sample firm, **Harbor & Pine Wealth Partners**, is fictional, and its name is deliberately unrelated to the product. Disclosures refer to the adviser as `[Firm]` until a real firm name is set in Firm & Branding.
+Stratovell is white-label: clients see the adviser's firm, logo and colors, not Stratovell. The sample firm, **Harbor & Pine Wealth Partners**, is fictional, and its name is deliberately unrelated to the product. Disclosures refer to the adviser as `[Firm]` until a real firm name is set in Firm & Branding.
 
-Every PDF Atlas generates is marked as a sample: a SAMPLE watermark on final PDFs (DRAFT on drafts), a notice at the foot of every page, and a `SAMPLE_` filename prefix. The same disclaimer appears in the app footer. These markings are intentional and stay in this repository.
+Every PDF Stratovell generates is marked as a sample: a SAMPLE watermark on final PDFs (DRAFT on drafts), a notice at the foot of every page, and a `SAMPLE_` filename prefix. The same disclaimer appears in the app footer. These markings are intentional and stay in this repository.
 
-> **The one Atlas mark on client documents.** The sample notice (`PDF_SAMPLE_NOTICE` in `src/domain/legal.ts`, the SAMPLE watermark and cover label, and the `SAMPLE_` filename prefix) is the only place Atlas appears on a client-facing PDF. An adopter with the necessary rights would need its own reviewed output policy; sample markings are not a licensing permission or a compliance approval.
+> **The one Stratovell mark on client documents.** The sample notice (`PDF_SAMPLE_NOTICE` in `src/domain/legal.ts`, the SAMPLE watermark and cover label, and the `SAMPLE_` filename prefix) is the only place Stratovell appears on a client-facing PDF. An adopter with the necessary rights would need its own reviewed output policy; sample markings are not a licensing permission or a compliance approval.
 
 Any authorized adaptation for real client work also requires the relevant production controls and review before removing sample markings: compliance review, books-and-records retention, supervision, data security and vendor due diligence are the responsibility of whoever deploys it.
 

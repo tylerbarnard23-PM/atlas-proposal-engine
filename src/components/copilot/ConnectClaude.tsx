@@ -41,7 +41,7 @@ async function post(url: string, csrf: string | null, body: unknown): Promise<{ 
     const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json", "X-Atlas-CSRF": csrf ?? "" }, body: JSON.stringify(body) });
     return { ok: res.ok, data: await res.json().catch(() => ({ error: `The request failed (${res.status}).` })) };
   } catch {
-    return { ok: false, data: { error: "Couldn't reach the Atlas server on this machine. Check that it is still running." } };
+    return { ok: false, data: { error: "Couldn't reach the Stratovell server on this machine. Check that it is still running." } };
   }
 }
 
@@ -90,7 +90,7 @@ export function ConnectClaude({ live, local, onChanged }: { live: LiveInfo; loca
   async function save(e: React.FormEvent) {
     e.preventDefault();
     const pasted = key;
-    const ok = await run("save", () => post("/api/copilot/local/connection", local!.csrf, { action: "save", key: pasted, storage }), "Key saved. Atlas hasn't contacted Anthropic: your first question will be the first request.");
+    const ok = await run("save", () => post("/api/copilot/local/connection", local!.csrf, { action: "save", key: pasted, storage }), "Key saved. Stratovell hasn't contacted Anthropic: your first question will be the first request.");
     if (ok) {
       setKey("");
       setEditing(false);
@@ -116,9 +116,9 @@ export function ConnectClaude({ live, local, onChanged }: { live: LiveInfo; loca
 
       {!local.paired && (
         <div className="mt-1.5 space-y-1 text-ink-800" role="status" data-testid="connect-unpaired">
-          <p>This browser isn&apos;t paired with Atlas on this machine yet, so it can&apos;t manage the Claude connection.</p>
+          <p>This browser isn&apos;t paired with Stratovell on this machine yet, so it can&apos;t manage the Claude connection.</p>
           <p>
-            Start Atlas with <code className="rounded bg-slatey-100 px-1">npm run local</code>, which opens a paired window. If Atlas is already running, run <code className="rounded bg-slatey-100 px-1">npm run local:pair</code> in a terminal and open the one-time link it prints.
+            Start Stratovell with <code className="rounded bg-slatey-100 px-1">npm run local</code>, which opens a paired window. If Stratovell is already running, run <code className="rounded bg-slatey-100 px-1">npm run local:pair</code> in a terminal and open the one-time link it prints.
           </p>
           <p className="text-2xs text-ink-500">Pairing only lets this browser manage the connection. It starts no session and spends nothing.</p>
         </div>
@@ -132,18 +132,18 @@ export function ConnectClaude({ live, local, onChanged }: { live: LiveInfo; loca
 
           {!fake && (
             <details className="rounded-md bg-slatey-50 px-3 py-2" open={needsKey && !editing ? true : undefined} data-testid="connect-guide">
-              <summary className="cursor-pointer font-medium text-ink-900">How to get a key for Atlas</summary>
+              <summary className="cursor-pointer font-medium text-ink-900">How to get a key for Stratovell</summary>
               <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-ink-800">
                 <li>
-                  In the Claude Console (platform.claude.com), open <strong>Workspaces</strong> and create a workspace just for Atlas. The Default Workspace can&apos;t have a spend limit, so a dedicated one matters.
+                  In the Claude Console (platform.claude.com), open <strong>Workspaces</strong> and create a workspace just for Stratovell. The Default Workspace can&apos;t have a spend limit, so a dedicated one matters.
                 </li>
                 <li>
-                  Select that workspace and set its monthly <strong>spend limit</strong>. This is the control that actually caps what you can be billed; Atlas&apos;s own guard is only an estimate.
+                  Select that workspace and set its monthly <strong>spend limit</strong>. This is the control that actually caps what you can be billed; Stratovell&apos;s own guard is only an estimate.
                 </li>
                 <li>
                   Create an <strong>API key in that workspace</strong>. Never use an Admin key (<code>sk-ant-admin…</code>): it manages your whole organization. A Claude subscription token from Claude Code isn&apos;t an API key either.
                 </li>
-                <li>Paste the key below and choose how long Atlas keeps it.</li>
+                <li>Paste the key below and choose how long Stratovell keeps it.</li>
               </ol>
               <p className="mt-2 text-2xs text-ink-600">
                 API usage is billed to your Console organization, separately from a Claude subscription. Max, Ultra and Team plans include monthly API credits, which you claim by linking your plan to a Console organization in claude.ai billing settings; Free, Pro and Enterprise plans don&apos;t include them. When credits
@@ -174,7 +174,7 @@ export function ConnectClaude({ live, local, onChanged }: { live: LiveInfo; loca
                   data-testid="connect-key"
                 />
                 <p id={`${id}-key-help`} className="mt-1 text-2xs text-ink-500">
-                  The key goes to the Atlas server on this machine only. It isn&apos;t kept in the browser, the workspace or backups, and Atlas never shows it again. Atlas can&apos;t tell a working key from a mistyped one: your first question settles that.
+                  The key goes to the Stratovell server on this machine only. It isn&apos;t kept in the browser, the workspace or backups, and Stratovell never shows it again. Stratovell can&apos;t tell a working key from a mistyped one: your first question settles that.
                 </p>
               </div>
               <fieldset className="space-y-1">
@@ -182,14 +182,14 @@ export function ConnectClaude({ live, local, onChanged }: { live: LiveInfo; loca
                 <label className="flex items-start gap-2">
                   <input type="radio" name={`${id}-storage`} className="mt-1" checked={storage === "session"} onChange={() => setStorage("session")} data-testid="connect-storage-session" />
                   <span>
-                    For this server session only <span className="text-ink-500">(in memory; you paste it again after Atlas restarts)</span>
+                    For this server session only <span className="text-ink-500">(in memory; you paste it again after Stratovell restarts)</span>
                   </span>
                 </label>
                 <label className={cn("flex items-start gap-2", !local.remember?.available && "text-ink-500")}>
                   <input type="radio" name={`${id}-storage`} className="mt-1" checked={storage === "keychain"} disabled={!local.remember?.available} onChange={() => setStorage("keychain")} data-testid="connect-storage-keychain" />
                   <span>
                     Remember it securely on this computer <span className="text-ink-500">(your operating system&apos;s credential store)</span>
-                    {!local.remember?.available && <span className="block text-2xs">{local.remember?.reason ?? "Not available here."} Atlas never falls back to a plain file.</span>}
+                    {!local.remember?.available && <span className="block text-2xs">{local.remember?.reason ?? "Not available here."} Stratovell never falls back to a plain file.</span>}
                   </span>
                 </label>
               </fieldset>
@@ -218,7 +218,7 @@ export function ConnectClaude({ live, local, onChanged }: { live: LiveInfo; loca
                     variant="secondary"
                     loading={busy === "env"}
                     onClick={async () => {
-                      if (await run("env", () => post("/api/copilot/local/connection", local.csrf, { action: "use_environment" }), "Using the key from the server's environment. Atlas hasn't contacted Anthropic.")) setEditing(false);
+                      if (await run("env", () => post("/api/copilot/local/connection", local.csrf, { action: "use_environment" }), "Using the key from the server's environment. Stratovell hasn't contacted Anthropic.")) setEditing(false);
                     }}
                     data-testid="connect-use-env"
                   >
@@ -226,7 +226,7 @@ export function ConnectClaude({ live, local, onChanged }: { live: LiveInfo; loca
                   </Button>
                 )}
               </div>
-              {local.environmentKey && <p className="text-2xs text-ink-500">A key is also set in the server&apos;s environment. It is managed outside Atlas and is used only if you choose it here.</p>}
+              {local.environmentKey && <p className="text-2xs text-ink-500">A key is also set in the server&apos;s environment. It is managed outside Stratovell and is used only if you choose it here.</p>}
             </form>
           ) : (
             <div className="flex flex-wrap gap-2">
@@ -244,7 +244,7 @@ export function ConnectClaude({ live, local, onChanged }: { live: LiveInfo; loca
           {!showForm && keyUsable && session && STARTABLE.includes(session.status) && (
             <div className="space-y-2 rounded-md bg-slatey-50 px-3 py-2" data-testid="connect-start">
               <p className="font-medium text-ink-900">Start a limited session</p>
-              <p className="text-ink-800">A session is an allowance you give Atlas for asking Claude. You can lower these limits, not raise them. Each new session is a new allowance and needs your say-so.</p>
+              <p className="text-ink-800">A session is an allowance you give Stratovell for asking Claude. You can lower these limits, not raise them. Each new session is a new allowance and needs your say-so.</p>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 <AllowanceSelect label="Minutes" value={allowance.minutes} options={MINUTES.filter((v) => v <= ceilings.minutes)} onChange={(minutes) => setAllowance({ ...allowance, minutes })} testid="allow-minutes" />
                 <AllowanceSelect label="Copilot runs" value={allowance.runs} options={RUNS.filter((v) => v <= ceilings.runs)} onChange={(runs) => setAllowance({ ...allowance, runs })} testid="allow-runs" />
@@ -252,7 +252,7 @@ export function ConnectClaude({ live, local, onChanged }: { live: LiveInfo; loca
                 <AllowanceSelect label="USD guard" value={allowance.usd} options={usdOptions} onChange={(usd) => setAllowance({ ...allowance, usd })} testid="allow-usd" />
               </div>
               <p className="text-2xs text-ink-600">
-                The USD guard is Atlas&apos;s estimate from list prices, not a billing limit. Each request is first reserved at its worst case (about USD {local.minimumUsd.toFixed(2)}), so the guard stops requests well before the figure is spent. Your Console workspace&apos;s spend limit is what caps real charges.
+                The USD guard is Stratovell&apos;s estimate from list prices, not a billing limit. Each request is first reserved at its worst case (about USD {local.minimumUsd.toFixed(2)}), so the guard stops requests well before the figure is spent. Your Console workspace&apos;s spend limit is what caps real charges.
               </p>
               {!confirming ? (
                 <Button size="sm" onClick={() => setConfirming(true)} iconLeft={<Play className="h-4 w-4" />} data-testid="connect-start-review">
@@ -292,7 +292,7 @@ export function ConnectClaude({ live, local, onChanged }: { live: LiveInfo; loca
           )}
 
           <p className="text-2xs text-ink-500">
-            What reaches Anthropic when you ask: your question and the figures the Atlas engines return to Claude&apos;s tool calls. Names Atlas recognizes are replaced first, which is not complete anonymization, so use sample or synthetic data.
+            What reaches Anthropic when you ask: your question and the figures the Stratovell engines return to Claude&apos;s tool calls. Names Stratovell recognizes are replaced first, which is not complete anonymization, so use sample or synthetic data.
           </p>
         </div>
       )}

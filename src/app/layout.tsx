@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import AppShell from "@/components/layout/AppShell";
 
 export const metadata: Metadata = {
-  title: "Atlas Proposal Engine",
+  title: "Stratovell Proposal System: Advisor Proposal Workspace",
   description:
     "Advisor-first global proposal platform for wealth advisors, RIAs, private banks, family offices, and institutional consultants.",
 };

@@ -85,7 +85,7 @@ export function parseStatementPdf(pdf: PdfText, fileName?: string): ExtractionRe
     h.sourceTrace = { ...h.sourceTrace, sourceType: "pdf_text", extractionMethod: "pdf-layout-table", page: page >= 0 ? page + 1 : undefined };
   }
   if (account.holdings.length === 0) {
-    return empty(pdf, start, `Read ${pdf.pageCount} page(s) but found no holdings table with currency amounts. If this is a statement in a layout Atlas doesn't know yet, try pasting the holdings table into the Paste tab.`);
+    return empty(pdf, start, `Read ${pdf.pageCount} page(s) but found no holdings table with currency amounts. If this is a statement in a layout Stratovell doesn't know yet, try pasting the holdings table into the Paste tab.`);
   }
 
   const valued = account.holdings.filter((h) => h.marketValue != null);
