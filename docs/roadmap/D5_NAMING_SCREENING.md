@@ -1,8 +1,112 @@
 # D5 — Naming screening (issue #35)
 
-**Round 2, 17 November 2026.** Preliminary screening from public sources, **not trademark clearance, legal advice or a guarantee of availability.** **No name is selected and none has been applied.** Tyler rejected round 1's recommendation, **Cartouche**, and chooses the name ([#35](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/35)); the product still ships as "Atlas Proposal Engine". Round 1 is kept below as a superseded record.
+**Round 3 (a correction of round 2), 17 November 2026.** Preliminary screening from public sources, **not trademark clearance, legal advice or a guarantee of availability.** **No name is selected and none has been applied**: Tyler chooses the name on [#35](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/35), and the product still ships as "Atlas Proposal Engine". **Round 2's recommendation (Clearpage) is withdrawn.** Round 2 and round 1 (Cartouche, rejected by Tyler) are kept below as superseded records.
 
-## The reset brief
+## Correction to round 2
+
+Codex found existing first-party uses of two round 2 finalists that round 2 missed. I opened each source myself on 17 November 2026 (15:14–15:26 UTC):
+
+| Name | Source (first-party) | What it is | Effect |
+|---|---|---|---|
+| **Clearpage** | [clearpage.app/about](https://clearpage.app/about) | "ClearPage", an AI-powered engine for WCAG and Section 508 document and PDF accessibility | Withdrawn: an AI document product of the same name |
+| **Clearpage** | [clearpage.com](https://www.clearpage.com/) | Clearpage, a web design and technology development company in Columbia, Missouri (since 2006) | Same name, software services |
+| **Clearwork** | [clearwork.io](https://www.clearwork.io/) | "ClearWork", AI discovery of processes and requirements for transformation teams | Dropped: an AI business-software product of the same name |
+| **Clearwork** | [clearwork.app](https://clearwork.app/) | "ClearWork", AI project management for agencies | A second AI product of the same name |
+
+Re-screening the other two finalists with the corrected method also removed them:
+
+| Name | Source | What it is | Effect |
+|---|---|---|---|
+| **Fairdraft** | [fairdraftstudio.github.io](https://fairdraftstudio.github.io/) | "Fairdraft Studio", client templates (**proposals**, agreements, reports) for freelancers and coaches, with Claude skills that fill them in | Dropped: a proposal-document product of the same name |
+| **Fairdraft** | [fairdraft.rizvex.com](https://fairdraft.rizvex.com/) | "FairDraft", a fair-housing listing-drafting tool | A second drafting tool of the same name; `fairdraft.com` redirects to a HugeDomains sale page |
+| **Casebook** | [casebook.net](https://www.casebook.net/) | Casebook, human-services case-management software | Dropped: an established software product of the same name |
+
+**Why round 2 missed them:** it searched each name *combined with* wealth, advisor and software terms, which hid same-name products in other fields. It never opened the pages on the registered domains it listed. It also read low GitHub counts and unregistered compound domains as signs of distinctiveness. Round 3 changes the method (below) and drops all four round 2 finalists.
+
+## Recommendation
+
+**Plainbrief**: "Plainbrief is an advisor proposal workspace." This is the only candidate that held up under the corrected method. I'm not filling the shortlist with weaker names to reach three.
+
+**On its own merits:**
+
+- **Fit.** The product produces the brief an advisor takes into a client meeting. It is written in plain language, shows a source and date for each figure and marks drafts clearly until the advisor approves them. "Plain" says that and makes no claim about outcomes. "Brief" is the document.
+- **Say it.** Two common words, said as written: *PLAYN-breef*. The stress is even and nothing in it is silent.
+- **Claims.** No suggestion of trading, performance, guarantees or AI. The AI assistant stays a feature that the product copy can describe.
+- **Existing uses.** Exact-name searches of "Plainbrief" and "Plain Brief" (standard and extended search) found **no product, company or service of this name**. They found only incidental uses: a GitHub project, [bandbox](https://github.com/brfindla/bandbox), uses "plainbrief" as a common noun for a plain-language description, and a code field is named `plainBrief`. `plainbrief.com` is registered (since 1 October 2025). It serves an empty page from Afternic name servers, which usually means a domain listed for sale. I did not check whether it is for sale, at what price or who owns it, and I contacted no one.
+
+**Weigh these before choosing:**
+
+- **"Plain briefs" is also a description of underwear.** One search result was a clothing listing of exactly that. In a sentence with "advisor" it is unlikely to be the first reading, but it is the most unfortunate association, and it is worth saying the name aloud to someone.
+- **"Plain" and "plane" sound the same.** Someone who hears the name once may write "Planebrief" or think of a pilot's pre-flight brief. Context usually settles it, but it is a real spelling risk.
+- **"-brief" is a common software suffix**, mostly in other fields: [Clearbrief](https://clearbrief.com/) (legal AI in Microsoft Word), [Onebrief](https://www.onebrief.com/) (planning software for military staffs) and Swiftbrief (a content-brief tool, seen only in directories). "Brief" also reads as legal. None of these is the same name, but "brief" does not make the name distinctive on its own.
+- **"Plain"** is also the name of a customer-support platform (plain.com, seen in search results and not opened). It is a different field, and only one word is shared.
+
+## Spoken test
+
+| Name | "…is an advisor proposal workspace." | How it is said | Sound-alikes and unfortunate readings | Verdict |
+|---|---|---|---|---|
+| **Plainbrief** | "Plainbrief is an advisor proposal workspace." | PLAYN-breef | "plain briefs" (underwear); "plane brief" (a pilot's pre-flight brief); "plain grief" (a stretch) | Clear to say; one awkward association and one homophone |
+
+## Considered, not strong enough
+
+None of these returned a same-name product in the checks, but each has a weakness that makes it weaker than Plainbrief. They are listed so they aren't re-screened by accident. Each is available if the owner prefers it anyway.
+
+| Name | Evidence | Weakness |
+|---|---|---|
+| **Keybrief** | No exact-name product found. `keybrief.com` (registered 2007) serves an empty page from CashParking name servers. `keybrief.app` was registered on 5 November 2026 and did not respond. | In wealth management, "Key" suggests KeyBank and Key Private Bank. The new `.app` registration may mean someone is preparing a product. |
+| **Wellbrief** | No exact-name product found. `wellbrief.com` (registered 2012) did not respond. | Reads as wellness or health (the nearest results were health and wellness brands). |
+| **Truebrief** | No exact-name product found. `truebrief.com` (2025) serves an empty page; `truebrief.ai` (2026) did not respond. | Close to **Truebill**, a personal-finance app now part of Rocket. "True" also sounds like a claim. |
+| **Proposewell** | No exact-name product found. | Sits next to proposal-software names (Proposeful, Proposable, Proposify), can read as a marriage proposal, and is awkward to say. |
+| **Clientready** | No single product found; "client-ready" is an everyday phrase. | Descriptive, so weak as a brand. Every checked domain (`.com`, `.io`, `.ai`, `.app`, `.dev`) is registered, three of them in the last year. Sounds like ClubReady (fitness-club software). |
+
+## Screened out in round 3
+
+| Name | Existing use (first-party unless marked) | Why |
+|---|---|---|
+| **Truepage** | [truepage.app](https://truepage.app/): "TruePage", a private PDF workspace for Windows | Same name, document software |
+| **Plainspoke** | [plainspoke.app](https://plainspoke.app/): "Plainspoke", a voice-to-text notebook | Same name, writing software |
+| **Pagewell** | [pagewell.ai](https://pagewell.ai/): share HTML and Markdown files as a page; [pagewell.co](https://pagewell.co/): Amazon listing assessments | Two same-name businesses |
+| **Plainpage** | [ChurchTao/PlainPage](https://github.com/ChurchTao/PlainPage), a blog theme; "PlainPage: Document Scanner, OCR & PDF Tools", an app on Amazon (second source, not opened) | Same name, document software |
+| **Brightpage** | [brightpage.co.uk](https://www.brightpage.co.uk/): web design for local businesses; BrightPage, a PDF-reading company in Glasgow (directories) | Same name, two businesses |
+| **Notewell** | [notewell.io](https://www.notewell.io/): turns your notes into quiz questions | Same name, notes software |
+| **Draftwell** | [Draftwell Pro](https://draftwellpro.github.io/Draftwell-Pro/): a writing app for authors | Same name, drafting software |
+| **Fairbrief** | [CIB fairBrief](https://www.cib.de/en/fairbrief/): online letter sending ("Brief" is German for letter) | Same name, document software |
+| **Deskside** | [deskside.com](https://deskside.com/): managed IT services; several other same-name apps (second source) | Crowded |
+| **Planfold** | [Planfold](https://community.obsidian.md/plugins/planfold), an Obsidian planning plugin (its listing) | Same name, planning software |
+| **Sidebook** | [SideBooks](https://apps.apple.com/nl/app/sidebooks/id409777225?l=en-GB), a PDF viewer (its App Store listing) | One letter from a document app |
+| **Talkthrough** | TalkThrough™, an OnSong app feature (from search; [its page](https://new.onsongapp.com/docs/2026/features/talkthrough/) returned an error when opened, so unverified) | Used as a product feature name; also an everyday phrase |
+| **Tablewise** | Table Wise, restaurant analytics ([Serchen](https://www.serchen.com/company/table-wise), third-party; not confirmed first-party) | Likely same-name software |
+| **Fieldbook** | Many uses (construction software, a field-data app, a database service, a scouting handbook) | Generic |
+| **Ballast** | Ballast, a risk and compliance tool listed under LBMC ([Capterra](https://www.capterra.co.uk/software/186339/ballast), third-party); Ballast Consulting Group (finance) | Crowded and finance-adjacent |
+| **Briefwell** | No exact use found | Sounds like **Bridewell**, a historic London prison |
+| **Plainview** | Place names; the "plain view" legal doctrine | Generic |
+| **Advisewell, Firmplan, Counselwell, Planwell, Plancase, Clientwell** | Bing returned unrelated pages only; none was taken further | Dropped as weak against the brief (awkward or generic); not fully screened |
+
+## Method (round 3)
+
+The brief is unchanged from round 2: professional advisor software; easy to pronounce, spell and remember after hearing it once; familiar words or natural compounds; no obscure or forced theme; AI a feature, not the identity; sound-alikes checked explicitly; domains a separate question.
+
+1. **The exact name alone first.** Each name was searched with no industry words, before any combined query. Plainbrief was also searched as two words and with the extended search mode.
+2. **Registered domains are opened.** For every registered `.com`, `.ai`, `.app`, `.io` and `.co` checked, the public home page (and an About page where one exists) was fetched to see the title, description and headings. A same-name product on any of them is treated as an existing use.
+3. **A second search source.** Bing was used as the second source. DuckDuckGo and Mojeek returned bot challenges after the first query; these were **not bypassed**, and their partial results count for nothing. Bing often returned unrelated pages for rare names (unrelated sites and spam that I've filtered out and don't reproduce), so for those names **the second source added little**. That is recorded as sparse coverage, not as evidence that a name is clear.
+4. **Supporting information only.** Registry RDAP lookups (Verisign `.com`, Identity Digital `.ai`, Google Registry `.app` and `.dev`; DNS for `.io`), GitHub repository counts and handles, npm, and unregistered compound domains (`get…`, `use…`, `…hq`) are recorded as practical information. **They are not evidence of distinctiveness.** For Plainbrief: `.ai`, `.app` and `.dev` were not in the registry, 0 GitHub repositories, npm name free, and `getplainbrief.com`, `useplainbrief.com`, `tryplainbrief.com`, `plainbriefhq.com` unregistered. All of that is at the moment of checking and reserves nothing.
+5. **Coverage, labelled honestly.**
+   - **Covered:** exact-name web search (one engine, plus Bing as a sparse second source); first-party pages on registered domains that responded.
+   - **Partial:** several domains did not respond or showed blank or parked pages (`plainspoke.ai`, `truebrief.ai`, `truepage.com`, `keybrief.app`, `wellbrief.com`), so a use could exist behind them. Directory and app-store listings are second-hand.
+   - **Not covered:** trademarks (the USPTO, state, EU, UK and WIPO registers; common-law use); company registries; social handles (X, LinkedIn, Instagram and the like); non-English meanings beyond those noted; and testing with listeners. Pronunciation and sound-alikes are my reading of the spelling.
+   - Nothing was bought, registered, reserved or contacted, and no settings or accounts were touched.
+
+## Decision gate
+
+**Naming remains open and is an explicit publication gate.** No LinkedIn publication or announcement happens under a name the owner hasn't chosen, and counsel should clear the chosen name for the intended use first. After Tyler's selection, the change follows [the implementation checklist](D5_BRANDING_IMPLEMENTATION_CHECKLIST.md) as one focused PR. The owner may instead choose a name from "Considered, not strong enough", or ask for another round.
+
+---
+
+## Round 2 — superseded (17 November 2026; recommendation withdrawn)
+
+**Superseded by round 3.** Its recommendation (Clearpage) and its finalists (Fairdraft, Clearwork, Casebook) are withdrawn because of existing same-name products (see "Correction to round 2" above). Its "none found" statements for those names are **wrong**. Kept unchanged below as a record of what was claimed, including the method that missed them.
+
+### The reset brief
 
 - Professional advisor and wealth software.
 - **Easy to pronounce, spell and remember after hearing it once.**
@@ -13,7 +117,7 @@
 
 **Why rename at all:** the nearest products to this one are Telescope Atlas, Meotis Finance Atlas and Eton Solutions' AtlasFive (from #35).
 
-## Recommendation
+### Recommendation
 
 **Clearpage** — "Clearpage: Advisor Proposal Workspace."
 
@@ -25,7 +129,7 @@
 
 **Runner-up: Fairdraft** — no collisions of its own and the most distinctive (4 GitHub repositories), but it sits next to an advisor-technology company called **Draft Technologies** (Draft Insights), and "fair" could be read as a claim of fair treatment. Details below.
 
-## Spoken test and pronunciation
+### Spoken test and pronunciation
 
 Each sentence is how the name would be said in an introduction. Check each aloud.
 
@@ -36,7 +140,7 @@ Each sentence is how the name would be said in an introduction. Check each aloud
 | **Clearwork** | "Clearwork is an advisor proposal workspace." | KLEER-wurk | **Clearwater** (Clearwater Analytics, investment reporting used by wealth managers and family offices); "clear work" is generic. | Clean to say; a wealth-software sound-alike |
 | **Casebook** | "Casebook is an advisor proposal workspace." | KAYS-book | **Facebook** (rhymes); reads as legal, medical or social-work case files. | Easy, but the rhyme and the connotation hurt |
 
-## Comparison
+### Comparison
 
 | | Clearpage | Fairdraft | Clearwork | Casebook |
 |---|---|---|---|---|
@@ -50,36 +154,36 @@ Each sentence is how the name would be said in an introduction. Check each aloud
 
 Domain options are a separate check and don't decide the ranking: **every single-word `.com`, `.ai`, `.app` and `.io` for all four is registered**, as expected for common words.
 
-## Screening by candidate
+### Screening by candidate
 
 Every search and check is dated 17 November 2026. The web-search tool has limited coverage, so "nothing found" is weak evidence.
 
-### Clearpage
+#### Clearpage
 - **Wealth, advice and software:** searches for the name with wealth, advisor, financial advisor, RIA, software and platform returned no product, vendor or adviser of this name; results were advisor-technology roundups (Advisor360, AdvisorEngine, Equisoft, Croesus) unrelated to it.
 - **Sound-alike:** [Clearpay](https://adyen.com/en_GB/payment-methods/clearpay-afterpay) is the name Afterpay uses in the UK and parts of Europe for buy-now-pay-later (also described in [Stripe's guide](https://stripe.com/resources/more/afterpay-clearpay-an-in-depth-guide)).
 - **GitHub:** 22 exact-name repositories, the largest [yangyuan-zhen/ClearPage](https://github.com/yangyuan-zhen/ClearPage) (8★, a browser-data-cleaning extension).
 - **Domains (registry RDAP, DNS, GitHub API):** `clearpage.com` (registered 2004), `.ai` (2026), `.app` (2026) registered; `.io` has name servers. `getclearpage.com` and `tryclearpage.com` registered; **`useclearpage.com`, `clearpagehq.com`, `clearpagedesk.com`, `clearpageproposals.com` not found in the registry** (reserves nothing). GitHub handle `clearpagehq` free; three other handles returned an unclear result from the API.
 - **Uncertain:** trademarks (not screened this round), other jurisdictions, social handles.
 
-### Fairdraft
+#### Fairdraft
 - **Wealth, advice and software:** no product or adviser named Fairdraft or Fair Draft found. **Adjacent:** [DRAFT Technologies](https://linkedin.com/company/draftapp) sells analytics and communication tools to wealth advisors ("Draft Insights"); an earlier consumer investment app of the name Draft (Austin) is also on [Crunchbase](https://crunchbase.com/organization/draft-2). Neither is a proposal tool.
 - **GitHub:** 4 repositories, none of note ([Byvalvin/FairDraft](https://github.com/Byvalvin/FairDraft), a team-generating web app, 0★).
 - **Domains:** `fairdraft.com` (2009), `.app` (2025), `.dev` registered; `fairdraft.ai` not found; `.io` has name servers. `getfairdraft.com` and `usefairdraft.com` registered; **`tryfairdraft.com`, `fairdrafthq.com`, `fairdraftdesk.com`, `fairdraftproposals.com` not found**. GitHub handles free.
 - **Uncertain:** trademarks (not screened this round); whether a name containing "Draft" would be taken as related to DRAFT Technologies is a question for counsel.
 
-### Clearwork
+#### Clearwork
 - **Wealth, advice and software:** no product or adviser found. **Sound-alike:** [Clearwater Analytics](https://clearwateranalytics.com), investment accounting and reporting software listed for institutional investors, private wealth and family offices.
 - **GitHub:** 25 repositories, all tiny (a WordPress theme, 1★).
 - **Domains:** all single-word TLDs registered; `clearworkdesk.com` and `clearworkproposals.com` not found; `get`, `use`, `try` and `hq` `.com` compounds registered.
 - **Uncertain:** generic and weakly distinctive; trademarks not screened.
 
-### Casebook
+#### Casebook
 - **Wealth, advice and software:** no wealth or RIA product found. [Casebook](https://www.softwareadvice.com/product/216199-Casebook-Platform/) is a case-management product for social services, healthcare, education and government.
 - **GitHub:** 557 repositories, including [thebuggeddev/casebook](https://github.com/thebuggeddev/casebook) (85★, an investigation board) and a test-case workflow tool.
 - **Domains:** all single-word TLDs and `get`, `use`, `try`, `hq` compounds registered; `casebookdesk.com` and `casebookproposals.com` not found; `casebookai` GitHub handle taken.
 - **Uncertain:** trademarks not screened.
 
-## Round 2 screened out
+### Round 2 screened out
 
 | Name | Why |
 |---|---|
@@ -92,7 +196,7 @@ Every search and check is dated 17 November 2026. The web-search tool has limite
 | **Firstdraft** | A common phrase (397 GitHub repositories); weak as a brand. |
 | **Deskwork** | No collisions found, but flat and forgettable. |
 
-## Method and limits (round 2)
+### Method and limits (round 2)
 
 - **Candidates:** familiar words and plain compounds, generated against the brief above; 12 were screened mechanically (domains, GitHub, npm) and by web search; four are finalists.
 - **Web:** the session's web-search tool, exact-name queries combined with wealth, advisor, RIA, software and platform terms. A miss is weak evidence. Several results are third-party directories whose figures can be stale.
@@ -102,7 +206,7 @@ Every search and check is dated 17 November 2026. The web-search tool has limite
 - **Pronunciation and sound-alikes** are my reading of the spelling and are not a test with listeners. Say each spoken introduction aloud, ideally to someone who hasn't seen the name.
 - Nothing was bought, registered or reserved. No settings or accounts were touched.
 
-## Decision gate
+### Decision gate
 
 **Naming remains open and is an explicit publication gate.** No LinkedIn publication or announcement happens under a name the owner hasn't chosen after this screening, and counsel should clear the chosen name for the intended use before it. After Tyler's selection, the change follows [the implementation checklist](D5_BRANDING_IMPLEMENTATION_CHECKLIST.md) as one focused PR. The owner may also ask for another round.
 
