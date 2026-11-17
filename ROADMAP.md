@@ -34,7 +34,7 @@ The approved [valuation scope and safe-retirement plan](docs/roadmap/VALUATION_S
 - PR #34 (the precise live preview) is complete. R08 is a separate follow-up that reuses it, not a duplicate preview.
 - #26 FX work is complete and live (PR #60, merge `e54d56e3d381a65715bedcf686bf7d59935591bf`). #28 date rendering is complete and live (PR #63, merge `23db797c58b2241e8b0c229818ebeecb06755d47`); follow-up #64 (UTC "today" writes) is logged.
 - R23a is complete and live: PR #66 (Codex-reviewed head `d088dab657c802d18c8e34882f245603f31ab75e`) merged as `e56335e5fdb4f2f343cdea605333b16cda9ad932` on 23 October 2026 (production `dpl_DUsfyjnmjxaUaLNfBhrNfHixwqsy`). It precedes persisted-schema migrations: each later store version needs a matching backup migration step. R23b is not started; #55 stays open.
-- Naming #35: researched on 17 November 2026 ([screening](docs/roadmap/D5_NAMING_SCREENING.md); recommendation Cartouche; not trademark clearance). **No name is selected or applied**, and naming is an explicit publication gate before LinkedIn. Preserve browser storage and working links during that transition.
+- Naming #35 is **open**: round 1's Cartouche was rejected by Tyler; round 2 was researched on 17 November 2026 ([screening](docs/roadmap/D5_NAMING_SCREENING.md); recommendation Clearpage, runner-up Fairdraft; not trademark clearance). **No name is selected or applied**, and naming is an explicit publication gate before LinkedIn. Preserve browser storage and working links during that transition.
 - This roadmap does not merge, deploy, change hosting, run a new live model, purchase data or authorize external trading.
 
 ## Client-data privacy prerequisite

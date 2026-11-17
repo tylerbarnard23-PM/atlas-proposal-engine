@@ -1022,7 +1022,7 @@
     "status": "planned",
     "trackingIssue": 36,
     "mode": "synthetic-employer-demo-first",
-    "nextMilestone": "D5: owner's name choice for #35 (screening saved), then one branding PR; D5 package (golden path, R25 protocol, README/demo); agent 27-trial evaluation budget still undecided",
+    "nextMilestone": "D5: owner's name choice for #35 (round 2 screening saved; Cartouche rejected), then one branding PR; D5 package (golden path, R25 protocol, README/demo); agent 27-trial evaluation budget still undecided",
     "supersedes": "Serial P0–P5 implementation and standalone R11-first cleanup command; original feature contracts retained",
     "observedMain": "569b96f89efef60bc6c9d90fd92cc5745e90cb96",
     "developmentAssistant": {
@@ -1197,21 +1197,39 @@
         },
         "namingGate": {
           "issue": 35,
-          "status": "researched_owner_choice_pending",
-          "researchedAt": "2026-11-17",
+          "status": "open_owner_choice_pending",
           "report": "D5_NAMING_SCREENING.md",
           "checklist": "D5_BRANDING_IMPLEMENTATION_CHECKLIST.md",
-          "recommendation": "Cartouche",
-          "runnerUp": "Theodolite",
-          "screenedOut": [
-            "Alidade",
-            "Proffer",
-            "Waymark",
-            "Graticule",
-            "Cairn",
-            "Tessera"
+          "rounds": [
+            {
+              "round": 1,
+              "researchedAt": "2026-11-17",
+              "recommendation": "Cartouche",
+              "outcome": "rejected_by_owner",
+              "shortlist": [
+                "Cartouche",
+                "Theodolite",
+                "Scriptorium",
+                "Portolan",
+                "Plumbline"
+              ]
+            },
+            {
+              "round": 2,
+              "researchedAt": "2026-11-17",
+              "recommendation": "Clearpage",
+              "runnerUp": "Fairdraft",
+              "finalists": [
+                "Clearpage",
+                "Fairdraft",
+                "Clearwork",
+                "Casebook"
+              ],
+              "outcome": "awaiting_owner_choice"
+            }
           ],
           "trademarkClearance": "not_performed",
+          "trademarksScreenedInRound2": false,
           "applied": false,
           "publicationGate": true
         }
