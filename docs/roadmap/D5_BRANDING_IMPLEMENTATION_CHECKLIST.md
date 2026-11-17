@@ -1,6 +1,6 @@
-# D5 — Branding implementation checklist (prepared, not started)
+# D5 — Branding implementation checklist (applied in PR #90: Stratovell)
 
-Prepared 17 November 2026 for the focused branding PR that follows the owner's name choice in [#35](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/35) ([screening](D5_NAMING_SCREENING.md)). **Nothing here has been applied; no replacement name is chosen.** `<Name>` below stands for the owner's choice.
+Prepared 17 November 2026 for the focused branding PR that follows the owner's name choice in [#35](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/35) ([screening](D5_NAMING_SCREENING.md)). **Applied in PR #90 on 17 November 2026 for the owner's choice, Stratovell** (`<Name>` below). Sections 2 and 3 were kept as written; the PR lists what was retained.
 
 **Rule:** change visible product wording only, file by file, with review. No blind global replacement. A cosmetic rename must not reset, migrate or invalidate any saved workspace, backup, credential, cookie or link. Advisor and firm branding stays a separate, customer-controlled layer.
 

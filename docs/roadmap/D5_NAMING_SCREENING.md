@@ -1,6 +1,30 @@
 # D5 — Naming screening (issue #35)
 
-**Round 3 (a correction of round 2), 17 November 2026.** Preliminary screening from public sources, **not trademark clearance, legal advice or a guarantee of availability.** **No name is selected and none has been applied**: Tyler chooses the name on [#35](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/35), and the product still ships as "Atlas Proposal Engine". **Round 2's recommendation (Clearpage) is withdrawn.** Round 2 and round 1 (Cartouche, rejected by Tyler) are kept below as superseded records.
+## Selection (17 November 2026)
+
+**Tyler selected Stratovell** on [#35](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/35). The choice was Tyler's; it was not one of the options round 3 screened, and **Plainbrief was not selected**.
+
+- **Product name:** Stratovell Proposal System. **Short name:** Stratovell. **Descriptor:** Advisor Proposal Workspace. The former name is Atlas Proposal Engine.
+- The visible rename is made in PR #90 under [the implementation checklist](D5_BRANDING_IMPLEMENTATION_CHECKLIST.md). Technical identities are preserved on purpose (listed in the PR and the handoff).
+- **This is not trademark or legal clearance.** Counsel's clearance of the name for the intended use is still required before any LinkedIn publication or announcement, which remains an explicit gate. Nothing was bought, registered or reserved.
+
+### Preliminary screening of Stratovell (17 November 2026, 16:25 UTC)
+
+Run with round 3's method after the selection. It describes what public sources showed on that date and nothing more.
+
+- **Exact name alone** (standard web search): no product, company or adviser named Stratovell. Results were near-misses: Stratacell (a soil-cell system for tree pits), Stratwell Consulting, Stratoscale (a software company) and the stratovolcano. Bing returned only unrelated pages, so the second source added nothing.
+- **Domains:** `stratovell.com`, `.ai`, `.app`, `.dev` were not in the registry and `.io` did not resolve when checked. There were no sites to inspect. Compounds such as `getstratovell.com` and `stratovellhq.com` were also unregistered. GitHub user and organization names were free; GitHub repository search returned 0; the npm name is free. **This is supporting information, not evidence of distinctiveness, and it reserves nothing.**
+- **Say it and spell it:** *STRAT-oh-vell* (strat-o-VELL is also natural). It is a coined name, so listeners will ask for the spelling once.
+- **Sound-alikes to weigh:** **Stratwell** (a consulting firm), **Stratavell**/**Stratovel** as likely misspellings, "stratovolcano", and the many Strat- names (Stratus, Strata, Stratos). "Strat" can suggest "strategy", which suits advisory work but is not a claim the product makes.
+- **Not covered:** trademark registers (USPTO, state, EU, UK, WIPO), common-law use, company registries, social handles other than GitHub, non-English meanings, and pronunciation testing with listeners.
+
+Prior research follows as superseded history. Round 2's "none found" statements for its names remain **wrong** (see its section); round 3's recommendation of Plainbrief was not taken.
+
+---
+
+## Round 3 — superseded by Tyler's selection (17 November 2026)
+
+**Round 3 (a correction of round 2), 17 November 2026.** Preliminary screening from public sources, **not trademark clearance.** It withdrew round 2's recommendation and returned one strong option, Plainbrief. Kept unchanged below.
 
 ## Correction to round 2
 
@@ -96,9 +120,9 @@ The brief is unchanged from round 2: professional advisor software; easy to pron
    - **Not covered:** trademarks (the USPTO, state, EU, UK and WIPO registers; common-law use); company registries; social handles (X, LinkedIn, Instagram and the like); non-English meanings beyond those noted; and testing with listeners. Pronunciation and sound-alikes are my reading of the spelling.
    - Nothing was bought, registered, reserved or contacted, and no settings or accounts were touched.
 
-## Decision gate
+## Decision gate (as written in round 3; superseded: the owner has since selected Stratovell, and clearance and the announcement gate remain)
 
-**Naming remains open and is an explicit publication gate.** No LinkedIn publication or announcement happens under a name the owner hasn't chosen, and counsel should clear the chosen name for the intended use first. After Tyler's selection, the change follows [the implementation checklist](D5_BRANDING_IMPLEMENTATION_CHECKLIST.md) as one focused PR. The owner may instead choose a name from "Considered, not strong enough", or ask for another round.
+**Naming remained open and is an explicit publication gate.** No LinkedIn publication or announcement happens under a name the owner hasn't chosen, and counsel should clear the chosen name for the intended use first. After Tyler's selection, the change follows [the implementation checklist](D5_BRANDING_IMPLEMENTATION_CHECKLIST.md) as one focused PR. The owner may instead choose a name from "Considered, not strong enough", or ask for another round.
 
 ---
 

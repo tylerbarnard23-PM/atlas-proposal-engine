@@ -55,16 +55,20 @@ Stop for Codex review with exact head, checks, preview association, remaining li
 
 D1 (PR #72, `0381db1`), D2 (PR #75, `073049f`), D2a (PR #79, `c0ee4e9`), D3 (PR #81, `85b3910`) and **D4 (PR #82, `3738588`, 16 November 2026)** are released; the commands below the next one are historical, so do not rerun them. **D5 is in progress:** its security and dependency gate is in review on `feat/d5-security-dependency-gate`.
 
-### Next command: apply the chosen name
+### Next command: review the Stratovell branding PR
 
-Saved on 17 November 2026. **Blocked on the owner's name choice** ([#35](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/35); screening in [D5_NAMING_SCREENING.md](D5_NAMING_SCREENING.md)). **Tyler rejected round 1's Cartouche. Round 2's finalists (Clearpage, Fairdraft, Clearwork, Casebook) are withdrawn because of existing same-name products. Round 3's single strong option, Plainbrief, is unselected.** The #86 request limits (PR #89, `569b96f`) and the D5 security gate (PR #88) are released and verified; don't rerun them. Verify heads, tree and stash first, and preserve any newer work.
+Saved on 17 November 2026. Tyler selected **Stratovell** on [#35](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/35); PR #90 now holds the visible rename (**Stratovell Proposal System**, formerly Atlas Proposal Engine) and the naming records. Verify heads, tree and stash first, and preserve newer work.
 
-1. **The owner** chooses a name on #35 (or asks for another round of research), says each candidate aloud first, and has counsel clear the chosen name for the intended use. This screening is not clearance, and trademarks were not screened in rounds 2 or 3. Any further round follows round 3's method: the exact name alone first, then the registered domains' own pages, a second search source, GitHub counts and domains treated as supporting information only, and coverage labelled honestly. **Naming stays open until then; do not apply any name.**
-2. **Claude** then makes one focused branding PR from [the implementation checklist](D5_BRANDING_IMPLEMENTATION_CHECKLIST.md): visible product name, titles and metadata, README and the PDF and meeting-view product-name lines, with an accurate descriptor and a former-name note. Impact note first; preserve the repository and deployment URLs, package identity, the `atlas-proposal-engine` storage key, backup format and file names, local-mode identifiers, the credential-store service name and the model-facing prompt and tools. Verify a saved v6 workspace and a v10 backup still load identically, then typecheck, full tests, eval, build and a browser pass. One PR; stop for review.
-3. **Separate owner decisions:** [#85](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/85), [#87](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/87), Vercel access, closing PR #80.
-4. **Then the D5 package:** golden-path, keyboard and viewport evidence, the R25 protocol and scorecard, the README and demo narrative.
+1. **Codex** reviews PR #90: that only display text changed, every retained technical identity is intact, the `Atlas` references that remain are intended (listed in [the handoff](../CLAUDE_HANDOFF.md)), approved versions and backups still load, and the PDF sample notice and demo disclaimers stay accurate.
+2. **The owner** decides on merge (pinned: `gh pr merge 90 --merge --match-head-commit <reviewed head>`), counsel's clearance of the name, and whether the model-facing prompt and credential-store service name get their own later change (they are retained; see [the checklist](D5_BRANDING_IMPLEMENTATION_CHECKLIST.md) section 2).
+3. **Claude** then retakes `docs/screenshots/dashboard.jpg` and `copilot.jpg` (they still show the old wordmark) and records the post-merge production check.
+4. **Separate owner decisions:** [#85](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/85), [#87](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/87), Vercel access, closing PR #80. **Then the D5 package:** golden-path, keyboard and viewport evidence, the R25 protocol and scorecard, the README and demo narrative.
 
-Until the owner says otherwise: no name applied before the choice; no paid testing, settings change, purchase (domains, handles, trademarks), merge or deployment.
+Until the owner says otherwise: no merge, announcement or LinkedIn publication, no purchase (domains, handles, trademarks), settings change or paid call.
+
+### Previous command (done 17 November 2026, don't rerun): apply the chosen name
+
+Superseded by the one above: the name is chosen and the rename is in PR #90.
 
 ### Previous command (done 16 November 2026, don't rerun): review the #86 request limits
 
