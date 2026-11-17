@@ -55,7 +55,18 @@ Stop for Codex review with exact head, checks, preview association, remaining li
 
 D1 (PR #72, `0381db1`), D2 (PR #75, `073049f`), D2a (PR #79, `c0ee4e9`), D3 (PR #81, `85b3910`) and **D4 (PR #82, `3738588`, 16 November 2026)** are released; the commands below the next one are historical, so do not rerun them. **D5 is in progress:** its security and dependency gate is in review on `feat/d5-security-dependency-gate`.
 
-### Next command: review the #86 request limits
+### Next command: apply the chosen name
+
+Saved on 17 November 2026. **Blocked on the owner's name choice** ([#35](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/35); screening in [D5_NAMING_SCREENING.md](D5_NAMING_SCREENING.md), recommendation Cartouche). The #86 request limits (PR #89, `569b96f`) and the D5 security gate (PR #88) are released and verified; don't rerun them. Verify heads, tree and stash first, and preserve any newer work.
+
+1. **The owner** chooses a name on #35 (or asks for another round of research), and has counsel clear it for the intended use. This screening is not clearance.
+2. **Claude** then makes one focused branding PR from [the implementation checklist](D5_BRANDING_IMPLEMENTATION_CHECKLIST.md): visible product name, titles and metadata, README and the PDF and meeting-view product-name lines, with an accurate descriptor and a former-name note. Impact note first; preserve the repository and deployment URLs, package identity, the `atlas-proposal-engine` storage key, backup format and file names, local-mode identifiers, the credential-store service name and the model-facing prompt and tools. Verify a saved v6 workspace and a v10 backup still load identically, then typecheck, full tests, eval, build and a browser pass. One PR; stop for review.
+3. **Separate owner decisions:** [#85](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/85), [#87](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/87), Vercel access, closing PR #80.
+4. **Then the D5 package:** golden-path, keyboard and viewport evidence, the R25 protocol and scorecard, the README and demo narrative.
+
+Until the owner says otherwise: no name applied before the choice; no paid testing, settings change, purchase (domains, handles, trademarks), merge or deployment.
+
+### Previous command (done 16 November 2026, don't rerun): review the #86 request limits
 
 Saved on 16 November 2026. PR #88 (the D5 security and dependency gate) is merged as `ba5f6ce`. Branch `fix/86-request-resource-limits`; the handoff names the PR and head. Verify heads, tree and stash first, and preserve any newer work.
 
