@@ -55,16 +55,21 @@ Stop for Codex review with exact head, checks, preview association, remaining li
 
 D1 (PR #72, `0381db1`), D2 (PR #75, `073049f`), D2a (PR #79, `c0ee4e9`), D3 (PR #81, `85b3910`) and **D4 (PR #82, `3738588`, 16 November 2026)** are released; the commands below the next one are historical, so do not rerun them. **D5 is in progress:** its security and dependency gate is in review on `feat/d5-security-dependency-gate`.
 
-### Next command: review the D5 stability batch
+### Next command: review the D5 demo package
 
-Saved on 17 November 2026. The Stratovell rename is released and production-verified (PR #90 → `3c40cf7`; evidence on [PR #90](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/90#issuecomment-6957672889)). The stability batch is on branch `fix/d5-stability-reset-meeting`. Verify heads, tree and stash first, and preserve newer work.
+Saved on 17 November 2026. PR #91 (meeting-view fit; reset not reproduced) is released and production-verified (`b2eb2de`; [evidence](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/91#issuecomment-6959423945)). The D5 demo package is on branch `docs/d5-demo-package`, docs only. Verify heads, tree and stash first, and preserve newer work.
 
-1. **Codex** reviews the batch PR: the meeting view fits 375 and 768 px screens and stays keyboard-reachable; the change is limited to `/meeting/[id]`; `ProposalPdfTemplate`, the PDF route, print output and approved-version contents and fingerprints are unchanged (fixed-input comparison in [D5_STABILITY_BATCH.md](D5_STABILITY_BATCH.md)); the reset investigation's conclusion (not reproduced, no persistence change) is supported by its evidence.
-2. **The owner** decides on merge (pinned: `gh pr merge <N> --merge --match-head-commit <reviewed head>`). After a merge, Claude reads main CI and the production deployment once and checks the meeting view on production at 375 px with synthetic data.
-3. **If the reset recurs:** capture the saved value before any app script runs and after hydration (the harness in the stability record), note how the browser was closed, and only then consider an app change, with the failing test first.
-4. **Then the D5 package:** golden-path, keyboard and viewport evidence, the R25 protocol and empty scorecard, the README and demo narrative. **Separate owner decisions:** counsel's clearance of Stratovell, [#85](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/85), [#87](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/87), Vercel access, closing PR #80.
+1. **Codex** reviews the package PR: the walkthrough ([D5_DEMO_WALKTHROUGH.md](D5_DEMO_WALKTHROUGH.md)) matches what the rehearsal showed and claims no more; the R25 protocol ([R25_USABILITY_PROTOCOL.md](R25_USABILITY_PROTOCOL.md)) is usable and sends nothing; the scorecard ([R25_SCORECARD.md](R25_SCORECARD.md)) is empty and invents no result; the README distinguishes the one real-Claude run from the evaluations not performed; no runtime code, dependency, model setting or technical identity changed.
+2. **The owner** decides on merge (pinned: `gh pr merge <N> --merge --match-head-commit <reviewed head>`), counsel's clearance of Stratovell, and the announcement gate. Nothing is announced before then.
+3. **Claude, as separate bounded tasks (one issue each, tests first where code changes):** [#92](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/92) navigation below 768 px; [#93](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/93) skip link; [#94](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/94) whether every PDF page must carry the sample notice (a PDF-output change: contract-impact note and fixed-input before/after comparison first). Then re-run the walkthrough's keyboard and viewport checks.
+4. **When advisors are available (owner-led, consented):** run the R25 protocol and fill the scorecard only from real sessions.
+5. **Separate owner decisions:** the 27-trial agent evaluation budget, [#85](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/85), [#87](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/87), Vercel access (the Vercel API was not readable from this account), closing PR #80, and merging the Next.js 16.4.5 security patch ([PR #96](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/96), reviewed separately).
 
 Until the owner says otherwise: no merge, announcement or LinkedIn publication, purchase, settings change or paid call.
+
+### Previous command (done 17 November 2026, don't rerun): review the D5 stability batch
+
+Done: PR #91 was approved and merged pinned to `64e8b2a` as `b2eb2de`, then verified in production.
 
 ### Previous command (done 17 November 2026, don't rerun): review the Stratovell branding PR
 

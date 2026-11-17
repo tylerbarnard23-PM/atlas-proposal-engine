@@ -14,6 +14,14 @@
 
 ![Stratovell dashboard](docs/screenshots/dashboard.jpg)
 
+## Why it matters: the advisor stays in control
+
+Stratovell's value is a proposal an advisor can defend line by line. Portfolio calculations use shared deterministic engines. Copilot figures are checked against tool results; unsupported or unchecked claims are flagged for advisor review. The advisor chooses the scope (which accounts the proposal is about), sizes each change, approves it explicitly, and then freezes an approved version that later edits can't rewrite. The product refuses to approve a version or issue a final PDF until a readiness checklist passes, and says what is blocking. Nothing is sent, traded or filed: it produces a sample document and a read-only meeting view.
+
+**See it in five minutes:** the [demo walkthrough](docs/roadmap/D5_DEMO_WALKTHROUGH.md) goes scope → proposed change → explicit approval → approved version → PDF, with a blocked-readiness example, and records what was and wasn't rehearsed.
+
+**What has and hasn't been evidenced.** The public demo is scripted (no model, no key). One owner-operated run against real Claude passed on 16 November 2026 (one question, synthetic data, a spend-limited Console workspace, about USD 0.07). The 27-trial agent evaluation, the real-model browser checks and any study with advisors have **not** been performed; the [usability protocol](docs/roadmap/R25_USABILITY_PROTOCOL.md) and its [scorecard](docs/roadmap/R25_SCORECARD.md) are prepared and empty, so there are no usability or time-saving claims.
+
 ## The problem
 
 Before an advisor can propose anything, someone has to rebuild the client's balance sheet by hand: brokerage CSVs, a private-bank PDF in CHF, a screenshot of a crypto wallet, a K-1 capital account, a mortgage statement. Then they value it all in one currency, spot the problems, write the recommendations and check the disclosures. Most of that is clerical work, and the clerical work is where errors get in.
@@ -183,9 +191,9 @@ npm run local
 
 Stratovell is white-label: clients see the adviser's firm, logo and colors, not Stratovell. The sample firm, **Harbor & Pine Wealth Partners**, is fictional, and its name is deliberately unrelated to the product. Disclosures refer to the adviser as `[Firm]` until a real firm name is set in Firm & Branding.
 
-Every PDF Stratovell generates is marked as a sample: a SAMPLE watermark on final PDFs (DRAFT on drafts), a notice at the foot of every page, and a `SAMPLE_` filename prefix. The same disclaimer appears in the app footer. These markings are intentional and stay in this repository.
+Every PDF Stratovell generates is marked as a sample: a SAMPLE watermark on final PDFs (DRAFT on drafts), the sample notice on the cover and in the footer at the end of each section (continuation pages of a long section carry none, [#94](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/94)), and a `SAMPLE_` filename prefix. The same disclaimer appears in the app footer. These markings are intentional and stay in this repository.
 
-> **Stratovell on client documents.** The sample notice (`PDF_SAMPLE_NOTICE` in `src/domain/legal.ts`, the SAMPLE watermark and cover label, and the `SAMPLE_` filename prefix) is the Stratovell attribution every page carries (the notice repeats in the footer of each page). The product name also appears in the approved-version note ("a local Stratovell record") and in the two statements that Stratovell does not reprice securities or use a price feed; the advisor's firm name and branding stay as the advisor set them. An adopter with the necessary rights would need its own reviewed output policy; sample markings are not a licensing permission or a compliance approval.
+> **Stratovell on client documents.** The sample notice (`PDF_SAMPLE_NOTICE` in `src/domain/legal.ts`, the SAMPLE watermark and cover label, and the `SAMPLE_` filename prefix) is the Stratovell attribution on the cover and at the end of each section of the document. The product name also appears in the approved-version note ("a local Stratovell record") and in the two statements that Stratovell does not reprice securities or use a price feed; the advisor's firm name and branding stay as the advisor set them. An adopter with the necessary rights would need its own reviewed output policy; sample markings are not a licensing permission or a compliance approval.
 
 Any authorized adaptation for real client work also requires the relevant production controls and review before removing sample markings: compliance review, books-and-records retention, supervision, data security and vendor due diligence are the responsibility of whoever deploys it.
 
@@ -193,7 +201,7 @@ Any authorized adaptation for real client work also requires the relevant produc
 
 **Approved scope adjustment (planning only, 22 October 2026):** the core proposal journey will use verified statement/imported account values or explicit advisor-approved valuations, retaining FX, dates, provenance and financial safeguards. Broad security pricing/research will become optional; safe retirement of unnecessary integrations is planned, not implemented. See the [valuation scope and migration plan](docs/roadmap/VALUATION_SCOPE.md). R18 slice 1 removed security quotes from the ordinary UI and corrected the value-source wording in the Dashboard and PDF; the quote adapters and routes remain in the codebase until their planned retirement.
 
-**Delivery priority (24 October 2026, planned):** [five coherent demo packages](docs/roadmap/DEMO_DELIVERY_PLAN.md) take the existing input foundation through portfolio construction, funded alternatives, approved presentation and a tested bounded agent. The [Claude command playbook](docs/roadmap/CLAUDE_COMMANDS.md) defines the next workspace task and effort settings. Full advanced features remain later; none of these packages is claimed built by this planning update.
+**Delivery status (17 November 2026):** the [five demo packages](docs/roadmap/DEMO_DELIVERY_PLAN.md) D1–D4 (scope and allocation desk, funded alternatives, approved versions and the meeting view, the bounded agent) are released, and the D5 packaging (rename, walkthrough, usability protocol) is in review. The [Claude command playbook](docs/roadmap/CLAUDE_COMMANDS.md) holds the next task. Full advanced features remain later.
 
 The **[accepted 25-item advisor roadmap](ROADMAP.md)** has detailed plans, dependencies, phases and linked issues. Planned features are separate from the capabilities above. Start implementation with **[the roadmap guide](docs/roadmap/IMPLEMENTATION_GUIDE.md)** and the current handoff.
 
@@ -201,6 +209,8 @@ The **[accepted 25-item advisor roadmap](ROADMAP.md)** has detailed plans, depen
 - Market data, FX and the insight thresholds are illustrative, not calibrated.
 - The Copilot doesn't yet read raw statements; the next step is a Claude extraction pass over low-confidence rows, measured with the same eval.
 - Compliance checks are a readiness checklist, not a compliance review.
+- No advisor usability study has been run, and no accessibility conformance is claimed. Known gaps from the walkthrough rehearsal: no navigation below 768 px ([#92](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/92)) and no skip link ([#93](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/93)).
+- The name is preliminary-screened only: not trademark or legal clearance.
 
 Feedback and issues welcome.
 
