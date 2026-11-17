@@ -1331,7 +1331,20 @@
             "92": "no navigation below 768px",
             "93": "no skip link",
             "94": "sample notice absent from PDF continuation pages"
-          }
+          },
+          "reviewCorrections": [
+            "README: engine and Copilot figure-checking statement",
+            "walkthrough step 3: proposed cash, not actual cash"
+          ]
+        },
+        "nextjsSecurityPatch": {
+          "status": "in_review",
+          "pr": 96,
+          "branch": "fix/nextjs-16.4.5-security",
+          "from": "16.4.2",
+          "to": "16.4.5",
+          "applicableAdvisoriesFound": 0,
+          "prodAuditAfter": 0
         }
       }
     ],

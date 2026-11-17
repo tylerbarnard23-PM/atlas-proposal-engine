@@ -16,7 +16,7 @@
 
 ## Why it matters: the advisor stays in control
 
-Stratovell's value is a proposal an advisor can defend line by line. Every figure comes from a deterministic engine with its source, currency and date shown; the AI layer plans and explains but never does the arithmetic. The advisor chooses the scope (which accounts the proposal is about), sizes each change, approves it explicitly, and then freezes an approved version that later edits can't rewrite. The product refuses to approve a version or issue a final PDF until a readiness checklist passes, and says what is blocking. Nothing is sent, traded or filed: it produces a sample document and a read-only meeting view.
+Stratovell's value is a proposal an advisor can defend line by line. Portfolio calculations use shared deterministic engines. Copilot figures are checked against tool results; unsupported or unchecked claims are flagged for advisor review. The advisor chooses the scope (which accounts the proposal is about), sizes each change, approves it explicitly, and then freezes an approved version that later edits can't rewrite. The product refuses to approve a version or issue a final PDF until a readiness checklist passes, and says what is blocking. Nothing is sent, traded or filed: it produces a sample document and a read-only meeting view.
 
 **See it in five minutes:** the [demo walkthrough](docs/roadmap/D5_DEMO_WALKTHROUGH.md) goes scope → proposed change → explicit approval → approved version → PDF, with a blocked-readiness example, and records what was and wasn't rehearsed.
 
