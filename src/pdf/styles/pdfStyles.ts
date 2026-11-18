@@ -1,6 +1,61 @@
 // Inline CSS used by the proposal print template. Kept self-contained so it can be
 // injected directly into the rendered HTML and rendered identically by Puppeteer.
 
+import { PDF_SAMPLE_NOTICE } from "@/domain/legal";
+
+/**
+ * #94: height of the bottom page margin, on every physical page except the
+ * full-bleed cover, that holds the sample notice. Nothing else prints there.
+ */
+export const PDF_NOTICE_BAND_IN = 0.6;
+/** Top page margin, so a section that continues onto another page doesn't start at the paper's edge. */
+export const PDF_TOP_MARGIN_IN = 0.35;
+
+const cssString = (s: string) => `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, " ")}"`;
+
+/**
+ * Printed output only (the PDF route and the browser's print of the meeting
+ * view); screen rendering is untouched. A section is one .pdf-page box that
+ * can run onto several physical pages, so anything positioned inside the box
+ * appears once per section, not once per page. The notice therefore lives in
+ * the page's own bottom margin box, which Chromium draws on every physical page
+ * in space that content can't occupy. The cover is a named page with no margin
+ * and no margin box: it is full-bleed and carries the complete notice itself.
+ *
+ * The section box's padding is reduced by the margins so the first page of a
+ * section has the same content area as before (0.6in top, 0.95in bottom).
+ */
+const PDF_PRINT_PAGE_CSS = `
+  @page {
+    size: Letter;
+    margin: ${PDF_TOP_MARGIN_IN}in 0 ${PDF_NOTICE_BAND_IN}in 0;
+    @bottom-center {
+      content: ${cssString(PDF_SAMPLE_NOTICE)};
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, "Helvetica Neue", Arial, sans-serif;
+      font-size: 7pt;
+      line-height: 1.35;
+      color: #566077;
+      text-align: center;
+      vertical-align: middle;
+      padding: 0 0.55in;
+    }
+  }
+  @page cover {
+    margin: 0;
+    @bottom-center { content: none; }
+  }
+  @media print {
+    .pdf-cover { page: cover; }
+    .pdf-page {
+      min-height: ${(11 - PDF_TOP_MARGIN_IN - PDF_NOTICE_BAND_IN).toFixed(2)}in;
+      padding-top: ${(0.6 - PDF_TOP_MARGIN_IN).toFixed(2)}in;
+      padding-bottom: ${(0.95 - PDF_NOTICE_BAND_IN).toFixed(2)}in;
+    }
+    .pdf-page .pdf-sample-notice { display: none; }
+    .pdf-footer { bottom: 0.05in; }
+  }
+`;
+
 export const PDF_BASE_CSS = `
   :root {
     --ink-900: #11151E;
@@ -126,4 +181,4 @@ export const PDF_BASE_CSS = `
   .pdf-kv dd { margin: 0; color: var(--ink-900); }
   .pdf-summary-box { background: #FAFBFD; border-left: 3pt solid var(--gold-500); padding: 12pt; margin-bottom: 14pt; font-size: 9.5pt; color: var(--ink-800); break-inside: avoid; page-break-inside: avoid; }
   .pdf-source-tag { font-size: 7.5pt; color: var(--ink-500); }
-`;
+${PDF_PRINT_PAGE_CSS}`;

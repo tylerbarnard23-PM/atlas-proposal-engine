@@ -25,6 +25,7 @@ import { checkSnapshot } from "@/engines/workspaceBackup";
 import { PDF_MAX_BODY_BYTES, SHAPE_LIMITS, readBodyLimited, shapeProblem } from "@/server/requestLimits";
 import { snapshotFileName, snapshotReadiness, snapshotTemplateProps } from "@/engines/approvedSnapshot";
 import type { ProposalPdfTemplateProps } from "@/pdf/templates/ProposalPdfTemplate";
+import { PDF_PRINT_OPTIONS } from "@/pdf/printOptions";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -227,12 +228,7 @@ async function renderPdf(props: ProposalPdfTemplateProps, filename: string, id: 
     // The template is self-contained (inline CSS, no scripts or remote assets),
     // so "load" is complete. puppeteer-core 25 dropped networkidle for setContent.
     await page.setContent(html, { waitUntil: "load", timeout: 60_000 });
-    const pdf = await page.pdf({
-      format: "Letter",
-      printBackground: true,
-      margin: { top: "0", bottom: "0", left: "0", right: "0" },
-      preferCSSPageSize: false,
-    });
+    const pdf = await page.pdf({ ...PDF_PRINT_OPTIONS, margin: { ...PDF_PRINT_OPTIONS.margin } });
     return new Response(pdf as unknown as BodyInit, {
       status: 200,
       headers: {

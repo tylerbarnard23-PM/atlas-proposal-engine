@@ -62,7 +62,7 @@ Accessibility observations (K and any participant using assistive technology): f
 
 - No navigation below 768 px ([#92](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/92)).
 - No skip link; many Tab stops before page content ([#93](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/93)).
-- The sample notice is absent from PDF continuation pages ([#94](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/94)).
+- The sample notice was absent from PDF continuation pages ([#94](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/94)); fixed after the rehearsal, retest that every page carries it.
 
 ## Out of scope
 
