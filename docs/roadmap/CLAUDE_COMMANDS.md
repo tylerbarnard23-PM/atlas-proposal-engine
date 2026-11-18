@@ -53,9 +53,19 @@ Stop for Codex review with exact head, checks, preview association, remaining li
 
 ## Active sequencing: D4 released → D5
 
-D1 (PR #72, `0381db1`), D2 (PR #75, `073049f`), D2a (PR #79, `c0ee4e9`), D3 (PR #81, `85b3910`) and **D4 (PR #82, `3738588`, 16 November 2026)** are released; the commands below the next one are historical, so do not rerun them. **D5 is in progress:** its security and dependency gate is in review on `feat/d5-security-dependency-gate`.
+D1 (PR #72, `0381db1`), D2 (PR #75, `073049f`), D2a (PR #79, `c0ee4e9`), D3 (PR #81, `85b3910`) and **D4 (PR #82, `3738588`, 16 November 2026)** are released; the commands below the next one are historical, so do not rerun them. **D5 is in progress** (desktop-first since 18 November 2026: mobile work is deferred).
 
-### Next command: review the D5 demo package
+### Next command: review the PDF sample notices
+
+Saved on 18 November 2026. PRs #96 and #95 are merged and production-verified (`fe90ae9`; [evidence](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/57#issuecomment-6982996211)). **The owner deferred mobile work in favour of the desktop demo:** draft [PR #98](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/98) is parked unchanged at `59f6a9b`; do not merge, revert, delete or continue it, and keep #92, #93 and #97 deferred. The #94 fix is on branch `fix/pdf-sample-notices` ([D5_PDF_SAMPLE_NOTICES.md](D5_PDF_SAMPLE_NOTICES.md)). Verify heads, tree and stash first, and preserve newer work.
+
+1. **Codex** reviews the PR: every physical page of draft, final and approved-version PDFs and of the printed meeting view carries the complete notice in reserved space; the regression test checks each page with real Chromium; the before/after comparison loses no content and explains pagination; screen rendering, figures, disclosures, branding, approval status and fingerprints are unchanged; no state, dependency, model or identity change.
+2. **The owner** decides on merge (pinned: `gh pr merge <N> --merge --match-head-commit <reviewed head>`), counsel's clearance of Stratovell, and the announcement gate. After a merge, verify a production draft and final PDF page by page.
+3. **Desktop demo next (owner to choose):** remaining desktop polish found while rehearsing; mobile stays deferred.
+4. **When advisors are available (owner-led, consented):** run the R25 protocol and fill the scorecard only from real sessions; it stays empty until then.
+5. **Separate owner decisions:** the 27-trial agent evaluation budget, [#85](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/85), [#87](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/87), Vercel access, closing PR #80.
+
+### Previous command (completed 18 November 2026): review the D5 demo package
 
 Saved on 17 November 2026. PR #91 (meeting-view fit; reset not reproduced) is released and production-verified (`b2eb2de`; [evidence](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/91#issuecomment-6959423945)). The D5 demo package is on branch `docs/d5-demo-package`, docs only. Verify heads, tree and stash first, and preserve newer work.
 
@@ -63,7 +73,7 @@ Saved on 17 November 2026. PR #91 (meeting-view fit; reset not reproduced) is re
 2. **The owner** decides on merge (pinned: `gh pr merge <N> --merge --match-head-commit <reviewed head>`), counsel's clearance of Stratovell, and the announcement gate. Nothing is announced before then.
 3. **Claude, as separate bounded tasks (one issue each, tests first where code changes):** [#92](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/92) navigation below 768 px; [#93](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/93) skip link; [#94](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/94) whether every PDF page must carry the sample notice (a PDF-output change: contract-impact note and fixed-input before/after comparison first). Then re-run the walkthrough's keyboard and viewport checks.
 4. **When advisors are available (owner-led, consented):** run the R25 protocol and fill the scorecard only from real sessions.
-5. **Separate owner decisions:** the 27-trial agent evaluation budget, [#85](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/85), [#87](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/87), Vercel access (the Vercel API was not readable from this account), closing PR #80, and merging the Next.js 16.4.5 security patch ([PR #96](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/96), reviewed separately).
+5. **Separate owner decisions:** the 27-trial agent evaluation budget, [#85](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/85), [#87](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/87), Vercel access (the Vercel API was not readable from this account), closing PR #80, (the Next.js 16.4.5 patch, [PR #96](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/96), has since merged).
 
 Until the owner says otherwise: no merge, announcement or LinkedIn publication, purchase, settings change or paid call.
 

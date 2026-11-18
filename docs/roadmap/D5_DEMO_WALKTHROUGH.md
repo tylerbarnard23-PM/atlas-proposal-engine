@@ -38,7 +38,7 @@ Each run used a new browser profile and host (`walk-N.localhost`) on the local p
 | Meeting view: version, fingerprint, action, firm, no "Atlas" | all | all | all |
 | Final PDF (Chromium) | 200, 561 KB | 200, 561 KB | 200, 561 KB |
 
-PDFs from runs 2 and 3, read as extracted text: 23 pages; the issue line and fingerprint; the approved action at USD 200,000.00; "Investment scope" for the two chosen accounts and "Household context outside the investment scope" for the others; the Stratovell sample notice on the cover and on 19 of 23 pages (continuation pages carry none, see [#94](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/94)); no "Atlas".
+PDFs from runs 2 and 3, read as extracted text: 23 pages; the issue line and fingerprint; the approved action at USD 200,000.00; "Investment scope" for the two chosen accounts and "Household context outside the investment scope" for the others; the Stratovell sample notice on the cover and on 19 of 23 pages (continuation pages carried none at the time, see [#94](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/94); fixed afterwards, every page now carries it: [D5_PDF_SAMPLE_NOTICES.md](D5_PDF_SAMPLE_NOTICES.md)); no "Atlas".
 
 ## Keyboard evidence (1360 px, synthetic sample)
 

@@ -8,7 +8,7 @@ On 17 November, `npm run build` several times stopped with a Next.js security-up
 
 ## Sources checked
 
-- Next.js blog, "November 2026 Security Release" (<https://nextjs.org/blog/november-2026-security-release>, published 3 November 2026). It names patched releases **16.4.5** (16.4 line) and 15.5.29 (15.5 line) and lists six GHSA IDs plus one unnumbered item. It gives no affected ranges.
+- Next.js blog, "November 2026 Security Release" (<https://nextjs.org/blog/november-2026-security-release>, published 3 November 2026). It names patched releases **16.4.5** (16.4 line) and 15.5.29 (15.5 line) and lists six GHSA IDs plus one item the blog gives no ID (identified below as GHSA-vvgp-ww4w-46vf). It gives no affected ranges.
 - GitHub security advisories for `vercel/next.js` and the GitHub Advisory Database, for affected ranges, CVE IDs and first patched versions.
 - The npm registry: 16.4.5 was published 3 November 2026; 16.4.6 (9 November) also exists. **16.4.5 was chosen** because it is the release the official advisories name as patched; 16.4.6 adds changes not needed for these fixes.
 
@@ -21,10 +21,12 @@ Affected ranges and patched versions come from the GitHub advisories. "Applicabi
 | GHSA-mfr8-8qww-v76h (CVE-2026-119790): cross-root-param disclosure, `use cache` called through `unstable_cache` | medium; blog: High | `>=16.3.0 <=16.4.4` → 16.4.5 | Cache Components; the same `use cache` function called directly and inside `unstable_cache`, reading a root param | **No.** No `use cache`, `unstable_cache` or `cacheComponents` anywhere in `src` or `next.config.ts` |
 | GHSA-vc7v-qv4w-wrv8 (CVE-2026-119351): cache leak across root params in nested `use cache` | medium | `>=16.2.0 <=16.4.4` → 16.4.5 | Cache Components; nested `use cache` functions reading a root param | **No**, same reason |
 | GHSA-rhh4-g77r-r9qj (CVE-2026-119349): cross-user cache disclosure/poisoning via binary `use cache` arguments | medium | `>=16.0.0 <=16.4.4` → 16.4.5 | `use cache` with binary arguments that identify users | **No**, same reason |
-| Unnumbered: shared shell cache poisoning in self-hosted apps | medium (blog) | not stated | `next start`, Cache Components, specific dynamic-param routes | **No.** Local mode uses `next start` on 127.0.0.1, but Cache Components is not enabled |
+| GHSA-vvgp-ww4w-46vf (CVE-2026-119350): shared shell cache poisoning in self-hosted apps | medium | `>=16.4.0 <=16.4.4` → 16.4.5 | `next start`, Cache Components, specific dynamic-param routes | **No.** Local mode uses `next start` on 127.0.0.1, but Cache Components is not enabled |
 | GHSA-pc58-hwjq-p385 (CVE-2026-119348): cross-client response injection through stale compressed framing | medium | `>=16.0.0 <=16.4.4` → 16.4.5 | Self-hosted; returns an attacker-controlled fetched `Response` unchanged; behind an HTTP/1.1 reverse proxy that pipelines | **Not as configured.** Routes return `NextResponse.json(...)` built from parsed data; providers parse responses; local mode binds 127.0.0.1 with no reverse proxy |
 | GHSA-f3mh-rxg3-f5g2 (CVE-2026-119346): HttpOnly cookie exposure in Edge routes | medium | `>=16.0.0 <=16.4.4` → 16.4.5 | Edge route handlers that set cookies with `NextResponse.cookies.set()` | **No.** Every API route declares `runtime = "nodejs"`; the local cookies are set from Node routes |
 | GHSA-7qx7-33qx-rqx2 (CVE-2026-119347): SVG rejection bypass in Image Optimization | medium | `>=16.0.0 <=16.4.4` → 16.4.5 | An attacker image from an allowed remote source, with a native backend that decodes SVG | **Unlikely.** No `next/image` use and no `images` remote patterns configured; the default optimizer endpoint exists, but no remote source is allowed |
+
+**Correction (18 November 2026):** this document first called the shared-shell item "unnumbered" because the blog gives no ID; it is GHSA-vvgp-ww4w-46vf (CVE-2026-119350), per the GitHub advisory. The affected range and the not-applicable finding are as in the table.
 
 **Conclusion:** none of the advisories was found to apply to Stratovell's current code and configuration. The patch is still applied because the installed version was in every affected range, the build tool reports it, and staying on a patched release prevents a future change from making one applicable unnoticed.
 
