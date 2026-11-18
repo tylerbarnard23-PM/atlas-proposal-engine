@@ -52,7 +52,7 @@ Readiness was cleared with the mouse in setup; the steps below were done with th
 | Recommendations: Enter on "Approve" | approves (1 approved) |
 | Review: Enter on "Approve version" | version 1 created |
 | Review: after approving, "Open meeting view" and "Issue final PDF" | each one Tab stop further on |
-| Tab stops to the page's own first control | 20 (Approve version), 23 (Edit accounts), 26 (first Approve): the whole sidebar comes first, with no skip link ([#93](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/93)) |
+| Tab stops to the page's own first control | 20 (Approve version), 23 (Edit accounts), 26 (first Approve): the whole sidebar comes first, with no skip link ([#93](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/93)); **a skip link was added after this rehearsal** (one Tab plus Enter reaches the page; see [D5_MOBILE_NAV_SKIP_LINK.md](D5_MOBILE_NAV_SKIP_LINK.md)) |
 
 Not tested: screen readers, high-zoom or high-contrast modes, colour-only cues, error announcements, touch. No accessibility conformance or certification is claimed.
 
@@ -61,7 +61,7 @@ Not tested: screen readers, high-zoom or high-contrast modes, colour-only cues, 
 Twelve routes (dashboard, client profile, accounts, exchange rates, allocation desk, recommendations, Copilot, proposal builder, PDF preview, review, settings, meeting view) at 375, 768 and 1360 px:
 
 - **No page-level horizontal scroll** and no off-screen elements outside scrollable regions at any width.
-- **Navigation is missing below 768 px.** The sidebar is hidden and there is no menu control, so at 375 px no page shows navigation links ([#92](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/92)). In-page buttons still link onward.
+- **Navigation was missing below 768 px** at the time of this rehearsal: the sidebar is hidden and there was no menu control, so at 375 px no page showed navigation links ([#92](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/92)). A menu drawer was added afterwards ([D5_MOBILE_NAV_SKIP_LINK.md](D5_MOBILE_NAV_SKIP_LINK.md)). In-page buttons still link onward.
 - The meeting view fits the screen at 375 and 768 px (PR #91); the Review page's controls and the PDF Preview page were not re-measured in detail.
 - Not tested: a physical phone, Safari, Firefox, landscape, browser zoom beyond the default.
 

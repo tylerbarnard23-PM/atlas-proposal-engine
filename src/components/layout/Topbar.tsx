@@ -5,6 +5,7 @@ import { useAtlasStore } from "@/store/useStore";
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { ReadinessPill } from "./ReadinessPill";
+import { MobileNav } from "./MobileNav";
 
 export function Topbar() {
   const client = useAtlasStore((s) => s.client);
@@ -15,6 +16,8 @@ export function Topbar() {
 
   return (
     <header className="sticky top-0 z-40 h-14 bg-paper/95 backdrop-blur-sm border-b border-ink-100 flex items-center px-6 gap-4">
+      {/* Below 768px the sidebar is hidden; this menu button opens the same links. */}
+      <MobileNav />
       <div className="flex items-center gap-3 min-w-0">
         <div className="text-[13px] text-ink-500">Engagement</div>
         <div className="font-medium text-ink-900 text-sm truncate">{client.householdName ?? client.fullName}</div>

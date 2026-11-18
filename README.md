@@ -209,7 +209,7 @@ The **[accepted 25-item advisor roadmap](ROADMAP.md)** has detailed plans, depen
 - Market data, FX and the insight thresholds are illustrative, not calibrated.
 - The Copilot doesn't yet read raw statements; the next step is a Claude extraction pass over low-confidence rows, measured with the same eval.
 - Compliance checks are a readiness checklist, not a compliance review.
-- No advisor usability study has been run, and no accessibility conformance is claimed. Known gaps from the walkthrough rehearsal: no navigation below 768 px ([#92](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/92)) and no skip link ([#93](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/93)).
+- No advisor usability study has been run, and no accessibility conformance is claimed. The walkthrough rehearsal found no navigation below 768 px ([#92](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/92)) and no skip link ([#93](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/93)); a menu drawer and a skip link were added afterwards (keyboard-rehearsed in Chrome only; no screen-reader, touch or physical-phone testing; see [D5_MOBILE_NAV_SKIP_LINK.md](docs/roadmap/D5_MOBILE_NAV_SKIP_LINK.md)). Still open: the sample notice is absent from PDF continuation pages ([#94](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/94)) and a banner layout problem at 375 px ([#97](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/97)).
 - The name is preliminary-screened only: not trademark or legal clearance.
 
 Feedback and issues welcome.

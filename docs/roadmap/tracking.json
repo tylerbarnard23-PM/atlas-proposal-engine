@@ -1308,7 +1308,7 @@
           }
         },
         "demoPackage": {
-          "status": "in_review",
+          "status": "merged",
           "branch": "docs/d5-demo-package",
           "files": [
             "docs/roadmap/D5_DEMO_WALKTHROUGH.md",
@@ -1328,23 +1328,40 @@
             "scorecard": "empty"
           },
           "findings": {
-            "92": "no navigation below 768px",
-            "93": "no skip link",
-            "94": "sample notice absent from PDF continuation pages"
+            "92": "no navigation below 768px (fixed in branch feat/mobile-nav-skip-link, in review)",
+            "93": "no skip link (fixed in branch feat/mobile-nav-skip-link, in review)",
+            "94": "sample notice absent from PDF continuation pages",
+            "97": "Accounts & Assets exchange-rate banner wraps one word per line at 375px"
           },
           "reviewCorrections": [
             "README: engine and Copilot figure-checking statement",
             "walkthrough step 3: proposed cash, not actual cash"
-          ]
+          ],
+          "pr": 95,
+          "mergeCommit": "fe90ae9640c0d0d9bc0aca11824a6b03df1ce7cd",
+          "productionVerified": "2026-11-18"
         },
         "nextjsSecurityPatch": {
-          "status": "in_review",
+          "status": "merged",
           "pr": 96,
           "branch": "fix/nextjs-16.4.5-security",
           "from": "16.4.2",
           "to": "16.4.5",
           "applicableAdvisoriesFound": 0,
-          "prodAuditAfter": 0
+          "prodAuditAfter": 0,
+          "mergeCommit": "eb9a63e2d6add89d5e7ca0042807c7c009c823b3",
+          "productionVerified": "2026-11-18",
+          "advisoryCorrection": "the item first called unnumbered is GHSA-vvgp-ww4w-46vf"
+        },
+        "mobileNavSkipLink": {
+          "status": "in_review",
+          "branch": "feat/mobile-nav-skip-link",
+          "issues": [
+            92,
+            93
+          ],
+          "report": "D5_MOBILE_NAV_SKIP_LINK.md",
+          "newFinding": 97
         }
       }
     ],
@@ -1386,5 +1403,6 @@
       "mergeCommit": "8b06b6a842d8b11adc1b96967c78aee9c0e12a6c",
       "scope": "R11/R18 review wording and non-penalizing optional identifiers; do not repeat in D1"
     }
-  }
+  },
+  "nextMilestone": "D5: Codex review of the mobile navigation and skip-link PR, then the owner's merge decision, counsel's clearance of Stratovell and the announcement gate; separate bounded fixes for #94 and #97."
 }
