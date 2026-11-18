@@ -25,15 +25,16 @@ import { cn } from "@/utils/cn";
 import { useAtlasStore } from "@/store/useStore";
 import { useWorkspaceReadiness } from "@/hooks/useWorkspaceReadiness";
 import { readinessSteps, useReadinessNudge } from "@/components/proposal/ReadinessBanner";
+import { isActiveRoute } from "./navFocus";
 
-interface NavItem {
+export interface NavItem {
   label: string;
   href: string;
   icon: React.ReactNode;
   group?: string;
 }
 
-const NAV: NavItem[] = [
+export const NAV: NavItem[] = [
   // Set up once, before any client work, so it leads the menu.
   { label: "Firm & Branding", href: "/firm-branding", icon: <Building2 className="h-4 w-4" />, group: "Your Firm" },
   { label: "Dashboard", href: "/", icon: <LayoutDashboard className="h-4 w-4" />, group: "Overview" },
@@ -53,7 +54,29 @@ const NAV: NavItem[] = [
   { label: "Settings", href: "/settings", icon: <Settings className="h-4 w-4" />, group: "Workspace" },
 ];
 
-export function Sidebar() {
+/** The Stratovell mark and name, linking to the dashboard. */
+export function SidebarBrand({ onNavigate }: { onNavigate?: () => void }) {
+  return (
+    <Link href="/" onClick={onNavigate} className="flex items-center gap-2.5">
+      <div className="h-8 w-8 rounded-md bg-navy-900 text-gold-300 flex items-center justify-center font-serif text-base shadow-card">
+        S
+      </div>
+      <div>
+        <div className="text-[15px] font-serif text-ink-900 leading-none">Stratovell</div>
+        <div className="text-2xs uppercase tracking-widest text-ink-500 mt-1">Proposal System</div>
+      </div>
+    </Link>
+  );
+}
+
+export const SIDEBAR_FOOTER = "Advisor-led platform · AI drafts, advisor decides · Advisor approval required.";
+
+/**
+ * The primary navigation links, grouped. The desktop sidebar and the mobile
+ * drawer both render this, so they list the same pages in the same style.
+ * `onNavigate` runs when a link is activated (the drawer closes itself).
+ */
+export function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const groups = Array.from(new Set(NAV.map((n) => n.group ?? "")));
   const hydrated = useAtlasStore((s) => s.hasHydrated);
@@ -63,19 +86,7 @@ export function Sidebar() {
   const openByPath = new Map(readinessSteps(failing).map((s) => [s.href.split("?")[0], s.items.length] as const));
 
   return (
-    <aside className="hidden md:flex w-[260px] shrink-0 flex-col border-r border-ink-100 bg-paper">
-      <div className="px-5 pt-5 pb-4 border-b border-ink-100">
-        <Link href="/" className="flex items-center gap-2.5">
-          <div className="h-8 w-8 rounded-md bg-navy-900 text-gold-300 flex items-center justify-center font-serif text-base shadow-card">
-            S
-          </div>
-          <div>
-            <div className="text-[15px] font-serif text-ink-900 leading-none">Stratovell</div>
-            <div className="text-2xs uppercase tracking-widest text-ink-500 mt-1">Proposal System</div>
-          </div>
-        </Link>
-      </div>
-      <nav className="flex-1 overflow-y-auto py-3">
+      <nav aria-label="Primary" className="flex-1 overflow-y-auto py-3">
         {groups.map((g) => (
           <div key={g} className="px-3 pb-3">
             {g && (
@@ -83,11 +94,13 @@ export function Sidebar() {
             )}
             <ul className="space-y-0.5">
               {NAV.filter((n) => (n.group ?? "") === g).map((item) => {
-                const active = item.href === "/" ? pathname === "/" : pathname?.startsWith(item.href);
+                const active = isActiveRoute(pathname, item.href);
                 return (
                   <li key={item.href}>
                     <Link
                       href={item.href}
+                      onClick={onNavigate}
+                      aria-current={active ? "page" : undefined}
                       className={cn(
                         "flex items-center gap-2.5 rounded-md px-2 h-8 text-[13px] transition-colors",
                         active
@@ -129,9 +142,17 @@ export function Sidebar() {
           </div>
         ))}
       </nav>
-      <div className="px-5 py-3 border-t border-ink-100 text-2xs text-ink-500 leading-relaxed">
-        Advisor-led platform · AI drafts, advisor decides · Advisor approval required.
+  );
+}
+
+export function Sidebar() {
+  return (
+    <aside className="hidden md:flex w-[260px] shrink-0 flex-col border-r border-ink-100 bg-paper">
+      <div className="px-5 pt-5 pb-4 border-b border-ink-100">
+        <SidebarBrand />
       </div>
+      <NavLinks />
+      <div className="px-5 py-3 border-t border-ink-100 text-2xs text-ink-500 leading-relaxed">{SIDEBAR_FOOTER}</div>
     </aside>
   );
 }

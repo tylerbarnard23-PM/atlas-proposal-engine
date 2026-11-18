@@ -60,8 +60,8 @@ Accessibility observations (K and any participant using assistive technology): f
 
 ## Known gaps to retest first (from the rehearsal, not participant data)
 
-- No navigation below 768 px ([#92](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/92)).
-- No skip link; many Tab stops before page content ([#93](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/93)).
+- Navigation below 768 px ([#92](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/92)): a menu drawer was added after the rehearsal; retest it with participants.
+- Skip link and many Tab stops before page content ([#93](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/93)): a skip link was added after the rehearsal; pages still have many Tab stops of their own; retest it.
 - The sample notice is absent from PDF continuation pages ([#94](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/94)).
 
 ## Out of scope
