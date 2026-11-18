@@ -1330,7 +1330,7 @@
           "findings": {
             "92": "no navigation below 768px (deferred: desktop-first demo; draft PR #98 parked)",
             "93": "no skip link (deferred: desktop-first demo; draft PR #98 parked)",
-            "94": "sample notice absent from PDF continuation pages (fixed in branch fix/pdf-sample-notices, in review)",
+            "94": "sample notice absent from PDF continuation pages (fixed in PR #99, merged as 1f5a856 and production-verified)",
             "97": "Accounts & Assets exchange-rate banner wraps one word per line at 375px (deferred: desktop-first demo)"
           },
           "reviewCorrections": [
@@ -1365,10 +1365,44 @@
           ]
         },
         "pdfSampleNotices": {
-          "status": "in_review",
+          "status": "merged_and_production_verified",
           "issue": 94,
-          "branch": "fix/pdf-sample-notices",
-          "report": "D5_PDF_SAMPLE_NOTICES.md"
+          "pr": 99,
+          "mergeCommit": "1f5a856ce0290bb1f52ecee5c9d218f7afc6305c",
+          "productionDeployment": 7891943189,
+          "mainCiRun": 44366280151,
+          "report": "D5_PDF_SAMPLE_NOTICES.md",
+          "productionCheck": {
+            "pdfs": [
+              "draft 21 pages",
+              "final 23 pages",
+              "meeting print 23 pages"
+            ],
+            "noticeOnEveryPage": true,
+            "limitations": [
+              "section footer numbers count sections",
+              "watermark centred per section",
+              "Vercel API unreadable, alias not matched to a deployment directly"
+            ]
+          }
+        },
+        "recordingPackage": {
+          "status": "in_review",
+          "branch": "docs/d5-recording-package",
+          "doc": "D5_RECORDING_PACKAGE.md",
+          "captures": "docs/demo-captures (10 files, synthetic, desktop 1440x900)",
+          "productionRuns": 2,
+          "provider": "scripted demo, no model",
+          "paidCalls": 0,
+          "realClientData": false,
+          "usabilityStudy": {
+            "performed": false,
+            "scorecard": "empty"
+          },
+          "remainingManual": [
+            "owner records and edits the video",
+            "counsel clearance of the name (#35) and the announcement gate before publication"
+          ]
         }
       }
     ],
@@ -1411,5 +1445,5 @@
       "scope": "R11/R18 review wording and non-penalizing optional identifiers; do not repeat in D1"
     }
   },
-  "nextMilestone": "D5: Codex review of the PDF sample-notice fix (#94), then the owner's merge decision, counsel's clearance of Stratovell and the announcement gate; mobile (#92, #93, #97; draft PR #98) deferred for a desktop-first demo; R25 study when participants exist; agent 27-trial evaluation budget still undecided"
+  "nextMilestone": "D5: Codex review of the recording package (docs and captures), then the owner records the desktop demo; counsel's clearance of Stratovell and the announcement gate before any publication; mobile (#92, #93, #97; draft PR #98) deferred; R25 study when participants exist; agent 27-trial evaluation budget still undecided"
 }

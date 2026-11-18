@@ -55,15 +55,17 @@ Stop for Codex review with exact head, checks, preview association, remaining li
 
 D1 (PR #72, `0381db1`), D2 (PR #75, `073049f`), D2a (PR #79, `c0ee4e9`), D3 (PR #81, `85b3910`) and **D4 (PR #82, `3738588`, 16 November 2026)** are released; the commands below the next one are historical, so do not rerun them. **D5 is in progress** (desktop-first since 18 November 2026: mobile work is deferred).
 
-### Next command: review the PDF sample notices
+### Next command: review the recording package
 
-Saved on 18 November 2026. PRs #96 and #95 are merged and production-verified (`fe90ae9`; [evidence](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/57#issuecomment-6982996211)). **The owner deferred mobile work in favour of the desktop demo:** draft [PR #98](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/98) is parked unchanged at `59f6a9b`; do not merge, revert, delete or continue it, and keep #92, #93 and #97 deferred. The #94 fix is on branch `fix/pdf-sample-notices` ([D5_PDF_SAMPLE_NOTICES.md](D5_PDF_SAMPLE_NOTICES.md)). Verify heads, tree and stash first, and preserve newer work.
+Saved on 18 November 2026. PR #99 (the sample notice on every PDF page, [#94](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/94)) is merged as `1f5a856` and production-verified page by page ([D5_RECORDING_PACKAGE.md](D5_RECORDING_PACKAGE.md)). The recording package (docs and synthetic captures, no code) is on branch `docs/d5-recording-package`. **Mobile stays deferred:** draft [PR #98](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/98) is parked unchanged at `59f6a9b`; do not merge, revert, delete or continue it, and keep #92, #93 and #97 deferred. Verify heads, tree and stash first, and preserve newer work.
 
-1. **Codex** reviews the PR: every physical page of draft, final and approved-version PDFs and of the printed meeting view carries the complete notice in reserved space; the regression test checks each page with real Chromium; the before/after comparison loses no content and explains pagination; screen rendering, figures, disclosures, branding, approval status and fingerprints are unchanged; no state, dependency, model or identity change.
-2. **The owner** decides on merge (pinned: `gh pr merge <N> --merge --match-head-commit <reviewed head>`), counsel's clearance of Stratovell, and the announcement gate. After a merge, verify a production draft and final PDF page by page.
-3. **Desktop demo next (owner to choose):** remaining desktop polish found while rehearsing; mobile stays deferred.
-4. **When advisors are available (owner-led, consented):** run the R25 protocol and fill the scorecard only from real sessions; it stays empty until then.
-5. **Separate owner decisions:** the 27-trial agent evaluation budget, [#85](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/85), [#87](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/87), Vercel access, closing PR #80.
+1. **Codex** reviews the PR: the production evidence claims no more than was observed (Chrome only, scripted, two fresh profiles, the Vercel-API limitation stated); the narration outline and capture checklist match the walkthrough and make no usability, time-saving, security, compliance or competitor claim; the captures are synthetic and show the scripted-demo label; the R25 scorecard is still empty; no code, dependency, model setting or identity changed.
+2. **The owner** decides on merge (pinned: `gh pr merge <N> --merge --match-head-commit <reviewed head>`), records and edits the video, and clears the name with counsel (#35) and the announcement gate before anything is published.
+3. **Remaining and not started:** the R25 study when advisors are available (owner-led, consented); the 27-trial agent evaluation budget, [#85](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/85), [#87](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/87), Vercel access and closing PR #80 are separate owner decisions. Known print limitations (not in scope): the section footer counts sections, and the watermark is clipped at page breaks.
+
+### Previous command (completed 18 November 2026): review the PDF sample notices
+
+PR #99 was merged pinned to `300b57c` as `1f5a856` and production-verified (18 November 2026). Do not rerun.
 
 ### Previous command (completed 18 November 2026): review the D5 demo package
 

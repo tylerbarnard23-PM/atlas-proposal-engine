@@ -4,6 +4,8 @@ Prepared and rehearsed 17 November 2026 on the released build (`main` at `b2eb2d
 
 Live demo: <https://atlas-proposal-engine.vercel.app/> (a fresh browser starts on the sample workspace; click "Restore sample data" in Settings to return to it).
 
+**Production rehearsal, 18 November 2026 (`main` at `1f5a856`):** the same script was run twice on the live site with fresh profiles and gave the same results, with the notice on every page of the draft, final and printed meeting-view PDFs. Evidence, desktop captures, the recording narration outline and the capture checklist: [D5_RECORDING_PACKAGE.md](D5_RECORDING_PACKAGE.md).
+
 ## The story in one line
 
 An advisor chooses which accounts the proposal is about, sizes a change, approves it explicitly, freezes a version, and issues a sample PDF from that version. Until every readiness check passes, the product refuses to approve a version or issue a final PDF, and says why.
