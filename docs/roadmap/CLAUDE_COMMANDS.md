@@ -55,15 +55,17 @@ Stop for Codex review with exact head, checks, preview association, remaining li
 
 D1 (PR #72, `0381db1`), D2 (PR #75, `073049f`), D2a (PR #79, `c0ee4e9`), D3 (PR #81, `85b3910`) and **D4 (PR #82, `3738588`, 16 November 2026)** are released; the commands below the next one are historical, so do not rerun them. **D5 is in progress** (desktop-first since 18 November 2026: mobile work is deferred).
 
-### Next command: review the PDF sample notices
+### Next task: record and edit the desktop demo video
 
-Saved on 18 November 2026. PRs #96 and #95 are merged and production-verified (`fe90ae9`; [evidence](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/57#issuecomment-6982996211)). **The owner deferred mobile work in favour of the desktop demo:** draft [PR #98](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/98) is parked unchanged at `59f6a9b`; do not merge, revert, delete or continue it, and keep #92, #93 and #97 deferred. The #94 fix is on branch `fix/pdf-sample-notices` ([D5_PDF_SAMPLE_NOTICES.md](D5_PDF_SAMPLE_NOTICES.md)). Verify heads, tree and stash first, and preserve newer work.
+Saved on 18 November 2026. Desktop implementation, production verification and rehearsal are complete: PR #99 (`1f5a856`, the sample notice on every PDF page, [#94](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/94)) is production-verified page by page, and the recording package (PR #100, docs and synthetic captures) holds the evidence, narration outline and capture checklist ([D5_RECORDING_PACKAGE.md](D5_RECORDING_PACKAGE.md)). **Mobile stays deferred:** draft [PR #98](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/98) is parked unchanged at `59f6a9b`; do not merge, revert, delete or continue it, and keep #92, #93 and #97 deferred. Verify heads, tree and stash first, and preserve newer work.
 
-1. **Codex** reviews the PR: every physical page of draft, final and approved-version PDFs and of the printed meeting view carries the complete notice in reserved space; the regression test checks each page with real Chromium; the before/after comparison loses no content and explains pagination; screen rendering, figures, disclosures, branding, approval status and fingerprints are unchanged; no state, dependency, model or identity change.
-2. **The owner** decides on merge (pinned: `gh pr merge <N> --merge --match-head-commit <reviewed head>`), counsel's clearance of Stratovell, and the announcement gate. After a merge, verify a production draft and final PDF page by page.
-3. **Desktop demo next (owner to choose):** remaining desktop polish found while rehearsing; mobile stays deferred.
-4. **When advisors are available (owner-led, consented):** run the R25 protocol and fill the scorecard only from real sessions; it stays empty until then.
-5. **Separate owner decisions:** the 27-trial agent evaluation budget, [#85](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/85), [#87](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/87), Vercel access, closing PR #80.
+1. **The owner** records and edits the video of the scripted, synthetic demo using the narration outline and capture checklist (fresh browser profile, "Scripted demo · no model" and the sample notice visible, limits read aloud, nothing about advisors tested, time saved, security or competitors). Nothing here records it.
+2. **Publication decisions, separate from recording and still open:** counsel's clearance of the Stratovell name ([#35](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/35)) and the announcement gate; [#85](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/85) secret scanning and push protection; [#87](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/87) public PDF-route exposure; Vercel settings (unread; the Vercel API is unreadable from this account); closing PR #80. Nothing is published or announced before these are decided.
+3. **Later, separate work (not prerequisites for recording):** the R25 advisor study when consented advisors are available (the scorecard stays empty until real sessions); the 27-trial paid-agent evaluation (budget unapproved). Known print limitations, out of scope: the section footer counts sections, and the watermark is clipped at page breaks.
+
+### Previous command (completed 18 November 2026): review the PDF sample notices
+
+PR #99 was merged pinned to `300b57c` as `1f5a856` and production-verified (18 November 2026). Do not rerun.
 
 ### Previous command (completed 18 November 2026): review the D5 demo package
 
