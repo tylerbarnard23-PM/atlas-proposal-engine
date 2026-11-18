@@ -50,7 +50,7 @@ Taken from the second production run, synthetic data only. Browser captures are 
 | `02-copilot-blocked-answer.png` | Scripted Copilot listing the blockers ("Scripted demo · no model") |
 | `03-allocation-scope.png` | Allocation desk, account scope narrowed to 2 of 14 |
 | `04-recommendation-sized-unapproved.png` | The Apple trim sized at 200,000, still Not approved |
-| `05-desk-approved-changes.png` | Approved changes view: equity 87.3%, cash 7.7%, actual cash $184,200 → $384,200 |
+| `05-desk-approved-changes.png` | Approved changes view: equity 87.3%, cash 7.7%, proposed cash $184,200 → $384,200 |
 | `06-review-ready.png` | Review & present: 20/20, ready for final generation |
 | `07-meeting-view.png` | Read-only meeting view of approved version 1 with fingerprint |
 | `08-final-pdf-cover.png` | Final PDF cover (issue line, fingerprint, sample notice) |

@@ -1387,7 +1387,7 @@
           }
         },
         "recordingPackage": {
-          "status": "in_review",
+          "status": "complete",
           "branch": "docs/d5-recording-package",
           "doc": "D5_RECORDING_PACKAGE.md",
           "captures": "docs/demo-captures (10 files, synthetic, desktop 1440x900)",
@@ -1400,9 +1400,11 @@
             "scorecard": "empty"
           },
           "remainingManual": [
-            "owner records and edits the video",
-            "counsel clearance of the name (#35) and the announcement gate before publication"
-          ]
+            "owner records and edits the video (next task)",
+            "publication decisions kept separate: counsel clearance of the name (#35), announcement gate, #85, #87, Vercel settings",
+            "advisor study and paid-agent evaluation: separate later work, not prerequisites"
+          ],
+          "pr": 100
         }
       }
     ],
@@ -1445,5 +1447,5 @@
       "scope": "R11/R18 review wording and non-penalizing optional identifiers; do not repeat in D1"
     }
   },
-  "nextMilestone": "D5: Codex review of the recording package (docs and captures), then the owner records the desktop demo; counsel's clearance of Stratovell and the announcement gate before any publication; mobile (#92, #93, #97; draft PR #98) deferred; R25 study when participants exist; agent 27-trial evaluation budget still undecided"
+  "nextMilestone": "D5: the owner records and edits the desktop demo video (scripted, synthetic) from the recording package; publication decisions stay separate and open (counsel's clearance of Stratovell #35, announcement gate, #85, #87, Vercel settings); mobile (#92, #93, #97; draft PR #98) deferred; R25 study and the 27-trial agent evaluation are separate later work"
 }
