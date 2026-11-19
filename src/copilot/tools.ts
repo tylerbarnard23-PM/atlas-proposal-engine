@@ -771,7 +771,7 @@ const TOOLS: Record<string, ToolSpec> = {
     definition: {
       name: "get_portfolio_overview",
       description:
-        "Client profile, net worth, allocation by asset class and currency, the ten largest positions and the recommendations already on file, all valued by the Atlas valuation and FX engines in the proposal's reporting currency. Call this first.",
+        "Client profile, net worth, allocation by asset class and currency, the ten largest positions and the recommendations already on file, all valued by the Stratovell valuation and FX engines in the proposal's reporting currency. Call this first.",
       input_schema: { type: "object", properties: {} },
     },
     run: (ctx) => getPortfolioOverview(ctx),
@@ -780,7 +780,7 @@ const TOOLS: Record<string, ToolSpec> = {
     definition: {
       name: "list_insights",
       description:
-        "Rules-based findings from the Atlas insight engine: concentration, currency and country exposure, liquidity, cash drag, high fees, manual valuations and data-quality problems.",
+        "Rules-based findings from the Stratovell insight engine: concentration, currency and country exposure, liquidity, cash drag, high fees, manual valuations and data-quality problems.",
       input_schema: {
         type: "object",
         properties: {
@@ -814,7 +814,7 @@ const TOOLS: Record<string, ToolSpec> = {
   check_proposal_readiness: {
     definition: {
       name: "check_proposal_readiness",
-      description: "Run the Atlas compliance readiness checklist that gates PDF generation and report which checks fail.",
+      description: "Run the Stratovell compliance readiness checklist that gates PDF generation and report which checks fail.",
       input_schema: { type: "object", properties: {} },
     },
     run: (ctx) => checkReadiness(ctx),
@@ -823,7 +823,7 @@ const TOOLS: Record<string, ToolSpec> = {
     definition: {
       name: "get_scope_overview",
       description:
-        "The active alternative through the Atlas allocation desk: its investment scope, current and proposed totals and asset-class weights (scope only), target drift, in-scope positions, household context outside the scope, the alternative's actions, blocked actions, shortfalls and reserves, and the input revision. Use it before simulating a change.",
+        "The active alternative through the Stratovell allocation desk: its investment scope, current and proposed totals and asset-class weights (scope only), target drift, in-scope positions, household context outside the scope, the alternative's actions, blocked actions, shortfalls and reserves, and the input revision. Use it before simulating a change.",
       input_schema: { type: "object", properties: {} },
     },
     run: (ctx) => scopeOverview(ctx),
@@ -935,7 +935,7 @@ export function evidenceIn(value: unknown, clean: (s: string) => string, reporti
 }
 
 const AUTHORITY_REFUSAL =
-  "Refused: Proposal Copilot has no authority to approve, finalize, include in the PDF, share, issue or execute anything. It can investigate, simulate and save unapproved drafts; the advisor decides in Atlas.";
+  "Refused: Proposal Copilot has no authority to approve, finalize, include in the PDF, share, issue or execute anything. It can investigate, simulate and save unapproved drafts; the advisor decides in Stratovell.";
 
 // Runs one tool call and returns the JSON string handed back to the model.
 // Errors become is_error tool results instead of exceptions so the model can
@@ -962,6 +962,6 @@ export function executeTool(ctx: CopilotContext, name: string, input: unknown): 
     if (err instanceof ToolInputError) return { content: err.message, isError: true };
     // Anything else (a workspace record the engines can't read) is reported,
     // without its message or stack, and the run carries on truthfully.
-    return { content: `The ${name} tool failed unexpectedly: Atlas couldn't read part of the workspace for it. Nothing was changed; tell the advisor rather than estimating.`, isError: true };
+    return { content: `The ${name} tool failed unexpectedly: Stratovell couldn't read part of the workspace for it. Nothing was changed; tell the advisor rather than estimating.`, isError: true };
   }
 }

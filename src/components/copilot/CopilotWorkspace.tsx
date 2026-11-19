@@ -15,6 +15,7 @@ import { formatCurrency } from "@/utils/formatting";
 import { cn } from "@/utils/cn";
 import { LiveSessionBar, liveReady, type LiveInfo, type LiveRunInfo } from "./LiveSessionBar";
 import { ConnectClaude } from "./ConnectClaude";
+import { MiniMarkdown } from "./MiniMarkdown";
 import type { LocalInfo } from "@/copilot/localConnect";
 import type { Recommendation } from "@/domain/types";
 import type { CopilotMode, CopilotResult, RunStatus } from "@/copilot/agent";
@@ -49,7 +50,7 @@ export const MODE_LABEL: Record<CopilotMode, string> = {
 export const MODE_HINT: Record<CopilotMode, string> = {
   demo: "A fixed script calls the same engine tools as the live agent. No model writes these answers.",
   test: "A deterministic test provider runs through the real agent loop and tools. It is not a model and makes no API calls.",
-  live: "A Claude model plans and writes; every figure comes from the Stratovell engines.",
+  live: "Portfolio calculations use shared deterministic engines. Copilot figures are checked against tool results; unsupported or unchecked claims are flagged for advisor review.",
 };
 
 const STATUS_LABEL: Record<RunStatus, string> = {
@@ -561,41 +562,3 @@ export function DraftPreview(props: {
   );
 }
 
-// Renders the small Markdown subset the Copilot uses (paragraphs, "- " lists,
-// **bold**, *italic*) as React elements, so model output is never injected as HTML.
-function MiniMarkdown({ text }: { text: string }) {
-  const blocks: React.ReactNode[] = [];
-  let list: string[] = [];
-  const flush = () => {
-    if (list.length) {
-      blocks.push(
-        <ul key={blocks.length} className="list-disc pl-5 space-y-1">
-          {list.map((l, i) => <li key={i}>{inline(l)}</li>)}
-        </ul>
-      );
-      list = [];
-    }
-  };
-  for (const line of text.split("\n")) {
-    const item = line.match(/^\s*[-*]\s+(.*)$/);
-    if (item) {
-      list.push(item[1]);
-      continue;
-    }
-    flush();
-    const heading = line.match(/^#{1,4}\s+(.*)$/);
-    if (heading) blocks.push(<h4 key={blocks.length} className="font-semibold text-ink-900">{inline(heading[1])}</h4>);
-    else if (line.trim()) blocks.push(<p key={blocks.length}>{inline(line)}</p>);
-  }
-  flush();
-  return <div className="space-y-2 text-sm text-ink-700 leading-relaxed">{blocks}</div>;
-}
-
-function inline(s: string): React.ReactNode[] {
-  return s.split(/(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g).map((part, i) => {
-    if (part.startsWith("**") && part.endsWith("**")) return <strong key={i} className="text-ink-900">{part.slice(2, -2)}</strong>;
-    if (part.startsWith("`") && part.endsWith("`")) return <code key={i} className="text-[12px]">{part.slice(1, -1)}</code>;
-    if (part.startsWith("*") && part.endsWith("*") && part.length > 2) return <em key={i}>{part.slice(1, -1)}</em>;
-    return part;
-  });
-}

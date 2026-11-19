@@ -326,7 +326,7 @@ export async function startSession(deps: LiveDeps, provider: LiveProvider, body:
   }
   const now = deps.now();
   const armed = await sessions.armSession(deps.sessionFile, now, provider, { allowance: allowance.allowance, credentialRevision: conn.revision, claim: true });
-  if (!armed.ok) return { ok: false, status: armed.code === "already_armed" ? 409 : 400, code: armed.code, error: armed.error };
+  if (!armed.ok) return { ok: false, status: armed.code === "already_armed" || armed.code === "run_in_progress" ? 409 : 400, code: armed.code, error: armed.error };
   const cookie = armed.cookie!;
   return { ok: true, cookie, expiresAt: sessions.expiresAt(armed.state), session: await sessions.readView(deps.sessionFile, now, cookie, FIRST_REQUEST_USD, provider, conn.revision) };
 }

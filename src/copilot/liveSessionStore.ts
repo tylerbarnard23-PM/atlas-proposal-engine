@@ -302,7 +302,14 @@ export function viewOf(loaded: Loaded, now: Date, cookie: string | null, nextReq
   const mismatch = provider ? providerMismatch(s, provider) : null;
   // A stopped or expired session says so; a key change matters only while the session could otherwise be used.
   const changed = credentialRevision !== undefined && !closed ? credentialMismatch(s, credentialRevision) : null;
-  if (mismatch) {
+  // A session that is over (stopped or expired, no run in flight) says so even when it was armed for the other
+  // provider, so a new session can be started with the user's confirmation (#101). It is still never used:
+  // arming, admission and every request check the provider and credential again.
+  const over = !!closed && (closed.code === "stopped" || closed.code === "expired") && !s.active;
+  if (mismatch && over) {
+    status = closed!.code === "stopped" ? "stopped" : "expired";
+    message = `${closed!.error} It was armed for ${providerName(s.provider)} and is never used for ${providerName(provider!)}; its counters are kept until you start a new session.`;
+  } else if (mismatch) {
     status = "provider_mismatch";
     message = mismatch.error;
   } else if (changed) {
@@ -354,7 +361,11 @@ export async function armSession(file: string, now: Date, provider: SessionProvi
     const prev = load(file);
     if (prev.kind === "ok") {
       const s = prev.state;
-      reapStale(s, now);
+      if (reapStale(s, now)) save(file, s);
+      // A run still in flight (even in a stopped session) holds reservations: replacing the record now would
+      // drop them from the counters. Its run ends, or is reaped as abandoned, first.
+      if (s.active)
+        return { ok: false, code: "run_in_progress", error: "A live run is still in progress in the current session. Wait for it to finish before starting a new session." } as const;
       if (!s.stopped && now < expiresAt(s) && (s.active || s.runs < s.limits.runs))
         return { ok: false, code: "already_armed", error: `A live session is armed until ${expiresAt(s).toISOString()}. Stop it first (Stop live session in Stratovell, or npm run live-session -- stop).` } as const;
     }
