@@ -35,12 +35,14 @@ export interface FigureCheck {
 // A currency amount ($1,234.56, USD 1,234, €1.2M, -$50.0K, +CHF 300, $250k,
 // $1.2bn, $3 million), a percentage (12.5%, -0.4%), or a grouped number
 // (1,234,567). Years and small bare integers are not claims.
-// An amount takes every letter glued to it, and an uppercase K/M/B or the word
-// thousand/million/billion after one space, so a multiplier is never left
-// behind: "$250k" is never read as $250. Letters that aren't a known multiplier
-// make the amount's size undecidable (see parse).
+// An amount takes every letter glued to it, and a known multiplier written as a
+// separate word after spaces on the same line (k, m, b, bn, mn, mm, thousand,
+// million, billion, in any case), so a multiplier is never left behind: neither
+// "$250k" nor "$250 k" nor "$2.5 MILLION" is read at the smaller size. Letters
+// glued to the amount that aren't a known multiplier make its size undecidable
+// (see parse); an ordinary word after a space ("$250 more") is just prose.
 const FIGURE =
-  /(?<![\w.,])(?:[+\-−]\s?)?(?:US\$|CA\$|A\$|NZ\$|HK\$|S\$|[$€£¥]|\b(?:USD|EUR|GBP|CHF|JPY|CAD|AUD|NOK|SEK|DKK)\s?)\s?[+\-−]?\d[\d,]*(?:\.\d+)?(?:[A-Za-z]+|\s(?:[KMB]|[Tt]housand|[Mm]illion|[Bb]illion)\b)?|(?<![\w.,])[+\-−]?\d[\d,]*(?:\.\d+)?\s?%|(?<![\w.,])[+\-−]?\b\d{1,3}(?:,\d{3})+(?:\.\d+)?\b/g;
+  /(?<![\w.,])(?:[+\-−]\s?)?(?:US\$|CA\$|A\$|NZ\$|HK\$|S\$|[$€£¥]|\b(?:USD|EUR|GBP|CHF|JPY|CAD|AUD|NOK|SEK|DKK)\s?)\s?[+\-−]?\d[\d,]*(?:\.\d+)?(?:[A-Za-z]+|[^\S\r\n]+(?:[Tt][Hh][Oo][Uu][Ss][Aa][Nn][Dd]|[Mm][Ii][Ll][Ll][Ii][Oo][Nn]|[Bb][Ii][Ll][Ll][Ii][Oo][Nn]|[Bb][Nn]|[Mm][Nn]|[Mm][Mm]|[KkMmBb])\b)?|(?<![\w.,])[+\-−]?\d[\d,]*(?:\.\d+)?\s?%|(?<![\w.,])[+\-−]?\b\d{1,3}(?:,\d{3})+(?:\.\d+)?\b/g;
 
 /** Amount multipliers, by their lowercase spelling (k and K, m and M, b and B are the same). */
 const MULTIPLIER: Record<string, number> = { k: 1e3, thousand: 1e3, m: 1e6, mm: 1e6, mn: 1e6, million: 1e6, b: 1e9, bn: 1e9, billion: 1e9 };

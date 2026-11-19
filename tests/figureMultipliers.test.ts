@@ -47,6 +47,37 @@ describe("amount multipliers keep their size in any case", () => {
     expect(check("+$250k", [usd(250_000, true)]).matched).toBe(1);
   });
 
+  // Review of #102: a multiplier after one or more spaces, or written in capitals, was still left behind
+  // ("$250 k" read as USD 250), so smaller-value evidence matched.
+  it.each([
+    ["$250 k", 250_000, 250],
+    ["$2.5 MILLION", 2_500_000, 2.5],
+    ["$1 bn", 1_000_000_000, 1],
+    ["$3 mm", 3_000_000, 3],
+    ["$250  K", 250_000, 250],
+    ["$2.5 Billion", 2_500_000_000, 2.5],
+    ["USD 4 THOUSAND", 4_000, 4],
+    ["$1.2 BN", 1_200_000_000, 1.2],
+  ])("reads %s at full size and rejects smaller-value evidence", (text, full, small) => {
+    expect(check(`Sell ${text} of stock`, [usd(full)])).toMatchObject({ claims: 1, matched: 1, unsupported: [] });
+    expect(check(`Sell ${text} of stock`, [usd(small)])).toMatchObject({ claims: 1, matched: 0 });
+    expect(parseFigures(`Sell ${text} of stock`)[0]).toMatchObject({ value: full, unit: "money" });
+  });
+
+  it("keeps ordinary words after an amount as prose, not multipliers", () => {
+    for (const text of ["$250 by Friday", "$250 more", "$250 bonus", "$250 kits", "$250 million-dollar", "$5 Microsoft shares"]) {
+      const f = parseFigures(text)[0];
+      if (text === "$250 million-dollar") expect(f.value).toBe(250_000_000); // the word itself is a multiplier
+      else expect(f).toMatchObject({ value: Number(text.match(/\d+/)![0]), unit: "money" });
+    }
+  });
+
+  it("keeps the multiplier after a non-breaking space or tab, but not across a line break", () => {
+    expect(parseFigures("$250\u00a0k")[0]).toMatchObject({ value: 250_000 });
+    expect(parseFigures("$250\tM")[0]).toMatchObject({ value: 250_000_000 });
+    expect(parseFigures("Option A: $250\nB: keep the position")[0]).toMatchObject({ value: 250 });
+  });
+
   it("rounds at the precision shown, scaled by the multiplier", () => {
     expect(check("$1.25k", [usd(1_249)]).matched).toBe(1); // within half of the last shown digit (USD 5)
     expect(check("$1.25k", [usd(1_300)]).matched).toBe(0);

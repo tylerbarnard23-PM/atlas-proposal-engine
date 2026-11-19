@@ -55,7 +55,7 @@ Follow [VALUATION_SCOPE.md](VALUATION_SCOPE.md). Evaluation tools use the accept
   - Percentage fields are all percentage points, as their producers return them (including `pct_change`, corrected in review round 3). No tool returns a fraction today.
   - **Unchecked** claims are reported explicitly, never as matched: a bare number, or an unsigned amount the engine has only as a negative change.
   - Figures inside workspace text are neither evidence nor claims.
-  - Amount multipliers keep their size in any case or spelling (k/K, m/M, b/B, bn, mn, mm, thousand, million, billion), so "$250k" is checked as USD 250,000 and never as USD 250. An amount glued to letters that aren't a multiplier ("$250x") is unchecked, never matched ([#102](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/102)).
+  - Amount multipliers keep their size in any case or spelling (k/K, m/M, b/B, bn, mn, mm, thousand, million, billion), glued or after spaces on the same line ("$250k", "$250 k", "$2.5 MILLION", "$1 bn"), so "$250k" is checked as USD 250,000 and never as USD 250. An ordinary word after a space ("$250 more") stays prose. An amount glued to letters that aren't a multiplier ("$250x") is unchecked, never matched ([#102](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/102)).
   - The UI says "all matched" only when nothing is unsupported or unchecked. Version constants: `PROMPT_VERSION` and `TOOLS_VERSION` `d5-2026-11-19` (19 November 2026: the product name in the prompt, tool descriptions and tool messages changed from Atlas to Stratovell, approved by the owner on #35; nothing else changed; `d4-2026-10-28` before).
 - **Layer A (offline, in CI).**
   - `tests/agentLoop.test.ts` covers:
