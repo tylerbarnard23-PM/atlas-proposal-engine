@@ -32,13 +32,20 @@ export interface FigureCheck {
   unchecked: string[];
 }
 
-// A currency amount ($1,234.56, USD 1,234, €1.2M, -$50.0K, +CHF 300), a
-// percentage (12.5%, -0.4%), or a grouped number (1,234,567). Years and small
-// bare integers are not claims.
+// A currency amount ($1,234.56, USD 1,234, €1.2M, -$50.0K, +CHF 300, $250k,
+// $1.2bn, $3 million), a percentage (12.5%, -0.4%), or a grouped number
+// (1,234,567). Years and small bare integers are not claims.
+// An amount takes every letter glued to it, and a known multiplier written as a
+// separate word after spaces on the same line (k, m, b, bn, mn, mm, thousand,
+// million, billion, in any case), so a multiplier is never left behind: neither
+// "$250k" nor "$250 k" nor "$2.5 MILLION" is read at the smaller size. Letters
+// glued to the amount that aren't a known multiplier make its size undecidable
+// (see parse); an ordinary word after a space ("$250 more") is just prose.
 const FIGURE =
-  /(?<![\w.,])(?:[+\-−]\s?)?(?:US\$|CA\$|A\$|NZ\$|HK\$|S\$|[$€£¥]|\b(?:USD|EUR|GBP|CHF|JPY|CAD|AUD|NOK|SEK|DKK)\s?)\s?[+\-−]?\d[\d,]*(?:\.\d+)?(?:\s?[KMB]\b)?|(?<![\w.,])[+\-−]?\d[\d,]*(?:\.\d+)?\s?%|(?<![\w.,])[+\-−]?\b\d{1,3}(?:,\d{3})+(?:\.\d+)?\b/g;
+  /(?<![\w.,])(?:[+\-−]\s?)?(?:US\$|CA\$|A\$|NZ\$|HK\$|S\$|[$€£¥]|\b(?:USD|EUR|GBP|CHF|JPY|CAD|AUD|NOK|SEK|DKK)\s?)\s?[+\-−]?\d[\d,]*(?:\.\d+)?(?:[A-Za-z]+|[^\S\r\n]+(?:[Tt][Hh][Oo][Uu][Ss][Aa][Nn][Dd]|[Mm][Ii][Ll][Ll][Ii][Oo][Nn]|[Bb][Ii][Ll][Ll][Ii][Oo][Nn]|[Bb][Nn]|[Mm][Nn]|[Mm][Mm]|[KkMmBb])\b)?|(?<![\w.,])[+\-−]?\d[\d,]*(?:\.\d+)?\s?%|(?<![\w.,])[+\-−]?\b\d{1,3}(?:,\d{3})+(?:\.\d+)?\b/g;
 
-const MULTIPLIER: Record<string, number> = { K: 1e3, M: 1e6, B: 1e9 };
+/** Amount multipliers, by their lowercase spelling (k and K, m and M, b and B are the same). */
+const MULTIPLIER: Record<string, number> = { k: 1e3, thousand: 1e3, m: 1e6, mm: 1e6, mn: 1e6, million: 1e6, b: 1e9, bn: 1e9, billion: 1e9 };
 const SYMBOL: Record<string, string> = { US$: "USD", CA$: "CAD", A$: "AUD", NZ$: "NZD", HK$: "HKD", S$: "SGD", $: "USD", "€": "EUR", "£": "GBP", "¥": "JPY" };
 
 export interface Figure {
@@ -60,15 +67,18 @@ function parse(text: string): Figure | null {
   const currency = code ?? (symbol ? SYMBOL[symbol] : undefined);
   const negative = /^-|[$€£¥A-Z]\s?-/.test(t);
   const signed = negative || /^\+|[$€£¥A-Z]\s?\+/.test(t);
-  const suffix = t.match(/([KMB])\s*$/)?.[1];
   const digits = t.match(/\d[\d,]*(?:\.\d+)?/)?.[0];
   if (!digits) return null;
+  // Letters after the number: a multiplier, or something that isn't one.
+  const suffix = percent ? undefined : t.slice(t.indexOf(digits) + digits.length).trim();
+  const known = suffix ? MULTIPLIER[suffix.toLowerCase()] : 1;
   const plain = digits.replace(/,/g, "");
   const magnitude = Number(plain);
   if (!Number.isFinite(magnitude)) return null;
   const decimals = plain.includes(".") ? plain.split(".")[1].length : 0;
-  const scale = suffix ? MULTIPLIER[suffix] : 1;
-  const unit = percent ? "percent" : currency ? "money" : "number";
+  // An unknown suffix ("$250x", "$5km") leaves the size undecidable: no unit, so it is reported as unchecked, never matched.
+  const scale = known ?? 1;
+  const unit = percent ? "percent" : currency && known !== undefined ? "money" : "number";
   return { text: t, value: (negative ? -1 : 1) * magnitude * scale, unit, currency: unit === "money" ? currency : undefined, signed, tolerance: 0.5 * 10 ** -decimals * scale };
 }
 
