@@ -21,7 +21,7 @@ import { SAMPLE_CRYPTO_WALLET } from "@/ingestion/sampleSources/sampleCryptoWall
 import { SAMPLE_RETIREMENT_CSV } from "@/ingestion/sampleSources/sampleRetirementStatement";
 import { formatCurrency, localCalendarDay, safeId, todayIso } from "@/utils/formatting";
 import { PdfImport } from "@/components/import/PdfImport";
-import { extractionToWorkspace } from "@/ingestion/documents/toWorkspace";
+import { extractionToWorkspace, importedAssetClass, isUnclassifiedPosition } from "@/ingestion/documents/toWorkspace";
 import { useImportTarget } from "@/components/import/importTarget";
 import type {
   Account,
@@ -697,7 +697,14 @@ function ExtractedAccountTable({ account }: { account: ExtractedAccount }) {
                 <td className="px-3 py-1.5 text-right tabular text-ink-900 font-medium">{h.marketValue ?? "—"}</td>
                 <td className="px-3 py-1.5 text-ink-700">{h.currency ?? "—"}</td>
                 <td className="px-3 py-1.5 text-ink-700">
-                  {h.assetClass ? ASSET_CLASS_LABELS[h.assetClass] : h.symbol && h.quantity != null ? "Equity (assumed)" : "Unclassified"}
+                  {/* The class the workspace will receive (#105). */}
+                  {h.assetClass
+                    ? ASSET_CLASS_LABELS[h.assetClass]
+                    : isUnclassifiedPosition(h)
+                    ? "Unclassified: needs review"
+                    : importedAssetClass(h) === "equity"
+                    ? "Equity (assumed)"
+                    : "Unclassified"}
                 </td>
                 <td className="px-3 py-1.5">
                   <Badge tone={h.confidence === "high" ? "positive" : h.confidence === "low" ? "warning" : "neutral"}>{h.confidence}</Badge>
