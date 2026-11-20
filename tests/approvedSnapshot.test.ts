@@ -681,3 +681,28 @@ describe("persistence", () => {
     expect(m.migrateAtlasState({ ...persisted, snapshots: [{ id: "keep" }] }, 9).snapshots).toEqual([{ id: "keep" }]);
   });
 });
+
+describe("#109 client discovery and approved versions", () => {
+  it("a version approved after discovery freezes it; both it and an earlier version issue through the final-PDF route; tampering is refused", async () => {
+    const m = await load();
+    approvedStory(m);
+    const v1 = approve(m, "Before discovery");
+    const v1Saved = JSON.stringify(v1);
+    store(m).setDiscoveryAnswer("objectives", { primary: "reduce_concentration", secondary: ["preserve_wealth"] });
+    store(m).setDiscoveryAnswer("liquidity", { need: "planned", amount: 50_000, currency: "USD", timing: "within_1_year" });
+    store(m).recordDiscoveryReview();
+    const v2 = approve(m, "After discovery");
+    expect(v2.inputs.client.discovery).toEqual(store(m).client.discovery);
+    expect(JSON.stringify(store(m).snapshots[0])).toBe(v1Saved); // never rewritten
+    expect("discovery" in store(m).snapshots[0].inputs.client).toBe(false);
+
+    expect(await post({ snapshot: json(v1), timeZone: "UTC" })).toMatchObject({ status: 200 });
+    expect(await post({ snapshot: json(v2), timeZone: "UTC" })).toMatchObject({ status: 200 });
+    const tampered = json(v2);
+    tampered.inputs.client.discovery.liquidity.amount = 5_000_000;
+    expect(await post({ snapshot: tampered })).toMatchObject({ status: 422, error: expect.stringMatching(/don't match its fingerprint/) });
+    const unknown = json(v2);
+    unknown.inputs.client.discovery.inferredByModel = true;
+    expect(await post({ snapshot: unknown })).toMatchObject({ status: 422, error: expect.stringMatching(/Not a valid approved version/) });
+  });
+});
