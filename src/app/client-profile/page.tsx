@@ -10,6 +10,8 @@ import { ClientOnly } from "@/components/layout/ClientOnly";
 import { COUNTRIES } from "@/domain/countryConfigs";
 import { CURRENCIES } from "@/domain/currencyConfigs";
 import { hasMoneyAmounts, recommendationsInOtherCurrencies } from "@/engines/recommendationAmounts";
+import { DiscoveryQuestionnaire } from "@/components/profile/DiscoveryQuestionnaire";
+import { ClientBriefPanel } from "@/components/profile/ClientBriefPanel";
 
 export default function ClientProfilePage() {
   return (
@@ -62,7 +64,7 @@ ${affected.length} recommendation${affected.length === 1 ? " has" : "s have"} am
       <PageHeader
         eyebrow="Engagement"
         title="Client Profile"
-        description="Who this proposal is for: the client's details, jurisdiction, goals and constraints."
+        description="Who this proposal is for: the client's details and jurisdiction, and what you discussed with them: objectives, needs and constraints."
         actions={
           <>
             <Button variant="ghost" size="sm" onClick={() => { if (confirm("Restore the seeded Blackwell Family Office household?")) resetSeed(); }}>
@@ -75,7 +77,7 @@ ${affected.length} recommendation${affected.length === 1 ? " has" : "s have"} am
         }
       />
 
-      <div className="max-w-4xl">
+      <div className="max-w-4xl space-y-6">
         <Card>
           <CardHeader>
             <CardTitle>Client</CardTitle>
@@ -157,6 +159,22 @@ ${affected.length} recommendation${affected.length === 1 ? " has" : "s have"} am
                 <Input value={client.locale} onChange={(e) => setClient({ locale: e.target.value })} />
               </Field>
             </div>
+          </CardBody>
+        </Card>
+
+        <DiscoveryQuestionnaire />
+
+        <ClientBriefPanel />
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Earlier profile levels</CardTitle>
+          </CardHeader>
+          <CardBody className="space-y-3">
+            <p className="text-2xs text-ink-500">
+              Shown in the proposal’s client profile, as before. They aren’t discovery answers and aren’t sent to Stratovell AI; use the questions above for what the
+              client said.
+            </p>
             <div className="grid grid-cols-3 gap-3">
               <Field label="Risk tolerance">
                 <Select
@@ -169,45 +187,36 @@ ${affected.length} recommendation${affected.length === 1 ? " has" : "s have"} am
                   <option value="aggressive">Aggressive</option>
                 </Select>
               </Field>
-              <Field label="Time horizon (years)">
-                <Input
-                  type="number"
-                  value={client.timeHorizonYears}
-                  onChange={(e) => setClient({ timeHorizonYears: Number(e.target.value) })}
-                />
-              </Field>
-              <Field label="Tax sensitivity">
-                <Select
-                  value={client.taxSensitivity}
-                  onChange={(e) => setClient({ taxSensitivity: e.target.value as typeof client.taxSensitivity })}
-                >
+              <Field label="Liquidity needs (level)">
+                <Select value={client.liquidityNeeds} onChange={(e) => setClient({ liquidityNeeds: e.target.value as typeof client.liquidityNeeds })}>
                   <option value="low">Low</option>
                   <option value="moderate">Moderate</option>
                   <option value="high">High</option>
                 </Select>
               </Field>
+              <Field label="Income needs (level)">
+                <Select value={client.incomeNeeds} onChange={(e) => setClient({ incomeNeeds: e.target.value as typeof client.incomeNeeds })}>
+                  <option value="none">None</option>
+                  <option value="modest">Modest</option>
+                  <option value="significant">Significant</option>
+                </Select>
+              </Field>
             </div>
-            <Field label="Investment objective">
-              <Textarea
-                rows={3}
-                value={client.investmentObjective}
-                onChange={(e) => setClient({ investmentObjective: e.target.value })}
-              />
-            </Field>
-            <Field label="Special instructions">
-              <Textarea
-                rows={2}
-                value={client.specialInstructions ?? ""}
-                onChange={(e) => setClient({ specialInstructions: e.target.value })}
-              />
-            </Field>
-            <Field label="Advisor discovery notes (private)">
-              <Textarea
-                rows={3}
-                value={client.advisorDiscoveryNotes ?? ""}
-                onChange={(e) => setClient({ advisorDiscoveryNotes: e.target.value })}
-              />
-            </Field>
+          </CardBody>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Advisor discovery notes (private)</CardTitle>
+          </CardHeader>
+          <CardBody>
+            <Textarea
+              rows={3}
+              aria-label="Advisor discovery notes (private)"
+              value={client.advisorDiscoveryNotes ?? ""}
+              onChange={(e) => setClient({ advisorDiscoveryNotes: e.target.value })}
+            />
+            <p className="mt-1 text-2xs text-ink-500">Private to you: never part of the client brief and never sent to Stratovell AI or Anthropic.</p>
           </CardBody>
         </Card>
       </div>
