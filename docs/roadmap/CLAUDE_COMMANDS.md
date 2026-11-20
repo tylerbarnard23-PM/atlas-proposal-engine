@@ -55,7 +55,39 @@ Stop for Codex review with exact head, checks, preview association, remaining li
 
 D1 (PR #72, `0381db1`), D2 (PR #75, `073049f`), D2a (PR #79, `c0ee4e9`), D3 (PR #81, `85b3910`) and **D4 (PR #82, `3738588`, 16 November 2026)** are released; the commands below the next one are historical, so do not rerun them. **D5 is in progress** (desktop-first since 18 November 2026: mobile work is deferred).
 
-### Next task: review the Copilot live-demo fixes (PR #103)
+### Next task: review the statement-import fixes (PR #108)
+
+Saved on 20 November 2026. [PR #108](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/108) is on branch `fix/import-statement-dates-bond-class`, from `main` at `bb1ff9f`.
+- Application commit `5a02b8d`, then docs.
+- **Review follow-up `03c2344`**, from the reviewed head `0664b40`:
+  - a zero or out-of-range numeric date gives an unknown date with a reason, not a crash;
+  - a separate-cell labelled value that is ambiguous, impossible or unreadable is reported, and never replaced by another labelled date;
+  - bare headers are still ignored.
+
+Re-review the diff from `0664b40`. It fixes the two defects that stopped the demo's statement-import chapter:
+- [#104](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/104): the statement date was ignored, so holdings were dated the import day.
+- [#105](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/105): a municipal bond was imported as equity.
+
+Verify heads, tree and stash first, and preserve newer work. The recording stays paused.
+
+1. **Codex** reviews PR #108 at its head. Check:
+   - **The date reader** (`src/ingestion/documents/statementDate.ts`): labels only at the start of a cell; one-way numeric dates only. A two-way, impossible or unreadable date, or labelled dates that disagree, stay unknown with the reason.
+   - **The date precedence:** the holding's date, then the account's, then the document's. There is no fallback to the import day, for every source.
+   - **The class evidence:** "General Obligation" only as the whole phrase, never a bare "GO". Equity is assumed only for a ticker with a share count and a price that isn't per 100. A row with only a CUSIP, ISIN or SEDOL, or priced per 100, stays `custom` with a warning.
+   - **The UI:** the preview and review show the saved date and class, and "No date" blocks bulk confirmation.
+   - **The impact note** on #104, and that store, backup, readiness and Copilot are unchanged.
+   - **The deliberate behaviour change:** CSV, Excel, paste, OCR and OFX imports with no stated date now arrive undated. Follow-ups: #106 and #107.
+2. **The owner** decides on merge (pinned: `gh pr merge 108 --merge --match-head-commit <reviewed head>`). Then, only on the owner's instruction:
+   - re-rehearse the import chapter on the merged build;
+   - record it, about 45 to 60 s, before the Part 1 walkthrough, with the existing recorder, narration and captions. The narration must say the PDF is read in the browser and not uploaded, and that no model reads it.
+   - assemble and validate a new version, keeping every original recording.
+3. **Still open, unchanged:**
+   - the independent review of the Part 2 paused frame;
+   - publication decisions: #35 counsel and the announcement gate, #85, #87, Vercel settings, and closing PR #80;
+   - mobile stays parked: draft PR #98 at `59f6a9b`, and #92, #93, #97;
+   - the R25 study and the 27-trial paid evaluation.
+
+### Previous task (done 19 November 2026; PR #103 merged as `bb1ff9f`, don't rerun): review the Copilot live-demo fixes (PR #103)
 
 Saved on 19 November 2026. [PR #103](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/103) (branch `fix/d5-copilot-live-findings`, from `main` at `6660a61`; application commit `de19df5`, review follow-up `0fd4555` for spaced and capitalised multipliers, then docs commits) fixes what the private live-Claude recording found: [#102](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/102) the figure check dropping lowercase multipliers ("$250k" read as $250, with a false-pass risk), [#84](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/84) answer tables shown as raw pipes, [#101](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/101) a stopped other-provider session blocking Start (plus arming during an in-flight run), the live-mode figure copy, and the owner-approved model-facing name (Atlas → Stratovell, prompt/tools `d5-2026-11-19`). Verify heads, tree and stash first, and preserve newer work.
 

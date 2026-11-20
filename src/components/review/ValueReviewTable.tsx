@@ -43,6 +43,12 @@ function flagsFor(h: Holding & { valuation?: NormalizedHolding["valuation"] }): 
   if (mismatch) out.push({ label: "Statement total mismatch", blocksBulk: true, title: mismatch.message });
   const balanceOnly = h.dataQuality.find((d) => /only this account's balance/.test(d.message));
   if (balanceOnly) out.push({ label: "Balance only", blocksBulk: false, title: balanceOnly.message });
+  // #104: an undated value is checked one by one; confirming it doesn't date it.
+  if (!h.valuationDate)
+    out.push({ label: "No date", blocksBulk: true, title: "No valuation date is recorded for this value. Check its date against the source; confirming the value doesn't add one." });
+  // #105: a position whose class the source didn't state is left unclassified, not guessed.
+  if (h.assetClass === "custom" && !balanceOnly && (h.identifier || h.quantity != null))
+    out.push({ label: "Class not stated", blocksBulk: false, title: "The source doesn't say what kind of investment this is, so it's counted as Other / unclassified." });
   return out;
 }
 
@@ -464,7 +470,7 @@ function ReviewRow({
 
       <div className="col-start-2 md:col-start-auto text-[12px] text-ink-600">
         <span className="md:hidden text-ink-400">As of </span>
-        {formatCalendarDate(h.valuationDate)}
+        {h.valuationDate ? formatCalendarDate(h.valuationDate) : <span className="text-warning-600">Not stated</span>}
       </div>
 
       <div className="col-start-2 md:col-start-auto flex items-center justify-start md:justify-end gap-2 md:w-[178px]">

@@ -1,7 +1,9 @@
 import type { AssetClass } from "@/domain/types";
 
 const KEYWORDS: { class: AssetClass; words: string[] }[] = [
-  { class: "fixed_income", words: ["TREAS", "TREASURY", "BOND", "MUNI", "MUNICIPAL", "AGENCY", "T-BILL", "T-NOTE", "CD", "CERTIFICATE OF DEPOSIT"] },
+  // "General Obligation" names a municipal bond only as the whole phrase; a
+  // bare "GO" is not evidence (#105).
+  { class: "fixed_income", words: ["TREAS", "TREASURY", "BOND", "MUNI", "MUNICIPAL", "GENERAL OBLIGATION", "AGENCY", "T-BILL", "T-NOTE", "CD", "CERTIFICATE OF DEPOSIT"] },
   { class: "equity", words: ["ETF", "STOCK", "FUND", "EQUITY", "ADR", "MUTUAL FUND"] },
   { class: "cash", words: ["CASH", "MONEY MARKET", "MMKT", "SWEEP"] },
   { class: "crypto", words: ["BITCOIN", "BTC", "ETHEREUM", "ETH", "USDC", "USDT", "STABLECOIN", "CRYPTO"] },

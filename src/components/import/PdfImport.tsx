@@ -10,10 +10,10 @@ import { Badge } from "@/components/ui/Badge";
 import { ACCOUNT_TYPE_LABELS } from "@/domain/accountTaxonomy";
 import { ASSET_CLASS_LABELS } from "@/domain/assetTaxonomy";
 import type { ExtractionResult, Reconciliation } from "@/domain/types";
-import { formatCurrency } from "@/utils/formatting";
+import { formatCalendarDate, formatCurrency } from "@/utils/formatting";
 import { PdfReadError, readPdfInBrowser } from "@/ingestion/pdf/readPdfBrowser";
 import { parseStatementPdf } from "@/ingestion/documents/parseStatementPdf";
-import { extractionToWorkspace } from "@/ingestion/documents/toWorkspace";
+import { extractionToWorkspace, importedAssetClass, importedValuationDate, isUnclassifiedPosition } from "@/ingestion/documents/toWorkspace";
 import { useImportTarget } from "./importTarget";
 
 type State =
@@ -128,7 +128,7 @@ export function PdfImport() {
   );
 }
 
-function ImportResult({
+export function ImportResult({
   result,
   fileName,
   onLoad,
@@ -160,7 +160,7 @@ function ImportResult({
       <div className="flex flex-wrap items-center gap-2 text-[13px] text-ink-700">
         <Badge tone="navy">{KIND_LABEL[result.documentKind ?? ""] ?? "PDF"}</Badge>
         {result.clientNameDetected && <span>Client: <span className="font-medium text-ink-900">{result.clientNameDetected}</span></span>}
-        {result.asOfDate && <span>· As of {result.asOfDate}</span>}
+        {result.asOfDate && <span>· As of {formatCalendarDate(result.asOfDate)}</span>}
         {result.pageCount && <span>· {result.pageCount} pages</span>}
       </div>
 
@@ -201,8 +201,19 @@ function ImportResult({
                 <td className="px-3 py-1.5 text-ink-900">{h.assetName}</td>
                 <td className="px-3 py-1.5 text-ink-600">{h.notes?.replace(/ \(from.*\)$/, "") ?? "—"}</td>
                 <td className="px-3 py-1.5 text-ink-600">{a.accountType ? ACCOUNT_TYPE_LABELS[a.accountType] : "—"}</td>
-                <td className="px-3 py-1.5 text-ink-600">{h.assetClass === "custom" ? "Other / unclassified (balance only)" : h.assetClass ? ASSET_CLASS_LABELS[h.assetClass] : "—"}</td>
-                <td className="px-3 py-1.5 text-ink-600 tabular">{h.valuationDate ?? "—"}</td>
+                {/* The class and date the workspace will receive (#104, #105). */}
+                <td className="px-3 py-1.5 text-ink-600">
+                  {isUnclassifiedPosition(h) ? (
+                    <span className="text-warning-600">Unclassified: needs review</span>
+                  ) : importedAssetClass(h) === "custom" ? (
+                    "Other / unclassified (balance only)"
+                  ) : (
+                    ASSET_CLASS_LABELS[importedAssetClass(h)]
+                  )}
+                </td>
+                <td className="px-3 py-1.5 text-ink-600 tabular">
+                  {importedValuationDate(result, a, h) ? formatCalendarDate(importedValuationDate(result, a, h)) : <span className="text-warning-600">Not stated</span>}
+                </td>
                 <td className={`px-3 py-1.5 text-right tabular font-medium ${(h.marketValue ?? 0) < 0 ? "text-negative-600" : "text-ink-900"}`}>
                   {h.marketValue == null ? (
                     <span className="text-[12px] text-warning-600" title={h.sourceTrace.rawText}>

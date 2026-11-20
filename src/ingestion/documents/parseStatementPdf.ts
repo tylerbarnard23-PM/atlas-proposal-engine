@@ -4,6 +4,7 @@ import { moneyAmounts, parsePastedText } from "../parsers/parsePastedText";
 import { detectCurrency } from "../normalizers/detectCurrency";
 import { isFinancialPlan, parseFinancialPlan, planToAccounts, reconcile } from "./financialPlan";
 import { extractHoldingsTable, type HoldingsTable } from "./holdingsTable";
+import { statementDateOf } from "./statementDate";
 import { ASSET_CLASS_LABELS } from "@/domain/assetTaxonomy";
 import { safeId } from "@/utils/formatting";
 
@@ -95,6 +96,20 @@ export function parseStatementPdf(pdf: PdfText, fileName?: string): ExtractionRe
   const stated = totals[totals.length - 1];
   const currencies = new Set(valued.map((h) => h.currency ?? stated?.currency));
   const warnings: DataQualityIssue[] = [];
+
+  // #104: the values are as of the statement's own labelled date. Without
+  // one clear date they stay undated for the advisor to record.
+  const asOf = statementDateOf(pdf.pages.flat());
+  account.statementDate = asOf.date;
+  if (!asOf.date) {
+    warnings.push({
+      code: "MISSING_VALUATION_DATE",
+      severity: "warning",
+      message: `${
+        asOf.problem ?? 'The statement states no date for its values (no "Statement Date" or "As of" line was found).'
+      } The values are imported without a date: record each value's date from the statement before it's used.`,
+    });
+  }
   const review = account.holdings.filter((h) => h.status === "needs_review");
   if (review.length > 0) {
     warnings.push({
@@ -138,6 +153,7 @@ export function parseStatementPdf(pdf: PdfText, fileName?: string): ExtractionRe
     extractionMethod: "pdf-layout-table",
     extractionMs: Date.now() - start,
     documentKind: "statement_table",
+    asOfDate: asOf.date,
     pageCount: pdf.pageCount,
     reconciliation,
   };

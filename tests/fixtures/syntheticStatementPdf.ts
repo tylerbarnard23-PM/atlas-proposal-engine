@@ -16,6 +16,32 @@ export const ISSUE_29_LINES = [
   "Total Account Value                                           USD 8,300,000.00",
 ];
 
+// Issues #104/#105: the fictional one-page statement used to rehearse the demo
+// video's import chapter. Its six positions are the sample workspace's Taxable
+// Brokerage as of April 30, 2026 (total USD 3,667,555.50). Fictional
+// institution and client; synthetic data only.
+export const FICTIONAL_STATEMENT_LINES = [
+  "*** FICTIONAL SAMPLE STATEMENT - NOT A REAL ACCOUNT ***",
+  "Northbridge Sample Custody (fictional institution)",
+  "Brokerage Account Statement - synthetic data for a software demonstration",
+  "Client: Jonathan & Helena Blackwell (fictional)",
+  "Account: Blackwell Family - Taxable Brokerage (fictional)",
+  "Statement Date: April 30, 2026",
+  "Amounts shown in USD. Not a real client statement.",
+  "",
+  "Holding                                Symbol      Qty       Price       Market Value",
+  "Apple Inc.                             AAPL        4200      USD 224.18  USD 941,556.00",
+  "Microsoft Corporation                  MSFT        1850      USD 462.73  USD 856,050.50",
+  "Vanguard Total Stock Market ETF        VTI         3200      USD 286.42  USD 916,544.00",
+  "Berkshire Hathaway Class B             BRK.B       1100      USD 471.05  USD 518,155.00",
+  "MA State General Obligation 4.0% 2031  574208ZK4   250000    USD 100.42  USD 251,050.00",
+  "Cash & Money Market                    CASH        184200    USD 1.00    USD 184,200.00",
+  "Total Account Value                                                  USD 3,667,555.50",
+  "",
+  "Bond quantity is face value; bond price is per 100 of face value.",
+  "*** FICTIONAL - SYNTHETIC DATA ONLY - NOT A REAL STATEMENT ***",
+];
+
 const escape = (s: string) => s.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
 
 export interface PlacedText {
