@@ -237,6 +237,7 @@ function schemas(strict: boolean) {
     lossWillingness: level.optional(),
     lossAbility: level.optional(),
     securitiesToRetain: z.array(text()).optional(),
+    otherConstraints: text().optional(),
     analysisNote: text().optional(),
   });
   const client = clientV10.extend({ discovery: discovery.optional() });

@@ -93,7 +93,7 @@ export interface AtlasActions {
   setDiscoveryAnswer: <Q extends DiscoveryQuestionId>(question: Q, value: DiscoveryValues[Q]) => void;
   /** "Not discussed yet": the question is unknown again (an existing profile field keeps its value but isn't read as the answer). */
   setDiscoveryNotDiscussed: (question: DiscoveryQuestionId) => void;
-  setDiscoveryClarification: (question: Exclude<DiscoveryQuestionId, "objectives" | "otherConstraints">, note: string) => void;
+  setDiscoveryClarification: (question: Exclude<DiscoveryQuestionId, "otherConstraints">, note: string) => void;
   /** The advisor's review of every answered question, dated now. */
   recordDiscoveryReview: () => void;
   /** The advisor's note for the analysis (part of the client brief; unlike the private discovery notes, it is sent with a live question). */

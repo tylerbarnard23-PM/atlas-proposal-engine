@@ -172,8 +172,8 @@ ${affected.length} recommendation${affected.length === 1 ? " has" : "s have"} am
           </CardHeader>
           <CardBody className="space-y-3">
             <p className="text-2xs text-ink-500">
-              Shown in the proposal’s client profile, as before. They aren’t discovery answers and aren’t sent to Stratovell AI; use the questions above for what the
-              client said.
+              Shown on the dashboard and in the proposal’s client profile, as before. They aren’t discovery answers and aren’t sent to Stratovell AI; use the
+              questions above for what the client said.
             </p>
             <div className="grid grid-cols-3 gap-3">
               <Field label="Risk tolerance">
@@ -202,6 +202,12 @@ ${affected.length} recommendation${affected.length === 1 ? " has" : "s have"} am
                 </Select>
               </Field>
             </div>
+            <Field label="Investment objective (text)">
+              <Textarea rows={2} value={client.investmentObjective} onChange={(e) => setClient({ investmentObjective: e.target.value })} />
+            </Field>
+            <Field label="Special instructions">
+              <Textarea rows={2} value={client.specialInstructions ?? ""} onChange={(e) => setClient({ specialInstructions: e.target.value })} />
+            </Field>
           </CardBody>
         </Card>
 

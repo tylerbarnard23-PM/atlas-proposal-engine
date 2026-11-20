@@ -4,8 +4,10 @@ import { contentHash } from "./snapshotRecord";
 // #109 — client discovery. The advisor records what was discussed with the
 // client; nothing here is inferred. A question with no recorded state is "Not
 // discussed yet", whatever an older field or a default says. Existing profile
-// fields keep the value where their meaning is the same (one source of truth);
-// `client.discovery` holds the rest, each question's status and its review.
+// fields keep the value where their meaning is the same (time horizon, tax
+// sensitivity, restricted investments: one source of truth); `client.discovery`
+// holds the rest, each question's status and its review. An older field's
+// value is never adopted as an answer: the advisor records it explicitly.
 // A review stores the answer's content hash, so editing the answer makes it stale.
 // The same brief is shown to the advisor and given to Stratovell AI.
 
@@ -37,7 +39,7 @@ export const FREQUENCY_LABEL = { monthly: "per month", quarterly: "per quarter",
 
 /** Each question's answer, as recorded (wherever it is stored). */
 export interface DiscoveryValues {
-  objectives: { primary: DiscoveryObjective; secondary: DiscoveryObjective[]; clarification: string };
+  objectives: { primary: DiscoveryObjective; secondary: DiscoveryObjective[] };
   timeHorizon: { years: number };
   liquidity: NonNullable<ClientDiscovery["liquidity"]>;
   income: NonNullable<ClientDiscovery["income"]>;
@@ -57,7 +59,7 @@ export function answerValue<Q extends DiscoveryQuestionId>(c: ClientProfile, q: 
   if (!answered(c, q)) return null;
   const d = c.discovery!;
   const v: { [K in DiscoveryQuestionId]: () => DiscoveryValues[K] | null } = {
-    objectives: () => (d.objectives ? { primary: d.objectives.primary, secondary: d.objectives.secondary, clarification: c.investmentObjective ?? "" } : null),
+    objectives: () => (d.objectives ? { primary: d.objectives.primary, secondary: d.objectives.secondary } : null),
     timeHorizon: () => (Number.isFinite(c.timeHorizonYears) ? { years: c.timeHorizonYears } : null),
     liquidity: () => d.liquidity ?? null,
     income: () => d.income ?? null,
@@ -66,7 +68,7 @@ export function answerValue<Q extends DiscoveryQuestionId>(c: ClientProfile, q: 
     taxSensitivity: () => ({ level: c.taxSensitivity }),
     securitiesToRetain: () => ({ securities: d.securitiesToRetain ?? [] }),
     restrictedInvestments: () => ({ securities: c.restrictedSecurities ?? [] }),
-    otherConstraints: () => ({ text: c.specialInstructions ?? "" }),
+    otherConstraints: () => ({ text: d.otherConstraints ?? "" }),
   };
   return v[q]() as DiscoveryValues[Q] | null;
 }
@@ -108,7 +110,7 @@ export function recordAnswer<Q extends DiscoveryQuestionId>(c: ClientProfile, q:
     case "objectives": {
       const o = v as DiscoveryValues["objectives"];
       const secondary = [...new Set(o.secondary)].filter((x) => x !== o.primary);
-      return withState({ ...c, investmentObjective: o.clarification }, q, s, now, { objectives: { primary: o.primary, secondary } });
+      return withState(c, q, s, now, { objectives: { primary: o.primary, secondary } });
     }
     case "timeHorizon":
       return withState({ ...c, timeHorizonYears: (v as DiscoveryValues["timeHorizon"]).years }, q, s, now);
@@ -127,7 +129,7 @@ export function recordAnswer<Q extends DiscoveryQuestionId>(c: ClientProfile, q:
     case "restrictedInvestments":
       return withState({ ...c, restrictedSecurities: cleanList((v as DiscoveryValues["restrictedInvestments"]).securities) }, q, s, now);
     case "otherConstraints":
-      return withState({ ...c, specialInstructions: (v as DiscoveryValues["otherConstraints"]).text }, q, s, now);
+      return withState(c, q, s, now, { otherConstraints: (v as DiscoveryValues["otherConstraints"]).text });
   }
 }
 
@@ -155,6 +157,7 @@ export function markNotDiscussed(c: ClientProfile, q: DiscoveryQuestionId, now: 
     lossWillingness: "lossWillingness",
     lossAbility: "lossAbility",
     securitiesToRetain: "securitiesToRetain",
+    otherConstraints: "otherConstraints",
   };
   const next = withState(c, q, { status: "not_discussed" }, now);
   const key = own[q];
@@ -166,8 +169,8 @@ export function markNotDiscussed(c: ClientProfile, q: DiscoveryQuestionId, now: 
   return next;
 }
 
-/** The clarification recorded with an answer (objectives use the investment-objective text instead). */
-export function setClarification(c: ClientProfile, q: Exclude<DiscoveryQuestionId, "objectives" | "otherConstraints">, note: string, now: string): ClientProfile {
+/** The clarification recorded with an answer (other constraints are free text already). */
+export function setClarification(c: ClientProfile, q: Exclude<DiscoveryQuestionId, "otherConstraints">, note: string, now: string): ClientProfile {
   const prev = stateOf(c, q);
   if (!prev || prev.status !== "answered") return c;
   return withState(c, q, { status: "answered", note }, now);
@@ -256,7 +259,7 @@ export function clientBrief(c: ClientProfile): ClientBrief {
       continue;
     }
     const st = stateOf(c, id)!;
-    const clarification = id === "objectives" ? (c.investmentObjective?.trim() || undefined) : st.note?.trim() || undefined;
+    const clarification = st.note?.trim() || undefined;
     answers.push({ question: id, label, status, answer: describeAnswer(c, id)!, ...(clarification ? { clarification } : {}), ...(status === "reviewed" ? { reviewedAt: st.review!.reviewedAt } : {}) });
   }
   const reviewedTimes = answers.filter((a) => a.reviewedAt).map((a) => a.reviewedAt!).sort();

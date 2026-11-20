@@ -49,7 +49,8 @@ afterEach(() => vi.useRealTimers());
 /** A complete synthetic brief, entered through the store's actions as the questionnaire does. */
 function answerAll(m: M) {
   const s = store(m);
-  s.setDiscoveryAnswer("objectives", { primary: "reduce_concentration", secondary: ["preserve_wealth", "fund_spending"], clarification: "Diversify away from the largest position." });
+  s.setDiscoveryAnswer("objectives", { primary: "reduce_concentration", secondary: ["preserve_wealth", "fund_spending"] });
+  s.setDiscoveryClarification("objectives", "Diversify away from the largest position.");
   s.setDiscoveryAnswer("timeHorizon", { years: 12 });
   s.setDiscoveryAnswer("liquidity", { need: "planned", amount: 250_000, currency: "USD", timing: "within_1_year" });
   s.setDiscoveryAnswer("income", { need: "none" });
@@ -84,6 +85,23 @@ describe("#109 client discovery: no invented answers", () => {
     expect("discovery" in migrated.client).toBe(false);
     expect(m.migrateAtlasState(json(migrated), 10)).toEqual(migrated); // idempotent
   });
+
+  it("answering never adopts an older profile text: the sample's objective text and special instructions stay profile fields", async () => {
+    const m = await load();
+    m.useAtlasStore.setState({ client: { ...m.SEED_CLIENT } });
+    store(m).setDiscoveryAnswer("objectives", { primary: "grow_wealth", secondary: [] });
+    store(m).setDiscoveryAnswer("otherConstraints", { text: "" });
+    const b = m.clientBrief(store(m).client);
+    expect(b.answers.find((a) => a.question === "objectives")).toEqual({ question: "objectives", label: "Objectives", status: "recorded", answer: "Primary: Grow wealth" });
+    expect(b.answers.find((a) => a.question === "otherConstraints")!.answer).toBe("None");
+    expect(store(m).client.investmentObjective).toBe(m.SEED_CLIENT.investmentObjective);
+    expect(store(m).client.specialInstructions).toBe(m.SEED_CLIENT.specialInstructions);
+    const sent = JSON.stringify(m.modelBoundClientBrief(store(m).client));
+    expect(sent).not.toContain(m.SEED_CLIENT.investmentObjective);
+    expect(sent).not.toContain(m.SEED_CLIENT.specialInstructions!);
+    // the restriction on file is still carried, flagged as unconfirmed, until the advisor records the answer
+    expect(m.modelBoundClientBrief(store(m).client).restricted_investments_on_file_not_confirmed).toEqual(["BAYN.DE"]);
+  });
 });
 
 describe("#109 recording, reviewing and editing answers", () => {
@@ -95,7 +113,11 @@ describe("#109 recording, reviewing and editing answers", () => {
     expect(b.counts).toMatchObject({ answered: 10, reviewed: 0 });
     expect(b.answers.every((a) => a.status === "recorded")).toBe(true);
     // Existing fields hold the values whose meaning is the same (one source of truth).
-    expect(store(m).client).toMatchObject({ timeHorizonYears: 12, taxSensitivity: "high", restrictedSecurities: ["Tobacco producers"], investmentObjective: "Diversify away from the largest position.", specialInstructions: "" });
+    expect(store(m).client).toMatchObject({ timeHorizonYears: 12, taxSensitivity: "high", restrictedSecurities: ["Tobacco producers"] });
+    // The older objective text and special instructions are profile fields, never adopted as answers.
+    expect(store(m).client.investmentObjective).toBe("");
+    expect(store(m).client.specialInstructions).toBeUndefined();
+    expect(store(m).client.discovery).toMatchObject({ otherConstraints: "", answers: { objectives: { note: "Diversify away from the largest position." } } });
 
     store(m).recordDiscoveryReview();
     b = m.clientBrief(store(m).client);
@@ -129,7 +151,7 @@ describe("#109 recording, reviewing and editing answers", () => {
     store(m).startNewClient();
     store(m).upsertAccount({ id: "acc_x", name: "Synthetic", type: "brokerage", baseCurrency: "USD", createdAt: NOW.toISOString(), updatedAt: NOW.toISOString() });
     const accountsBefore = json(store(m).accounts);
-    store(m).setDiscoveryAnswer("objectives", { primary: "fund_spending", secondary: ["grow_wealth"], clarification: "" });
+    store(m).setDiscoveryAnswer("objectives", { primary: "fund_spending", secondary: ["grow_wealth"] });
     store(m).setDiscoveryAnswer("liquidity", { need: "planned", amount: 120_000 });
     store(m).setDiscoveryAnswer("income", { need: "needed", amount: 4_000, currency: "CHF", frequency: "monthly" });
     store(m).setDiscoveryAnswer("lossAbility", { level: "low" });

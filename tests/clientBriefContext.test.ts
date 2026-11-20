@@ -83,7 +83,8 @@ afterEach(() => vi.useRealTimers());
 /** A complete synthetic brief, entered through the store's actions as the questionnaire does. */
 function answerAll(m: M) {
   const s = store(m);
-  s.setDiscoveryAnswer("objectives", { primary: "reduce_concentration", secondary: ["preserve_wealth", "fund_spending"], clarification: "Diversify away from the largest position." });
+  s.setDiscoveryAnswer("objectives", { primary: "reduce_concentration", secondary: ["preserve_wealth", "fund_spending"] });
+  s.setDiscoveryClarification("objectives", "Diversify away from the largest position.");
   s.setDiscoveryAnswer("timeHorizon", { years: 12 });
   s.setDiscoveryAnswer("liquidity", { need: "planned", amount: 250_000, currency: "USD", timing: "within_1_year" });
   s.setDiscoveryAnswer("income", { need: "none" });

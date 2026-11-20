@@ -10,9 +10,10 @@ import type { ClientProfile, DiscoveryLevel, DiscoveryObjective, DiscoveryQuesti
 import { ChoiceButtons, type Choice } from "./ChoiceButtons";
 
 // #109: the advisor-completed discovery questionnaire. Every question starts
-// at "Not discussed yet"; an answer exists only when the advisor records one.
-// Values with an existing profile field are written there (one source of
-// truth). Editing an answer leaves its review stale until reviewed again.
+// at "Not discussed yet"; an answer exists only when the advisor records one,
+// and an older profile value is never adopted without the advisor's action.
+// Values with an existing field of the same meaning are written there (one
+// source of truth). Editing an answer leaves its review stale until reviewed.
 
 const NOT = "__not_discussed" as const;
 type Not = typeof NOT;
@@ -63,9 +64,12 @@ export function DiscoveryQuestionnaire() {
           {brief.counts.stale ? ` · ${brief.counts.stale} changed since review` : ""}
           {brief.lastReviewedAt ? ` · last reviewed ${fmtDate(brief.lastReviewedAt)}` : ""}
         </span>
-        <Button size="sm" onClick={recordReview} disabled={toReview === 0} title="Records today’s date as your review of every answered question.">
+        <Button size="sm" onClick={recordReview} disabled={toReview === 0} aria-describedby="discovery-review-help" data-testid="record-review">
           Record advisor review{toReview > 0 ? ` (${toReview})` : ""}
         </Button>
+        <span id="discovery-review-help" className="text-2xs text-ink-500">
+          Dates your review of every answered question. Changing an answer later marks it “Changed since review”.
+        </span>
       </CardFooter>
     </Card>
   );
@@ -88,7 +92,7 @@ function Question({ q, client, title, help, children }: { q: DiscoveryQuestionId
   );
 }
 
-function Clarification({ q, client }: { q: Exclude<DiscoveryQuestionId, "objectives" | "otherConstraints">; client: ClientProfile }) {
+function Clarification({ q, client }: { q: Exclude<DiscoveryQuestionId, "otherConstraints">; client: ClientProfile }) {
   const set = useAtlasStore((s) => s.setDiscoveryClarification);
   if (answerValue(client, q) == null) return null;
   return (
@@ -104,14 +108,14 @@ function Objectives({ client }: { client: ClientProfile }) {
   const notDiscussed = useAtlasStore((s) => s.setDiscoveryNotDiscussed);
   const v = answerValue(client, "objectives");
   const choices: Choice<DiscoveryObjective | Not>[] = [notChoice, ...OBJECTIVES.map((o) => ({ value: o.id, label: o.label }))];
-  const record = (primary: DiscoveryObjective, secondary: DiscoveryObjective[], clarification: string) => setAnswer("objectives", { primary, secondary, clarification });
+  const record = (primary: DiscoveryObjective, secondary: DiscoveryObjective[]) => setAnswer("objectives", { primary, secondary });
   return (
     <Question q="objectives" client={client} title="Primary objective">
       <ChoiceButtons
         labelledBy="dq-objectives"
         choices={choices}
         selected={[v ? v.primary : NOT]}
-        onSelect={(o) => (o === NOT ? notDiscussed("objectives") : record(o, v?.secondary ?? [], v?.clarification ?? client.investmentObjective ?? ""))}
+        onSelect={(o) => (o === NOT ? notDiscussed("objectives") : record(o, v?.secondary ?? []))}
       />
       {v && (
         <>
@@ -123,15 +127,11 @@ function Objectives({ client }: { client: ClientProfile }) {
             multiple
             choices={OBJECTIVES.filter((o) => o.id !== v.primary).map((o) => ({ value: o.id, label: o.label }))}
             selected={v.secondary}
-            onSelect={(o) => record(v.primary, v.secondary.includes(o) ? v.secondary.filter((x) => x !== o) : [...v.secondary, o], v.clarification)}
+            onSelect={(o) => record(v.primary, v.secondary.includes(o) ? v.secondary.filter((x) => x !== o) : [...v.secondary, o])}
           />
-          <div>
-            <Label htmlFor="dq-objectives-note">Objective in the client’s words (optional)</Label>
-            <Textarea id="dq-objectives-note" rows={2} value={v.clarification} onChange={(e) => record(v.primary, v.secondary, e.target.value)} />
-            <p className="mt-1 text-2xs text-ink-500">Also shown on the dashboard and in the proposal as the investment objective.</p>
-          </div>
         </>
       )}
+      <Clarification q="objectives" client={client} />
     </Question>
   );
 }
@@ -267,10 +267,14 @@ function ListQuestion({ q, client, title, help }: { q: "securitiesToRetain" | "r
   const notDiscussed = useAtlasStore((s) => s.setDiscoveryNotDiscussed);
   const v = answerValue(client, q);
   const onFile = q === "restrictedInvestments" ? client.restrictedSecurities ?? [] : [];
-  // Typed as a comma-separated list; recorded when the field is left.
-  const [text, setText] = React.useState((v?.securities ?? []).join(", "));
-  React.useEffect(() => setText((v?.securities ?? []).join(", ")), [v?.securities.join("|")]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Typed as a comma-separated list; recorded when the field is left, and only
+  // if the advisor changed it (restrictions already on file are shown, never
+  // adopted or dropped silently).
+  const shown = (v?.securities ?? onFile).join(", ");
+  const [text, setText] = React.useState(shown);
+  React.useEffect(() => setText(shown), [shown]);
   const commit = () => {
+    if (text === shown && !v) return;
     const list = text.split(",").map((x) => x.trim()).filter(Boolean);
     if (list.length > 0 || v) setAnswer(q, { securities: list });
   };
@@ -288,7 +292,7 @@ function ListQuestion({ q, client, title, help }: { q: "securitiesToRetain" | "r
       />
       {!v && onFile.length > 0 && <p className="text-2xs text-warning-600">On file before discovery, not confirmed with the client: {onFile.join(", ")}. Still treated as restricted.</p>}
       <div>
-        <Label htmlFor={`dq-${q}-list`}>{v ? "Securities (comma-separated)" : "Or type them (comma-separated) to record the answer"}</Label>
+        <Label htmlFor={`dq-${q}-list`}>{v ? "Securities (comma-separated)" : onFile.length ? "Edit the list to record the client’s answer" : "Or type them (comma-separated) to record the answer"}</Label>
         <Input id={`dq-${q}-list`} value={text} onChange={(e) => setText(e.target.value)} onBlur={commit} onKeyDown={(e) => e.key === "Enter" && commit()} />
       </div>
       <Clarification q={q} client={client} />
@@ -300,22 +304,20 @@ function OtherConstraints({ client }: { client: ClientProfile }) {
   const setAnswer = useAtlasStore((s) => s.setDiscoveryAnswer);
   const notDiscussed = useAtlasStore((s) => s.setDiscoveryNotDiscussed);
   const v = answerValue(client, "otherConstraints");
-  const existing = client.specialInstructions ?? "";
   return (
-    <Question q="otherConstraints" client={client} title="Other constraints" help="Anything else that limits the proposal (for example, a lock-up, an employer’s trading window or an ESG preference). Shown in the proposal as special instructions.">
+    <Question q="otherConstraints" client={client} title="Other constraints" help="Anything else that limits the proposal (for example, a lock-up, an employer’s trading window or an ESG preference).">
       <ChoiceButtons
         labelledBy="dq-otherConstraints"
         choices={[notChoice, { value: "none", label: "None" }] as Choice<string>[]}
         selected={[v ? (v.text.trim() ? "" : "none") : NOT]}
         onSelect={(c) => {
           if (c === NOT) return notDiscussed("otherConstraints");
-          if (existing.trim() && !confirm("Record that there are no other constraints? This clears the special instructions text.")) return;
           setAnswer("otherConstraints", { text: "" });
         }}
       />
       <div>
         <Label htmlFor="dq-otherConstraints-text">{v ? "Constraints" : "Or type them to record the answer"}</Label>
-        <Textarea id="dq-otherConstraints-text" rows={2} value={v ? v.text : ""} placeholder={!v && existing ? `Earlier profile text (not confirmed): ${existing}` : undefined} onChange={(e) => setAnswer("otherConstraints", { text: e.target.value })} />
+        <Textarea id="dq-otherConstraints-text" rows={2} value={v ? v.text : ""} onChange={(e) => setAnswer("otherConstraints", { text: e.target.value })} />
       </div>
     </Question>
   );

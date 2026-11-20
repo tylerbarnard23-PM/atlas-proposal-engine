@@ -913,8 +913,9 @@ export interface ClientProfile {
    * question is "Not discussed yet": legacy levels and defaults above are
    * never read as the client's answers. Where an existing field already means
    * the same thing it keeps the value (time horizon, tax sensitivity,
-   * restricted investments, objective clarification, other constraints); this
-   * record holds the rest and each question's status and review.
+   * restricted investments); this record holds the rest and each question's
+   * status and review. The older objective text and special instructions stay
+   * profile fields (shown in the PDF) and are not discovery answers.
    */
   discovery?: ClientDiscovery;
 }
@@ -953,6 +954,7 @@ export interface ClientDiscovery {
   lossWillingness?: DiscoveryLevel;
   lossAbility?: DiscoveryLevel;
   securitiesToRetain?: string[];
+  otherConstraints?: string;
   /** The advisor's note for the analysis. Part of the client brief sent with a live question (unlike advisorDiscoveryNotes). */
   analysisNote?: string;
 }
