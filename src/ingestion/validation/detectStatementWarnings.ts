@@ -1,4 +1,5 @@
 import type { DataQualityIssue, ExtractedHolding } from "@/domain/types";
+import { quantityPriceBasis } from "@/engines/quantityPrice";
 
 export function detectStatementWarnings(h: ExtractedHolding): DataQualityIssue[] {
   const out: DataQualityIssue[] = [];
@@ -12,14 +13,8 @@ export function detectStatementWarnings(h: ExtractedHolding): DataQualityIssue[]
     out.push({ code: "ADVISOR_APPROVED_VALUE_MISSING", severity: "warning", message: "Market value missing." });
   }
   // Bonds are priced per 100 of face value: 250,000 × 100.42 / 100 = 251,050.
-  const off = (gross: number) => Math.abs(gross - h.marketValue!) / Math.max(1, Math.abs(h.marketValue!));
-  if (
-    h.quantity != null &&
-    h.price != null &&
-    h.marketValue != null &&
-    off(h.quantity * h.price) > 0.05 &&
-    off((h.quantity * h.price) / 100) > 0.05
-  ) {
+  // The row's kind isn't known yet here, so either convention is accepted.
+  if (quantityPriceBasis(h.quantity, h.price, h.marketValue, 0.05) === "mismatch") {
     out.push({ code: "QUANTITY_VALUE_MISMATCH", severity: "warning", message: "Quantity × price differs from market value." });
   }
   if (!h.currency) {
