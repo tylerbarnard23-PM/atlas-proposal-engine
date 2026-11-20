@@ -57,7 +57,14 @@ D1 (PR #72, `0381db1`), D2 (PR #75, `073049f`), D2a (PR #79, `c0ee4e9`), D3 (PR 
 
 ### Next task: review the statement-import fixes (PR #108)
 
-Saved on 20 November 2026. [PR #108](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/108) is on branch `fix/import-statement-dates-bond-class`, from `main` at `bb1ff9f`, with application commit `5a02b8d` followed by docs. It fixes the two defects that stopped the demo's statement-import chapter:
+Saved on 20 November 2026. [PR #108](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/108) is on branch `fix/import-statement-dates-bond-class`, from `main` at `bb1ff9f`.
+- Application commit `5a02b8d`, then docs.
+- **Review follow-up `03c2344`**, from the reviewed head `0664b40`:
+  - a zero or out-of-range numeric date gives an unknown date with a reason, not a crash;
+  - a separate-cell labelled value that is ambiguous, impossible or unreadable is reported, and never replaced by another labelled date;
+  - bare headers are still ignored.
+
+Re-review the diff from `0664b40`. It fixes the two defects that stopped the demo's statement-import chapter:
 - [#104](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/104): the statement date was ignored, so holdings were dated the import day.
 - [#105](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/105): a municipal bond was imported as equity.
 

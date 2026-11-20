@@ -43,6 +43,13 @@
     - the bond is stored as fixed income; all six unconfirmed;
     - the undated or unclassified variant is flagged and stored unset;
     - 0 console errors, no `/api/` call.
+  - **Review follow-up (commit `03c2344`, from the reviewed head `0664b40`):** the two confirmed date-reader findings are fixed.
+    - A zero day or month (`00/05/2026`) no longer throws. Like other out-of-range values (`13/13`, `32/05`, `04/31`, `2026-00-10`), it leaves the date unknown with "couldn't be read as a date", and all six positions still import.
+    - A labelled value in its own cell (`Statement Date:    04/05/2026`) is now read. If it is two-way, impossible or unreadable, it is reported, and a later `Valuation Date: 2026-04-30` is not chosen instead.
+    - A bare header followed by a cell with no digit or month name (`As of    Market Value`) is still ignored.
+    - Regressions were written first, for the helper and the real PDF pipeline: 17 of the 21 new tests failed.
+    - Local checks: typecheck, **865 passed / 0 skipped**, eval 100/100/87.5, build.
+    - Classification, #106, #107 and the removal of import-day dates are unchanged. No browser re-run: the preview's warning path is the same one already rehearsed.
 - **Desktop demo: implementation, production verification and rehearsal are complete.** The recording package (PR #100: docs and ten synthetic captures only) holds the production evidence, a second fresh-profile rehearsal of the walkthrough, the narration outline and the capture checklist: [D5_RECORDING_PACKAGE.md](roadmap/D5_RECORDING_PACKAGE.md); its merge is recorded on PR #100 and [#57](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/57). **The owner's next task is to record and edit the video** of the scripted, synthetic demo. The R25 scorecard stays empty; no usability claim.
 - **Delivered contracts to build on (store/backup v10):** scope, alternatives and the shared desk evaluator (D1/D2); versioned models and sleeves (D2a); append-only approved versions, one meeting-view/PDF template and server re-gating (D3); the context-bound agent with preview and explicit Add, labelled demo/test/live modes, and local onboarding with a user-owned key (D4). Earlier detail: [history (28 October)](CLAUDE_HANDOFF_HISTORY_2026-10-28.md), [history (16 November)](CLAUDE_HANDOFF_HISTORY_2026-11-16.md).
 - **Remaining work (concise):**
