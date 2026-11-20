@@ -176,7 +176,7 @@ function load(file: string): Loaded {
   return state ? { kind: "ok", state } : { kind: "invalid" };
 }
 
-const HOW_TO_START = "Start a new session in Stratovell (Connect Claude on the Copilot page), or arm a new session in a terminal: npm run live-session -- arm --provider anthropic (or fake).";
+const HOW_TO_START = "Start a new session in Stratovell (Connect Claude on the Stratovell AI page), or arm a new session in a terminal: npm run live-session -- arm --provider anthropic (or fake).";
 const UNBOUND_ERROR = `This live session was armed before sessions were bound to a provider and a key, so it can't be used. ${HOW_TO_START}`;
 
 /** The refusal for a record that isn't a usable session, or null when it is one. */

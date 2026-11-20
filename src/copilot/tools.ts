@@ -714,7 +714,7 @@ function draftRecommendation(ctx: CopilotContext, input: z.infer<typeof DraftInp
     riskTradeoff: input.risk_tradeoff,
     taxNote: input.tax_note,
     implementationStep: input.implementation_step,
-    complianceNote: `Drafted by Proposal Copilot for "${ctx.draft.name}" (input revision ${ctx.context.inputRevision}). Requires advisor review and approval before client use.`,
+    complianceNote: `Drafted by Stratovell AI for "${ctx.draft.name}" (input revision ${ctx.context.inputRevision}). Requires advisor review and approval before client use.`,
     priority: input.priority,
     // Hard-coded, not model-controlled: AI drafts are never approved and never
     // reach the client PDF until the advisor flips these in the UI.
@@ -924,7 +924,7 @@ export function evidenceIn(value: unknown, clean: (s: string) => string, reporti
 }
 
 const AUTHORITY_REFUSAL =
-  "Refused: Proposal Copilot has no authority to approve, finalize, include in the PDF, share, issue or execute anything. It can investigate, simulate and save unapproved drafts; the advisor decides in Stratovell.";
+  "Refused: Stratovell AI has no authority to approve, finalize, include in the PDF, share, issue or execute anything. It can investigate, simulate and save unapproved drafts; the advisor decides in Stratovell.";
 
 // Runs one tool call and returns the JSON string handed back to the model.
 // Errors become is_error tool results instead of exceptions so the model can

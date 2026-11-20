@@ -10,7 +10,7 @@ import type { ConnectionStatus, LocalInfo } from "@/copilot/localConnect";
 import type { AllowanceChoice, SessionStatus } from "@/copilot/liveSessionStore";
 import type { LiveInfo } from "./LiveSessionBar";
 
-// Connect Claude: the guided local set-up, shared by the Copilot page and the
+// AI connection (Connect Claude): the guided local set-up, shared by the Stratovell AI page and the
 // desk panel. It walks through getting a key, saving it, and starting a
 // limited session. Nothing here contacts Anthropic: the first request is the
 // first question the user asks.
@@ -100,16 +100,17 @@ export function ConnectClaude({ live, local, onChanged }: { live: LiveInfo; loca
   const badge = !local.paired ? { text: "Not paired", tone: "warning" as const } : fake && status === "none" ? { text: "Fake provider · no key needed", tone: "neutral" as const } : CONNECTION_BADGE[status];
 
   return (
-    <section aria-label="Connect Claude" data-testid="connect-claude" data-paired={local.paired} data-connection={status} className="rounded-md bg-white px-3 py-2 text-[13px] ring-1 ring-inset ring-ink-200">
+    <section aria-label="AI connection" data-testid="connect-claude" data-paired={local.paired} data-connection={status} className="rounded-md bg-white px-3 py-2 text-[13px] ring-1 ring-inset ring-ink-200">
       <div className="flex flex-wrap items-center gap-2">
         <KeyRound className="h-4 w-4 text-ink-500" aria-hidden />
-        <strong className="text-ink-900">Connect Claude</strong>
+        <strong className="text-ink-900">AI connection</strong>
+        <span className="text-2xs text-ink-500">Claude · your Anthropic API key</span>
         <Badge tone={badge.tone} data-testid="connect-status">
           {badge.text}
         </Badge>
         {local.paired && (
           <Button size="sm" variant="ghost" className="ml-auto" aria-expanded={expanded} aria-controls={`${id}-body`} onClick={() => setOpen(!expanded)} data-testid="connect-toggle">
-            {expanded ? "Hide set-up" : "Manage connection"}
+            {expanded ? "Hide set-up" : status === "none" && !fake ? "Connect Claude" : "Manage connection"}
           </Button>
         )}
       </div>
@@ -247,7 +248,7 @@ export function ConnectClaude({ live, local, onChanged }: { live: LiveInfo; loca
               <p className="text-ink-800">A session is an allowance you give Stratovell for asking Claude. You can lower these limits, not raise them. Each new session is a new allowance and needs your say-so.</p>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 <AllowanceSelect label="Minutes" value={allowance.minutes} options={MINUTES.filter((v) => v <= ceilings.minutes)} onChange={(minutes) => setAllowance({ ...allowance, minutes })} testid="allow-minutes" />
-                <AllowanceSelect label="Copilot runs" value={allowance.runs} options={RUNS.filter((v) => v <= ceilings.runs)} onChange={(runs) => setAllowance({ ...allowance, runs })} testid="allow-runs" />
+                <AllowanceSelect label="Analysis runs" value={allowance.runs} options={RUNS.filter((v) => v <= ceilings.runs)} onChange={(runs) => setAllowance({ ...allowance, runs })} testid="allow-runs" />
                 <AllowanceSelect label="Requests" value={allowance.requests} options={REQUESTS.filter((v) => v <= ceilings.requests)} onChange={(requests) => setAllowance({ ...allowance, requests })} testid="allow-requests" />
                 <AllowanceSelect label="USD guard" value={allowance.usd} options={usdOptions} onChange={(usd) => setAllowance({ ...allowance, usd })} testid="allow-usd" />
               </div>
@@ -261,7 +262,7 @@ export function ConnectClaude({ live, local, onChanged }: { live: LiveInfo; loca
               ) : (
                 <div className="space-y-2 rounded-md bg-white px-3 py-2 ring-1 ring-inset ring-ink-200" role="group" aria-label="Confirm the session allowance" data-testid="connect-start-confirm">
                   <p className="text-ink-900">
-                    Allow up to <strong>{allowance.runs}</strong> Copilot run{allowance.runs === 1 ? "" : "s"} and <strong>{allowance.requests}</strong> requests to {fake ? "the fake provider (no API calls)" : "Anthropic"} over <strong>{allowance.minutes} minutes</strong>, with a <strong>USD {allowance.usd}</strong> estimated guard?
+                    Allow up to <strong>{allowance.runs}</strong> analysis run{allowance.runs === 1 ? "" : "s"} and <strong>{allowance.requests}</strong> requests to {fake ? "the fake provider (no API calls)" : "Anthropic"} over <strong>{allowance.minutes} minutes</strong>, with a <strong>USD {allowance.usd}</strong> estimated guard?
                   </p>
                   <p className="text-2xs text-ink-600">Starting sends nothing to Anthropic. Requests are made only when you ask a question. You can stop the session at any time.</p>
                   <div className="flex flex-wrap gap-2">

@@ -123,3 +123,10 @@ export function draftNowLabel(now: DraftNow): string {
       return "Deleted since";
   }
 }
+
+/**
+ * Whether a recommendation was drafted by Stratovell AI: its compliance note
+ * names it (drafts saved before the rename name "Proposal Copilot"; saved
+ * notes are never rewritten).
+ */
+export const isAiDraftNote = (note: string | undefined) => !!note && (note.includes("Drafted by Stratovell AI") || note.includes("Proposal Copilot"));

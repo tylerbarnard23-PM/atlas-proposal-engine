@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Input";
 import { formatCurrency } from "@/utils/formatting";
+import { clientBrief } from "@/engines/clientDiscovery";
 import { cn } from "@/utils/cn";
 import { LiveSessionBar, liveReady, type LiveInfo, type LiveRunInfo } from "./LiveSessionBar";
 import { ConnectClaude } from "./ConnectClaude";
@@ -50,7 +51,7 @@ export const MODE_LABEL: Record<CopilotMode, string> = {
 export const MODE_HINT: Record<CopilotMode, string> = {
   demo: "A fixed script calls the same engine tools as the live agent. No model writes these answers.",
   test: "A deterministic test provider runs through the real agent loop and tools. It is not a model and makes no API calls.",
-  live: "Portfolio calculations use shared deterministic engines. Copilot figures are checked against tool results; unsupported or unchecked claims are flagged for advisor review.",
+  live: "Portfolio calculations use shared deterministic engines. Stratovell AI checks the figures Claude states against tool results; unsupported or unchecked claims are flagged for advisor review.",
 };
 
 const STATUS_LABEL: Record<RunStatus, string> = {
@@ -204,6 +205,8 @@ export function CopilotWorkspace({
         )}
       </div>
 
+      {panel && <BriefLine />}
+
       {mode?.mode === "live" && mode.live && <ConnectClaude live={mode.live} local={mode.local} onChanged={mode.refresh} />}
       {mode?.mode === "live" && <LiveSessionBar live={mode.live ?? { available: false, reasons: ["Live session status couldn't be read."], provider: null, session: null }} lastRun={lastRun} onChanged={mode.refresh} />}
 
@@ -211,7 +214,7 @@ export function CopilotWorkspace({
         <Textarea
           rows={3}
           value={question}
-          aria-label="Question for Copilot"
+          aria-label="Question for Stratovell AI"
           placeholder="e.g. Which positions create the most concentration risk in this scope, and what would trimming them do?"
           onChange={(e) => setQuestion(e.target.value)}
           onKeyDown={(e) => {
@@ -219,15 +222,15 @@ export function CopilotWorkspace({
           }}
         />
         <div className="flex flex-wrap items-center gap-2">
-          <Button onClick={() => ask(question)} loading={loading} disabled={!question.trim() || liveBlocked} iconLeft={<Send className="h-4 w-4" />}>
-            Ask
+          <Button onClick={() => ask(question)} loading={loading} disabled={!question.trim() || liveBlocked} iconLeft={<Send className="h-4 w-4" />} data-testid="analyze-portfolio">
+            Analyze portfolio
           </Button>
           {loading && (
             <Button variant="secondary" onClick={() => abort.current?.abort()} iconLeft={<Square className="h-4 w-4" />}>
               Cancel
             </Button>
           )}
-          <span className="text-2xs text-ink-500">Nothing runs until you ask. Ctrl+Enter also asks.</span>
+          <span className="text-2xs text-ink-500">Nothing runs until you choose Analyze portfolio. Ctrl+Enter also runs it.</span>
         </div>
         <div className="flex flex-wrap gap-2" aria-label="Suggested questions">
           {SUGGESTIONS.map((s) => (
@@ -293,7 +296,7 @@ export function CopilotWorkspace({
               <FigureStatus figures={result.figures} />
               {result.forbiddenAttempts > 0 && (
                 <p className="text-[13px] text-ink-700">
-                  Refused {result.forbiddenAttempts} attempt{result.forbiddenAttempts === 1 ? "" : "s"} to approve, finalize, share or execute: Copilot has no such authority.
+                  Refused {result.forbiddenAttempts} attempt{result.forbiddenAttempts === 1 ? "" : "s"} to approve, finalize, share or execute: Stratovell AI has no such authority.
                 </p>
               )}
               <RunDetails result={result} />
@@ -302,6 +305,21 @@ export function CopilotWorkspace({
         </div>
       )}
     </div>
+  );
+}
+
+// #109: in the desk's panel, where the brief itself doesn't fit, its status and a link to it.
+function BriefLine() {
+  const client = useAtlasStore((s) => s.client);
+  const b = clientBrief(client);
+  return (
+    <p className="text-2xs text-ink-600" data-testid="client-brief-line">
+      Client brief: {b.counts.answered} of {b.counts.total} answered, {b.counts.reviewed} reviewed
+      {b.conflicts.length ? `, ${b.conflicts.length} possible conflict${b.conflicts.length === 1 ? "" : "s"}` : ""}.{" "}
+      <Link href="/client-profile#client-brief" className="text-navy-700 underline underline-offset-2">
+        Review the brief
+      </Link>
+    </p>
   );
 }
 

@@ -314,7 +314,7 @@ describe("authority, injection and fail-closed safeguards", () => {
       },
       (p) => {
         const r = results(p);
-        expect(r.every((x) => x.error?.startsWith("Refused: Proposal Copilot has no authority"))).toBe(true);
+        expect(r.every((x) => x.error?.startsWith("Refused: Stratovell AI has no authority"))).toBe(true);
         return msg([use("simulate_scope_change", { holding_id: "h_story_equity", change: "reduce", amount: 5_000 })], "tool_use");
       },
       (p) => {

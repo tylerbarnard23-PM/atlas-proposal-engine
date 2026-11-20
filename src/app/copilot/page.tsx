@@ -5,6 +5,7 @@ import { ClientOnly } from "@/components/layout/ClientOnly";
 import { PageHeader } from "@/components/ui/Section";
 import { Card, CardBody } from "@/components/ui/Card";
 import { CopilotWorkspace, ModeBadge, useCopilotMode } from "@/components/copilot/CopilotWorkspace";
+import { ClientBriefPanel } from "@/components/profile/ClientBriefPanel";
 
 export default function CopilotPage() {
   return (
@@ -23,10 +24,13 @@ function Inner() {
     <>
       <PageHeader
         eyebrow="Advisory · AI-assisted"
-        title="Proposal Copilot"
-        description="Ask about the active alternative. Answers come from the same Stratovell engines the rest of the app uses. Drafts are a preview until you add them to the working draft, and adding never approves anything."
+        title="Stratovell AI"
+        description="Stratovell AI uses Claude to review portfolio information and prepare recommendations for your review, with the same Stratovell engines the rest of the app uses. Drafts are a preview until you add them to the working draft, and adding never approves anything."
         actions={mode && <ModeBadge mode={mode.mode} model={mode.model} live={mode.live} />}
       />
+      <div className="max-w-4xl mb-4">
+        <ClientBriefPanel variant="compact" />
+      </div>
       <Card className="max-w-4xl">
         <CardBody>
           <CopilotWorkspace initialQuestion={initial} />

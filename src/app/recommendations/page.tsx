@@ -26,6 +26,7 @@ import { cn } from "@/utils/cn";
 import { summarizePreview } from "@/components/recommendations/recEffect";
 import { RecPreview } from "@/components/recommendations/RecPreview";
 import { previewRecommendation } from "@/engines/recommendationPreview";
+import { isAiDraftNote } from "@/copilot/request";
 import { CurrencyReviewPanel } from "@/components/recommendations/CurrencyReviewPanel";
 import { RecCurrencyField } from "@/components/recommendations/RecCurrencyField";
 import { formatCurrency, formatTimestampDate, todayIso } from "@/utils/formatting";
@@ -79,11 +80,11 @@ function Inner() {
   const [approvedNotice, setApprovedNotice] = React.useState<number | null>(null);
 
   function onApproveAll() {
-    const fromCopilot = recs.filter((r) => !r.approvedByAdvisor && !isRejected(r) && r.complianceNote?.includes("Proposal Copilot")).length;
+    const fromCopilot = recs.filter((r) => !r.approvedByAdvisor && !isRejected(r) && isAiDraftNote(r.complianceNote)).length;
     const ok = confirm(
       `Approve ${pendingCount} recommendation${pendingCount === 1 ? "" : "s"} and include ${pendingCount === 1 ? "it" : "them"} in the PDF?` +
         "\n\nThis covers every pending recommendation, in any alternative, not only the current view." +
-        (fromCopilot ? `\n\n${fromCopilot} of these were drafted by the Proposal Copilot.` : "") +
+        (fromCopilot ? `\n\n${fromCopilot} of these were drafted by Stratovell AI.` : "") +
         "\n\nApproved recommendations reshape the Before / After allocation and appear in the client proposal. You can unapprove any of them afterwards."
     );
     if (ok) setApprovedNotice(approveAll());
@@ -292,7 +293,7 @@ function Inner() {
       {recs.length > 0 && shown.length === 0 && (
         <EmptyState
           title="Nothing in the current draft yet"
-          description={`"${draft.name}" has no recommendations. Add a change on the allocation desk or from Copilot, or see all recommendations.`}
+          description={`"${draft.name}" has no recommendations. Add a change on the allocation desk or from Stratovell AI, or see all recommendations.`}
           action={
             <Button variant="secondary" onClick={() => changeView("all")}>
               See all recommendations ({recs.length})

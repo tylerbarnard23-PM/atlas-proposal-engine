@@ -49,7 +49,7 @@ export async function handleCopilotGet(req: Request, deps: LiveDeps = defaultDep
 export async function handleCopilotPost(req: Request, deps: LiveDeps = defaultDeps()) {
   const read = await readBodyLimited(req, COPILOT_MAX_BODY_BYTES);
   if (!read.ok) {
-    if (read.tooLarge) return NextResponse.json({ error: "Workspace too large for one Copilot request." }, { status: 413 });
+    if (read.tooLarge) return NextResponse.json({ error: "Workspace too large for one Stratovell AI request." }, { status: 413 });
     return NextResponse.json({ error: "Body must be JSON." }, { status: 400 });
   }
   let body: unknown;
@@ -120,7 +120,7 @@ export async function handleCopilotPost(req: Request, deps: LiveDeps = defaultDe
 
 // A workspace record the engines can't read: say so, without the error's
 // message or any of the workspace. Nothing was saved.
-const unreadable = () => NextResponse.json({ error: "Copilot couldn't read this workspace (a record is malformed). Nothing was changed." }, { status: 422 });
+const unreadable = () => NextResponse.json({ error: "Stratovell AI couldn't read this workspace (a record is malformed). Nothing was changed." }, { status: 422 });
 
 /** GET /api/copilot/live-session/claim?token=… : the owner's one-time claim link. */
 export async function handleLiveSessionClaim(req: Request, deps: LiveDeps = defaultDeps()) {
