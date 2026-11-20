@@ -619,7 +619,7 @@ describe("persistence", () => {
     const v1 = approve(m, "Synthetic note");
     store(m).recordPdfJob({ id: "pdf_v1", proposalId: store(m).proposal.id, variant: "final", startedAt: NOW.toISOString(), completedAt: NOW.toISOString(), status: "succeeded", filename: "x.pdf", snapshotId: v1.id, snapshotVersion: 1 });
     const before = JSON.stringify(store(m).snapshots);
-    expect(JSON.parse(storage.getItem("atlas-proposal-engine")!).version).toBe(10);
+    expect(JSON.parse(storage.getItem("atlas-proposal-engine")!).version).toBe(11); // current version (v11: client discovery, #109)
     vi.resetModules();
     m = await load();
     await m.useAtlasStore.persist.rehydrate();
@@ -629,7 +629,7 @@ describe("persistence", () => {
     const exported = m.exportBackup(store(m), NOW, ids);
     if (!exported.ok) throw new Error(exported.errors.join("; "));
     const file = JSON.parse(exported.text);
-    expect(file.workspaceVersion).toBe(10);
+    expect(file.workspaceVersion).toBe(11);
     const parsed = m.parseBackup(exported.text, ids);
     if (!parsed.ok) throw new Error(parsed.errors.join("; "));
     store(m).startNewClient();
@@ -669,7 +669,7 @@ describe("persistence", () => {
     const v9 = { ...file, workspaceVersion: 9, engagement: e9 };
     const p9 = m.parseBackup(JSON.stringify(v9), ids);
     if (!p9.ok) throw new Error(p9.errors.join("; "));
-    expect(p9.backup.workspaceVersion).toBe(10);
+    expect(p9.backup.workspaceVersion).toBe(11);
     expect(p9.backup.engagement.snapshots).toEqual([]);
     expect(m.parseBackup(JSON.stringify({ ...v9, engagement: { ...e9, snapshots: [] } }), ids).ok).toBe(false);
     expect(m.parseBackup(JSON.stringify({ ...v9, engagement: { ...e9, pdfHistory: [{ id: "j", proposalId: e9.proposal.id, variant: "final", startedAt: NOW.toISOString(), status: "succeeded", snapshotId: "ver_x" }] } }), ids).ok).toBe(false);

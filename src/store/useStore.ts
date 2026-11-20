@@ -8,6 +8,7 @@ import type {
   ApprovedSnapshot,
   AssetClass,
   ClientProfile,
+  DiscoveryQuestionId,
   CurrencyCode,
   DismissedInsight,
   Disclosure,
@@ -49,10 +50,11 @@ import type { RestoredWorkspace } from "@/engines/workspaceBackup";
 import { findRevision, modelProblems, nextRevision, strategyProblems } from "@/engines/strategyProposals";
 import { UMA_MODELS, UMA_STRATEGIES } from "@/data/umaStory";
 import { buildSnapshot } from "@/engines/approvedSnapshot";
+import { markNotDiscussed, recordAnswer, recordReview, setAnalysisNote, setClarification, type DiscoveryValues } from "@/engines/clientDiscovery";
 
 /** The browser storage key every saved workspace lives under; never renamed. */
 export const STORAGE_KEY = "atlas-proposal-engine";
-export const STORE_VERSION = 10;
+export const STORE_VERSION = 11;
 
 export interface AtlasState {
   client: ClientProfile;
@@ -87,6 +89,15 @@ export interface AtlasState {
 
 export interface AtlasActions {
   setClient: (patch: Partial<ClientProfile>) => void;
+  // #109 client discovery: each answer is the advisor's explicit record; editing one leaves its review stale.
+  setDiscoveryAnswer: <Q extends DiscoveryQuestionId>(question: Q, value: DiscoveryValues[Q]) => void;
+  /** "Not discussed yet": the question is unknown again (an existing profile field keeps its value but isn't read as the answer). */
+  setDiscoveryNotDiscussed: (question: DiscoveryQuestionId) => void;
+  setDiscoveryClarification: (question: Exclude<DiscoveryQuestionId, "objectives" | "otherConstraints">, note: string) => void;
+  /** The advisor's review of every answered question, dated now. */
+  recordDiscoveryReview: () => void;
+  /** The advisor's note for the analysis (part of the client brief; unlike the private discovery notes, it is sent with a live question). */
+  setAnalysisNote: (note: string) => void;
   setAdvisor: (patch: Partial<AdvisorProfile>) => void;
   upsertAccount: (account: Account) => void;
   removeAccount: (id: string) => void;
@@ -374,6 +385,10 @@ export function migrateAtlasState(persisted: unknown, version: number): AtlasSta
   if (version < 10 && state && !Array.isArray(state.snapshots)) {
     state.snapshots = [];
   }
+  // v11 (#109): client discovery. Nothing is added: a profile without a
+  // discovery record has every question "Not discussed yet", and its older
+  // levels and defaults are never read as the client's answers. Approved
+  // versions are untouched. Idempotent.
   return state;
 }
 
@@ -398,6 +413,11 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
     (set, get) => ({
       ...seedState(),
       setClient: (patch) => set((s) => ({ client: { ...s.client, ...patch } })),
+      setDiscoveryAnswer: (question, value) => set((s) => ({ client: recordAnswer(s.client, question, value, new Date().toISOString()) })),
+      setDiscoveryNotDiscussed: (question) => set((s) => ({ client: markNotDiscussed(s.client, question, new Date().toISOString()) })),
+      setDiscoveryClarification: (question, note) => set((s) => ({ client: setClarification(s.client, question, note, new Date().toISOString()) })),
+      recordDiscoveryReview: () => set((s) => ({ client: recordReview(s.client, new Date().toISOString()) })),
+      setAnalysisNote: (note) => set((s) => ({ client: setAnalysisNote(s.client, note) })),
       setAdvisor: (patch) => set((s) => ({ advisor: { ...s.advisor, ...patch } })),
       upsertAccount: (account) =>
         set((s) => ({

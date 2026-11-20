@@ -351,7 +351,7 @@ describe("Copilot and persistence", () => {
       return { strategies: s.strategies, models: s.models, draft: [s.workingDraft.model, s.workingDraft.memberIds], recs: s.recommendations, accounts: s.accounts, holdings: s.holdings, exposure: pctBy(exposure(mm)) };
     };
     const before = JSON.parse(JSON.stringify(snap(m)));
-    expect(JSON.parse(storage.getItem("atlas-proposal-engine")!).version).toBe(10);
+    expect(JSON.parse(storage.getItem("atlas-proposal-engine")!).version).toBe(11); // current version (v11: client discovery, #109)
     vi.resetModules();
     m = await load();
     await m.useAtlasStore.persist.rehydrate();
@@ -361,7 +361,7 @@ describe("Copilot and persistence", () => {
     const exported = m.exportBackup(m.useAtlasStore.getState(), NOW, ids);
     if (!exported.ok) throw new Error(exported.errors.join("; "));
     const file = JSON.parse(exported.text);
-    expect(file.workspaceVersion).toBe(10);
+    expect(file.workspaceVersion).toBe(11);
     const parsed = m.parseBackup(exported.text, ids);
     if (!parsed.ok) throw new Error(parsed.errors.join("; "));
     m.useAtlasStore.getState().startNewClient();
@@ -396,7 +396,7 @@ describe("Copilot and persistence", () => {
     })();
     const p8 = m.parseBackup(JSON.stringify(plain), ids);
     if (!p8.ok) throw new Error(p8.errors.join("; "));
-    expect(p8.backup.workspaceVersion).toBe(10);
+    expect(p8.backup.workspaceVersion).toBe(11);
     expect([p8.backup.engagement.strategies, p8.backup.engagement.models]).toEqual([[], []]);
     expect(m.parseBackup(JSON.stringify({ ...plain, engagement: { ...plain.engagement, strategies: [] } }), ids).ok).toBe(false);
     expect(m.parseBackup(JSON.stringify({ ...file, workspaceVersion: 8 }), ids).ok).toBe(false);

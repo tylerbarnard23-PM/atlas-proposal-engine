@@ -908,6 +908,53 @@ export interface ClientProfile {
   restrictedSecurities?: string[];
   specialInstructions?: string;
   advisorDiscoveryNotes?: string;
+  /**
+   * #109: the advisor-completed discovery questionnaire. Absent means every
+   * question is "Not discussed yet": legacy levels and defaults above are
+   * never read as the client's answers. Where an existing field already means
+   * the same thing it keeps the value (time horizon, tax sensitivity,
+   * restricted investments, objective clarification, other constraints); this
+   * record holds the rest and each question's status and review.
+   */
+  discovery?: ClientDiscovery;
+}
+
+export type DiscoveryObjective = "preserve_wealth" | "generate_income" | "grow_wealth" | "reduce_concentration" | "fund_spending";
+export type DiscoveryLevel = "low" | "moderate" | "high";
+export type DiscoveryQuestionId =
+  | "objectives"
+  | "timeHorizon"
+  | "liquidity"
+  | "income"
+  | "lossWillingness"
+  | "lossAbility"
+  | "taxSensitivity"
+  | "securitiesToRetain"
+  | "restrictedInvestments"
+  | "otherConstraints";
+
+/** One question's state. A question with no state is "Not discussed yet". */
+export interface DiscoveryAnswerState {
+  status: "answered" | "not_discussed";
+  /** Optional clarification recorded with the answer; part of the client brief. */
+  note?: string;
+  updatedAt: string;
+  /** The advisor's review: the answer's content hash when reviewed. Stale once the answer changes. */
+  review?: { reviewedAt: string; answerHash: string };
+}
+
+export interface ClientDiscovery {
+  answers: { [Q in DiscoveryQuestionId]?: DiscoveryAnswerState };
+  objectives?: { primary: DiscoveryObjective; secondary: DiscoveryObjective[] };
+  /** A client instruction with its own currency and period, not an engine-enforced reserve. */
+  liquidity?: { need: "none" | "planned"; amount?: number; currency?: CurrencyCode; timing?: "within_1_year" | "1_to_3_years" | "over_3_years" };
+  /** A client instruction with its own currency and frequency, not an engine-enforced reserve. */
+  income?: { need: "none" | "needed"; amount?: number; currency?: CurrencyCode; frequency?: "monthly" | "quarterly" | "annually" };
+  lossWillingness?: DiscoveryLevel;
+  lossAbility?: DiscoveryLevel;
+  securitiesToRetain?: string[];
+  /** The advisor's note for the analysis. Part of the client brief sent with a live question (unlike advisorDiscoveryNotes). */
+  analysisNote?: string;
 }
 
 export type ProposalApprovalStatus =

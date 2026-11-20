@@ -256,7 +256,7 @@ describe("preview, saved result, reload and backup agree", () => {
       return mm.compareAlternatives({ holdings: mm.normalizeHoldings(s.holdings, s.fxRates, "USD"), accounts: s.accounts, recommendations: s.recommendations, drafts: [s.workingDraft, ...s.alternatives], fx: { reportingCurrency: "USD", rates: s.fxRates } }).map((c) => [c.draft.name, c.result.rows, c.result.reserves, c.result.blocked]);
     };
     const before = snapshot(m);
-    expect(JSON.parse(storage.getItem("atlas-proposal-engine")!).version).toBe(10);
+    expect(JSON.parse(storage.getItem("atlas-proposal-engine")!).version).toBe(11); // current version (v11: client discovery, #109)
     vi.resetModules();
     m = await load();
     await m.useAtlasStore.persist.rehydrate();
@@ -264,7 +264,7 @@ describe("preview, saved result, reload and backup agree", () => {
 
     const s = m.useAtlasStore.getState();
     const text = m.serializeBackup(m.createBackup(s, NOW));
-    expect(JSON.parse(text).workspaceVersion).toBe(10);
+    expect(JSON.parse(text).workspaceVersion).toBe(11);
     const parsed = m.parseBackup(text, { disclosureIds: m.DISCLOSURE_LIBRARY.map((d) => d.id) });
     if (!parsed.ok) throw new Error(parsed.errors.join("; "));
     const restored = m.restoredState(parsed.backup, s, { replaceFirm: false });
@@ -288,7 +288,7 @@ describe("preview, saved result, reload and backup agree", () => {
     const v7 = { ...v8, workspaceVersion: 7, engagement: e7 };
     const p7 = m.parseBackup(JSON.stringify(v7), ids);
     if (!p7.ok) throw new Error(p7.errors.join("; "));
-    expect(p7.backup.workspaceVersion).toBe(10);
+    expect(p7.backup.workspaceVersion).toBe(11);
     expect(p7.backup.engagement.alternatives).toEqual([]);
     expect(p7.backup.engagement.workingDraft).toEqual(v8.engagement.workingDraft);
     const { workingDraft: _w, ...e6 } = e7;

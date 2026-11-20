@@ -833,7 +833,7 @@ describe("connecting Claude leaves the proposal contracts alone", () => {
     const exported = m.exportBackup(store(), T0, { disclosureIds: DISCLOSURE_LIBRARY.map((d) => d.id) });
     expect(exported.ok).toBe(true);
     for (const text of [JSON.stringify(store()), storage.dump(), exported.ok ? exported.text : "", JSON.stringify(result), JSON.stringify(request)]) expect(text).not.toContain("CANARY");
-    expect(m.BACKUP_WORKSPACE_VERSION).toBe(10);
+    expect(m.BACKUP_WORKSPACE_VERSION).toBe(11);
   });
 });
 

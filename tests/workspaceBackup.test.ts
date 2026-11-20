@@ -167,7 +167,7 @@ describe("export", () => {
     richWorkspace(m);
     const b = JSON.parse(exportText(m));
     expect(Object.keys(b).sort()).toEqual(["engagement", "exportedAt", "firm", "format", "notice", "omitted", "schemaVersion", "workspaceVersion"]);
-    expect(b).toMatchObject({ format: "atlas-workspace-backup", schemaVersion: 1, workspaceVersion: 10, exportedAt: NOW.toISOString() });
+    expect(b).toMatchObject({ format: "atlas-workspace-backup", schemaVersion: 1, workspaceVersion: 11, exportedAt: NOW.toISOString() });
     expect(Object.keys(b.engagement).sort()).toEqual(
       ["accounts", "client", "dismissedInsights", "fxConfirmation", "fxRates", "fxRefresh", "holdings", "pdfHistory", "proposal", "proposalSections", "recommendations", "sourceDocuments", "unresolvedLinks", "workingDraft", "alternatives", "unresolvedFunding", "strategies", "models", "snapshots"].sort()
     );
@@ -295,7 +295,7 @@ describe("round trip", () => {
     if (!parsed.ok) throw new Error(parsed.errors.join("; "));
     m.useAtlasStore.getState().restoreWorkspace(m.restoredState(parsed.backup, { advisor: m.useAtlasStore.getState().advisor, disclosures: m.DISCLOSURE_LIBRARY }, { replaceFirm: false }));
     const saved = JSON.parse(storage.getItem(KEY)!);
-    expect(saved.version).toBe(10); // the existing key and store version (v10: approved versions)
+    expect(saved.version).toBe(11); // the existing key and store version (v11: client discovery, #109)
     // A fresh page: a new store module hydrates from the same key.
     vi.resetModules();
     const fresh = await load();
@@ -331,7 +331,7 @@ describe("restore is validated in full before anything is written", () => {
     reject(m, "{ not json", /isn't valid JSON/);
     reject(m, JSON.stringify({ hello: "world" }), /not a Stratovell workspace backup/);
     reject(m, mutate(good, (b) => (b.schemaVersion = 2)), /newer version of Stratovell/);
-    reject(m, mutate(good, (b) => (b.workspaceVersion = 11)), /newer version of Stratovell/);
+    reject(m, mutate(good, (b) => (b.workspaceVersion = 12)), /newer version of Stratovell/);
     reject(m, mutate(good, (b) => (b.workspaceVersion = 5)), /not supported/);
     reject(m, mutate(good, (b) => (b.schemaVersion = "1")), /not supported/);
     reject(m, " ".repeat(m.BACKUP_MAX_BYTES + 1), /larger than/);

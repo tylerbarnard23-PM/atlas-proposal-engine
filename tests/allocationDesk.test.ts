@@ -482,7 +482,7 @@ describe("store v7 migration", () => {
     st.setDraftTarget("equity", 50);
     st.addDraftEdit(edit(m, "h_story_equity", "reduce", 10_000));
     const draft = m.useAtlasStore.getState().workingDraft;
-    expect(JSON.parse(storage.getItem(KEY)!).version).toBe(10); // v8 (D2), v9 (D2a) and v10 (D3) keep the v7 draft
+    expect(JSON.parse(storage.getItem(KEY)!).version).toBe(11); // v8 (D2), v9 (D2a), v10 (D3) and v11 (#109 discovery) keep the v7 draft
     vi.resetModules();
     m = await load();
     await m.useAtlasStore.persist.rehydrate();
@@ -552,7 +552,7 @@ describe("backup and restore", () => {
     const v6 = { ...v7, workspaceVersion: 6, engagement };
     const parsed = m.parseBackup(JSON.stringify(v6), ids(m));
     if (!parsed.ok) throw new Error(parsed.errors.join("; "));
-    expect(parsed.backup.workspaceVersion).toBe(10); // upgraded to the current version (D3: v10)
+    expect(parsed.backup.workspaceVersion).toBe(11); // upgraded to the current version (v11: client discovery, #109)
     expect(parsed.backup.engagement.workingDraft).toMatchObject({ memberIds: [st.recommendations[0].id], scopeAccountIds: null, targets: {}, inputBasis: null, createdAt: NOW.toISOString() });
     expect(parsed.backup.engagement.recommendations).toEqual(v7.engagement.recommendations);
     // Still strict: a v6 file carrying a draft (or anything unknown) is rejected, and so is v5.
