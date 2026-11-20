@@ -87,6 +87,10 @@ Follow [AGENT_EVALUATION.md](AGENT_EVALUATION.md), including its offline, live a
 
 Prepare versioned synthetic cases, code-based numerical/authority checks and minimized usage/latency evidence. No paid calls in normal CI. Run live evaluations only with explicit approved credentials, configuration and a concrete run budget/limit; if none is authorized, prepare the runner and obtain that one budget decision before spending. Do not invent a passing live result. Public mode remains no-key/scripted; live-agent evidence may come from the separately enabled local synthetic demonstration. No private data or public live key.
 
+### D5 addition: client discovery and an analysis-led Stratovell AI (#109, PR #110)
+
+Added 20 November 2026 at the owner's request, within D5's demonstrated scope. The advisor records a short client discovery in the Client Profile (every question starts "Not discussed yet"; reviews are dated and go stale on change); Stratovell AI receives the reviewed client brief through the existing portfolio-context tools, relates its analysis to the stated objectives, asks follow-up questions instead of inventing client facts, and compares feasible alternatives with the simulation tools. The visible product name is **Stratovell AI** ("Analyze portfolio", "AI connection", "Connect Claude"). The demo's live chapter becomes analysis-led (discovery → brief → analysis request → the actual simulated recommendation → explicit Add and approval → version → PDF with the approved-change row and holdings). Its live take needs the owner's explicit approval and budget; a fake-provider rehearsal proves the flow, not the analysis.
+
 ### D5: publish the demonstrated scope
 
 Run the same synthetic task with a keyboard and representative viewport; record assistance/failures honestly. Prepare the R25 protocol/empty scorecard now and perform the 3–5-advisor study when participants are available. Lack of recruitment need not delay an honestly labelled engineering demonstration; it does prohibit claiming measured advisor usability or competitor parity. No automatic outreach.

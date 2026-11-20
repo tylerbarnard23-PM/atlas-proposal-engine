@@ -128,7 +128,7 @@ tests/            unit tests + extraction eval
 ## Tests and evals
 
 ```bash
-npm test        # 684 tests in 39 files (2 need the private UBS PDF and are skipped without it, as in CI): the Stratovell AI agent loop with an injected fake provider (no key, no spend), local pairing, key handling and sessions with fake credential stores, proposal math and currency handling, calendar dates across time zones, workspace backup and restore, recommendation currencies and previews, cash flows, readiness, insights, CSV/Excel/PDF import and import completeness
+npm test        # 880 tests in 52 files (2 need the private UBS PDF and are skipped without it, as in CI): the Stratovell AI agent loop with an injected fake provider (no key, no spend), local pairing, key handling and sessions with fake credential stores, proposal math and currency handling, calendar dates across time zones, workspace backup and restore, recommendation currencies and previews, cash flows, readiness, insights, CSV/Excel/PDF import and import completeness
 npm run eval    # statement-extraction accuracy scorecard
 npm run eval:agent:live   # opt-in PAID live agent evaluation; refuses to run without explicit flags, a key and a spend cap. The cap is an estimate-based guard, not a guaranteed ceiling (see docs/roadmap/AGENT_EVALUATION.md)
 ```
