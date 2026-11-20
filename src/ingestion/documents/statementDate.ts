@@ -24,7 +24,10 @@ const DAY_FIRST = new RegExp(String.raw`^(\d{1,2})\s+${MONTH_NAME},?\s+(\d{4})$`
 const ISO = /^(\d{4})-(\d{2})-(\d{2})$/;
 const NUMERIC = /^(\d{1,2})[/.](\d{1,2})[/.](\d{4})$/;
 
-const monthNumber = (name: string) => MONTHS.findIndex((m) => m.startsWith(name.toLowerCase().replace(/\.$/, "").slice(0, 3))) + 1;
+// Something meant as a date: it has a digit or starts with a month name.
+const DATE_LIKE = new RegExp(String.raw`\d|^${MONTH_NAME}(?:\s|$)`, "i");
+
+const monthNumber =(name: string) => MONTHS.findIndex((m) => m.startsWith(name.toLowerCase().replace(/\.$/, "").slice(0, 3))) + 1;
 const iso = (y: number, m: number, d: number) => calendarDay(`${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`) ?? undefined;
 const monthDay = (m: number, d: number) => `${MONTHS[m - 1][0].toUpperCase()}${MONTHS[m - 1].slice(1)} ${d}`;
 
@@ -38,12 +41,16 @@ function readValue(raw: string): { date?: string; problem?: string } {
   else if ((m = value.match(ISO))) date = iso(+m[1], +m[2], +m[3]);
   else if ((m = value.match(NUMERIC))) {
     const [a, b, y] = [+m[1], +m[2], +m[3]];
-    // Month first (US) or day first: only a date that reads one way is used.
-    if (a > 12 && b <= 12) date = iso(y, b, a);
-    else if (b > 12 && a <= 12) date = iso(y, a, b);
-    else if (a === b) date = iso(y, a, b);
-    else if (a <= 12 && b <= 12) {
-      return { problem: `The statement's date "${value}" could be ${monthDay(a, b)} or ${monthDay(b, a)}, ${y}, so it isn't used.` };
+    // A zero component isn't a day or a month (PR #108 review); out-of-range
+    // ones (13/13, 32/05, 04/31) fail the calendar check below.
+    if (a >= 1 && b >= 1) {
+      // Month first (US) or day first: only a date that reads one way is used.
+      if (a > 12 && b <= 12) date = iso(y, b, a);
+      else if (b > 12 && a <= 12) date = iso(y, a, b);
+      else if (a === b) date = iso(y, a, b);
+      else if (a <= 12 && b <= 12) {
+        return { problem: `The statement's date "${value}" could be ${monthDay(a, b)} or ${monthDay(b, a)}, ${y}, so it isn't used.` };
+      }
     }
   }
   return date ? { date } : { problem: `The statement's date "${value}" couldn't be read as a date, so it isn't used.` };
@@ -57,11 +64,15 @@ export function statementDateOf(lines: string[]): StatementDateReading {
     for (let i = 0; i < cells.length; i++) {
       const label = cells[i].match(LABEL);
       if (!label) continue;
+      // "Statement Date:" in one cell and its value in the next. A bare label
+      // followed by a cell with no digits or month name (a column header
+      // "As of  Market Value") says nothing. Any other next cell is the
+      // label's value: an ambiguous, impossible or unreadable one is reported,
+      // never skipped in favour of another date (PR #108 review).
       const inline = label[1].trim();
-      // "Statement Date:" in one cell and its date in the next. A bare label
-      // followed by something else (a column header "As of") says nothing.
-      if (!inline && !(cells[i + 1] && readValue(cells[i + 1]).date)) continue;
-      const read = readValue(inline || cells[i + 1]);
+      const value = inline || cells[i + 1];
+      if (!value || (!inline && !DATE_LIKE.test(value))) continue;
+      const read = readValue(value);
       if (read.date) dates.add(read.date);
       if (read.problem) problems.push(read.problem);
     }

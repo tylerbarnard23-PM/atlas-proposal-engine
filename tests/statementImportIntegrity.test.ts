@@ -4,6 +4,7 @@ import { FICTIONAL_STATEMENT_LINES, ISSUE_29_LINES, textPdf } from "./fixtures/s
 import { readPdfInNode } from "@/ingestion/pdf/readPdfNode";
 import { parseStatementPdf } from "@/ingestion/documents/parseStatementPdf";
 import { extractionToWorkspace } from "@/ingestion/documents/toWorkspace";
+import { statementDateOf } from "@/ingestion/documents/statementDate";
 import { detectAssetClass } from "@/ingestion/normalizers/detectAssetClass";
 import { dataTasks } from "@/engines/dataTasks";
 import { holdingsNeedingReview } from "@/engines/complianceEngine";
@@ -245,6 +246,77 @@ describe("statement dates are read only from a clear label (#104)", () => {
     const ws = atImportDay(() => extractionToWorkspace(result, { fileName: "positions.csv", reportingCurrency: "USD", sourceType: "csv" }));
     expect(ws.holdings[0].valuationDate).toBeUndefined();
     expect(ws.holdings[0].dataQuality.some((d) => d.code === "MISSING_VALUATION_DATE")).toBe(true);
+  });
+});
+
+// PR #108 review: invalid numeric components threw, and a labelled value in a
+// separate cell that isn't a usable date was skipped, so another date won.
+describe("date-reader review findings (PR #108)", () => {
+  const UNREADABLE = /couldn't be read as a date/;
+
+  it.each(["00/05/2026", "05/00/2026", "00/00/2026", "13/13/2026", "32/05/2026", "05/32/2026", "99/99/2026", "04/31/2026", "2026-00-10", "2026-13-01"])(
+    "Statement Date: %s is unknown and explained, never a crash",
+    (value) => {
+      for (const line of [`Statement Date: ${value}`, `Statement Date:    ${value}`]) {
+        const r = statementDateOf([line]);
+        expect(r.date).toBeUndefined();
+        expect(r.problem).toMatch(UNREADABLE);
+      }
+    }
+  );
+
+  it.each([
+    ["a two-way date", "Statement Date:    04/05/2026", /April 5 or May 4/],
+    ["an impossible date", "Statement Date:    00/05/2026", UNREADABLE],
+    ["an unreadable date", "Statement Date:    Q2 2026", UNREADABLE],
+    ["an impossible month-name date", "As of    February 30, 2026", UNREADABLE],
+  ])("%s in a separate cell is reported and no other labelled date is chosen instead", (_label, line, why) => {
+    const r = statementDateOf([line, "Valuation Date: 2026-04-30"]);
+    expect(r.date).toBeUndefined();
+    expect(r.problem).toMatch(why);
+  });
+
+  it("a valid date in a separate cell is still read", () => {
+    expect(statementDateOf(["Statement Date:    April 30, 2026"])).toEqual({ date: "2026-04-30" });
+    expect(statementDateOf(["As of    04/30/2026"])).toEqual({ date: "2026-04-30" });
+  });
+
+  it("bare table headers are not dates and raise no problem", () => {
+    expect(statementDateOf(["Holding    As of    Market Value"])).toEqual({});
+    expect(statementDateOf(["Holding    Valuation Date    Value"])).toEqual({});
+    expect(statementDateOf(["Holding    As of    Market Value", "Statement Date: April 30, 2026"])).toEqual({ date: "2026-04-30" });
+  });
+
+  it.each(["Statement Date: 00/05/2026", "Statement Date:    00/05/2026", "Statement Date: 13/13/2026"])(
+    "through the real pipeline, %s keeps all six positions and leaves the date unknown with the reason",
+    async (line) => {
+      const r = await extract(withDateLine(line));
+      expect(r.asOfDate).toBeUndefined();
+      expect(r.reconciliation?.status).toBe("matched");
+      expect(r.accounts[0].holdings.map((h) => h.assetName)).toEqual(SOURCE.map((s) => s.name));
+      expect(r.warnings.some((w) => w.code === "MISSING_VALUATION_DATE" && UNREADABLE.test(w.message))).toBe(true);
+      const ws = atImportDay(() => toWorkspace(r));
+      expect(ws.holdings).toHaveLength(6);
+      expect(ws.holdings.every((h) => h.valuationDate === undefined)).toBe(true);
+    }
+  );
+
+  it("through the real pipeline, a separate-cell two-way date isn't replaced by a later labelled date", async () => {
+    const lines = withDateLine("Statement Date:    04/05/2026");
+    lines.splice(6, 0, "Valuation Date: 2026-04-30");
+    const r = await extract(lines);
+    expect(r.asOfDate).toBeUndefined();
+    expect(r.warnings.some((w) => /April 5 or May 4/.test(w.message))).toBe(true);
+    expect(r.accounts[0].holdings).toHaveLength(6);
+    expect(atImportDay(() => toWorkspace(r)).holdings.every((h) => h.valuationDate === undefined)).toBe(true);
+  });
+
+  it("through the real pipeline, a bare header line doesn't disturb the stated date", async () => {
+    const lines = withDateLine("Statement Date: April 30, 2026");
+    lines.splice(7, 0, "Account summary    As of    Total");
+    const r = await extract(lines);
+    expect(r.asOfDate).toBe("2026-04-30");
+    expect(r.warnings.some((w) => w.code === "MISSING_VALUATION_DATE")).toBe(false);
   });
 });
 
