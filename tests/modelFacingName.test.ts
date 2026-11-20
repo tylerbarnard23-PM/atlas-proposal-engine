@@ -50,7 +50,7 @@ describe("model-facing product name (owner-approved substitution)", () => {
   it("names Stratovell, never Atlas, in the system prompt, tool descriptions and tool messages", async () => {
     const { calls } = await run();
     const system = JSON.stringify(calls[0].system);
-    expect(system).toContain("an assistant inside Stratovell, a wealth-proposal workspace");
+    expect(system).toContain("You are Stratovell AI, the analysis assistant inside Stratovell, a wealth-proposal workspace");
     expect(system).toContain("The Stratovell engines (valuation, FX, the allocation desk, proposal math, compliance readiness) are the source of truth.");
     expect(system).toContain("say the advisor does that in Stratovell.");
     for (const c of calls) {
@@ -72,7 +72,7 @@ describe("model-facing product name (owner-approved substitution)", () => {
     expect((calls[0].tools ?? []).every((t) => typeof (t as { input_schema?: unknown }).input_schema === "object")).toBe(true);
     expect(JSON.stringify(calls[0].system)).toContain("You cannot approve, finalize, include in the PDF, share, issue or execute anything");
     expect(result.forbiddenAttempts).toBe(1);
-    expect(result.provider).toMatchObject({ requestedModel: COPILOT_MODEL, promptVersion: "d5-2026-11-19", toolsVersion: "d5-2026-11-19" });
-    expect([PROMPT_VERSION, TOOLS_VERSION]).toEqual(["d5-2026-11-19", "d5-2026-11-19"]);
+    expect(result.provider).toMatchObject({ requestedModel: COPILOT_MODEL, promptVersion: "discovery-2026-11-20", toolsVersion: "discovery-2026-11-20" });
+    expect([PROMPT_VERSION, TOOLS_VERSION]).toEqual(["discovery-2026-11-20", "discovery-2026-11-20"]); // #109: the client brief and its instructions
   });
 });

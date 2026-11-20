@@ -15,6 +15,8 @@ import { describeImportIssue, importIssues, type ImportIssue } from "@/engines/i
 import { agentContextOf, type AgentContext } from "./context";
 import { figuresIn, type EvidenceValue } from "./evidence";
 import type { CopilotSnapshot } from "./snapshot";
+import { redactIdentity } from "./redaction";
+import { modelBoundClientBrief } from "@/engines/clientDiscovery";
 
 // Every tool here is a thin, read-only wrapper over the deterministic engines.
 // The model never computes a number itself; it asks the engines. The single
@@ -121,6 +123,10 @@ export class CopilotContext {
         s.client.investmentObjective,
         s.client.specialInstructions,
         ...(s.client.restrictedSecurities ?? []),
+        // #109: what the advisor typed into the discovery brief.
+        s.client.discovery?.analysisNote,
+        ...(s.client.discovery?.securitiesToRetain ?? []),
+        ...Object.values(s.client.discovery?.answers ?? {}).map((a) => a?.note),
       ];
       this.untrustedCache = [...new Set(texts.filter((t): t is string => typeof t === "string" && t.trim().length > 0))].sort((a, b) => b.length - a.length);
     }
@@ -141,20 +147,7 @@ export class CopilotContext {
    * JSON a tool returns, so names are matched in their escaped form.
    */
   redact(text: string, json = false): string {
-    const s = this.snapshot;
-    const pairs: [string | undefined, string][] = [
-      [s.client.householdName, "[client household]"],
-      [s.client.fullName, "[client]"],
-      [s.advisor.email, "[advisor email]"],
-      [s.advisor.name, "[advisor]"],
-      ...(s.sourceDocuments ?? []).map((d, i) => [d.fileName, `[import ${i + 1}]`] as [string, string]),
-    ];
-    let out = text;
-    for (const [raw, label] of pairs.filter(([r]) => typeof r === "string" && r.trim().length >= 3).sort((a, b) => b[0]!.length - a[0]!.length)) {
-      const needle = json ? JSON.stringify(raw).slice(1, -1) : raw!;
-      out = out.split(needle).join(label);
-    }
-    return out;
+    return redactIdentity(this.snapshot, text, json);
   }
 
   /** Age and confirmation of the rates in use (#26). Reported, never a reason to refuse a draft. */
@@ -288,16 +281,12 @@ function getPortfolioOverview(ctx: CopilotContext) {
     }));
   return {
     reporting_currency: ctx.reportingCurrency,
-    // The profile the advice depends on; the client's name and identity stay out of model-bound data (#59).
+    // #109: the advisor's discovery records, with review status, unknowns and conflicts. Older profile
+    // levels and defaults are not client answers and aren't sent. The client's name and identity and the
+    // private discovery notes stay out of model-bound data (#59).
     client: {
-      risk_tolerance: client.riskTolerance,
-      objective: client.investmentObjective,
-      time_horizon_years: client.timeHorizonYears,
-      liquidity_needs: client.liquidityNeeds,
-      income_needs: client.incomeNeeds,
-      tax_sensitivity: client.taxSensitivity,
       country_of_residence: client.countryOfResidence,
-      restricted_securities: client.restrictedSecurities ?? [],
+      client_brief: modelBoundClientBrief(client),
     },
     // status: complete | partial (valued holdings only) | unavailable (null values).
     net_worth: {
@@ -771,7 +760,7 @@ const TOOLS: Record<string, ToolSpec> = {
     definition: {
       name: "get_portfolio_overview",
       description:
-        "Client profile, net worth, allocation by asset class and currency, the ten largest positions and the recommendations already on file, all valued by the Stratovell valuation and FX engines in the proposal's reporting currency. Call this first.",
+        "The client brief (the advisor's discovery records: objectives, time horizon, liquidity and income needs, loss willingness and ability, tax sensitivity and constraints, each with its review status, plus what wasn't discussed and possible conflicts), net worth, allocation by asset class and currency, the ten largest positions and the recommendations already on file, all valued by the Stratovell valuation and FX engines in the proposal's reporting currency. Call this first.",
       input_schema: { type: "object", properties: {} },
     },
     run: (ctx) => getPortfolioOverview(ctx),
