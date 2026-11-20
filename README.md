@@ -2,7 +2,7 @@
 
 > **Formerly Atlas Proposal Engine.** The repository, live-demo URL, package name and browser-storage and backup identifiers keep the `atlas-proposal-engine` name, so existing links, saved workspaces and backups keep working.
 
-**A demonstration of AI-assisted wealth-proposal tooling.** Stratovell takes an advisor from a pile of messy client statements to a branded sample PDF proposal gated by a readiness checklist, with a Claude-powered Copilot that drafts recommendations and leaves every decision to the advisor.
+**A demonstration of AI-assisted wealth-proposal tooling.** Stratovell takes an advisor from a pile of messy client statements to a branded sample PDF proposal gated by a readiness checklist, with Stratovell AI, which uses Claude to review portfolio information against the advisor's client discovery and prepare recommendations for advisor review, leaving every decision to the advisor.
 
 [![CI](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/actions/workflows/ci.yml)
 
@@ -16,7 +16,7 @@
 
 ## Why it matters: the advisor stays in control
 
-Stratovell's value is a proposal an advisor can defend line by line. Portfolio calculations use shared deterministic engines. Copilot figures are checked against tool results; unsupported or unchecked claims are flagged for advisor review. The advisor chooses the scope (which accounts the proposal is about), sizes each change, approves it explicitly, and then freezes an approved version that later edits can't rewrite. The product refuses to approve a version or issue a final PDF until a readiness checklist passes, and says what is blocking. Nothing is sent, traded or filed: it produces a sample document and a read-only meeting view.
+Stratovell's value is a proposal an advisor can defend line by line. Portfolio calculations use shared deterministic engines. Stratovell AI's figures are checked against tool results; unsupported or unchecked claims are flagged for advisor review. The advisor chooses the scope (which accounts the proposal is about), sizes each change, approves it explicitly, and then freezes an approved version that later edits can't rewrite. The product refuses to approve a version or issue a final PDF until a readiness checklist passes, and says what is blocking. Nothing is sent, traded or filed: it produces a sample document and a read-only meeting view.
 
 **See it in five minutes:** the [demo walkthrough](docs/roadmap/D5_DEMO_WALKTHROUGH.md) goes scope → proposed change → explicit approval → approved version → PDF, with a blocked-readiness example, and records what was and wasn't rehearsed.
 
@@ -38,19 +38,20 @@ Stratovell is built for advisors at RIAs and wealth platforms, and for the peopl
 | **Analyze** | A rules engine flags concentration, currency and country exposure, illiquidity, cash drag, high fees, manual valuations and data-quality problems. | Insights |
 | **Recommend** | The advisor writes or converts recommendations; approved ones reshape the Before/After allocation, with sale proceeds flowing to cash in the same account. Amounts keep the currency they were entered in and are converted into the reporting currency at the workspace's current rates, with the rate, source and date shown; changing a recommendation's currency means converting its amounts or entering new ones, and editing an approved recommendation's amounts clears the approval. The editor shows a live preview simulated with the full proposal engine: current and proposed value, signed and percentage change, the cash it actually moves (including household cash for debt paydowns) and any shortfall, without saving anything. | Recommendations |
 | **Design** | The Allocation desk sets the investment scope (context assets and liabilities stay out of the weights), shows current, proposed and target asset-class weights with drift and actual cash, and previews one working draft of explicit position edits through the same proposal engine. Targets create no trades; previews change no holdings or approvals. It also builds funded alternatives: replace into a new investment with linked sell/buy legs applied together, fund purchases only from an account's chosen eligible cash, keep a minimum reserve, and compare named alternatives. | Allocation desk |
-| **Ask the Copilot** | Claude investigates the portfolio through the engines and drafts recommendations for review. See below. | Proposal Copilot, or beside the Allocation desk |
+| **Discover** | An advisor-completed client discovery: objectives, time horizon, liquidity and income needs (each amount with its own currency and period), willingness and ability to accept losses (kept separate), tax sensitivity and constraints. Every question starts as "Not discussed yet"; older profile values are never read as answers; each answer carries a dated advisor review that goes stale when it changes. | Client Profile |
+| **Analyze with Stratovell AI** | Claude investigates the portfolio through the engines against the reviewed client brief, compares alternatives with simulations and drafts recommendations for review. See below. | Stratovell AI, or beside the Allocation desk |
 | **Brand** | White-label: the adviser's firm name, advisor of record, logo and accent color brand every proposal. Set once and kept when starting a new client. Logos are uploaded raster images re-encoded in the browser; the PDF server never fetches a URL. | Firm & Branding |
 | **Check & publish** | A readiness checklist (unverified holdings, stale prices, approvals, required disclosures) gates the final PDF, in the UI and on the server. Each open item links to the page where it's fixed. PDFs are rendered with headless Chromium and marked as samples. | Proposal Builder, PDF Preview |
 
-## Proposal Copilot: the AI layer
+## Stratovell AI: the AI layer
 
-![Proposal Copilot](docs/screenshots/copilot.jpg)
+![Stratovell AI (screenshot taken before the page was renamed from Proposal Copilot)](docs/screenshots/copilot.jpg)
 
-The Copilot is a Claude agent (`claude-opus-5-5`) whose tools are Stratovell's existing deterministic engines. The design rule is simple: **the model plans and writes; the engines do the math; the advisor decides.**
+Stratovell AI is a Claude agent (`claude-opus-5-5`) whose tools are Stratovell's existing deterministic engines. The design rule is simple: **the model plans and writes; the engines do the math; the advisor decides.**
 
 | Tool | Backed by |
 |---|---|
-| `get_portfolio_overview` | valuation + FX engines, `netWorth`, allocation summaries, recommendations already on file |
+| `get_portfolio_overview` | the client brief (the advisor's discovery answers with their review status, what wasn't discussed, possible conflicts and missing details; never names or the private discovery notes), valuation + FX engines, `netWorth`, allocation summaries, recommendations already on file |
 | `list_insights` | insight engine |
 | `get_holding` | normalized holding, data-quality issues, verification status |
 | `simulate_recommendation` | `applyRecToValue`, the same function behind the proposal's Before/After view |
@@ -63,7 +64,9 @@ The Copilot is a Claude agent (`claude-opus-5-5`) whose tools are Stratovell's e
 
 - **Demo mode** (the default, and what the live site runs): a scripted planner calls *the same tools* in a fixed order and writes its answer and draft rationales from fixed templates filled with the values those tools return. It costs nothing to run and gives the tool layer a deterministic regression baseline. It also applies a few rules of its own: it won't draft a sale of an illiquid position (a primary residence, an LP interest), and it skips holdings that already have a recommendation.
 - **Test provider** (`COPILOT_MODE=test`): a deterministic scripted client runs through the *real* agent loop and tools. It is labelled "Test provider · not a model", makes no API calls and exists for end-to-end checks; it is never evidence of model behaviour.
-- **Live mode** (local only; see [Local Claude setup](docs/roadmap/LOCAL_CLAUDE_SETUP.md)): Claude chooses which tools to call and writes the answer and the draft text itself. The page shows the requested and actual model (a server-side refusal fallback is shown as such). You connect your own Anthropic API key under **Connect Claude** and start a limited session there: at most 30 minutes, 3 runs, 10 HTTP requests, one run at a time and a USD 5 estimate-based guard. Without a connected key and a session, live requests are refused before any provider call. **Not yet verified against real Claude:** this path has only been exercised with fake providers.
+- **Live mode** (local only; see [Local Claude setup](docs/roadmap/LOCAL_CLAUDE_SETUP.md)): Claude chooses which tools to call and writes the answer and the draft text itself. The page shows the requested and actual model (a server-side refusal fallback is shown as such). You connect your own Anthropic API key under **AI connection** (**Connect Claude**) and start a limited session there: at most 30 minutes, 3 runs, 10 HTTP requests, one run at a time and a USD 5 estimate-based guard. Without a connected key and a session, live requests are refused before any provider call. Real Claude has exercised this path only in a few owner-operated single runs on synthetic data; the 27-trial agent evaluation hasn't been performed.
+
+**The client brief (#109).** Before asking, the advisor sees the "Client brief for analysis": recorded answers with their review status, what wasn't discussed, possible conflicts and missing details, an editable note for the analysis, and the exact text a live analysis sends to Anthropic. The model receives that brief through `get_portfolio_overview`; it relates its analysis to the stated objectives and asks targeted follow-up questions instead of inventing client facts. Amounts are client instructions with their own currency and period, never reserves the engines enforce. Changing an answer (or its review) changes the input revision, so an earlier preview can't be added.
 
 **Enforced in code** (both modes, covered by tests):
 
@@ -108,7 +111,7 @@ flowchart LR
   UI --> Engines
 ```
 
-The engines in `src/engines` are pure TypeScript functions shared by the UI and the server, so the Copilot, the Before/After charts and the PDF can never disagree.
+The engines in `src/engines` are pure TypeScript functions shared by the UI and the server, so Stratovell AI, the Before/After charts and the PDF can never disagree.
 
 ```
 src/
@@ -125,7 +128,7 @@ tests/            unit tests + extraction eval
 ## Tests and evals
 
 ```bash
-npm test        # 684 tests in 39 files (2 need the private UBS PDF and are skipped without it, as in CI): the Copilot agent loop with an injected fake provider (no key, no spend), local pairing, key handling and sessions with fake credential stores, proposal math and currency handling, calendar dates across time zones, workspace backup and restore, recommendation currencies and previews, cash flows, readiness, insights, CSV/Excel/PDF import and import completeness
+npm test        # 684 tests in 39 files (2 need the private UBS PDF and are skipped without it, as in CI): the Stratovell AI agent loop with an injected fake provider (no key, no spend), local pairing, key handling and sessions with fake credential stores, proposal math and currency handling, calendar dates across time zones, workspace backup and restore, recommendation currencies and previews, cash flows, readiness, insights, CSV/Excel/PDF import and import completeness
 npm run eval    # statement-extraction accuracy scorecard
 npm run eval:agent:live   # opt-in PAID live agent evaluation; refuses to run without explicit flags, a key and a spend cap. The cap is an estimate-based guard, not a guaranteed ceiling (see docs/roadmap/AGENT_EVALUATION.md)
 ```
@@ -144,7 +147,7 @@ PDF import is verified on the document types below, not on PDFs in general. Anyt
 
 Known limits: the positioned-table reader needs the market-value column label ("Market value" / "Current value") and right-aligned numbers; a consolidated report that doesn't say which account holds each position is imported into one account (none is invented); no symbols or identifiers are inferred when the document has none; a price or cost basis printed as 0.00 next to a real value is treated as unavailable.
 
-**Incomplete imports.** An import whose rows don't reach the document's stated total, that left rows out as unreadable, or that has no total to check against is stored as incomplete (or of unknown completeness) with its source document. Until it's resolved (a complete re-import, or removing that import's holdings), the final PDF is blocked in the UI and on the server, the dashboard, Accounts & Assets and Recommendations say so, recommendations on its holdings are badged, and the Copilot refuses trade-sizing drafts. Confirming the imported values doesn't clear it.
+**Incomplete imports.** An import whose rows don't reach the document's stated total, that left rows out as unreadable, or that has no total to check against is stored as incomplete (or of unknown completeness) with its source document. Until it's resolved (a complete re-import, or removing that import's holdings), the final PDF is blocked in the UI and on the server, the dashboard, Accounts & Assets and Recommendations say so, recommendations on its holdings are badged, and Stratovell AI refuses trade-sizing drafts. Confirming the imported values doesn't clear it.
 
 The financial-plan reader was built against a real 94-page planning report (Morgan Stanley's public LifeView marketing sample, which isn't committed here): it reads all 21 Balance Sheet lines and matches the report's stated assets ($27,997,288), liabilities ($3,520,000) and net worth ($24,477,288) to the dollar. The committed eval case is a synthetic look-alike written from scratch.
 
@@ -173,14 +176,14 @@ npm run dev
 
 Open http://localhost:3000. The app loads with a sample client (the Blackwell Family Office); **Settings** resets the sample or clears to a blank workspace.
 
-To use the Copilot with your own Claude API key on this machine:
+To use Stratovell AI with your own Claude API key on this machine:
 
 ```bash
 npm run build
 npm run local
 ```
 
-`npm run local` starts Stratovell on `127.0.0.1` only and opens it paired with your browser. Then follow **Connect Claude** on the Proposal Copilot page: create a dedicated Console workspace with a spend limit, paste a standard API key, choose whether Stratovell remembers it, and start a limited session. `npm run local:doctor` checks the machine without contacting Anthropic. The full guide, limits and security design are in [Local Claude setup](docs/roadmap/LOCAL_CLAUDE_SETUP.md). API usage is billed to your Console account. The public demo deliberately runs without a key, and live mode refuses on a hosted deployment. Everything except one run was built and tested with fake providers; on 16 November 2026 the owner ran this path once against real Claude (one question, synthetic data, a dedicated Console workspace with a spend limit, 4 provider requests, about USD 0.07 estimated, no fallback model). That single run is not the 27-trial agent evaluation or the broader real-model browser checks, which have not been performed. Everything else is optional:
+`npm run local` starts Stratovell on `127.0.0.1` only and opens it paired with your browser. Then open **Stratovell AI → AI connection → Connect Claude**: create a dedicated Console workspace with a spend limit, paste a standard API key, choose whether Stratovell remembers it, and start a limited session. `npm run local:doctor` checks the machine without contacting Anthropic. The full guide, limits and security design are in [Local Claude setup](docs/roadmap/LOCAL_CLAUDE_SETUP.md). API usage is billed to your Console account. The public demo deliberately runs without a key, and live mode refuses on a hosted deployment. Everything except one run was built and tested with fake providers; on 16 November 2026 the owner ran this path once against real Claude (one question, synthetic data, a dedicated Console workspace with a spend limit, 4 provider requests, about USD 0.07 estimated, no fallback model). That single run is not the 27-trial agent evaluation or the broader real-model browser checks, which have not been performed. Everything else is optional:
 
 | Variable | Purpose |
 |---|---|
@@ -207,7 +210,7 @@ The **[accepted 25-item advisor roadmap](ROADMAP.md)** has detailed plans, depen
 
 - State lives in the browser. There are no accounts, no database and no audit trail, all of which a real advisory platform needs.
 - Market data, FX and the insight thresholds are illustrative, not calibrated.
-- The Copilot doesn't yet read raw statements; the next step is a Claude extraction pass over low-confidence rows, measured with the same eval.
+- Stratovell AI doesn't yet read raw statements; the next step is a Claude extraction pass over low-confidence rows, measured with the same eval.
 - Compliance checks are a readiness checklist, not a compliance review.
 - No advisor usability study has been run, and no accessibility conformance is claimed. Known gaps from the walkthrough rehearsal: no navigation below 768 px ([#92](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/92)) and no skip link ([#93](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/93)); both are deferred while the demo targets desktop, and a draft implementation is parked in PR #98.
 - The name is preliminary-screened only: not trademark or legal clearance.
