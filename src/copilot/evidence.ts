@@ -19,6 +19,12 @@ export interface EvidenceValue {
   currency?: string;
   /** A signed change (delta, drift), not a level or a size: only these support a written "+" or "-". */
   change?: boolean;
+  /**
+   * #109: a figure the advisor recorded in the client brief (a planned
+   * withdrawal, an income need): a client instruction, not an engine result.
+   * A claim it alone supports is reported as client-stated, never matched.
+   */
+  source?: "client_brief";
 }
 
 export interface FigureCheck {
@@ -30,6 +36,8 @@ export interface FigureCheck {
   unsupported: string[];
   /** Claims whose unit or direction can't be decided from the text, as written. */
   unchecked: string[];
+  /** #109: claims that only restate a figure from the client brief (the advisor's records, not an engine result), as written. */
+  clientStated: string[];
 }
 
 // A currency amount ($1,234.56, USD 1,234, €1.2M, -$50.0K, +CHF 300, $250k,
@@ -102,9 +110,17 @@ export function figuresIn(text: string): EvidenceValue[] {
   );
 }
 
-type Verdict = "matched" | "unsupported" | "unchecked";
+type Verdict = "matched" | "unsupported" | "unchecked" | "client_stated";
 
+// Engine evidence decides first; a claim only client-stated figures support is reported as such.
 function verdict(f: Figure, evidence: EvidenceValue[]): Verdict {
+  const engine = engineVerdict(f, evidence.filter((e) => e.source !== "client_brief"));
+  if (engine !== "unsupported") return engine;
+  const stated = engineVerdict(f, evidence.filter((e) => e.source === "client_brief"));
+  return stated === "matched" ? "client_stated" : "unsupported";
+}
+
+function engineVerdict(f: Figure, evidence: EvidenceValue[]): Exclude<Verdict, "client_stated"> {
   if (f.unit === "number") return "unchecked";
   const tol = f.tolerance + Math.abs(f.value) * 1e-4;
   const typed = evidence.flatMap((e): { v: number; change: boolean }[] => {
@@ -125,6 +141,7 @@ export function checkFigures(texts: string[], evidence: EvidenceValue[][]): Figu
   const all = evidence.flat();
   const unsupported: string[] = [];
   const unchecked: string[] = [];
+  const clientStated: string[] = [];
   let claims = 0;
   let matched = 0;
   for (const text of texts) {
@@ -133,8 +150,9 @@ export function checkFigures(texts: string[], evidence: EvidenceValue[][]): Figu
       const v = verdict(f, all);
       if (v === "matched") matched += 1;
       else if (v === "unsupported") unsupported.push(f.text);
+      else if (v === "client_stated") clientStated.push(f.text);
       else unchecked.push(f.text);
     }
   }
-  return { claims, matched, unsupported: [...new Set(unsupported)], unchecked: [...new Set(unchecked)] };
+  return { claims, matched, unsupported: [...new Set(unsupported)], unchecked: [...new Set(unchecked)], clientStated: [...new Set(clientStated)] };
 }

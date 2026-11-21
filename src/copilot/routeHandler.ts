@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 import { COPILOT_MODEL, runAgent, type CopilotMode } from "./agent";
 import { contextMismatch } from "./context";
 import { runDemoCopilot } from "./demo";
-import { parseCopilotRequest } from "./snapshot";
+import { parseCopilotRequest, type RunAs } from "./snapshot";
 import { TEST_PROVIDER_MODEL, createTestProvider } from "./testProvider";
-import { admitLiveRun, anthropicClient, claimLiveSession, clearedSessionCookie, liveSessionStatus, sessionCookie, stopLiveSession, type LiveDeps, type LiveRunReport } from "./liveGate";
+import { admitLiveRun, liveReadiness, anthropicClient, claimLiveSession, clearedSessionCookie, liveSessionStatus, sessionCookie, stopLiveSession, type LiveDeps, type LiveRunReport } from "./liveGate";
 import { sessionFilePath } from "./liveSessionStore";
 import { keychainStore, memoryStore } from "./credentialStore";
 import { connectionFilePath, pairingFilePath } from "./localFiles";
@@ -21,6 +21,20 @@ import { MAX_KEY_BODY_BYTES, authorizeLocal, disconnect, localInfo, pairBrowser,
 //     browser with allowance left, every live request is refused before any
 //     provider call. The key and the session are managed by a paired browser
 //     (localConnect.ts); none of that contacts the provider.
+
+/** What a request on this server actually runs: Claude, the scripted example or the test provider. */
+export function actualRun(mode: CopilotMode, env: Record<string, string | undefined>): RunAs {
+  if (mode === "demo") return "scripted_example";
+  if (mode === "test") return "test_provider";
+  const ready = liveReadiness(env);
+  return ready.ok && ready.provider === "fake" ? "test_provider" : "claude";
+}
+
+const RUN_MISMATCH: Record<RunAs, string> = {
+  scripted_example: "Claude isn't connected on this server, so nothing ran. Choose Run the scripted example to see a labelled demonstration; it isn't Claude's analysis of this client.",
+  test_provider: "This server answers with the test provider, not Claude, so nothing ran. Choose the test-provider run explicitly; its drafts are labelled as test examples.",
+  claude: "This server runs Claude only through a live session, so nothing ran. It never substitutes the scripted example or the test provider.",
+};
 
 export function copilotMode(env: Record<string, string | undefined>): CopilotMode {
   if (env.COPILOT_MODE === "live") return "live";
@@ -49,7 +63,7 @@ export async function handleCopilotGet(req: Request, deps: LiveDeps = defaultDep
 export async function handleCopilotPost(req: Request, deps: LiveDeps = defaultDeps()) {
   const read = await readBodyLimited(req, COPILOT_MAX_BODY_BYTES);
   if (!read.ok) {
-    if (read.tooLarge) return NextResponse.json({ error: "Workspace too large for one Copilot request." }, { status: 413 });
+    if (read.tooLarge) return NextResponse.json({ error: "Workspace too large for one Stratovell AI request." }, { status: 413 });
     return NextResponse.json({ error: "Body must be JSON." }, { status: 400 });
   }
   let body: unknown;
@@ -69,6 +83,12 @@ export async function handleCopilotPost(req: Request, deps: LiveDeps = defaultDe
   if (mismatch) return NextResponse.json({ error: mismatch, code: "stale_context" }, { status: 409 });
 
   const mode = copilotMode(deps.env);
+  // Only what the advisor chose runs: a script or the test provider never
+  // answers a request made for Claude. Refused before any engine work and
+  // before the live session admits a run, so nothing is spent or counted.
+  const runs = actualRun(mode, deps.env);
+  const asked = parsed.value.runAs ?? "claude";
+  if (asked !== runs) return NextResponse.json({ error: RUN_MISMATCH[runs], code: "run_mode_mismatch", runs }, { status: 409 });
   if (mode === "demo") {
     try {
       return NextResponse.json(runDemoCopilot(snapshot, question));
@@ -120,7 +140,7 @@ export async function handleCopilotPost(req: Request, deps: LiveDeps = defaultDe
 
 // A workspace record the engines can't read: say so, without the error's
 // message or any of the workspace. Nothing was saved.
-const unreadable = () => NextResponse.json({ error: "Copilot couldn't read this workspace (a record is malformed). Nothing was changed." }, { status: 422 });
+const unreadable = () => NextResponse.json({ error: "Stratovell AI couldn't read this workspace (a record is malformed). Nothing was changed." }, { status: 422 });
 
 /** GET /api/copilot/live-session/claim?token=… : the owner's one-time claim link. */
 export async function handleLiveSessionClaim(req: Request, deps: LiveDeps = defaultDeps()) {

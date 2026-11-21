@@ -10,7 +10,6 @@ import {
   FileSearch,
   ListTree,
   Activity,
-  Lightbulb,
   Wand2,
   FileText,
   Eye,
@@ -33,7 +32,8 @@ interface NavItem {
   group?: string;
 }
 
-const NAV: NavItem[] = [
+/** The primary navigation. Portfolio checks (formerly Insights) live inside Stratovell AI. */
+export const NAV: NavItem[] = [
   // Set up once, before any client work, so it leads the menu.
   { label: "Firm & Branding", href: "/firm-branding", icon: <Building2 className="h-4 w-4" />, group: "Your Firm" },
   { label: "Dashboard", href: "/", icon: <LayoutDashboard className="h-4 w-4" />, group: "Overview" },
@@ -42,10 +42,9 @@ const NAV: NavItem[] = [
   { label: "Statement Workbench", href: "/statement-workbench", icon: <FileSearch className="h-4 w-4" />, group: "Data" },
   { label: "Accounts & Assets", href: "/accounts-assets", icon: <ListTree className="h-4 w-4" />, group: "Data" },
   { label: "Exchange rates", href: "/market-data", icon: <Activity className="h-4 w-4" />, group: "Data" },
-  { label: "Insights", href: "/insights", icon: <Lightbulb className="h-4 w-4" />, group: "Advisory" },
   { label: "Allocation desk", href: "/allocation-desk", icon: <PieChart className="h-4 w-4" />, group: "Advisory" },
   { label: "Recommendations", href: "/recommendations", icon: <Wand2 className="h-4 w-4" />, group: "Advisory" },
-  { label: "Proposal Copilot", href: "/copilot", icon: <Bot className="h-4 w-4" />, group: "Advisory" },
+  { label: "Stratovell AI", href: "/copilot", icon: <Bot className="h-4 w-4" />, group: "Advisory" },
   { label: "Proposal Builder", href: "/proposal-builder", icon: <FileText className="h-4 w-4" />, group: "Proposal" },
   { label: "PDF Preview", href: "/pdf-preview", icon: <Eye className="h-4 w-4" />, group: "Proposal" },
   { label: "Review & present", href: "/review", icon: <BadgeCheck className="h-4 w-4" />, group: "Proposal" },

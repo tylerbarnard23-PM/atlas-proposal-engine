@@ -444,7 +444,7 @@ The gate is `src/copilot/liveGate.ts`, behind `src/app/api/copilot/route.ts` and
 - **Contents:** counters, timestamps, per-run summaries and the two hashes only. No prompts, answers, payloads, keys, tokens or cookies.
 - **Answers:** stay on the page for human review.
 
-**What the tester sees** (on the Copilot page and in the desk panel)
+**What the tester sees** (on the Stratovell AI page, formerly Copilot, and in the desk panel)
 - The mode, including when the fake provider is in use.
 - The session's state, runs and HTTP requests left, model attempts so far, estimated USD left, an expiry countdown and a **Stop live session** control.
 - The last run's requests, attempts and priced and kept USD.
@@ -575,7 +575,7 @@ Set-Location C:\Users\tyler\projects\atlas-proposal-engine
 npm run live-session -- arm --provider anthropic --origin http://localhost:3000
 ```
 
-12. Open the printed link in the browser on this machine, then use Copilot. The live session bar shows what's left.
+12. Open the printed link in the browser on this machine, then use Stratovell AI. The live session bar shows what's left.
 
 13. Check the session at any time.
 

@@ -1,5 +1,6 @@
 import * as React from "react";
 import type {
+  PresentedClientBrief,
   FxConfirmation,
   Account,
   AdvisorProfile,
@@ -169,6 +170,11 @@ export interface ProposalPdfTemplateProps {
   modelPin?: { id: string; revision: number } | null;
   /** D3: the approved version this document presents, when it presents one. */
   snapshot?: SnapshotMeta;
+  /**
+   * #109 (PR #110 review): the client brief to present: a version's frozen brief, or the current one for a
+   * workspace draft. Absent (a version approved before the brief existed), the client page renders as it always did.
+   */
+  clientBrief?: PresentedClientBrief;
 }
 
 /**
@@ -222,8 +228,72 @@ function pageNumber(idx: number) {
   return `Page ${idx}`;
 }
 
+/**
+ * #109: the client brief on the client page: the recorded answers with their review status, what wasn't discussed
+ * (unknown, not assumed), possible conflicts and missing details. A version's brief is the one frozen at approval.
+ * The older profile levels are not shown as client facts; older free texts appear only, labelled, below.
+ */
+function ClientBriefSection({ brief, frozen, client, timeZone }: { brief: PresentedClientBrief; frozen: boolean; client: ClientProfile; timeZone?: string }) {
+  const h3 = { fontFamily: "Georgia, serif", fontSize: "13pt", margin: "18pt 0 6pt" } as const;
+  const status = (a: PresentedClientBrief["answers"][number]) =>
+    a.status === "reviewed" ? `Reviewed${a.reviewedAt ? ` ${formatTimestampDate(a.reviewedAt, { timeZone })}` : ""}` : a.status === "review_stale" ? "Changed since review" : "Recorded, not reviewed";
+  return (
+    <div data-section="client-brief">
+      <h3 style={{ ...h3, margin: "22pt 0 4pt" }}>Client Brief</h3>
+      <p className="pdf-text" style={{ fontSize: "9pt", color: "#5b6676", margin: "0 0 8pt" }}>
+        {frozen ? "As recorded and reviewed by the advisor when this version was approved" : "As recorded by the advisor; current, not yet approved"}: {brief.counts.answered} of {brief.counts.total} questions answered, {brief.counts.reviewed} reviewed.
+        {" "}These are the advisor&apos;s records of what the client said; amounts are the client&apos;s instructions, not reserves the proposal enforces.
+      </p>
+      {brief.answers.length > 0 && (
+        <table className="pdf-table">
+          <thead>
+            <tr><th>Question</th><th>Recorded answer</th><th>Status</th></tr>
+          </thead>
+          <tbody>
+            {brief.answers.map((a) => (
+              <tr key={a.question}>
+                <td>{a.label}</td>
+                <td>{a.answer}{a.clarification ? <span style={{ color: "#5b6676" }}> — {a.clarification}</span> : null}</td>
+                <td>{status(a)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {brief.notDiscussed.length > 0 && (
+        <p className="pdf-text" style={{ marginTop: 8 }}>
+          <strong>Not discussed (unknown):</strong> {brief.notDiscussed.map((q) => q.label).join(", ")}.
+        </p>
+      )}
+      {brief.conflicts.length > 0 && (
+        <>
+          <h3 style={h3}>Possible conflicts to resolve with the client</h3>
+          <ul className="pdf-text">{brief.conflicts.map((c) => <li key={c}>{c}</li>)}</ul>
+        </>
+      )}
+      {brief.missingDetails.length > 0 && (
+        <>
+          <h3 style={h3}>Details still missing</h3>
+          <ul className="pdf-text">{brief.missingDetails.map((c) => <li key={c}>{c}</li>)}</ul>
+        </>
+      )}
+      {brief.restrictionsOnFile.length > 0 && (
+        <p className="pdf-text">Restricted investments on file, not confirmed in discovery: {brief.restrictionsOnFile.join(", ")}.</p>
+      )}
+      {(client.investmentObjective || client.specialInstructions) && (
+        <>
+          <h3 style={h3}>Earlier profile notes (not part of the reviewed brief)</h3>
+          {client.investmentObjective && <p className="pdf-text">Investment objective: {client.investmentObjective}</p>}
+          {client.specialInstructions && <p className="pdf-text">Special instructions: {client.specialInstructions}</p>}
+        </>
+      )}
+    </div>
+  );
+}
+
 export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
   const { client, advisor, accounts, recommendations, sections, disclosures, proposal, fxRates, variant } = props;
+  const brief = props.clientBrief;
   // The client's output currency is the only reporting currency: holdings are
   // normalized into it and readiness uses it. The proposal keeps no copy.
   const reportingCurrency = client.proposalOutputCurrency;
@@ -655,11 +725,15 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
               <dt>Tax residency</dt><dd>{client.taxResidency}</dd>
               <dt>Base currency</dt><dd>{client.baseCurrency}</dd>
               <dt>Reporting currency</dt><dd>{client.proposalOutputCurrency}</dd>
-              <dt>Risk tolerance</dt><dd style={{ textTransform: "capitalize" }}>{client.riskTolerance}</dd>
-              <dt>Time horizon</dt><dd>{client.timeHorizonYears} years</dd>
-              <dt>Liquidity needs</dt><dd style={{ textTransform: "capitalize" }}>{client.liquidityNeeds}</dd>
-              <dt>Income needs</dt><dd style={{ textTransform: "capitalize" }}>{client.incomeNeeds}</dd>
-              <dt>Tax sensitivity</dt><dd style={{ textTransform: "capitalize" }}>{client.taxSensitivity}</dd>
+              {!brief && (
+                <>
+                  <dt>Risk tolerance</dt><dd style={{ textTransform: "capitalize" }}>{client.riskTolerance}</dd>
+                  <dt>Time horizon</dt><dd>{client.timeHorizonYears} years</dd>
+                  <dt>Liquidity needs</dt><dd style={{ textTransform: "capitalize" }}>{client.liquidityNeeds}</dd>
+                  <dt>Income needs</dt><dd style={{ textTransform: "capitalize" }}>{client.incomeNeeds}</dd>
+                  <dt>Tax sensitivity</dt><dd style={{ textTransform: "capitalize" }}>{client.taxSensitivity}</dd>
+                </>
+              )}
             </dl>
           </div>
           <div className="pdf-card">
@@ -673,16 +747,22 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
             </dl>
           </div>
         </div>
-        {client.investmentObjective && (
+        {brief ? (
+          <ClientBriefSection brief={brief} frozen={!!props.snapshot} client={client} timeZone={props.timeZone} />
+        ) : (
           <>
-            <h3 style={{ fontFamily: "Georgia, serif", fontSize: "13pt", margin: "22pt 0 6pt" }}>Investment Objective</h3>
-            <p className="pdf-text">{client.investmentObjective}</p>
-          </>
-        )}
-        {client.specialInstructions && (
-          <>
-            <h3 style={{ fontFamily: "Georgia, serif", fontSize: "13pt", margin: "16pt 0 6pt" }}>Special Instructions</h3>
-            <p className="pdf-text">{client.specialInstructions}</p>
+            {client.investmentObjective && (
+              <>
+                <h3 style={{ fontFamily: "Georgia, serif", fontSize: "13pt", margin: "22pt 0 6pt" }}>Investment Objective</h3>
+                <p className="pdf-text">{client.investmentObjective}</p>
+              </>
+            )}
+            {client.specialInstructions && (
+              <>
+                <h3 style={{ fontFamily: "Georgia, serif", fontSize: "13pt", margin: "16pt 0 6pt" }}>Special Instructions</h3>
+                <p className="pdf-text">{client.specialInstructions}</p>
+              </>
+            )}
           </>
         )}
       </PageWrap>

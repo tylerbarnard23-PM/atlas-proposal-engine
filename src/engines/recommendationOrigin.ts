@@ -1,0 +1,131 @@
+import type { ApprovedSnapshot, Recommendation, RecommendationOrigin } from "@/domain/types";
+import { SEED_RECOMMENDATIONS } from "@/data/seedRecommendations";
+
+// Where a recommendation came from (PR #110, the Claude-led workflow). New
+// records carry an origin stamped when they're created; older records carry
+// none, and what is shown for them comes only from reliable evidence. An ID
+// prefix or a compliance note never makes a record Claude's.
+
+const SAMPLE_IDS = new Set(SEED_RECOMMENDATIONS.map((r) => r.id));
+
+/** The stored origin, or "unrecorded" for a record from before origins were kept. */
+export const originOf = (r: Pick<Recommendation, "origin">): RecommendationOrigin => r.origin ?? { kind: "unrecorded" };
+
+/** The origin of an AI run's drafts, from the provider that actually answered. */
+export function runOrigin(run: { provider: "anthropic" | "test" | "scripted"; models?: string[]; promptVersion?: string }): RecommendationOrigin {
+  if (run.provider === "anthropic") return { kind: "claude", models: [...(run.models ?? [])], promptVersion: run.promptVersion };
+  return { kind: "example", source: run.provider === "test" ? "test_provider" : "scripted_demo" };
+}
+
+/** The fields that make a recommendation what it says; approval, PDF inclusion and rejection aren't among them. */
+const CONTENT: (keyof Recommendation)[] = [
+  "title",
+  "type",
+  "relatedAccountId",
+  "relatedHoldingId",
+  "proposedValue",
+  "actionAmount",
+  "actionAmountUnit",
+  "currency",
+  "rationale",
+  "clientBenefit",
+  "riskTradeoff",
+  "taxNote",
+  "complianceNote",
+  "implementationStep",
+  "priority",
+  "destination",
+];
+export const isContentEdit = (prev: Recommendation, next: Recommendation) => CONTENT.some((k) => JSON.stringify(prev[k] ?? null) !== JSON.stringify(next[k] ?? null));
+
+/**
+ * The origin a saved record keeps. A new record without one is the
+ * advisor's own. An edit to an existing record's content keeps its source and
+ * records when the advisor edited it; an advisor's own record stays theirs.
+ */
+export function withOrigin(prev: Recommendation | undefined, next: Recommendation, now: string): Recommendation {
+  if (!prev) return next.origin ? next : { ...next, origin: { kind: "advisor" } };
+  const kept = prev.origin;
+  if (!isContentEdit(prev, next)) return kept ? { ...next, origin: kept } : omitOrigin(next);
+  if (kept?.kind === "advisor") return { ...next, origin: kept };
+  // A record from before origins were kept: its sample ID is the only reliable evidence of where it came from.
+  const earlier: RecommendationOrigin = SAMPLE_IDS.has(prev.id) ? { kind: "example", source: "sample_workspace" } : { kind: "unrecorded" };
+  return { ...next, origin: { ...(kept ?? earlier), editedByAdvisorAt: now } };
+}
+
+const omitOrigin = (r: Recommendation): Recommendation => {
+  const { origin: _o, ...rest } = r;
+  void _o;
+  return rest;
+};
+
+export interface OriginLabel {
+  label: string;
+  detail: string;
+  tone: "navy" | "neutral" | "gold" | "warning";
+}
+
+/** What the advisor is shown. */
+export function originLabel(r: Pick<Recommendation, "id" | "origin" | "sourceInsightKey" | "complianceNote">): OriginLabel {
+  const o = originOf(r);
+  const edited = o.editedByAdvisorAt ? ", edited by advisor" : "";
+  switch (o.kind) {
+    case "claude":
+      return {
+        label: `Claude draft${edited}`,
+        detail: `Prepared by Claude${o.models?.length ? ` (${o.models.join(", ")})` : ""} in Stratovell AI from this client's brief and portfolio data. It needs your review and approval like any other recommendation.`,
+        tone: "navy",
+      };
+    case "advisor":
+      return { label: "Advisor-authored", detail: "Written or sized by the advisor in Stratovell.", tone: "neutral" };
+    case "example":
+      return o.source === "scripted_demo"
+        ? { label: `Scripted example (not Claude)${edited}`, detail: "Prepared by the scripted demonstration, which follows fixed rules over the engine tools. No model wrote it; it is not an analysis of this client.", tone: "gold" }
+        : o.source === "test_provider"
+          ? { label: `Test provider example (not a model)${edited}`, detail: "Prepared by the deterministic test provider, which stands in for a model in rehearsals and tests. No model wrote it.", tone: "gold" }
+          : { label: `Sample example (prewritten)${edited}`, detail: "A prewritten recommendation from the sample workspace, not an analysis of a real client.", tone: "gold" };
+    default:
+      if (!r.origin && SAMPLE_IDS.has(r.id)) return { label: "Sample example (prewritten)", detail: "A prewritten recommendation from the sample workspace, not an analysis of a real client.", tone: "gold" };
+      return {
+        label: `Origin not recorded${edited}`,
+        detail: r.sourceInsightKey
+          ? "Created from a rule check by an earlier version's template, before origins were recorded."
+          : /Drafted by Stratovell AI|Proposal Copilot/.test(r.complianceNote ?? "")
+            ? "Prepared through Stratovell AI's tools by an earlier version. Whether Claude, the scripted demo or the test provider produced it wasn't recorded."
+            : "Saved before Stratovell recorded where recommendations came from.",
+        tone: "warning",
+      };
+  }
+}
+
+export interface VersionOrigins {
+  claude: number;
+  claudeEdited: number;
+  advisor: number;
+  example: number;
+  unrecorded: number;
+}
+
+/** The origins of the approved actions a version froze. */
+export function versionOrigins(s: Pick<ApprovedSnapshot, "inputs">): VersionOrigins {
+  const out: VersionOrigins = { claude: 0, claudeEdited: 0, advisor: 0, example: 0, unrecorded: 0 };
+  for (const r of s.inputs.recommendations) {
+    const o = originOf(r);
+    if (o.kind === "claude") out[o.editedByAdvisorAt ? "claudeEdited" : "claude"] += 1;
+    else if (o.kind === "unrecorded" && SAMPLE_IDS.has(r.id)) out.example += 1;
+    else out[o.kind] += 1;
+  }
+  return out;
+}
+
+/** "2 Claude drafts (1 edited by the advisor), 1 advisor-authored", or null with no actions. */
+export function versionOriginsText(v: VersionOrigins): string | null {
+  const parts: string[] = [];
+  const claude = v.claude + v.claudeEdited;
+  const n = (k: number, one: string, many = `${one}s`) => `${k} ${k === 1 ? one : many}`;
+  if (claude) parts.push(`${n(claude, "Claude draft")}${v.claudeEdited ? ` (${v.claudeEdited} edited by the advisor)` : ""}`);
+  if (v.advisor) parts.push(`${v.advisor} advisor-authored`);
+  if (v.example) parts.push(`${n(v.example, "example")} (scripted, test or sample; not Claude)`);
+  if (v.unrecorded) parts.push(`${v.unrecorded} with no recorded origin`);
+  return parts.length ? parts.join(", ") : null;
+}

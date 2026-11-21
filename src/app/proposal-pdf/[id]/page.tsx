@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useAtlasStore } from "@/store/useStore";
 import { useNormalizedHoldings } from "@/hooks/useNormalizedHoldings";
 import { useFxNow } from "@/hooks/useFxNow";
+import { presentedClientBrief } from "@/engines/clientDiscovery";
 import { ProposalPdfTemplate } from "@/pdf/templates/ProposalPdfTemplate";
 import { ClientOnly } from "@/components/layout/ClientOnly";
 import { reviewedAlternative } from "@/engines/approvedSnapshot";
@@ -57,6 +58,7 @@ function Inner() {
       strategies={strategies}
       models={models}
       modelPin={modelPin}
+      clientBrief={presentedClientBrief(client)}
       now={now.toISOString()}
       variant={variant}
     />

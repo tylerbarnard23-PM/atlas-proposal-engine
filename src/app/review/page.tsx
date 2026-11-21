@@ -20,6 +20,7 @@ import { scopeAccountIds } from "@/engines/allocationDesk";
 import { findRevision } from "@/engines/strategyProposals";
 import { cn } from "@/utils/cn";
 import { formatDateTime } from "@/utils/formatting";
+import { versionOrigins, versionOriginsText } from "@/engines/recommendationOrigin";
 import type { ApprovedSnapshot } from "@/domain/types";
 
 // D3 — review once, present consistently. The advisor approves a version of
@@ -163,6 +164,19 @@ function Inner() {
                           {s.inputs.recommendations.length === 1 ? "" : "s"} · fingerprint {s.fingerprint}
                           {s.note ? ` · “${s.note}”` : ""}
                         </div>
+                        <div className="text-[12px] text-ink-600" data-testid={`version-brief-${s.version}`}>
+                          {s.inputs.clientBrief
+                            ? `Client brief frozen in this version: ${s.inputs.clientBrief.counts.answered} of ${s.inputs.clientBrief.counts.total} answered, ${s.inputs.clientBrief.counts.reviewed} reviewed` +
+                              (s.inputs.clientBrief.notDiscussed.length ? `; not discussed: ${s.inputs.clientBrief.notDiscussed.map((q) => q.label).join(", ")}` : "") +
+                              (s.inputs.clientBrief.conflicts.length ? `; ${s.inputs.clientBrief.conflicts.length} possible conflict${s.inputs.clientBrief.conflicts.length === 1 ? "" : "s"}` : "") +
+                              ". The meeting view and its PDFs present it."
+                            : "Approved before the client brief: its meeting view and PDFs show the client profile as it was then."}
+                        </div>
+                        {versionOriginsText(versionOrigins(s)) && (
+                          <div className="text-[12px] text-ink-600" data-testid={`version-origins-${s.version}`}>
+                            Where its actions came from: {versionOriginsText(versionOrigins(s))}. For your records; the client documents don&apos;t print it.
+                          </div>
+                        )}
                         <div className="flex flex-wrap gap-2">
                           <a
                             href={`/meeting/${s.id}`}

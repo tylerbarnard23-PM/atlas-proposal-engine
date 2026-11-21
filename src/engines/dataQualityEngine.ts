@@ -1,5 +1,6 @@
 import type { DataQualityIssue, Holding } from "@/domain/types";
 import { isStale } from "@/utils/dates";
+import { quantityPriceBasis, quotedPer100 } from "./quantityPrice";
 
 const STATEMENT_FRESHNESS_DAYS = 35;
 
@@ -37,12 +38,12 @@ export function evaluateHoldingQuality(h: Holding): DataQualityIssue[] {
   if (h.advisorVerification === "unverified") {
     issues.push({ code: "ADVISOR_APPROVED_VALUE_MISSING", severity: "info", message: "Holding not yet advisor-reviewed." });
   }
-  if (h.quantity != null && h.price != null && h.nativeMarketValue != null) {
-    const computed = h.quantity * h.price;
-    const diff = Math.abs(computed - h.nativeMarketValue);
-    if (diff / Math.max(1, Math.abs(h.nativeMarketValue)) > 0.02) {
-      issues.push({ code: "QUANTITY_VALUE_MISMATCH", severity: "warning", message: "Quantity × price differs from market value by more than 2%." });
-    }
+  // The import's convention (#46): a bond is priced per 100 of face value. Only
+  // a fixed-income holding or a bond type may match that way; a share that
+  // matches only per 100 is still a mismatch.
+  const basis = quantityPriceBasis(h.quantity, h.price, h.nativeMarketValue, 0.02);
+  if (basis === "mismatch" || (basis === "per_100" && !quotedPer100(h))) {
+    issues.push({ code: "QUANTITY_VALUE_MISMATCH", severity: "warning", message: "Quantity × price differs from market value by more than 2%." });
   }
   return issues;
 }

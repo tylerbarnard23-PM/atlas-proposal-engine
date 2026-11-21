@@ -151,7 +151,7 @@ function Desk() {
         actions={
           // Copilot opens beside the desk on this alternative with a question filled in; it doesn't run until asked.
           <Button ref={askButton} variant={copilotOpen ? "secondary" : "primary"} iconLeft={<Bot className="h-4 w-4" />} aria-expanded={copilotOpen} aria-controls="copilot-panel" onClick={() => (copilotOpen ? closeCopilot() : setCopilotOpen(true))}>
-            {copilotOpen ? "Close Copilot" : "Ask Copilot"}
+            {copilotOpen ? "Close Stratovell AI" : "Stratovell AI"}
           </Button>
         }
       />
@@ -583,7 +583,7 @@ function ActionRow({ rec, member, justAdded, owner, onToggle }: { rec: Recommend
       <div className="min-w-0">
         <div className="text-[13px] text-ink-900">{rec.title || "Untitled recommendation"}</div>
         <div className="flex flex-wrap gap-1 mt-1">
-          {justAdded && <Badge tone="navy">Just added from Copilot</Badge>}
+          {justAdded && <Badge tone="navy">Just added from Stratovell AI</Badge>}
           {member && <Badge tone="navy">In draft</Badge>}
           {rec.approvedByAdvisor ? <Badge tone="positive">Approved</Badge> : <Badge tone="neutral">Not approved</Badge>}
           {rec.includeInPdf && <Badge tone="gold">In PDF prose</Badge>}

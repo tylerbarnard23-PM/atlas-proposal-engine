@@ -385,6 +385,22 @@ export interface InsightContextValue {
   value: string;
 }
 
+/**
+ * A Portfolio check's basis: a built-in Stratovell rule, the figure observed,
+ * the rule's threshold (a product default, not a regulatory limit or the
+ * client's policy), what it covers and what it can't see.
+ */
+export interface InsightBasis {
+  source: "Built-in Stratovell rule";
+  rule: string;
+  observed?: string;
+  threshold?: string;
+  scope: string;
+  /** The source valuation date, or the range of dates in the denominator. */
+  valuationDates?: string;
+  limitations: string[];
+}
+
 export interface Insight {
   id: string;
   category:
@@ -407,6 +423,8 @@ export interface Insight {
   context?: InsightContextValue[];
   /** A "Data to complete" item: which holdings are still open and which are done. */
   task?: { kind: DataTaskKind; openIds: string[]; doneIds: string[] };
+  /** What the check is based on, written by the same engine pass (Portfolio checks). */
+  basis?: InsightBasis;
   generatedAt: string;
 }
 
@@ -447,6 +465,21 @@ export type RecommendationStatus =
   | "excluded"
   | "implemented";
 
+/**
+ * Where a recommendation came from. "claude": a live Claude run (the models
+ * the provider reported and the prompt version). "example": a scripted demo,
+ * the deterministic test provider or the prewritten sample, never a model.
+ * "unrecorded": arrived without one (an AI draft from an older client).
+ * An advisor's edit keeps the kind and records when it was edited.
+ */
+export interface RecommendationOrigin {
+  kind: "claude" | "advisor" | "example" | "unrecorded";
+  source?: "scripted_demo" | "test_provider" | "sample_workspace";
+  models?: string[];
+  promptVersion?: string;
+  editedByAdvisorAt?: string;
+}
+
 export interface Recommendation {
   id: string;
   title: string;
@@ -478,8 +511,15 @@ export interface Recommendation {
   status: RecommendationStatus;
   includeInPdf: boolean;
   approvedByAdvisor: boolean;
-  /** Set when converted from an insight, so the same insight isn't added twice. */
+  /** Set by an earlier version's rule-check template (removed in PR #110): which check it came from. Kept as history. */
   sourceInsightKey?: string;
+  /**
+   * Who prepared it (PR #110, Claude-led workflow). Stamped when the record is
+   * created: by the server from the run's actual provider for an AI draft,
+   * and "advisor" for one the advisor writes. Absent on records from before;
+   * see engines/recommendationOrigin for what is shown for those.
+   */
+  origin?: RecommendationOrigin;
   /** Why the advisor rejected it (status "excluded"). */
   rejectionReason?: string;
   rejectedAt?: string;
@@ -908,6 +948,55 @@ export interface ClientProfile {
   restrictedSecurities?: string[];
   specialInstructions?: string;
   advisorDiscoveryNotes?: string;
+  /**
+   * #109: the advisor-completed discovery questionnaire. Absent means every
+   * question is "Not discussed yet": legacy levels and defaults above are
+   * never read as the client's answers. Where an existing field already means
+   * the same thing it keeps the value (time horizon, tax sensitivity,
+   * restricted investments); this record holds the rest and each question's
+   * status and review. The older objective text and special instructions stay
+   * profile fields (shown in the PDF) and are not discovery answers.
+   */
+  discovery?: ClientDiscovery;
+}
+
+export type DiscoveryObjective = "preserve_wealth" | "generate_income" | "grow_wealth" | "reduce_concentration" | "fund_spending";
+export type DiscoveryLevel = "low" | "moderate" | "high";
+export type DiscoveryQuestionId =
+  | "objectives"
+  | "timeHorizon"
+  | "liquidity"
+  | "income"
+  | "lossWillingness"
+  | "lossAbility"
+  | "taxSensitivity"
+  | "securitiesToRetain"
+  | "restrictedInvestments"
+  | "otherConstraints";
+
+/** One question's state. A question with no state is "Not discussed yet". */
+export interface DiscoveryAnswerState {
+  status: "answered" | "not_discussed";
+  /** Optional clarification recorded with the answer; part of the client brief. */
+  note?: string;
+  updatedAt: string;
+  /** The advisor's review: the answer's content hash when reviewed. Stale once the answer changes. */
+  review?: { reviewedAt: string; answerHash: string };
+}
+
+export interface ClientDiscovery {
+  answers: { [Q in DiscoveryQuestionId]?: DiscoveryAnswerState };
+  objectives?: { primary: DiscoveryObjective; secondary: DiscoveryObjective[] };
+  /** A client instruction with its own currency and period, not an engine-enforced reserve. */
+  liquidity?: { need: "none" | "planned"; amount?: number; currency?: CurrencyCode; timing?: "within_1_year" | "1_to_3_years" | "over_3_years" };
+  /** A client instruction with its own currency and frequency, not an engine-enforced reserve. */
+  income?: { need: "none" | "needed"; amount?: number; currency?: CurrencyCode; frequency?: "monthly" | "quarterly" | "annually" };
+  lossWillingness?: DiscoveryLevel;
+  lossAbility?: DiscoveryLevel;
+  securitiesToRetain?: string[];
+  otherConstraints?: string;
+  /** The advisor's note for the analysis. Part of the client brief sent with a live question (unlike advisorDiscoveryNotes). */
+  analysisNote?: string;
 }
 
 export type ProposalApprovalStatus =
@@ -1036,6 +1125,24 @@ export interface SnapshotInputs {
   /** The pinned model revision (if any) and every strategy revision the approved sleeves or that model use. */
   models: ModelRevision[];
   strategies: StrategyRevision[];
+  /**
+   * #109 (PR #110 review): the client brief as presented in this version, frozen at approval. Its presence is the
+   * rendering marker: a version with it presents the brief (never the older profile levels); a version approved
+   * before it has none and renders exactly as it always did. Covered by the fingerprint.
+   */
+  clientBrief?: PresentedClientBrief;
+}
+
+/** The client brief as a proposal presents it: what was recorded and reviewed, and what wasn't discussed. Never the private notes or the advisor's note for the analysis. */
+export interface PresentedClientBrief {
+  format: "discovery-brief-v1";
+  answers: { question: DiscoveryQuestionId; label: string; status: "recorded" | "reviewed" | "review_stale"; answer: string; clarification?: string; reviewedAt?: string }[];
+  notDiscussed: { question: DiscoveryQuestionId; label: string }[];
+  conflicts: string[];
+  missingDetails: string[];
+  restrictionsOnFile: string[];
+  counts: { answered: number; reviewed: number; stale: number; total: number };
+  lastReviewedAt: string | null;
 }
 
 /** D3: results computed at approval with the shared evaluator (and recomputable from the inputs). */

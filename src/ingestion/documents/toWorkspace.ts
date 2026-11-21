@@ -1,6 +1,7 @@
 import type { Account, AssetClass, DataQualityIssue, ExtractedAccount, ExtractedHolding, ExtractionResult, Holding, SourceDocument, SourceType } from "@/domain/types";
 import { safeId, todayIso } from "@/utils/formatting";
 import { completenessOf } from "@/engines/importCompleteness";
+import { quantityPriceBasis } from "@/engines/quantityPrice";
 import { detectIdentifierType } from "../normalizers/detectIdentifier";
 
 export interface ImportedWorkspace {
@@ -145,9 +146,7 @@ function fallbackAssetClass(eh: ExtractedHolding): AssetClass {
 // Quantity × price matches the value only after dividing by 100 (face value
 // priced per 100, as bonds are).
 function pricedPer100(eh: ExtractedHolding): boolean {
-  if (eh.quantity == null || eh.price == null || eh.marketValue == null) return false;
-  const off = (gross: number) => Math.abs(gross - eh.marketValue!) / Math.max(1, Math.abs(eh.marketValue!));
-  return off(eh.quantity * eh.price) > 0.02 && off((eh.quantity * eh.price) / 100) <= 0.02;
+  return quantityPriceBasis(eh.quantity, eh.price, eh.marketValue, 0.02) === "per_100";
 }
 
 /** A security position (identifier or units) whose class the document doesn't state, as opposed to a single balance. */

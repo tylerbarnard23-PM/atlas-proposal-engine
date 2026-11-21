@@ -42,8 +42,17 @@ const record = z.record(z.string(), z.unknown());
 // snapshot already accepts can't be refused by them.
 const memberIds = z.array(z.string().max(200)).max(LIST_LIMITS.memberIds);
 const scopeIds = z.array(z.string().max(200)).max(LIST_LIMITS.scopeAccountIds);
+/**
+ * What the advisor chose to run. The server answers only when this is what
+ * actually runs, so a script or the test provider never stands in for Claude.
+ * Absent means "claude".
+ */
+export const RUN_AS = ["claude", "scripted_example", "test_provider"] as const;
+export type RunAs = (typeof RUN_AS)[number];
+
 export const CopilotRequestSchema = z.object({
   question: z.string().trim().min(1).max(2000),
+  runAs: z.enum(RUN_AS).optional(),
   snapshot: z.object({
     client: record,
     advisor: record,
@@ -68,7 +77,7 @@ export const CopilotRequestSchema = z.object({
   }),
 });
 
-export type CopilotRequest = { question: string; snapshot: CopilotSnapshot & { workingDraft: WorkingDraft }; context: AgentContext };
+export type CopilotRequest = { question: string; runAs?: RunAs; snapshot: CopilotSnapshot & { workingDraft: WorkingDraft }; context: AgentContext };
 
 export function parseCopilotRequest(body: unknown):
   | { ok: true; value: CopilotRequest }

@@ -1,0 +1,357 @@
+import * as React from "react";
+import { useAtlasStore } from "@/store/useStore";
+import { Card, CardBody, CardFooter, CardHeader, CardSubtitle, CardTitle } from "@/components/ui/Card";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Input, Label, Select, Textarea } from "@/components/ui/Input";
+import { CURRENCIES } from "@/domain/currencyConfigs";
+import { OBJECTIVES, answerValue, clientBrief, questionStatus, type QuestionStatus } from "@/engines/clientDiscovery";
+import type { ClientProfile, DiscoveryLevel, DiscoveryObjective, DiscoveryQuestionId } from "@/domain/types";
+import { ChoiceButtons, type Choice } from "./ChoiceButtons";
+
+// #109: the advisor-completed discovery questionnaire. Every question starts
+// at "Not discussed yet"; an answer exists only when the advisor records one,
+// and an older profile value is never adopted without the advisor's action.
+// Values with an existing field of the same meaning are written there (one
+// source of truth). Editing an answer leaves its review stale until reviewed.
+
+const NOT = "__not_discussed" as const;
+type Not = typeof NOT;
+const notChoice: Choice<Not> = { value: NOT, label: "Not discussed yet" };
+const LEVELS: Choice<DiscoveryLevel>[] = [
+  { value: "low", label: "Low" },
+  { value: "moderate", label: "Moderate" },
+  { value: "high", label: "High" },
+];
+const fmtDate = (iso: string) => new Date(iso).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+
+export function StatusBadge({ status, reviewedAt }: { status: QuestionStatus; reviewedAt?: string }) {
+  if (status === "not_discussed") return <Badge tone="neutral">Not discussed yet</Badge>;
+  if (status === "recorded") return <Badge tone="warning">Recorded · not reviewed</Badge>;
+  if (status === "review_stale") return <Badge tone="warning">Changed since review</Badge>;
+  return <Badge tone="positive">Reviewed{reviewedAt ? ` ${fmtDate(reviewedAt)}` : ""}</Badge>;
+}
+
+export function DiscoveryQuestionnaire() {
+  const client = useAtlasStore((s) => s.client);
+  const recordReview = useAtlasStore((s) => s.recordDiscoveryReview);
+  const brief = clientBrief(client);
+  const toReview = brief.counts.answered - brief.counts.reviewed;
+  return (
+    <Card id="client-discovery">
+      <CardHeader>
+        <CardTitle>Client discovery</CardTitle>
+        <CardSubtitle>
+          Record what the client told you. Every question starts as “Not discussed yet”; nothing is filled in for you, and earlier profile values aren’t treated as
+          answers. Stratovell AI relates its analysis to these answers.
+        </CardSubtitle>
+      </CardHeader>
+      <CardBody className="space-y-6">
+        <Objectives client={client} />
+        <TimeHorizon client={client} />
+        <MoneyNeed q="liquidity" client={client} />
+        <MoneyNeed q="income" client={client} />
+        <LevelQuestion q="lossWillingness" client={client} title="Willingness to accept losses" help="How large a decline the client says they would accept." />
+        <LevelQuestion q="lossAbility" client={client} title="Ability to absorb losses" help="How large a decline the client’s finances could absorb without changing their plans. Separate from willingness." />
+        <LevelQuestion q="taxSensitivity" client={client} title="Tax sensitivity" help="How much taxes on gains or income matter to this client." />
+        <ListQuestion q="securitiesToRetain" client={client} title="Securities to retain" help="Holdings the client wants to keep (for example, inherited or sentimental positions)." />
+        <ListQuestion q="restrictedInvestments" client={client} title="Restricted investments" help="Securities or kinds of investment the client won’t hold." />
+        <OtherConstraints client={client} />
+      </CardBody>
+      <CardFooter className="flex flex-wrap items-center gap-3">
+        <span className="text-[13px] text-ink-700" data-testid="discovery-summary">
+          {brief.counts.answered} of {brief.counts.total} answered · {brief.counts.reviewed} reviewed
+          {brief.counts.stale ? ` · ${brief.counts.stale} changed since review` : ""}
+          {brief.lastReviewedAt ? ` · last reviewed ${fmtDate(brief.lastReviewedAt)}` : ""}
+        </span>
+        <Button size="sm" onClick={recordReview} disabled={toReview === 0} aria-describedby="discovery-review-help" data-testid="record-review">
+          Record advisor review{toReview > 0 ? ` (${toReview})` : ""}
+        </Button>
+        <span id="discovery-review-help" className="text-2xs text-ink-500">
+          Dates your review of every answered question. Changing an answer later marks it “Changed since review”.
+        </span>
+      </CardFooter>
+    </Card>
+  );
+}
+
+function Question({ q, client, title, help, children }: { q: DiscoveryQuestionId; client: ClientProfile; title: string; help?: string; children: React.ReactNode }) {
+  const status = questionStatus(client, q);
+  const reviewedAt = client.discovery?.answers[q]?.review?.reviewedAt;
+  return (
+    <section aria-labelledby={`dq-${q}`} className="space-y-2" data-question={q} data-status={status}>
+      <div className="flex flex-wrap items-center gap-2">
+        <h3 id={`dq-${q}`} className="text-sm font-semibold text-ink-900">
+          {title}
+        </h3>
+        <StatusBadge status={status} reviewedAt={status === "reviewed" ? reviewedAt : undefined} />
+      </div>
+      {help && <p className="text-2xs text-ink-500">{help}</p>}
+      {children}
+    </section>
+  );
+}
+
+function Clarification({ q, client }: { q: Exclude<DiscoveryQuestionId, "otherConstraints">; client: ClientProfile }) {
+  const set = useAtlasStore((s) => s.setDiscoveryClarification);
+  if (answerValue(client, q) == null) return null;
+  return (
+    <div>
+      <Label htmlFor={`dq-${q}-note`}>Clarification (optional)</Label>
+      <Input id={`dq-${q}-note`} value={client.discovery?.answers[q]?.note ?? ""} onChange={(e) => set(q, e.target.value)} />
+    </div>
+  );
+}
+
+function Objectives({ client }: { client: ClientProfile }) {
+  const setAnswer = useAtlasStore((s) => s.setDiscoveryAnswer);
+  const notDiscussed = useAtlasStore((s) => s.setDiscoveryNotDiscussed);
+  const v = answerValue(client, "objectives");
+  const choices: Choice<DiscoveryObjective | Not>[] = [notChoice, ...OBJECTIVES.map((o) => ({ value: o.id, label: o.label }))];
+  const record = (primary: DiscoveryObjective, secondary: DiscoveryObjective[]) => setAnswer("objectives", { primary, secondary });
+  return (
+    <Question q="objectives" client={client} title="Primary objective">
+      <ChoiceButtons
+        labelledBy="dq-objectives"
+        choices={choices}
+        selected={[v ? v.primary : NOT]}
+        onSelect={(o) => (o === NOT ? notDiscussed("objectives") : record(o, v?.secondary ?? []))}
+      />
+      {v && (
+        <>
+          <p id="dq-objectives-secondary" className="text-2xs font-medium text-ink-700">
+            Secondary priorities (optional)
+          </p>
+          <ChoiceButtons
+            labelledBy="dq-objectives-secondary"
+            multiple
+            choices={OBJECTIVES.filter((o) => o.id !== v.primary).map((o) => ({ value: o.id, label: o.label }))}
+            selected={v.secondary}
+            onSelect={(o) => record(v.primary, v.secondary.includes(o) ? v.secondary.filter((x) => x !== o) : [...v.secondary, o])}
+          />
+        </>
+      )}
+      <Clarification q="objectives" client={client} />
+    </Question>
+  );
+}
+
+/** What a typed number means (PR #110 review): empty, a valid value of 0 or more, or invalid with the reason. */
+export type NumberEdit = { kind: "empty" } | { kind: "valid"; value: number } | { kind: "invalid"; error: string };
+
+export function numberFieldEdit(text: string, min = 0): NumberEdit {
+  const raw = text.replace(/[,\s]/g, "");
+  if (raw === "") return { kind: "empty" };
+  if (/^-/.test(raw)) return { kind: "invalid", error: `Enter ${min} or more.` };
+  if (!/^\d+(\.\d*)?$/.test(raw)) return { kind: "invalid", error: "Enter a number, for example 150000 or 150,000." };
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < min) return { kind: "invalid", error: `Enter ${min} or more.` };
+  return { kind: "valid", value };
+}
+
+/**
+ * A number typed by the advisor: recorded when valid, never prefilled from an older value. An invalid or cleared
+ * entry records no value (onValue(undefined)), so an older answer and its review can't stand behind a field that
+ * shows something else; the typed text stays on screen with its error until it is corrected or cleared.
+ */
+function NumberField({ id, label, value, onValue, min = 0 }: { id: string; label: string; value: number | undefined; onValue: (n: number | undefined) => void; min?: number }) {
+  const [text, setText] = React.useState(value == null ? "" : String(value));
+  const edit = numberFieldEdit(text, min);
+  // Follow the stored value when it changes elsewhere, but keep what the advisor is typing when it already says the same (or is invalid).
+  React.useEffect(() => {
+    setText((t) => {
+      const e = numberFieldEdit(t, min);
+      if (e.kind === "valid" && e.value === value) return t;
+      if (e.kind === "invalid" && value == null) return t;
+      return value == null ? "" : String(value);
+    });
+  }, [value, min]);
+  const errorId = `${id}-error`;
+  return (
+    <div>
+      <Label htmlFor={id}>{label}</Label>
+      <Input
+        id={id}
+        inputMode="decimal"
+        value={text}
+        aria-invalid={edit.kind === "invalid" || undefined}
+        aria-describedby={edit.kind === "invalid" ? errorId : undefined}
+        onChange={(e) => {
+          setText(e.target.value);
+          const next = numberFieldEdit(e.target.value, min);
+          onValue(next.kind === "valid" ? next.value : undefined);
+        }}
+      />
+      {edit.kind === "invalid" && (
+        <p id={errorId} role="alert" className="mt-1 text-2xs text-negative-600" data-testid={`${id}-invalid`}>
+          {edit.error} Nothing is recorded until this is corrected.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function TimeHorizon({ client }: { client: ClientProfile }) {
+  const setAnswer = useAtlasStore((s) => s.setDiscoveryAnswer);
+  const notDiscussed = useAtlasStore((s) => s.setDiscoveryNotDiscussed);
+  const v = answerValue(client, "timeHorizon");
+  return (
+    <Question q="timeHorizon" client={client} title="Time horizon" help="Years until the client expects to need most of this money. Typing a number records the answer.">
+      <div className="flex flex-wrap items-end gap-3">
+        <ChoiceButtons labelledBy="dq-timeHorizon" choices={[notChoice]} selected={v ? [] : [NOT]} onSelect={() => notDiscussed("timeHorizon")} />
+        <div className="w-32">
+          <NumberField id="dq-timeHorizon-years" label="Years" value={v?.years} onValue={(n) => (n == null ? notDiscussed("timeHorizon") : setAnswer("timeHorizon", { years: n }))} />
+        </div>
+      </div>
+      <Clarification q="timeHorizon" client={client} />
+    </Question>
+  );
+}
+
+function MoneyNeed({ q, client }: { q: "liquidity" | "income"; client: ClientProfile }) {
+  const setAnswer = useAtlasStore((s) => s.setDiscoveryAnswer);
+  const notDiscussed = useAtlasStore((s) => s.setDiscoveryNotDiscussed);
+  const liquidity = q === "liquidity";
+  const v = answerValue(client, q);
+  const needed = liquidity ? "planned" : "needed";
+  const choices: Choice<string>[] = [notChoice, { value: "none", label: liquidity ? "No planned withdrawals" : "No income needed" }, { value: needed, label: liquidity ? "Planned withdrawal" : "Income needed" }];
+  const current = v ?? null;
+  const record = (patch: Record<string, unknown>) => setAnswer(q, { ...(current ?? { need: needed }), ...patch } as never);
+  return (
+    <Question
+      q={q}
+      client={client}
+      title={liquidity ? "Liquidity needs" : "Income needs"}
+      help={
+        liquidity
+          ? "Money the client plans to take out, with its currency and timing. A client instruction: it doesn’t reserve cash in any account."
+          : "Regular income the client needs from the portfolio, with its currency and frequency when known. A client instruction, not a reserve."
+      }
+    >
+      <ChoiceButtons labelledBy={`dq-${q}`} choices={choices} selected={[current ? current.need : NOT]} onSelect={(c) => (c === NOT ? notDiscussed(q) : setAnswer(q, { need: c } as never))} />
+      {current && current.need === needed && (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <NumberField id={`dq-${q}-amount`} label="Amount (if known)" value={current.amount} onValue={(n) => record({ amount: n })} />
+          <div>
+            <Label htmlFor={`dq-${q}-currency`}>Currency</Label>
+            <Select id={`dq-${q}-currency`} value={current.currency ?? ""} onChange={(e) => record({ currency: e.target.value || undefined })}>
+              <option value="">Not recorded</option>
+              {CURRENCIES.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.code}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div>
+            <p id={`dq-${q}-period`} className="text-2xs font-medium text-ink-700 mb-1">
+              {liquidity ? "Timing" : "Frequency"}
+            </p>
+            {liquidity ? (
+              <ChoiceButtons
+                labelledBy={`dq-${q}-period`}
+                choices={[
+                  { value: "within_1_year", label: "Within 1 year" },
+                  { value: "1_to_3_years", label: "1–3 years" },
+                  { value: "over_3_years", label: "Over 3 years" },
+                ]}
+                selected={"timing" in current && current.timing ? [current.timing] : []}
+                onSelect={(t) => record({ timing: t })}
+              />
+            ) : (
+              <ChoiceButtons
+                labelledBy={`dq-${q}-period`}
+                choices={[
+                  { value: "monthly", label: "Monthly" },
+                  { value: "quarterly", label: "Quarterly" },
+                  { value: "annually", label: "Annually" },
+                ]}
+                selected={"frequency" in current && current.frequency ? [current.frequency] : []}
+                onSelect={(f) => record({ frequency: f })}
+              />
+            )}
+          </div>
+        </div>
+      )}
+      <Clarification q={q} client={client} />
+    </Question>
+  );
+}
+
+function LevelQuestion({ q, client, title, help }: { q: "lossWillingness" | "lossAbility" | "taxSensitivity"; client: ClientProfile; title: string; help: string }) {
+  const setAnswer = useAtlasStore((s) => s.setDiscoveryAnswer);
+  const notDiscussed = useAtlasStore((s) => s.setDiscoveryNotDiscussed);
+  const v = answerValue(client, q);
+  return (
+    <Question q={q} client={client} title={title} help={help}>
+      <ChoiceButtons
+        labelledBy={`dq-${q}`}
+        choices={[notChoice, ...LEVELS] as Choice<DiscoveryLevel | Not>[]}
+        selected={[v ? v.level : NOT]}
+        onSelect={(l) => (l === NOT ? notDiscussed(q) : setAnswer(q, { level: l }))}
+      />
+      <Clarification q={q} client={client} />
+    </Question>
+  );
+}
+
+function ListQuestion({ q, client, title, help }: { q: "securitiesToRetain" | "restrictedInvestments"; client: ClientProfile; title: string; help: string }) {
+  const setAnswer = useAtlasStore((s) => s.setDiscoveryAnswer);
+  const notDiscussed = useAtlasStore((s) => s.setDiscoveryNotDiscussed);
+  const v = answerValue(client, q);
+  const onFile = q === "restrictedInvestments" ? client.restrictedSecurities ?? [] : [];
+  // Typed as a comma-separated list; recorded when the field is left, and only
+  // if the advisor changed it (restrictions already on file are shown, never
+  // adopted or dropped silently).
+  const shown = (v?.securities ?? onFile).join(", ");
+  const [text, setText] = React.useState(shown);
+  React.useEffect(() => setText(shown), [shown]);
+  const commit = () => {
+    if (text === shown && !v) return;
+    const list = text.split(",").map((x) => x.trim()).filter(Boolean);
+    if (list.length > 0 || v) setAnswer(q, { securities: list });
+  };
+  return (
+    <Question q={q} client={client} title={title} help={help}>
+      <ChoiceButtons
+        labelledBy={`dq-${q}`}
+        choices={[notChoice, { value: "none", label: "None" }] as Choice<string>[]}
+        selected={[v ? (v.securities.length === 0 ? "none" : "") : NOT]}
+        onSelect={(c) => {
+          if (c === NOT) return notDiscussed(q);
+          if (onFile.length > 0 && !confirm(`Record that the client has no restricted investments? This clears ${onFile.join(", ")} from the profile.`)) return;
+          setAnswer(q, { securities: [] });
+        }}
+      />
+      {!v && onFile.length > 0 && <p className="text-2xs text-warning-600">On file before discovery, not confirmed with the client: {onFile.join(", ")}. Still treated as restricted.</p>}
+      <div>
+        <Label htmlFor={`dq-${q}-list`}>{v ? "Securities (comma-separated)" : onFile.length ? "Edit the list to record the client’s answer" : "Or type them (comma-separated) to record the answer"}</Label>
+        <Input id={`dq-${q}-list`} value={text} onChange={(e) => setText(e.target.value)} onBlur={commit} onKeyDown={(e) => e.key === "Enter" && commit()} />
+      </div>
+      <Clarification q={q} client={client} />
+    </Question>
+  );
+}
+
+function OtherConstraints({ client }: { client: ClientProfile }) {
+  const setAnswer = useAtlasStore((s) => s.setDiscoveryAnswer);
+  const notDiscussed = useAtlasStore((s) => s.setDiscoveryNotDiscussed);
+  const v = answerValue(client, "otherConstraints");
+  return (
+    <Question q="otherConstraints" client={client} title="Other constraints" help="Anything else that limits the proposal (for example, a lock-up, an employer’s trading window or an ESG preference).">
+      <ChoiceButtons
+        labelledBy="dq-otherConstraints"
+        choices={[notChoice, { value: "none", label: "None" }] as Choice<string>[]}
+        selected={[v ? (v.text.trim() ? "" : "none") : NOT]}
+        onSelect={(c) => {
+          if (c === NOT) return notDiscussed("otherConstraints");
+          setAnswer("otherConstraints", { text: "" });
+        }}
+      />
+      <div>
+        <Label htmlFor="dq-otherConstraints-text">{v ? "Constraints" : "Or type them to record the answer"}</Label>
+        <Textarea id="dq-otherConstraints-text" rows={2} value={v ? v.text : ""} onChange={(e) => setAnswer("otherConstraints", { text: e.target.value })} />
+      </div>
+    </Question>
+  );
+}
