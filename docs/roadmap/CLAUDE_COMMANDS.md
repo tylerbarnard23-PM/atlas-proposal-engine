@@ -55,7 +55,19 @@ Stop for Codex review with exact head, checks, preview association, remaining li
 
 D1 (PR #72, `0381db1`), D2 (PR #75, `073049f`), D2a (PR #79, `c0ee4e9`), D3 (PR #81, `85b3910`) and **D4 (PR #82, `3738588`, 16 November 2026)** are released; the commands below the next one are historical, so do not rerun them. **D5 is in progress** (desktop-first since 18 November 2026: mobile work is deferred).
 
-### Next task: re-review PR #110 (review fixes, proposal brief and the Claude-led workflow)
+### Next task: re-review PR #110 (the fixes for Codex's findings at 527407e)
+
+Saved on 21 November 2026. [PR #110](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/110) on `feat/client-discovery-stratovell-ai`, `main` at `7aab3f4`. Codex reviewed `527407e` and held the merge for three findings; they are fixed at code **`1c98ae5`** (impact note: [comment](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/110#issuecomment-7070187330)), with a docs-only checkpoint on top. Nothing on the branch is approved yet. Verify heads, tree and stash first, and preserve newer work.
+
+1. **Codex** re-reviews `1c98ae5` against the findings:
+   - **The conversation across views:** both views stay mounted (`hidden`), no remount key; a prefill replaces only the question; the answer shows its own question and flags an unrun one; the tab follows the URL (`useSearchParams`, pushState). Check: a request in flight survives a switch; stale-context protection, Cancel and Stop unchanged.
+   - **Client-stated evidence:** no scanning of the brief's text; `clientStatedAmounts` (planned withdrawal, income need, each with its currency) only; free text never evidence, whatever its whitespace; trimmed and collapsed forms in the untrusted list; "a value match only" wording.
+   - **Duplicated origins:** `knownOrigin` before new IDs in `duplicateDraft`; unknown stays unknown; copies unapproved and out of the PDF; originals and versions untouched.
+   - Regressions: `tests/reviewFindings110b.test.ts`.
+2. **The owner** decides on merge (pinned: `gh pr merge 110 --merge --match-head-commit <reviewed head>`), then reads main CI and the production deployment once.
+3. **Then, only with the owner's explicit approval and budget:** a fresh fake rehearsal on the merged build, then the Claude-led live take (`recorder/live-take-plan-analysis.md` outside Git). The proposed USD 5 allowance is **not approved**.
+
+### Previous task (done 21 November 2026, don't rerun): re-review PR #110 (review fixes, proposal brief and the Claude-led workflow)
 
 Saved on 21 November 2026. [PR #110](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/110) on `feat/client-discovery-stratovell-ai`, `main` at `7aab3f4`. Two batches await independent Codex review; **neither is approved**. Verify heads, tree and stash first, and preserve newer work.
 
