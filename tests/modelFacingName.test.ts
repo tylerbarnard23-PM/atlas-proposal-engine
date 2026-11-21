@@ -73,8 +73,8 @@ describe("model-facing product name (owner-approved substitution)", () => {
     expect((calls[0].tools ?? []).every((t) => typeof (t as { input_schema?: unknown }).input_schema === "object")).toBe(true);
     expect(JSON.stringify(calls[0].system)).toContain("You cannot approve, finalize, include in the PDF, share, issue or execute anything");
     expect(result.forbiddenAttempts).toBe(1);
-    expect(result.provider).toMatchObject({ requestedModel: COPILOT_MODEL, promptVersion: "discovery-2026-11-20", toolsVersion: "discovery-2026-11-20" });
-    expect([PROMPT_VERSION, TOOLS_VERSION]).toEqual(["discovery-2026-11-20", "discovery-2026-11-20"]); // #109: the client brief and its instructions
+    expect(result.provider).toMatchObject({ requestedModel: COPILOT_MODEL, promptVersion: "claude-led-2026-11-21", toolsVersion: "claude-led-2026-11-21" });
+    expect([PROMPT_VERSION, TOOLS_VERSION]).toEqual(["claude-led-2026-11-21", "claude-led-2026-11-21"]); // PR #110: Claude-led workflow, portfolio checks as product-default facts
   });
 
   it("#109: the product name is Stratovell AI; drafts saved before the rename are still recognized; the model and settings are unchanged", async () => {

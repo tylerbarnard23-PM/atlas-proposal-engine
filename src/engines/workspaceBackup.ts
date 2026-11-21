@@ -311,6 +311,20 @@ function schemas(strict: boolean) {
     createdAt: date,
     updatedAt: date,
   });
+  // v11 (PR #110, the Claude-led workflow): who prepared it. Claude names the
+  // models that answered; an example names what produced it; the other kinds
+  // carry neither. Older envelopes can't carry an origin.
+  const recommendationOrigin = obj({
+    kind: z.enum(["claude", "advisor", "example", "unrecorded"]),
+    source: z.enum(["scripted_demo", "test_provider", "sample_workspace"]).optional(),
+    models: z.array(text()).optional(),
+    promptVersion: text().optional(),
+    editedByAdvisorAt: date.optional(),
+  }).refine(
+    (o) => (o.kind === "claude" ? (o.models?.length ?? 0) > 0 && !o.source : o.kind === "example" ? !!o.source && !o.models : !o.source && !o.models),
+    "A recommendation's origin is inconsistent"
+  );
+  const recommendationV11 = recommendation.extend({ origin: recommendationOrigin.optional() });
   const fxRate = obj({
     base: currency,
     quote: currency,
@@ -544,7 +558,7 @@ function schemas(strict: boolean) {
       advisor,
       accounts: z.array(account),
       holdings: z.array(holding),
-      recommendations: z.array(recommendation),
+      recommendations: z.array(withBrief ? recommendationV11 : recommendation),
       proposal,
       sections: z.array(section),
       disclosures: z.array(disclosure),
@@ -564,7 +578,7 @@ function schemas(strict: boolean) {
   const engagementV10 = engagementV9.extend({ pdfHistory: z.array(pdfJobV10), snapshots: z.array(snapshotV10) });
   // v11 (#109): the client's discovery, also frozen in versions approved from now on.
   const snapshot = snapshotOf(client, true);
-  const engagementV11 = engagementV10.extend({ client, snapshots: z.array(snapshot) });
+  const engagementV11 = engagementV10.extend({ client, recommendations: z.array(recommendationV11), snapshots: z.array(snapshot) });
   const envelopeOf = <E extends z.ZodTypeAny, V extends number>(e: E, version: V) =>
     obj({
       format: z.literal(BACKUP_FORMAT),

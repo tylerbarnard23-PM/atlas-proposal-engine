@@ -180,7 +180,7 @@ describe("orchestration", () => {
     const { POST } = await import("@/app/api/copilot/route");
     const { copilotRequest } = await import("./support/copilotRequest");
     const holdings = m.STORY_HOLDINGS.map((h) => (h.id === "h_story_bond" ? ({ ...h, dataQuality: undefined } as unknown as Holding) : h));
-    const res = await POST(new Request("http://localhost/api/copilot", { method: "POST", body: JSON.stringify(copilotRequest("hi", snap(m, { holdings }))) }));
+    const res = await POST(new Request("http://localhost/api/copilot", { method: "POST", body: JSON.stringify({ ...copilotRequest("hi", snap(m, { holdings })), runAs: "scripted_example" }) }));
     expect(res.status).toBe(422);
     expect((await res.json()).error).toMatch(/couldn't read this workspace/);
   });

@@ -42,6 +42,7 @@ import { cashBasisCurrency, markRemovedLinks } from "@/engines/recommendationLin
 import { contextMismatch, type AgentContext } from "@/copilot/context";
 import { forReadiness } from "@/engines/importCompleteness";
 import { migrateRecommendationCurrency, withApprovalRule } from "@/engines/recommendationAmounts";
+import { withOrigin } from "@/engines/recommendationOrigin";
 import { candidateProblems, deskActions, draftBasisInputs, legacyWorkingDraft, needsIntentRestatement, newWorkingDraft, recordInputBasis } from "@/engines/allocationDesk";
 import { normalizeHoldings } from "@/engines/normalizationEngine";
 import { LEGACY_SAMPLE_FIRM_NAME } from "@/domain/branding";
@@ -454,8 +455,8 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
       upsertRecommendation: (rec) =>
         set((s) => ({
           recommendations: s.recommendations.some((r) => r.id === rec.id)
-            ? s.recommendations.map((r) => (r.id === rec.id ? withApprovalRule(r, guardApproval(r, { ...r, ...rec })) : r))
-            : [...s.recommendations, guardApproval(undefined, rec)],
+            ? s.recommendations.map((r) => (r.id === rec.id ? withOrigin(r, withApprovalRule(r, guardApproval(r, { ...r, ...rec })), new Date().toISOString()) : r))
+            : [...s.recommendations, withOrigin(undefined, guardApproval(undefined, rec), new Date().toISOString())],
         })),
       removeRecommendation: (id) =>
         set((s) => ({ recommendations: s.recommendations.filter((r) => r.id !== id) })),
@@ -635,7 +636,9 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
         }),
       addDraftEdit: (input) =>
         set((s) => {
-          const recs = Array.isArray(input) ? input : [input];
+          const now = new Date().toISOString();
+          // A desk edit is the advisor's own; an accepted AI draft arrives with the origin its run stamped.
+          const recs = (Array.isArray(input) ? input : [input]).map((r) => withOrigin(s.recommendations.find((x) => x.id === r.id), r, now));
           const ids = new Set(recs.map((r) => r.id));
           const next = { ...s, recommendations: [...s.recommendations.filter((r) => !ids.has(r.id)), ...recs.map((r) => guardApproval(undefined, r))] };
           return { recommendations: next.recommendations, ...draftChange(next, { memberIds: [...s.workingDraft.memberIds.filter((x) => !ids.has(x)), ...ids] }) };
@@ -661,8 +664,11 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
           fx: { reportingCurrency: ccy, rates: s.fxRates },
         });
         if (problems.length > 0) return { ok: false, error: `Not accepted: ${problems.join(" ")}` };
-        // Whatever the draft says, it joins unapproved and out of the PDF.
-        get().addDraftEdit(fresh.map((d) => ({ ...d, status: "needs_review" as const, approvedByAdvisor: false, includeInPdf: false })));
+        // Whatever the draft says, it joins unapproved and out of the PDF. Its
+        // origin is the one the server stamped from the run (Claude, a script or
+        // the test provider); one without such an origin is never Claude's or the advisor's.
+        const stamped = (d: Recommendation) => (d.origin && (d.origin.kind === "claude" || d.origin.kind === "example") ? d.origin : { kind: "unrecorded" as const });
+        get().addDraftEdit(fresh.map((d) => ({ ...d, origin: stamped(d), status: "needs_review" as const, approvedByAdvisor: false, includeInPdf: false })));
         return { ok: true, added: fresh.map((d) => d.id), skipped };
       },
       setAccountFunding: (accountId, funding) =>

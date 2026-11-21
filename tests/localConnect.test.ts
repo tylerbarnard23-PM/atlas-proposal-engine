@@ -23,7 +23,7 @@ import { newWorkingDraft } from "@/engines/allocationDesk";
 import { STORY_ACCOUNTS, STORY_HOLDINGS } from "@/data/allocationStory";
 import { SEED_ADVISOR, SEED_CLIENT } from "@/data/seedClient";
 import { DISCLOSURE_LIBRARY } from "@/domain/disclosureLibrary";
-import { copilotRequest } from "./support/copilotRequest";
+import { copilotRequest, runAsFor } from "./support/copilotRequest";
 import { fakeKeychain, localDeps, type TestDeps } from "./support/localDeps";
 // @ts-expect-error a plain .mjs script without types; only its pure helpers are used here
 import { choosePort, doctor, openCommand, pairingLink, serverEnv } from "../scripts/atlas-local.mjs";
@@ -163,7 +163,7 @@ async function start(d: LiveDeps, b: Browser, allowance: unknown = FULL) {
 }
 
 const ask = (d: LiveDeps, b: Browser, signal?: AbortSignal) =>
-  handleCopilotPost(new Request(`${ORIGIN}/api/copilot`, { method: "POST", headers: { ...SAME, "content-type": "application/json", cookie: cookieHeader(b, d.env) }, body: JSON.stringify(copilotRequest(QUESTION, snap())), signal }), d);
+  handleCopilotPost(new Request(`${ORIGIN}/api/copilot`, { method: "POST", headers: { ...SAME, "content-type": "application/json", cookie: cookieHeader(b, d.env) }, body: JSON.stringify({ ...copilotRequest(QUESTION, snap()), runAs: runAsFor(d.env) }), signal }), d);
 
 const view = (d: LiveDeps) => sessions.readView(d.sessionFile, clock, null);
 /** Every file Atlas wrote for this "installation", as text. */
@@ -810,7 +810,7 @@ describe("connecting Claude leaves the proposal contracts alone", () => {
     const { b } = await pair(t.d);
     expect((await save(t.d, b)).status).toBe(200);
     expect((await start(t.d, b)).status).toBe(200);
-    const request = m.copilotRequest(store(), "Review this alternative.");
+    const request = { ...m.copilotRequest(store(), "Review this alternative."), runAs: runAsFor(t.d.env) };
     const res = await m.handleCopilotPost(new Request(`${ORIGIN}/api/copilot`, { method: "POST", headers: { ...SAME, "content-type": "application/json", cookie: cookieHeader(b, t.d.env) }, body: JSON.stringify(request) }), t.d);
     expect(res.status).toBe(200);
     const result = await res.json();

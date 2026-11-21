@@ -83,6 +83,8 @@ afterEach(() => {
 });
 
 const store = (m: M) => m.useAtlasStore.getState();
+/** A record as saved before origins were recorded (PR #110, Claude-led workflow). */
+const withoutOrigin = <R extends { origin?: unknown }>({ origin: _o, ...rest }: R) => (void _o, rest);
 const json = (v: unknown) => JSON.parse(JSON.stringify(v));
 
 /** The managed-account story, pinned to the 40/35/20/5 model, funded, reviewed and approved: every readiness check passes. */
@@ -666,6 +668,8 @@ describe("persistence", () => {
     const file = JSON.parse(exported.text);
     const { snapshots: _s, ...e9 } = file.engagement;
     void _s;
+    // A v9 file predates recommendation origins too.
+    e9.recommendations = e9.recommendations.map(withoutOrigin);
     const v9 = { ...file, workspaceVersion: 9, engagement: e9 };
     const p9 = m.parseBackup(JSON.stringify(v9), ids);
     if (!p9.ok) throw new Error(p9.errors.join("; "));
@@ -708,9 +712,10 @@ describe("#109 client discovery and approved versions", () => {
 });
 
 describe("PR #110 review: new versions present the frozen client brief; historical versions render as before", () => {
-  // A version as the code before this change made it: no frozen brief (fingerprint recomputed over what it holds).
+  // A version as the code before this change made it: no frozen brief and no
+  // recommendation origins (both newer), fingerprint recomputed over what it holds.
   const historical = (m: M, v: ApprovedSnapshot): ApprovedSnapshot => {
-    const inputs = { ...v.inputs };
+    const inputs = { ...v.inputs, recommendations: v.inputs.recommendations.map(withoutOrigin) };
     delete inputs.clientBrief;
     const base = { ...v, inputs };
     return { ...base, fingerprint: m.snapshotFingerprint(base) };
@@ -732,8 +737,8 @@ describe("PR #110 review: new versions present the frozen client brief; historic
     expect(await sha(await render(m, old, "draft_copy"))).toBe("f1f68c181050211535501d1815aca1bd00dc8a12dabe2b1990de01efecae645e");
     vi.restoreAllMocks();
     expect(text(await render(m, old, "meeting"))).toMatch(/Risk tolerance/);
-    // its match status ignores the brief it doesn't have
-    m.useAtlasStore.setState({ snapshots: [old] });
+    // its match status ignores the brief it doesn't have (in a workspace from before origins were recorded)
+    m.useAtlasStore.setState({ snapshots: [old], recommendations: store(m).recommendations.map(withoutOrigin) });
     expect(m.snapshotStatus(old, store(m), NOW)).toEqual({ kind: "matches" });
     // and it still issues through the route
     expect(await post({ snapshot: json(old), timeZone: "UTC" })).toMatchObject({ status: 200 });

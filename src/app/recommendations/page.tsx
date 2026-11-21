@@ -5,7 +5,7 @@ import { holdingsFromIncompleteImports } from "@/engines/importCompleteness";
 import { linkTargets, linkToHolding, unresolvedRecommendationLinks } from "@/engines/recommendationLinks";
 import { ImportNotice, IncompleteImportTag } from "@/components/import/ImportNotice";
 import Link from "next/link";
-import { Ban, CheckCheck, CheckCircle2, Lightbulb, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { Ban, Bot, CheckCheck, CheckCircle2, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { useAtlasStore } from "@/store/useStore";
 import { ClientOnly } from "@/components/layout/ClientOnly";
 import { PageHeader } from "@/components/ui/Section";
@@ -26,7 +26,7 @@ import { cn } from "@/utils/cn";
 import { summarizePreview } from "@/components/recommendations/recEffect";
 import { RecPreview } from "@/components/recommendations/RecPreview";
 import { previewRecommendation } from "@/engines/recommendationPreview";
-import { isAiDraftNote } from "@/copilot/request";
+import { originLabel, originOf } from "@/engines/recommendationOrigin";
 import { CurrencyReviewPanel } from "@/components/recommendations/CurrencyReviewPanel";
 import { RecCurrencyField } from "@/components/recommendations/RecCurrencyField";
 import { formatCurrency, formatTimestampDate, todayIso } from "@/utils/formatting";
@@ -80,11 +80,13 @@ function Inner() {
   const [approvedNotice, setApprovedNotice] = React.useState<number | null>(null);
 
   function onApproveAll() {
-    const fromCopilot = recs.filter((r) => !r.approvedByAdvisor && !isRejected(r) && isAiDraftNote(r.complianceNote)).length;
+    const fromClaude = recs.filter((r) => !r.approvedByAdvisor && !isRejected(r) && originOf(r).kind === "claude").length;
+    const examples = recs.filter((r) => !r.approvedByAdvisor && !isRejected(r) && originLabel(r).tone === "gold").length;
     const ok = confirm(
       `Approve ${pendingCount} recommendation${pendingCount === 1 ? "" : "s"} and include ${pendingCount === 1 ? "it" : "them"} in the PDF?` +
         "\n\nThis covers every pending recommendation, in any alternative, not only the current view." +
-        (fromCopilot ? `\n\n${fromCopilot} of these were drafted by Stratovell AI.` : "") +
+        (fromClaude ? `\n\n${fromClaude} of these are Claude drafts.` : "") +
+        (examples ? `\n\n${examples} of these are examples (scripted, test or sample), not Claude's analysis of this client.` : "") +
         "\n\nApproved recommendations reshape the Before / After allocation and appear in the client proposal. You can unapprove any of them afterwards."
     );
     if (ok) setApprovedNotice(approveAll());
@@ -172,9 +174,9 @@ function Inner() {
         description="Approving a recommendation reshapes the Before / After allocation immediately. The Include-in-PDF toggle controls only whether its prose appears in the final document. Holding values are confirmed separately, in Accounts & Assets."
         actions={
           <>
-            <Link href="/insights">
-              <Button variant="secondary" iconLeft={<Lightbulb className="h-4 w-4" />}>
-                Browse insights
+            <Link href="/copilot">
+              <Button variant="secondary" iconLeft={<Bot className="h-4 w-4" />}>
+                Analyze with Stratovell AI
               </Button>
             </Link>
             <Button
@@ -305,15 +307,15 @@ function Inner() {
       {recs.length === 0 ? (
         <EmptyState
           title="No recommendations yet"
-          description="Two ways to add one: write a recommendation directly, or open Insights and convert any rules-based observation into a draft you can edit and approve."
+          description="Write a recommendation yourself, or ask Stratovell AI: Claude analyzes the client brief and the portfolio and prepares drafts for your review. Portfolio checks never create recommendations by themselves."
           action={
             <div className="flex flex-wrap gap-2 justify-center">
               <Button onClick={newRec} iconLeft={<Plus className="h-4 w-4" />}>
                 Write a recommendation
               </Button>
-              <Link href="/insights">
-                <Button variant="secondary" iconLeft={<Lightbulb className="h-4 w-4" />}>
-                  Browse insights
+              <Link href="/copilot">
+                <Button variant="secondary" iconLeft={<Bot className="h-4 w-4" />}>
+                  Analyze with Stratovell AI
                 </Button>
               </Link>
             </div>
@@ -349,6 +351,9 @@ function Inner() {
                           </Badge>
                         )}
                         <Badge tone="neutral">{r.priority} priority</Badge>
+                        <Badge tone={originLabel(r).tone} title={originLabel(r).detail} data-testid="rec-origin">
+                          {originLabel(r).label}
+                        </Badge>
                         {r.includeInPdf && <Badge tone="gold">In PDF prose</Badge>}
                         {view === "all" && <Badge tone="neutral">{inDraft.has(r.id) ? `In ${draft.name}` : alternatives.find((a) => a.memberIds.includes(r.id))?.name ? `In ${alternatives.find((a) => a.memberIds.includes(r.id))!.name}` : "In no draft"}</Badge>}
                         {r.relatedHoldingId && fromIncomplete.has(r.relatedHoldingId) && <IncompleteImportTag />}

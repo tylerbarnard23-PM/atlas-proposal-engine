@@ -20,6 +20,8 @@ import { MiniMarkdown } from "./MiniMarkdown";
 import type { LocalInfo } from "@/copilot/localConnect";
 import type { Recommendation } from "@/domain/types";
 import type { CopilotMode, CopilotResult, RunStatus } from "@/copilot/agent";
+import type { RunAs } from "@/copilot/snapshot";
+import { originLabel } from "@/engines/recommendationOrigin";
 
 // The Copilot conversation, shared by the Copilot page and the allocation
 // desk's side panel. A question runs only when the advisor asks: mounting or
@@ -35,7 +37,7 @@ export const SUGGESTIONS = [
 const TOOL_LABELS: Record<string, string> = {
   get_portfolio_overview: "Read portfolio overview",
   get_scope_overview: "Read the alternative's scope (allocation desk)",
-  list_insights: "Ran insight engine",
+  list_insights: "Read the portfolio checks",
   get_holding: "Inspected holding",
   simulate_recommendation: "Simulated in proposal engine",
   simulate_scope_change: "Simulated in the alternative (allocation desk)",
@@ -80,6 +82,32 @@ export function useCopilotMode() {
   }, []);
   React.useEffect(() => refresh(), [refresh]);
   return mode ? { ...mode, refresh } : null;
+}
+
+/**
+ * What "Analyze" runs here, from the server's actual mode and provider. Only
+ * a live Anthropic session is Claude; the scripted example and the test
+ * provider are separate, labelled runs the advisor chooses.
+ */
+export function analysisRun(m: { mode: CopilotMode; live: Pick<LiveInfo, "provider"> | null } | null): { runAs: RunAs; claudeAvailable: boolean; label: string; testId: string; note: string | null } | null {
+  if (!m) return null;
+  if (m.mode === "demo")
+    return {
+      runAs: "scripted_example",
+      claudeAvailable: false,
+      label: "Run the scripted example",
+      testId: "run-scripted-example",
+      note: "Claude isn't connected here, so Stratovell AI generates no recommendations for this client. In local Stratovell, connect Claude to analyze the portfolio. This hosted demo can run a scripted example instead: a fixed script over the same engine tools, labelled as an example. It is not Claude's analysis of this client.",
+    };
+  if (m.mode === "test" || m.live?.provider === "fake")
+    return {
+      runAs: "test_provider",
+      claudeAvailable: false,
+      label: "Analyze with the test provider",
+      testId: "analyze-portfolio",
+      note: "This server answers with the deterministic test provider, not Claude. Its drafts are labelled as test examples.",
+    };
+  return { runAs: "claude", claudeAvailable: true, label: "Analyze portfolio", testId: "analyze-portfolio", note: null };
 }
 
 export function ModeBadge({ mode, model, live }: { mode: CopilotMode; model: string | null; live?: LiveInfo | null }) {
@@ -129,9 +157,11 @@ export function CopilotWorkspace({
   const stale = result ? result.context.inputRevision !== context.inputRevision || result.context.alternativeId !== context.alternativeId || result.context.clientId !== context.clientId : false;
   const existing = React.useMemo(() => new Set(state.recommendations.map((r) => r.id)), [state.recommendations]);
 
+  const run = analysisRun(mode);
+
   async function ask(q: string) {
     const text = q.trim();
-    if (!text || loading) return;
+    if (!text || loading || !run) return;
     setQuestion(text);
     setLoading(true);
     setError(null);
@@ -145,7 +175,7 @@ export function CopilotWorkspace({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
-        body: JSON.stringify({ ...request, question: text }),
+        body: JSON.stringify({ ...request, question: text, runAs: run.runAs }),
       });
       const data = await res.json();
       if (data.live && "run" in data.live) setLastRun(data.live as LiveRunInfo);
@@ -207,6 +237,12 @@ export function CopilotWorkspace({
 
       {panel && <BriefLine />}
 
+      {run?.note && (
+        <div role="note" className="rounded-md bg-warning-50 ring-1 ring-inset ring-warning-500/40 px-3 py-2 text-[13px] text-ink-800" data-testid="copilot-not-claude">
+          {run.note}
+        </div>
+      )}
+
       {mode?.mode === "live" && mode.live && <ConnectClaude live={mode.live} local={mode.local} onChanged={mode.refresh} />}
       {mode?.mode === "live" && <LiveSessionBar live={mode.live ?? { available: false, reasons: ["Live session status couldn't be read."], provider: null, session: null }} lastRun={lastRun} onChanged={mode.refresh} />}
 
@@ -222,19 +258,20 @@ export function CopilotWorkspace({
           }}
         />
         <div className="flex flex-wrap items-center gap-2">
-          <Button onClick={() => ask(question)} loading={loading} disabled={!question.trim() || liveBlocked} iconLeft={<Send className="h-4 w-4" />} data-testid="analyze-portfolio">
-            Analyze portfolio
+          <Button onClick={() => ask(question)} loading={loading} disabled={!question.trim() || liveBlocked || !run} iconLeft={<Send className="h-4 w-4" />} data-testid={run?.testId ?? "analyze-portfolio"} variant={run && !run.claudeAvailable && run.runAs === "scripted_example" ? "secondary" : undefined}>
+            {run?.label ?? "Analyze portfolio"}
           </Button>
           {loading && (
             <Button variant="secondary" onClick={() => abort.current?.abort()} iconLeft={<Square className="h-4 w-4" />}>
               Cancel
             </Button>
           )}
-          <span className="text-2xs text-ink-500">Nothing runs until you choose Analyze portfolio. Ctrl+Enter also runs it.</span>
+          <span className="text-2xs text-ink-500">Nothing runs until you choose {run?.label ?? "Analyze portfolio"}. Ctrl+Enter also runs it.</span>
         </div>
         <div className="flex flex-wrap gap-2" aria-label="Suggested questions">
           {SUGGESTIONS.map((s) => (
-            <Button key={s} size="sm" variant="secondary" onClick={() => ask(s)} disabled={loading || liveBlocked}>
+            // A suggestion fills in the question; it never runs by itself.
+            <Button key={s} size="sm" variant="ghost" onClick={() => setQuestion(s)} disabled={loading}>
               {s}
             </Button>
           ))}
@@ -292,6 +329,7 @@ export function CopilotWorkspace({
               </Badge>
             </CardHeader>
             <CardBody className="space-y-3">
+              <AnswerOrigin result={result} />
               <MiniMarkdown text={result.answer} />
               <FigureStatus figures={result.figures} />
               {result.forbiddenAttempts > 0 && (
@@ -305,6 +343,21 @@ export function CopilotWorkspace({
         </div>
       )}
     </div>
+  );
+}
+
+// Who wrote this answer, from the run itself: only a live Anthropic run is Claude's.
+function AnswerOrigin({ result }: { result: CopilotResult }) {
+  const claude = result.mode === "live" && result.provider?.name === "anthropic";
+  const text = claude
+    ? `Claude's analysis (${result.provider!.actualModels.join(", ") || result.provider!.requestedModel}), checked against Stratovell's engine results. Recommendations stay drafts until you review and approve them.`
+    : result.mode === "demo"
+      ? "Scripted example: a fixed script over the engine tools. It is not Claude's analysis of this client."
+      : "Test provider example: a deterministic stand-in for a model. No model wrote this.";
+  return (
+    <p className={cn("text-[13px]", claude ? "text-navy-700" : "rounded bg-gold-50 px-2 py-1 text-ink-800")} data-testid="copilot-answer-origin" data-origin={claude ? "claude" : "example"}>
+      {text}
+    </p>
   );
 }
 
@@ -563,6 +616,9 @@ export function DraftPreview(props: {
                   )}
                   <Badge tone="navy">{d.type.replace(/_/g, " ")}</Badge>
                   <Badge tone="neutral">{d.priority} priority</Badge>
+                  <Badge tone={originLabel(d).tone} title={originLabel(d).detail} data-testid="copilot-draft-origin">
+                    {originLabel(d).label}
+                  </Badge>
                 </div>
                 <h4 className="font-serif text-base text-ink-900 mt-1.5">{d.title}</h4>
                 <p className="text-sm text-ink-600 mt-1 leading-relaxed">{d.rationale}</p>

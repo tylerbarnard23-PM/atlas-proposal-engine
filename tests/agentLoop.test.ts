@@ -425,7 +425,11 @@ describe("the test provider and the route", () => {
     expect(await (await get()).json()).toEqual({ mode: "test", model: TEST_PROVIDER_MODEL });
 
     const post = (body: unknown) => POST(new Request("http://localhost/api/copilot", { method: "POST", body: JSON.stringify(body) }));
-    const req = copilotRequest("Review this alternative.", storySnapshot());
+    // PR #110: the test provider answers only a request made for it, never one made for Claude.
+    const forClaude = await post(copilotRequest("Review this alternative.", storySnapshot()));
+    expect(forClaude.status).toBe(409);
+    expect(await forClaude.json()).toMatchObject({ code: "run_mode_mismatch", runs: "test_provider" });
+    const req = { ...copilotRequest("Review this alternative.", storySnapshot()), runAs: "test_provider" };
     const ok = await post(req);
     expect(ok.status).toBe(200);
     const body = await ok.json();

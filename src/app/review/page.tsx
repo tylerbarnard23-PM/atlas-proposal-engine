@@ -20,6 +20,7 @@ import { scopeAccountIds } from "@/engines/allocationDesk";
 import { findRevision } from "@/engines/strategyProposals";
 import { cn } from "@/utils/cn";
 import { formatDateTime } from "@/utils/formatting";
+import { versionOrigins, versionOriginsText } from "@/engines/recommendationOrigin";
 import type { ApprovedSnapshot } from "@/domain/types";
 
 // D3 — review once, present consistently. The advisor approves a version of
@@ -171,6 +172,11 @@ function Inner() {
                               ". The meeting view and its PDFs present it."
                             : "Approved before the client brief: its meeting view and PDFs show the client profile as it was then."}
                         </div>
+                        {versionOriginsText(versionOrigins(s)) && (
+                          <div className="text-[12px] text-ink-600" data-testid={`version-origins-${s.version}`}>
+                            Where its actions came from: {versionOriginsText(versionOrigins(s))}. For your records; the client documents don&apos;t print it.
+                          </div>
+                        )}
                         <div className="flex flex-wrap gap-2">
                           <a
                             href={`/meeting/${s.id}`}
