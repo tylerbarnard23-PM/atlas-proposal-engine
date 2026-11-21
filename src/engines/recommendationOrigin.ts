@@ -48,7 +48,9 @@ export function withOrigin(prev: Recommendation | undefined, next: Recommendatio
   const kept = prev.origin;
   if (!isContentEdit(prev, next)) return kept ? { ...next, origin: kept } : omitOrigin(next);
   if (kept?.kind === "advisor") return { ...next, origin: kept };
-  return { ...next, origin: { ...(kept ?? { kind: "unrecorded" }), editedByAdvisorAt: now } };
+  // A record from before origins were kept: its sample ID is the only reliable evidence of where it came from.
+  const earlier: RecommendationOrigin = SAMPLE_IDS.has(prev.id) ? { kind: "example", source: "sample_workspace" } : { kind: "unrecorded" };
+  return { ...next, origin: { ...(kept ?? earlier), editedByAdvisorAt: now } };
 }
 
 const omitOrigin = (r: Recommendation): Recommendation => {

@@ -271,6 +271,10 @@ describe("3. recommendation origins", () => {
     expect(m.originLabel(template).detail).toMatch(/rule check/);
     const unknown = { ...seed, id: "rec_old_unknown" } as Recommendation;
     expect(m.originLabel(unknown).label).toBe("Origin not recorded");
+    // An advisor's edit of a prewritten sample record keeps it labelled as the sample's, edited.
+    const edited = m.withOrigin(seed, { ...seed, rationale: "Edited (synthetic)." }, NOW.toISOString());
+    expect(edited.origin).toEqual({ kind: "example", source: "sample_workspace", editedByAdvisorAt: NOW.toISOString() });
+    expect(m.originLabel(edited).label).toBe("Sample example (prewritten), edited by advisor");
   });
 
   it("a discovery edit after the answer still makes the preview stale", async () => {
