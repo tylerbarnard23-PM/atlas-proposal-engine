@@ -55,7 +55,34 @@ Stop for Codex review with exact head, checks, preview association, remaining li
 
 D1 (PR #72, `0381db1`), D2 (PR #75, `073049f`), D2a (PR #79, `c0ee4e9`), D3 (PR #81, `85b3910`) and **D4 (PR #82, `3738588`, 16 November 2026)** are released; the commands below the next one are historical, so do not rerun them. **D5 is in progress** (desktop-first since 18 November 2026: mobile work is deferred).
 
-### Next task: review client discovery and Stratovell AI (PR #110)
+### Next task: fix the PR #110 review findings
+
+Saved on 20 November 2026. **Opus 5.5 · High effort.** [PR #110](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/110) was reviewed at `c9a4ac67502d7c64c9d59d3cb4627919faf70cff` (`main` at `7aab3f4`); every reported check passed, but the merge is on hold for three findings ([record](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/110#issuecomment-7055631506)). Verify heads, tree and stash first; the branch head may be a later docs-only checkpoint on top of `c9a4ac6`. Preserve all work and recordings. No amend or force-push.
+
+```text
+Fix the three PR #110 review findings in one batch on feat/client-discovery-stratovell-ai, and resolve the PDF presentation decision. Do not run a live take.
+
+Read CLAUDE.md, the handoff and this task. Verify local/GitHub heads, tree and stash. The reviewed code basis is c9a4ac6; build on the current branch head.
+
+First write failing regressions through real paths (they must fail on c9a4ac6), then fix together:
+1. src/copilot/tools.ts: discovery.otherConstraints (and any other advisor-typed discovery text) belongs in the untrusted-text exclusions. A figure typed there (e.g. USD 987,654,321.23) must never count as evidence; an answer that calls it calculated cash must be flagged unsupported. Cover reviewed and unreviewed answers, through the real agent loop and figure check.
+2. src/engines/quantityPrice.ts: per-100 pricing only for bond-type instruments, not for an ETF or mutual fund classed as fixed income. Quantity 100, price 100, value 100 on a fixed-income ETF/fund must warn; a correctly priced bond still must not; ordinary shares and genuine mismatches as before. Re-trace Insights, readiness and AI consumers and the sample baseline.
+3. DiscoveryQuestionnaire.tsx NumberField: an invalid edit (e.g. -100000, or non-numeric text) must never leave a stored value and its reviewed status looking current. Show a validation error, keep the stored value visibly distinct or require a valid value, and never mark a review current for a value the field doesn't show. Test through the actual input handler.
+
+Then resolve the PDF presentation (owner decision; recommended): a version approved with discovery renders its own frozen, reviewed brief in the PDF and meeting view (answers with review status, unknowns, conflicts; no private notes); a version without discovery, and every historical approved version, renders exactly as before. Write the contract-impact note first (template, approved-version rendering, final-PDF route), prove historical versions are byte-identical in content and fingerprint, and check the rendered PDF.
+
+Keep: the terminology (Stratovell AI, Analyze portfolio, AI connection, Connect Claude; technical identifiers unchanged); privacy (no identity or private discovery notes in model-bound data or the PDF brief; the shared redaction); store/backup v11 compatibility; model, effort, fallbacks, authority and spending unchanged.
+
+Run typecheck, full UTC tests, eval and build; a browser check of the questionnaire edit and, if the template changes, a PDF check. Push new commits (no amend or force-push), update the PR, handoff, saved next command and the outside-Git REPORT.md, read CI once, and stop for re-review.
+
+No merge, paid request, live take, recording retry, settings change, publication, dependency upgrade or mobile work. The proposed USD 5 live-take allowance is not approved.
+```
+
+**Carried forward for the demo (outside Git):**
+- **Recording:** the analysis-led recorder, the guide v2, the storyboard and the PDF pickup stay as they are. Any later take needs a fresh rehearsal on the fixed build, then the owner's explicit approval of a session and budget. The key is entered privately, for that server session only, and is never read or recorded. Stop and Disconnect on completion or failure.
+- **Voiceover:** the Windows narration stays temporary. Keep masters, scripts, sentence segments, captions and cue timings. The final voice pass comes after the picture and wording are approved, with no paid voice service.
+
+### Previous task (reviewed 20 November 2026 at `c9a4ac6`; merge on hold for three findings, don't rerun): review client discovery and Stratovell AI (PR #110)
 
 Saved on 20 November 2026. [PR #110](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/110) is on branch `feat/client-discovery-stratovell-ai`, from `main` at `7aab3f4` (PR #108, released and verified). Impact notes: [#109](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/109) and [#46](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/46#issuecomment-7052076612). Verify heads, tree and stash first, and preserve newer work.
 
