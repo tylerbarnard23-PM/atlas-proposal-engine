@@ -11,6 +11,14 @@ const SAMPLE_IDS = new Set(SEED_RECOMMENDATIONS.map((r) => r.id));
 /** The stored origin, or "unrecorded" for a record from before origins were kept. */
 export const originOf = (r: Pick<Recommendation, "origin">): RecommendationOrigin => r.origin ?? { kind: "unrecorded" };
 
+/**
+ * The origin reliable evidence establishes, before an ID changes: the stored
+ * origin, or the prewritten sample for a sample ID. Undefined when nothing
+ * reliable is known (an older record stays unknown).
+ */
+export const knownOrigin = (r: Pick<Recommendation, "id" | "origin">): RecommendationOrigin | undefined =>
+  r.origin ?? (SAMPLE_IDS.has(r.id) ? { kind: "example", source: "sample_workspace" } : undefined);
+
 /** The origin of an AI run's drafts, from the provider that actually answered. */
 export function runOrigin(run: { provider: "anthropic" | "test" | "scripted"; models?: string[]; promptVersion?: string }): RecommendationOrigin {
   if (run.provider === "anthropic") return { kind: "claude", models: [...(run.models ?? [])], promptVersion: run.promptVersion };
@@ -49,7 +57,7 @@ export function withOrigin(prev: Recommendation | undefined, next: Recommendatio
   if (!isContentEdit(prev, next)) return kept ? { ...next, origin: kept } : omitOrigin(next);
   if (kept?.kind === "advisor") return { ...next, origin: kept };
   // A record from before origins were kept: its sample ID is the only reliable evidence of where it came from.
-  const earlier: RecommendationOrigin = SAMPLE_IDS.has(prev.id) ? { kind: "example", source: "sample_workspace" } : { kind: "unrecorded" };
+  const earlier: RecommendationOrigin = knownOrigin(prev) ?? { kind: "unrecorded" };
   return { ...next, origin: { ...(kept ?? earlier), editedByAdvisorAt: now } };
 }
 

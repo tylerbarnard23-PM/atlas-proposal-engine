@@ -25,6 +25,8 @@ export interface EvidenceValue {
    * A claim it alone supports is reported as client-stated, never matched.
    */
   source?: "client_brief";
+  /** For a client-stated amount: what it is (e.g. "planned withdrawal (within 1 year)"). Not used in matching. */
+  label?: string;
 }
 
 export interface FigureCheck {

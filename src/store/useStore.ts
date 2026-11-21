@@ -42,7 +42,7 @@ import { cashBasisCurrency, markRemovedLinks } from "@/engines/recommendationLin
 import { contextMismatch, type AgentContext } from "@/copilot/context";
 import { forReadiness } from "@/engines/importCompleteness";
 import { migrateRecommendationCurrency, withApprovalRule } from "@/engines/recommendationAmounts";
-import { withOrigin } from "@/engines/recommendationOrigin";
+import { knownOrigin, withOrigin } from "@/engines/recommendationOrigin";
 import { candidateProblems, deskActions, draftBasisInputs, legacyWorkingDraft, needsIntentRestatement, newWorkingDraft, recordInputBasis } from "@/engines/allocationDesk";
 import { normalizeHoldings } from "@/engines/normalizationEngine";
 import { LEGACY_SAMPLE_FIRM_NAME } from "@/domain/branding";
@@ -700,7 +700,9 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
             // D2a: a sleeve's recorded minimum review is this alternative's decision, like approval; the copy starts without it.
             const strategy = r.destination?.strategy;
             const destination = strategy?.review ? { ...r.destination!, strategy: { id: strategy.id, revision: strategy.revision, manager: strategy.manager, name: strategy.name, minimum: strategy.minimum } } : r.destination;
-            const copy: Recommendation = { ...r, id: safeId("rec"), status: "draft", approvedByAdvisor: false, includeInPdf: false, rejectionReason: undefined, rejectedAt: undefined, createdAt: now, updatedAt: now, ...(linked ? { linked } : {}), ...(destination ? { destination } : {}) };
+            // Its known origin is resolved before the new ID (a sample's comes from its ID); an unknown one stays unknown.
+            const origin = knownOrigin(r);
+            const copy: Recommendation = { ...r, ...(origin ? { origin } : {}), id: safeId("rec"), status: "draft", approvedByAdvisor: false, includeInPdf: false, rejectionReason: undefined, rejectedAt: undefined, createdAt: now, updatedAt: now, ...(linked ? { linked } : {}), ...(destination ? { destination } : {}) };
             return copy;
           });
           const copy: WorkingDraft = { ...s.workingDraft, id: safeId("draft"), name: name.trim() || `Alternative ${s.alternatives.length + 2}`, memberIds: copies.map((r) => r.id), createdAt: now, updatedAt: now };

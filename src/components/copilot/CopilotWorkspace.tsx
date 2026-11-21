@@ -110,6 +110,15 @@ export function analysisRun(m: { mode: CopilotMode; live: Pick<LiveInfo, "provid
   return { runAs: "claude", claudeAvailable: true, label: "Analyze portfolio", testId: "analyze-portfolio", note: null };
 }
 
+/**
+ * When the question in the box isn't the one the answer below answered: says
+ * so, and that nothing has run for the new one. Null when they're the same.
+ */
+export function answeredQuestionNote(asked: string | null, current: string): string | null {
+  if (asked == null || asked.trim() === current.trim()) return null;
+  return "The answer below is to your earlier question, shown above it. Nothing has run for the question in the box; run it to analyze it.";
+}
+
 export function ModeBadge({ mode, model, live }: { mode: CopilotMode; model: string | null; live?: LiveInfo | null }) {
   const fake = mode === "live" && live?.provider === "fake";
   return (
@@ -122,11 +131,14 @@ export function ModeBadge({ mode, model, live }: { mode: CopilotMode; model: str
 
 export function CopilotWorkspace({
   initialQuestion = "",
+  prefill = null,
   variant = "page",
   onAdded,
   onReveal,
 }: {
   initialQuestion?: string;
+  /** Replaces only the question in the box (each new `seq` once); the conversation, answer and drafts stay. Nothing runs. */
+  prefill?: { text: string; seq: number } | null;
   /** "panel" stacks everything in one narrow column. */
   variant?: "page" | "panel";
   /** Called with the IDs just added to the working draft. */
@@ -138,6 +150,14 @@ export function CopilotWorkspace({
   const accept = useAtlasStore((s) => s.acceptAgentDrafts);
   const mode = useCopilotMode();
   const [question, setQuestion] = React.useState(initialQuestion.slice(0, 2000));
+  // The question the current answer (or the request in flight) is for.
+  const [asked, setAsked] = React.useState<string | null>(null);
+  const prefillSeq = prefill?.seq;
+  React.useEffect(() => {
+    if (prefill) setQuestion(prefill.text.slice(0, 2000));
+    // Only a new prefill replaces the question; the text itself isn't a trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefillSeq]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [result, setResult] = React.useState<CopilotResult | null>(null);
@@ -163,6 +183,7 @@ export function CopilotWorkspace({
     const text = q.trim();
     if (!text || loading || !run) return;
     setQuestion(text);
+    setAsked(text);
     setLoading(true);
     setError(null);
     setResult(null);
@@ -329,6 +350,17 @@ export function CopilotWorkspace({
               </Badge>
             </CardHeader>
             <CardBody className="space-y-3">
+              {asked && (
+                <p className="text-[13px] text-ink-600" data-testid="copilot-answered-question">
+                  <span className="text-ink-500">Question: </span>
+                  {asked}
+                </p>
+              )}
+              {answeredQuestionNote(asked, question) && (
+                <p role="note" className="rounded bg-slatey-50 ring-1 ring-inset ring-ink-100 px-2 py-1 text-[13px] text-ink-800" data-testid="copilot-question-changed">
+                  {answeredQuestionNote(asked, question)}
+                </p>
+              )}
               <AnswerOrigin result={result} />
               <MiniMarkdown text={result.answer} />
               <FigureStatus figures={result.figures} />
@@ -444,7 +476,7 @@ function FigureStatus({ figures }: { figures: CopilotResult["figures"] }) {
       )}
       {stated.length > 0 && (
         <div data-testid="copilot-figures-client-stated">
-          Restate the client brief (the advisor&apos;s records of what the client said, not engine results): {stated.join(", ")}.
+          Match an amount recorded in the client brief (a value match only, to the advisor&apos;s record of what the client said; not an engine result, and the checker doesn&apos;t verify what the sentence says about it): {stated.join(", ")}.
         </div>
       )}
       {figures.unchecked.length > 0 && (

@@ -305,6 +305,25 @@ export function conflictsOf(c: ClientProfile): string[] {
   return out;
 }
 
+/**
+ * PR #110 review: the amounts the advisor recorded as structured answers (a
+ * planned withdrawal, an income need), each with its own currency and
+ * context. The only figures in the brief that count as client-stated: free
+ * text (constraints, clarifications, notes) never does.
+ */
+export function clientStatedAmounts(c: ClientProfile): { value: number; currency: string; label: string }[] {
+  const out: { value: number; currency: string; label: string }[] = [];
+  const liquidity = answerValue(c, "liquidity");
+  if (liquidity?.need === "planned" && typeof liquidity.amount === "number" && Number.isFinite(liquidity.amount) && liquidity.currency) {
+    out.push({ value: liquidity.amount, currency: liquidity.currency, label: `planned withdrawal${liquidity.timing ? ` (${liquidity.timing.replace(/_/g, " ")})` : ""}` });
+  }
+  const income = answerValue(c, "income");
+  if (income?.need === "needed" && typeof income.amount === "number" && Number.isFinite(income.amount) && income.currency) {
+    out.push({ value: income.amount, currency: income.currency, label: `income need${income.frequency ? ` (${income.frequency})` : ""}` });
+  }
+  return out;
+}
+
 /** Details an answer leaves open, or questions an objective depends on that weren't discussed. */
 export function missingDetailsOf(c: ClientProfile): string[] {
   const out: string[] = [];

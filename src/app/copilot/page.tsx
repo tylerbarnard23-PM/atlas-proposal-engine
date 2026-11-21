@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useSearchParams } from "next/navigation";
 import { ClientOnly } from "@/components/layout/ClientOnly";
 import { PageHeader } from "@/components/ui/Section";
 import { Card, CardBody } from "@/components/ui/Card";
@@ -13,7 +14,10 @@ import type { Insight } from "@/domain/types";
 export default function CopilotPage() {
   return (
     <ClientOnly>
-      <Inner />
+      {/* useSearchParams needs a Suspense boundary for the static build */}
+      <React.Suspense fallback={null}>
+        <Inner />
+      </React.Suspense>
     </ClientOnly>
   );
 }
@@ -26,22 +30,26 @@ const VIEWS: { id: View; label: string }[] = [
 
 function Inner() {
   const mode = useCopilotMode();
-  // A contextual entry point can prefill the question; it never runs by itself.
-  const [params] = React.useState(() => new URLSearchParams(window.location.search));
-  const [view, setView] = React.useState<View>(params.get("view") === "checks" ? "checks" : "analysis");
-  const [question, setQuestion] = React.useState(() => ({ text: params.get("q") ?? "", key: 0 }));
+  // The tab follows the URL (links, the /insights redirect, back and forward). Both views stay mounted, so
+  // switching never unmounts the conversation: its answer, preview selections and any request in flight survive.
+  const params = useSearchParams();
+  const view: View = params?.get("view") === "checks" ? "checks" : "analysis";
+  // A contextual entry point (?q=) prefills the question once; it never runs by itself.
+  const [initialQuestion] = React.useState(() => params?.get("q") ?? "");
+  // A finding replaces only the question in the box; the earlier answer stays, tied to its own question.
+  const [prefill, setPrefill] = React.useState<{ text: string; seq: number } | null>(null);
 
   function show(v: View) {
-    setView(v);
+    if (v === view) return;
     const url = new URL(window.location.href);
     if (v === "checks") url.searchParams.set("view", "checks");
     else url.searchParams.delete("view");
-    window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+    window.history.pushState(null, "", url.pathname + url.search + url.hash);
   }
 
   // A finding goes to the analysis view as a question; nothing runs until the advisor runs it.
   function analyze(i: Insight) {
-    setQuestion((q) => ({ text: findingQuestion(i), key: q.key + 1 }));
+    setPrefill((p) => ({ text: findingQuestion(i), seq: (p?.seq ?? 0) + 1 }));
     show("analysis");
   }
 
@@ -72,22 +80,19 @@ function Inner() {
           </button>
         ))}
       </div>
-      {view === "analysis" ? (
-        <div role="tabpanel" id="panel-analysis" aria-labelledby="tab-analysis">
-          <div className="max-w-4xl mb-4">
-            <ClientBriefPanel variant="compact" />
-          </div>
-          <Card className="max-w-4xl">
-            <CardBody>
-              <CopilotWorkspace key={question.key} initialQuestion={question.text} />
-            </CardBody>
-          </Card>
+      <div role="tabpanel" id="panel-analysis" aria-labelledby="tab-analysis" hidden={view !== "analysis"}>
+        <div className="max-w-4xl mb-4">
+          <ClientBriefPanel variant="compact" />
         </div>
-      ) : (
-        <div role="tabpanel" id="panel-checks" aria-labelledby="tab-checks" className="max-w-4xl">
-          <PortfolioChecks onAnalyze={analyze} />
-        </div>
-      )}
+        <Card className="max-w-4xl">
+          <CardBody>
+            <CopilotWorkspace initialQuestion={initialQuestion} prefill={prefill} />
+          </CardBody>
+        </Card>
+      </div>
+      <div role="tabpanel" id="panel-checks" aria-labelledby="tab-checks" className="max-w-4xl" hidden={view !== "checks"}>
+        <PortfolioChecks onAnalyze={analyze} />
+      </div>
     </>
   );
 }

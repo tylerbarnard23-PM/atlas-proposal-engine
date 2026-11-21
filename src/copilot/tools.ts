@@ -16,7 +16,7 @@ import { agentContextOf, type AgentContext } from "./context";
 import { figuresIn, type EvidenceValue } from "./evidence";
 import type { CopilotSnapshot } from "./snapshot";
 import { redactIdentity } from "./redaction";
-import { modelBoundClientBrief } from "@/engines/clientDiscovery";
+import { clientStatedAmounts, modelBoundClientBrief } from "@/engines/clientDiscovery";
 
 // Every tool here is a thin, read-only wrapper over the deterministic engines.
 // The model never computes a number itself; it asks the engines. The single
@@ -101,7 +101,13 @@ export class CopilotContext {
   /** Keeps a tool result as evidence and returns its reference. */
   record(tool: string, result: unknown, summary: string): string {
     const id = `ev_${this.evidence.length + 1}`;
-    this.evidence.push({ id, tool, summary, numbers: evidenceIn(result, (s) => this.withoutUntrusted(s), this.reportingCurrency) });
+    const numbers = evidenceIn(result, (s) => this.withoutUntrusted(s), this.reportingCurrency);
+    // PR #110 review: when the brief is handed over, its client-stated figures are the structured amounts the
+    // advisor recorded (with their own currency), never figures scanned from the brief's text.
+    if (holdsBrief(result)) {
+      for (const a of clientStatedAmounts(this.snapshot.client)) numbers.push({ value: a.value, unit: "money", currency: a.currency, source: "client_brief", label: a.label });
+    }
+    this.evidence.push({ id, tool, summary, numbers });
     return id;
   }
 
@@ -129,7 +135,9 @@ export class CopilotContext {
         ...(s.client.discovery?.securitiesToRetain ?? []),
         ...Object.values(s.client.discovery?.answers ?? {}).map((a) => a?.note),
       ];
-      this.untrustedCache = [...new Set(texts.filter((t): t is string => typeof t === "string" && t.trim().length > 0))].sort((a, b) => b.length - a.length);
+      // PR #110 review: also as presented (trimmed, whitespace collapsed), so formatting never lets it through.
+      const forms = texts.filter((t): t is string => typeof t === "string" && t.trim().length > 0).flatMap((t) => [t, t.trim(), t.replace(/\s+/g, " ").trim()]);
+      this.untrustedCache = [...new Set(forms)].sort((a, b) => b.length - a.length);
     }
     return this.untrustedCache;
   }
@@ -922,13 +930,10 @@ function classifyUnit(value: number, key: string | undefined, parent: Record<str
  * untrusted workspace text is removed (`clean`).
  */
 export function evidenceIn(value: unknown, clean: (s: string) => string, reporting: string, key?: string, parent?: Record<string, unknown>, out: EvidenceValue[] = []): EvidenceValue[] {
-  // #109: the client brief is the advisor's record of what the client said. Its figures (a planned withdrawal, an
-  // income need) are client instructions, never engine results: tagged so a claim they alone support is reported
-  // as client-stated. Its counts and dates are not figures; its free text is removed as untrusted (clean).
-  if (key === "client_brief") {
-    out.push(...briefText(value).flatMap((t) => figuresIn(clean(t)).map((e) => ({ ...e, source: "client_brief" as const }))));
-    return out;
-  }
+  // #109, PR #110 review: the client brief is the advisor's record of what the client said, never engine evidence,
+  // and its text is never scanned for figures (constraints, clarifications, notes and labels included). Its
+  // client-stated amounts come from the structured answers instead (CopilotContext.record, clientStatedAmounts).
+  if (key === "client_brief") return out;
   if (typeof value === "number" && Number.isFinite(value)) out.push(classify(value, key, parent, reporting));
   else if (typeof value === "string") out.push(...figuresIn(clean(value)));
   else if (Array.isArray(value)) for (const v of value) evidenceIn(v, clean, reporting, key, parent, out);
@@ -936,7 +941,9 @@ export function evidenceIn(value: unknown, clean: (s: string) => string, reporti
   return out;
 }
 
-const briefText = (v: unknown): string[] => (typeof v === "string" ? [v] : Array.isArray(v) ? v.flatMap(briefText) : v && typeof v === "object" ? Object.values(v).flatMap(briefText) : []);
+
+/** Whether a tool result hands the client brief to the model (at any depth). */
+const holdsBrief = (v: unknown): boolean => (Array.isArray(v) ? v.some(holdsBrief) : !!v && typeof v === "object" && ("client_brief" in v || Object.values(v).some(holdsBrief)));
 
 const AUTHORITY_REFUSAL =
   "Refused: Stratovell AI has no authority to approve, finalize, include in the PDF, share, issue or execute anything. It can investigate, simulate and save unapproved drafts; the advisor decides in Stratovell.";
