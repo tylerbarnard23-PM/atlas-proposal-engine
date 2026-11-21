@@ -385,6 +385,22 @@ export interface InsightContextValue {
   value: string;
 }
 
+/**
+ * A Portfolio check's basis: a built-in Stratovell rule, the figure observed,
+ * the rule's threshold (a product default, not a regulatory limit or the
+ * client's policy), what it covers and what it can't see.
+ */
+export interface InsightBasis {
+  source: "Built-in Stratovell rule";
+  rule: string;
+  observed?: string;
+  threshold?: string;
+  scope: string;
+  /** The source valuation date, or the range of dates in the denominator. */
+  valuationDates?: string;
+  limitations: string[];
+}
+
 export interface Insight {
   id: string;
   category:
@@ -407,6 +423,8 @@ export interface Insight {
   context?: InsightContextValue[];
   /** A "Data to complete" item: which holdings are still open and which are done. */
   task?: { kind: DataTaskKind; openIds: string[]; doneIds: string[] };
+  /** What the check is based on, written by the same engine pass (Portfolio checks). */
+  basis?: InsightBasis;
   generatedAt: string;
 }
 
@@ -447,6 +465,21 @@ export type RecommendationStatus =
   | "excluded"
   | "implemented";
 
+/**
+ * Where a recommendation came from. "claude": a live Claude run (the models
+ * the provider reported and the prompt version). "example": a scripted demo,
+ * the deterministic test provider or the prewritten sample, never a model.
+ * "unrecorded": arrived without one (an AI draft from an older client).
+ * An advisor's edit keeps the kind and records when it was edited.
+ */
+export interface RecommendationOrigin {
+  kind: "claude" | "advisor" | "example" | "unrecorded";
+  source?: "scripted_demo" | "test_provider" | "sample_workspace";
+  models?: string[];
+  promptVersion?: string;
+  editedByAdvisorAt?: string;
+}
+
 export interface Recommendation {
   id: string;
   title: string;
@@ -478,8 +511,15 @@ export interface Recommendation {
   status: RecommendationStatus;
   includeInPdf: boolean;
   approvedByAdvisor: boolean;
-  /** Set when converted from an insight, so the same insight isn't added twice. */
+  /** Set by an earlier version's rule-check template (removed in PR #110): which check it came from. Kept as history. */
   sourceInsightKey?: string;
+  /**
+   * Who prepared it (PR #110, Claude-led workflow). Stamped when the record is
+   * created: by the server from the run's actual provider for an AI draft,
+   * and "advisor" for one the advisor writes. Absent on records from before;
+   * see engines/recommendationOrigin for what is shown for those.
+   */
+  origin?: RecommendationOrigin;
   /** Why the advisor rejected it (status "excluded"). */
   rejectionReason?: string;
   rejectedAt?: string;

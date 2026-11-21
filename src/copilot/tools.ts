@@ -356,7 +356,12 @@ function listInsights(ctx: CopilotContext, input: z.infer<typeof ListInsightsInp
       title: i.title,
       detail: i.detail,
       related_holding_ids: i.relatedHoldingIds ?? [],
+      // What the check rests on: a product-default threshold, its scope and dates, and what it can't see.
+      basis: i.basis
+        ? { source: i.basis.source, rule: i.basis.rule, observed: i.basis.observed ?? null, threshold: i.basis.threshold ?? null, scope: i.basis.scope, valuation_dates: i.basis.valuationDates ?? null, limitations: i.basis.limitations }
+        : null,
     })),
+    note: "Portfolio checks are built-in rules with product-default thresholds: facts about the data, not recommendations. Decide what matters from the client brief.",
   };
 }
 
@@ -770,7 +775,7 @@ const TOOLS: Record<string, ToolSpec> = {
     definition: {
       name: "list_insights",
       description:
-        "Rules-based findings from the Stratovell insight engine: concentration, currency and country exposure, liquidity, cash drag, high fees, manual valuations and data-quality problems.",
+        "Stratovell's portfolio checks: built-in rules over the recorded data (concentration, currency and country exposure, illiquid assets, cash share, fund expense ratios, manual valuations and data-quality problems). Each check gives its basis: the observed figure, its threshold (a product default, not a regulatory limit or the client's policy), the scope, valuation dates and limitations. A check is a fact to analyze, not a recommendation.",
       input_schema: {
         type: "object",
         properties: {

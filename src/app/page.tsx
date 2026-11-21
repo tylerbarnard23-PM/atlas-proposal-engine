@@ -219,7 +219,12 @@ function DashboardInner() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
         <Card>
           <CardHeader>
-            <CardTitle>Active Insights</CardTitle>
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle>Portfolio checks</CardTitle>
+              <Link href="/copilot?view=checks" className="text-[12px] font-medium text-navy-700 hover:underline">
+                Open
+              </Link>
+            </div>
           </CardHeader>
           <CardBody>
             {insights.slice(0, 5).map((i) => (
@@ -233,7 +238,7 @@ function DashboardInner() {
                 <div className="text-2xs text-ink-500 mt-0.5">{i.category}</div>
               </div>
             ))}
-            {insights.length === 0 && <div className="text-sm text-ink-500">No insights generated.</div>}
+            {insights.length === 0 && <div className="text-sm text-ink-500">No checks flag anything with the current data.</div>}
           </CardBody>
         </Card>
 

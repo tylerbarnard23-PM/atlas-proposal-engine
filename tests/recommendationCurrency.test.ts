@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { Account, FxRate, Holding, Insight, Recommendation } from "@/domain/types";
+import type { Account, FxRate, Holding, Recommendation } from "@/domain/types";
 import { applyRecommendationsToProposed, DEFAULT_PROPOSAL_SECTIONS, type FxContext } from "@/engines/proposalEngine";
 import { normalizeHoldings } from "@/engines/normalizationEngine";
 import {
@@ -16,7 +16,6 @@ import {
   resolveCurrencyReview,
   withApprovalRule,
 } from "@/engines/recommendationAmounts";
-import { recommendationFromInsight } from "@/engines/recommendationEngine";
 import { summarizePreview } from "@/components/recommendations/recEffect";
 import { previewRecommendation } from "@/engines/recommendationPreview";
 import { evaluateWorkspaceReadiness } from "@/engines/complianceEngine";
@@ -198,10 +197,8 @@ describe("conversion: entered currency into the reporting currency, exactly once
 });
 
 describe("defaults and explicit currency changes", () => {
-  it("new, insight-generated and Copilot recommendations take the reporting currency", () => {
+  it("new and Copilot recommendations take the reporting currency", () => {
     expect(newRecommendation("CHF").currency).toBe("CHF");
-    const insight = { id: "i", title: "Concentration", detail: "d", category: "concentration", severity: "warning", relatedHoldingIds: ["h_eq"] } as unknown as Insight;
-    expect(recommendationFromInsight(insight, "EUR").currency).toBe("EUR");
     const ctx = new CopilotContext({ client: { ...SEED_CLIENT, proposalOutputCurrency: "EUR" }, advisor: SEED_ADVISOR, accounts: [ACCOUNT], holdings: HOLDINGS, fxRates: RATES, recommendations: [], disclosures: DISCLOSURE_LIBRARY } as never);
     const draft = JSON.parse(executeTool(ctx, "draft_recommendation", { type: "request_updated_statement", title: "Get statement", priority: "low", rationale: "Testing defaults." }).content);
     expect(ctx.drafts[0].currency).toBe("EUR");
