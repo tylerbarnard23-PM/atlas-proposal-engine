@@ -199,7 +199,7 @@ function BasisList({ basis }: { basis: InsightBasis }) {
     ["Limits", basis.limitations.length ? basis.limitations.join(" ") : undefined],
   ];
   return (
-    <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-2xs text-ink-600" data-testid="check-basis">
+    <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[12px] text-ink-600" data-testid="check-basis">
       {rows
         .filter(([, v]) => v)
         .map(([k, v]) => (
