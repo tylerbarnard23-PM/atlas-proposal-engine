@@ -142,7 +142,7 @@ export type NumberEdit = { kind: "empty" } | { kind: "valid"; value: number } | 
 export function numberFieldEdit(text: string, min = 0): NumberEdit {
   const raw = text.replace(/[,\s]/g, "");
   if (raw === "") return { kind: "empty" };
-  if (/^-/.test(raw)) return { kind: "invalid", error: `Enter ${min} or more; a negative amount isn't recorded.` };
+  if (/^-/.test(raw)) return { kind: "invalid", error: `Enter ${min} or more.` };
   if (!/^\d+(\.\d*)?$/.test(raw)) return { kind: "invalid", error: "Enter a number, for example 150000 or 150,000." };
   const value = Number(raw);
   if (!Number.isFinite(value) || value < min) return { kind: "invalid", error: `Enter ${min} or more.` };
@@ -184,7 +184,7 @@ function NumberField({ id, label, value, onValue, min = 0 }: { id: string; label
       />
       {edit.kind === "invalid" && (
         <p id={errorId} role="alert" className="mt-1 text-2xs text-negative-600" data-testid={`${id}-invalid`}>
-          {edit.error} Not recorded.
+          {edit.error} Nothing is recorded until this is corrected.
         </p>
       )}
     </div>
