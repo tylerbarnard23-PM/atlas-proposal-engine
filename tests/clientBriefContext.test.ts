@@ -156,7 +156,10 @@ describe("#109 Stratovell AI receives the reviewed brief; stale previews are ref
     expect(JSON.stringify(store(m).snapshots)).toBe(before);
     expect(store(m).snapshots[0].fingerprint).toBe(v1.fingerprint);
     expect("discovery" in store(m).snapshots[0].inputs.client).toBe(false);
-    expect(m.snapshotStatus(store(m).snapshots[0], store(m), NOW)).toEqual({ kind: "changed", parts: ["client profile"] });
+    // PR #110 review: a version approved now freezes the brief it presents (here every question Not discussed), so a
+    // later discovery edit is reported against both the profile and that frozen brief.
+    expect(store(m).snapshots[0].inputs.clientBrief).toMatchObject({ format: "discovery-brief-v1", counts: { answered: 0, total: 10 } });
+    expect(m.snapshotStatus(store(m).snapshots[0], store(m), NOW)).toEqual({ kind: "changed", parts: ["client profile", "client brief"] });
   });
 
   it("the model receives the brief with review status and unknowns, never the private notes, identity or legacy levels", async () => {

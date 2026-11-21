@@ -25,6 +25,7 @@ import { checkSnapshot } from "@/engines/workspaceBackup";
 import { PDF_MAX_BODY_BYTES, SHAPE_LIMITS, readBodyLimited, shapeProblem } from "@/server/requestLimits";
 import { snapshotFileName, snapshotReadiness, snapshotTemplateProps } from "@/engines/approvedSnapshot";
 import type { ProposalPdfTemplateProps } from "@/pdf/templates/ProposalPdfTemplate";
+import { presentedClientBrief } from "@/engines/clientDiscovery";
 import { PDF_PRINT_OPTIONS } from "@/pdf/printOptions";
 
 export const runtime = "nodejs";
@@ -159,7 +160,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
   }
 
-  const props = { ...body.state, fxRates: Array.isArray(body.state.fxRates) ? body.state.fxRates : [], fxConfirmation, now: now.toISOString(), timeZone, variant };
+  // #109: a workspace draft presents the current client brief, computed here from the client (never taken from the request).
+  let clientBrief: ProposalPdfTemplateProps["clientBrief"];
+  try {
+    clientBrief = presentedClientBrief(body.state.client);
+  } catch {
+    return NextResponse.json({ error: "The client discovery record couldn't be read. Nothing was generated." }, { status: 422 });
+  }
+  const props = { ...body.state, fxRates: Array.isArray(body.state.fxRates) ? body.state.fxRates : [], fxConfirmation, now: now.toISOString(), timeZone, variant, clientBrief };
   const safeName = (body.state.client.householdName ?? body.state.client.fullName)
     .replace(/[^A-Za-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");

@@ -512,7 +512,20 @@ function schemas(strict: boolean) {
     required: z.boolean(),
   });
   const classTotals = obj({ total: finite.nullable(), byClass: z.array(obj({ assetClass, value: finite })) });
-  const snapshotOf = (clientSchema: typeof clientV10 | typeof client) => obj({
+  // v11 (#109, PR #110 review): the client brief a version presents, frozen at approval. Older versions have none.
+  const questionId = z.enum(["objectives", "timeHorizon", "liquidity", "income", "lossWillingness", "lossAbility", "taxSensitivity", "securitiesToRetain", "restrictedInvestments", "otherConstraints"]);
+  const count = z.number().int().min(0);
+  const presentedBrief = obj({
+    format: z.literal("discovery-brief-v1"),
+    answers: z.array(obj({ question: questionId, label: text(), status: z.enum(["recorded", "reviewed", "review_stale"]), answer: text(), clarification: text().optional(), reviewedAt: date.optional() })),
+    notDiscussed: z.array(obj({ question: questionId, label: text() })),
+    conflicts: z.array(text()),
+    missingDetails: z.array(text()),
+    restrictionsOnFile: z.array(text()),
+    counts: obj({ answered: count, reviewed: count, stale: count, total: count }),
+    lastReviewedAt: date.nullable(),
+  });
+  const snapshotOf = (clientSchema: typeof clientV10 | typeof client, withBrief = false) => obj({
     id,
     version: z.number().int().min(1),
     approvedAt: date,
@@ -540,6 +553,7 @@ function schemas(strict: boolean) {
       sourceDocuments: z.array(sourceDocument),
       models: z.array(modelRevision),
       strategies: z.array(strategyRevision),
+      ...(withBrief ? { clientBrief: presentedBrief.optional() } : {}),
     }),
     results: obj({ reportingCurrency: currency, current: classTotals, proposed: classTotals, blocked: z.number().int().min(0), unresolved: z.number().int().min(0) }),
     fingerprint: text(),
@@ -549,7 +563,7 @@ function schemas(strict: boolean) {
   const snapshotV10 = snapshotOf(clientV10);
   const engagementV10 = engagementV9.extend({ pdfHistory: z.array(pdfJobV10), snapshots: z.array(snapshotV10) });
   // v11 (#109): the client's discovery, also frozen in versions approved from now on.
-  const snapshot = snapshotOf(client);
+  const snapshot = snapshotOf(client, true);
   const engagementV11 = engagementV10.extend({ client, snapshots: z.array(snapshot) });
   const envelopeOf = <E extends z.ZodTypeAny, V extends number>(e: E, version: V) =>
     obj({

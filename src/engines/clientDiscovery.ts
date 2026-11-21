@@ -1,4 +1,4 @@
-import type { ClientDiscovery, ClientProfile, DiscoveryAnswerState, DiscoveryLevel, DiscoveryObjective, DiscoveryQuestionId } from "@/domain/types";
+import type { ClientDiscovery, ClientProfile, DiscoveryAnswerState, DiscoveryLevel, DiscoveryObjective, DiscoveryQuestionId, PresentedClientBrief } from "@/domain/types";
 import { contentHash } from "./snapshotRecord";
 
 // #109 — client discovery. The advisor records what was discussed with the
@@ -324,6 +324,16 @@ export function missingDetailsOf(c: ClientProfile): string[] {
   if (p.has("fund_spending") && !liquidity) out.push("Funding upcoming spending is a priority, but liquidity needs weren't discussed.");
   if (p.has("generate_income") && !income) out.push("Generating income is a priority, but income needs weren't discussed.");
   return out;
+}
+
+/**
+ * The brief as a proposal presents it (PR #110 review): the same brief the analysis used, without the advisor's
+ * note for the analysis (an instruction to the AI, not a client fact). A version freezes this at approval.
+ */
+export function presentedClientBrief(c: ClientProfile): PresentedClientBrief {
+  const { analysisNote: _note, ...b } = clientBrief(c);
+  void _note;
+  return { format: "discovery-brief-v1", ...b };
 }
 
 /**

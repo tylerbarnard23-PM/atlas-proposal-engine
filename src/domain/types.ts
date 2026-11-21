@@ -1085,6 +1085,24 @@ export interface SnapshotInputs {
   /** The pinned model revision (if any) and every strategy revision the approved sleeves or that model use. */
   models: ModelRevision[];
   strategies: StrategyRevision[];
+  /**
+   * #109 (PR #110 review): the client brief as presented in this version, frozen at approval. Its presence is the
+   * rendering marker: a version with it presents the brief (never the older profile levels); a version approved
+   * before it has none and renders exactly as it always did. Covered by the fingerprint.
+   */
+  clientBrief?: PresentedClientBrief;
+}
+
+/** The client brief as a proposal presents it: what was recorded and reviewed, and what wasn't discussed. Never the private notes or the advisor's note for the analysis. */
+export interface PresentedClientBrief {
+  format: "discovery-brief-v1";
+  answers: { question: DiscoveryQuestionId; label: string; status: "recorded" | "reviewed" | "review_stale"; answer: string; clarification?: string; reviewedAt?: string }[];
+  notDiscussed: { question: DiscoveryQuestionId; label: string }[];
+  conflicts: string[];
+  missingDetails: string[];
+  restrictionsOnFile: string[];
+  counts: { answered: number; reviewed: number; stale: number; total: number };
+  lastReviewedAt: string | null;
 }
 
 /** D3: results computed at approval with the shared evaluator (and recomputable from the inputs). */

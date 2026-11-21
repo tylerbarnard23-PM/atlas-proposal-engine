@@ -706,3 +706,96 @@ describe("#109 client discovery and approved versions", () => {
     expect(await post({ snapshot: unknown })).toMatchObject({ status: 422, error: expect.stringMatching(/Not a valid approved version/) });
   });
 });
+
+describe("PR #110 review: new versions present the frozen client brief; historical versions render as before", () => {
+  // A version as the code before this change made it: no frozen brief (fingerprint recomputed over what it holds).
+  const historical = (m: M, v: ApprovedSnapshot): ApprovedSnapshot => {
+    const inputs = { ...v.inputs };
+    delete inputs.clientBrief;
+    const base = { ...v, inputs };
+    return { ...base, fingerprint: m.snapshotFingerprint(base) };
+  };
+  const sha = async (x: string) => (await import("crypto")).createHash("sha256").update(x).digest("hex");
+
+  it("a version approved before the brief is byte-identical to before: the same fingerprint and the same markup (hashes recorded on the reviewed code)", async () => {
+    // client and proposal IDs come from Math.random: seeded, so this version is the one the reviewed code (c9a4ac6;
+    // recorded at 6d41177, docs-only on top) produced for the same steps
+    let seed = 42;
+    vi.spyOn(Math, "random").mockImplementation(() => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648));
+    const m = await load();
+    approvedStory(m);
+    const old = historical(m, approve(m, "Golden"));
+    expect(m.snapshotIntegrity(old)).toBeNull();
+    expect(old.fingerprint).toBe("fd732c266b66aa94");
+    expect(await sha(await render(m, old, "meeting"))).toBe("749660db8fa39369f899d1ed46804c04abccc93a52eafcf0014f33a877bce97f");
+    expect(await sha(await render(m, old, "issued", "2026-10-26T13:00:00Z"))).toBe("56e992470dd03315a39ff1a8725c9ee6162f6861b7e6ca4616cf0c10b3dfe5b7");
+    expect(await sha(await render(m, old, "draft_copy"))).toBe("f1f68c181050211535501d1815aca1bd00dc8a12dabe2b1990de01efecae645e");
+    vi.restoreAllMocks();
+    expect(text(await render(m, old, "meeting"))).toMatch(/Risk tolerance/);
+    // its match status ignores the brief it doesn't have
+    m.useAtlasStore.setState({ snapshots: [old] });
+    expect(m.snapshotStatus(old, store(m), NOW)).toEqual({ kind: "matches" });
+    // and it still issues through the route
+    expect(await post({ snapshot: json(old), timeZone: "UTC" })).toMatchObject({ status: 200 });
+  });
+
+  it("a new version freezes the reviewed brief; the meeting view, issued PDF and draft copy present it, not the older levels; later edits don't change it", async () => {
+    const m = await load();
+    approvedStory(m);
+    store(m).setDiscoveryAnswer("objectives", { primary: "preserve_wealth", secondary: ["fund_spending"] });
+    store(m).setDiscoveryAnswer("liquidity", { need: "planned", amount: 50_000, currency: "USD", timing: "within_1_year" });
+    store(m).setDiscoveryClarification("liquidity", "Roof repairs next spring.");
+    store(m).setDiscoveryAnswer("lossAbility", { level: "moderate" });
+    store(m).recordDiscoveryReview();
+    store(m).setAnalysisNote("ANALYSIS-NOTE-CANARY: focus on cash.");
+    m.useAtlasStore.setState({ client: { ...store(m).client, advisorDiscoveryNotes: "PRIVATE-CANARY" } });
+    const v = approve(m, "With the brief");
+    const b = v.inputs.clientBrief!;
+    expect(b).toMatchObject({ format: "discovery-brief-v1", counts: { answered: 3, reviewed: 3, total: 10 } });
+    expect(JSON.stringify(b)).not.toMatch(/ANALYSIS-NOTE-CANARY|PRIVATE-CANARY/);
+    const markups = [await render(m, v, "meeting"), await render(m, v, "issued", "2026-10-26T13:00:00Z"), await render(m, v, "draft_copy")];
+    const renders = markups.map(text);
+    for (const t of renders) {
+      expect(t).toMatch(/Client Brief As recorded and reviewed by the advisor when this version was approved: 3 of 10 questions answered, 3 reviewed/);
+      expect(t).toMatch(/Liquidity needs Planned withdrawal: USD 50,000, within 1 year — Roof repairs next spring\. Reviewed Oct 26, 2026/);
+      expect(t).toMatch(/Not discussed \(unknown\): Time horizon, Income needs, Willingness to accept losses, Tax sensitivity, Securities to retain, Restricted investments, Other constraints\./);
+      expect(t).not.toMatch(/Risk tolerance|Liquidity needs \(level\)|Income needs Modest/);
+      expect(t).not.toMatch(/ANALYSIS-NOTE-CANARY|PRIVATE-CANARY/);
+    }
+    // the three presentations show the same brief section
+    const section = (h: string) => (h.match(/<div data-section="client-brief">[\s\S]*?<\/div>/) || [""])[0];
+    expect(section(markups[0]).length).toBeGreaterThan(200);
+    expect(new Set(markups.map(section)).size).toBe(1);
+    // a later edit changes the workspace, never the version or what it presents
+    const before = await render(m, v, "meeting");
+    store(m).setDiscoveryAnswer("liquidity", { need: "none" });
+    expect(await render(m, store(m).snapshots[0], "meeting")).toBe(before);
+    expect(m.snapshotStatus(store(m).snapshots[0], store(m), NOW)).toMatchObject({ kind: "changed", parts: expect.arrayContaining(["client profile", "client brief"]) });
+    // the route issues it; a tampered or unknown brief field is refused
+    expect(await post({ snapshot: json(v), timeZone: "UTC" })).toMatchObject({ status: 200 });
+    const tampered = json(v);
+    tampered.inputs.clientBrief.answers[0].status = "reviewed";
+    tampered.inputs.clientBrief.answers.find((a: { question: string }) => a.question === "liquidity").answer = "Planned withdrawal: USD 5,000,000";
+    expect(await post({ snapshot: tampered })).toMatchObject({ status: 422, error: expect.stringMatching(/don't match its fingerprint/) });
+    const unknown = json(v);
+    unknown.inputs.clientBrief.inferred = true;
+    expect(await post({ snapshot: unknown })).toMatchObject({ status: 422, error: expect.stringMatching(/Not a valid approved version/) });
+  });
+
+  it("the frozen brief survives a v11 backup round trip exactly; a v10 file can't carry one", async () => {
+    const m = await load();
+    approvedStory(m);
+    store(m).setDiscoveryAnswer("taxSensitivity", { level: "high" });
+    const v = approve(m, "Backup");
+    const ids = { disclosureIds: m.DISCLOSURE_LIBRARY.map((d) => d.id) };
+    const exported = m.exportBackup(store(m), NOW, ids);
+    if (!exported.ok) throw new Error(exported.errors.join("; "));
+    const parsed = m.parseBackup(exported.text, ids);
+    if (!parsed.ok) throw new Error(parsed.errors.join("; "));
+    expect(JSON.stringify(parsed.backup.engagement.snapshots[0])).toBe(JSON.stringify(v));
+    const v10 = JSON.parse(exported.text);
+    v10.workspaceVersion = 10;
+    delete v10.engagement.client.discovery;
+    expect(m.parseBackup(JSON.stringify(v10), ids)).toMatchObject({ ok: false });
+  });
+});
