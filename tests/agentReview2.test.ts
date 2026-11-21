@@ -153,7 +153,7 @@ describe("2. typed financial evidence", () => {
     const c = AGENT_EVAL_CASES[0];
     const s = c.snapshot();
     const base = { mode: "test", status: "completed", answer: "x", drafts: [], trace: [], evidence: [], forbiddenAttempts: 0 } as unknown as CopilotResult;
-    const g = gradeRun(c, { ...base, context: agentContextOf(s), figures: { claims: 2, matched: 1, unsupported: [], unchecked: ["60,000"] } }, s, s, "");
+    const g = gradeRun(c, { ...base, context: agentContextOf(s), figures: { claims: 2, matched: 1, unsupported: [], unchecked: ["60,000"], clientStated: [] } }, s, s, "");
     expect(g.checks.find((x) => x.name === "no unchecked figures")).toMatchObject({ critical: false, pass: false, detail: "60,000" });
   });
 });

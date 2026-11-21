@@ -371,7 +371,8 @@ function RunDetails({ result }: { result: CopilotResult }) {
 // result (value, unit, currency and any written sign).
 function FigureStatus({ figures }: { figures: CopilotResult["figures"] }) {
   const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
-  if (figures.unsupported.length === 0 && figures.unchecked.length === 0) {
+  const stated = figures.clientStated ?? [];
+  if (figures.unsupported.length === 0 && figures.unchecked.length === 0 && stated.length === 0) {
     return (
       <p className="text-2xs text-ink-500" data-testid="copilot-figures">
         {figures.claims === 0 ? "No figures to check in this answer." : `${plural(figures.claims, "figure")} checked against this run's engine results by value, unit, currency and sign; all matched.`}
@@ -386,6 +387,11 @@ function FigureStatus({ figures }: { figures: CopilotResult["figures"] }) {
       {figures.unsupported.length > 0 && (
         <div data-testid="copilot-figures-unsupported">
           Not supported by any engine result (value, unit, currency or sign), so not verified: {figures.unsupported.join(", ")}.
+        </div>
+      )}
+      {stated.length > 0 && (
+        <div data-testid="copilot-figures-client-stated">
+          Restate the client brief (the advisor&apos;s records of what the client said, not engine results): {stated.join(", ")}.
         </div>
       )}
       {figures.unchecked.length > 0 && (

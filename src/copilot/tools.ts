@@ -123,8 +123,9 @@ export class CopilotContext {
         s.client.investmentObjective,
         s.client.specialInstructions,
         ...(s.client.restrictedSecurities ?? []),
-        // #109: what the advisor typed into the discovery brief.
+        // #109: what the advisor typed into the discovery brief (every free-text field).
         s.client.discovery?.analysisNote,
+        s.client.discovery?.otherConstraints,
         ...(s.client.discovery?.securitiesToRetain ?? []),
         ...Object.values(s.client.discovery?.answers ?? {}).map((a) => a?.note),
       ];
@@ -916,12 +917,21 @@ function classifyUnit(value: number, key: string | undefined, parent: Record<str
  * untrusted workspace text is removed (`clean`).
  */
 export function evidenceIn(value: unknown, clean: (s: string) => string, reporting: string, key?: string, parent?: Record<string, unknown>, out: EvidenceValue[] = []): EvidenceValue[] {
+  // #109: the client brief is the advisor's record of what the client said. Its figures (a planned withdrawal, an
+  // income need) are client instructions, never engine results: tagged so a claim they alone support is reported
+  // as client-stated. Its counts and dates are not figures; its free text is removed as untrusted (clean).
+  if (key === "client_brief") {
+    out.push(...briefText(value).flatMap((t) => figuresIn(clean(t)).map((e) => ({ ...e, source: "client_brief" as const }))));
+    return out;
+  }
   if (typeof value === "number" && Number.isFinite(value)) out.push(classify(value, key, parent, reporting));
   else if (typeof value === "string") out.push(...figuresIn(clean(value)));
   else if (Array.isArray(value)) for (const v of value) evidenceIn(v, clean, reporting, key, parent, out);
   else if (value && typeof value === "object") for (const [k, v] of Object.entries(value)) evidenceIn(v, clean, reporting, k, value as Record<string, unknown>, out);
   return out;
 }
+
+const briefText = (v: unknown): string[] => (typeof v === "string" ? [v] : Array.isArray(v) ? v.flatMap(briefText) : v && typeof v === "object" ? Object.values(v).flatMap(briefText) : []);
 
 const AUTHORITY_REFUSAL =
   "Refused: Stratovell AI has no authority to approve, finalize, include in the PDF, share, issue or execute anything. It can investigate, simulate and save unapproved drafts; the advisor decides in Stratovell.";

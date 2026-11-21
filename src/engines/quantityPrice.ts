@@ -24,5 +24,11 @@ export function quantityPriceBasis(
 
 const BOND_TYPES = new Set(["bond", "treasury", "municipal_bond", "corporate_bond", "sovereign_bond"]);
 
-/** An instrument whose price may be quoted per 100 of face value: fixed income, or a bond asset type. */
-export const quotedPer100 = (h: { assetClass?: string; assetType?: string }) => h.assetClass === "fixed_income" || (!!h.assetType && BOND_TYPES.has(h.assetType));
+/**
+ * An instrument whose price may be quoted per 100 of face value (PR #110 review): the instrument is the evidence,
+ * not its asset class. A recorded instrument type decides: a bond type is per 100; an ETF, a mutual fund, a share
+ * or any other type is per unit, even when it's classed as fixed income. With no instrument type recorded, only
+ * fixed income identified by a CUSIP or ISIN (as the import records a bond) may be per 100; a ticker means per unit.
+ */
+export const quotedPer100 = (h: { assetClass?: string; assetType?: string; identifier?: { type: string } }) =>
+  h.assetType ? BOND_TYPES.has(h.assetType) : h.assetClass === "fixed_income" && (h.identifier?.type === "cusip" || h.identifier?.type === "isin");

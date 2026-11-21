@@ -136,10 +136,37 @@ function Objectives({ client }: { client: ClientProfile }) {
   );
 }
 
-/** A number typed by the advisor: recorded when valid, never prefilled from an older value. */
+/** What a typed number means (PR #110 review): empty, a valid value of 0 or more, or invalid with the reason. */
+export type NumberEdit = { kind: "empty" } | { kind: "valid"; value: number } | { kind: "invalid"; error: string };
+
+export function numberFieldEdit(text: string, min = 0): NumberEdit {
+  const raw = text.replace(/[,\s]/g, "");
+  if (raw === "") return { kind: "empty" };
+  if (/^-/.test(raw)) return { kind: "invalid", error: `Enter ${min} or more; a negative amount isn't recorded.` };
+  if (!/^\d+(\.\d*)?$/.test(raw)) return { kind: "invalid", error: "Enter a number, for example 150000 or 150,000." };
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < min) return { kind: "invalid", error: `Enter ${min} or more.` };
+  return { kind: "valid", value };
+}
+
+/**
+ * A number typed by the advisor: recorded when valid, never prefilled from an older value. An invalid or cleared
+ * entry records no value (onValue(undefined)), so an older answer and its review can't stand behind a field that
+ * shows something else; the typed text stays on screen with its error until it is corrected or cleared.
+ */
 function NumberField({ id, label, value, onValue, min = 0 }: { id: string; label: string; value: number | undefined; onValue: (n: number | undefined) => void; min?: number }) {
   const [text, setText] = React.useState(value == null ? "" : String(value));
-  React.useEffect(() => setText(value == null ? "" : String(value)), [value]);
+  const edit = numberFieldEdit(text, min);
+  // Follow the stored value when it changes elsewhere, but keep what the advisor is typing when it already says the same (or is invalid).
+  React.useEffect(() => {
+    setText((t) => {
+      const e = numberFieldEdit(t, min);
+      if (e.kind === "valid" && e.value === value) return t;
+      if (e.kind === "invalid" && value == null) return t;
+      return value == null ? "" : String(value);
+    });
+  }, [value, min]);
+  const errorId = `${id}-error`;
   return (
     <div>
       <Label htmlFor={id}>{label}</Label>
@@ -147,13 +174,19 @@ function NumberField({ id, label, value, onValue, min = 0 }: { id: string; label
         id={id}
         inputMode="decimal"
         value={text}
+        aria-invalid={edit.kind === "invalid" || undefined}
+        aria-describedby={edit.kind === "invalid" ? errorId : undefined}
         onChange={(e) => {
           setText(e.target.value);
-          const raw = e.target.value.replace(/[,\s]/g, "");
-          if (raw === "") onValue(undefined);
-          else if (/^\d+(\.\d+)?$/.test(raw) && Number(raw) >= min) onValue(Number(raw));
+          const next = numberFieldEdit(e.target.value, min);
+          onValue(next.kind === "valid" ? next.value : undefined);
         }}
       />
+      {edit.kind === "invalid" && (
+        <p id={errorId} role="alert" className="mt-1 text-2xs text-negative-600" data-testid={`${id}-invalid`}>
+          {edit.error} Not recorded.
+        </p>
+      )}
     </div>
   );
 }
