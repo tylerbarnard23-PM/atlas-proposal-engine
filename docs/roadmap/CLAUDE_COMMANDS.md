@@ -55,7 +55,20 @@ Stop for Codex review with exact head, checks, preview association, remaining li
 
 D1 (PR #72, `0381db1`), D2 (PR #75, `073049f`), D2a (PR #79, `c0ee4e9`), D3 (PR #81, `85b3910`) and **D4 (PR #82, `3738588`, 16 November 2026)** are released; the commands below the next one are historical, so do not rerun them. **D5 is in progress** (desktop-first since 18 November 2026: mobile work is deferred).
 
-### Next task: fix the PR #110 review findings
+### Next task: re-review PR #110
+
+Saved on 21 November 2026. [PR #110](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/110) on `feat/client-discovery-stratovell-ai`: the review fixes and the proposal brief are at code `c9a5153` (on top of the reviewed `c9a4ac6`), followed by a docs-only checkpoint. `main` is at `7aab3f4`. Verify heads, tree and stash first, and preserve newer work.
+
+1. **Codex** re-reviews from `c9a4ac6` (impact note: [comment](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/110#issuecomment-7064058137)):
+   - **`59430bf`, finding 1:** every discovery free-text field excluded from evidence; the brief's figures tagged as client-brief evidence and reported in `FigureCheck.clientStated`, never matched; engine figures still match. **Finding 2:** per-100 only for a bond type, or for fixed income identified by a CUSIP or ISIN with no instrument type; ETFs, funds and shares per unit. **Finding 3:** `numberFieldEdit` and `NumberField`: an invalid or negative edit shows an error (`aria-invalid`, `role="alert"`) and records no value (amount removed, or time horizon Not discussed), so no older reviewed answer stands behind it.
+   - **`034fe50`, the proposal brief:** `inputs.clientBrief` frozen for new versions (fingerprinted, strict v11 schema, no private notes or analysis note); the template presents it instead of the older levels; historical versions byte-identical (seeded fingerprint and markup hashes from the reviewed code); `snapshotStatus` ignores the field for versions without it; the route refuses a tampered or unknown brief; workspace drafts compute the brief on the server.
+   - **`c9a5153`:** the number-field error text.
+2. **The owner** decides on merge (pinned: `gh pr merge 110 --merge --match-head-commit <reviewed head>`), then reads main CI and the production deployment once.
+3. **Then, only with the owner's explicit approval and budget:** a fresh fake rehearsal on the merged build, then the analysis-led live take (`recorder/live-take-plan-analysis.md` outside Git). The proposed USD 5 allowance is **not approved**.
+
+**Carried forward for the demo (outside Git):** Stratovell AI labels; the shortened connection guide v2; the analysis-led question; readable answer holds; the completed-session counters framed without the next-session form; the PDF detail shots (approved-change row, holdings) and now the frozen client brief in the PDF; the temporary Windows voice with masters, scripts, segments, captions and cue timings kept; no paid voice service; the key entered privately for that server session only, Stop and Disconnect on completion or failure.
+
+### Previous task (done 21 November 2026, don't rerun): fix the PR #110 review findings
 
 Saved on 20 November 2026. **Opus 5.5 · High effort.** [PR #110](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/110) was reviewed at `c9a4ac67502d7c64c9d59d3cb4627919faf70cff` (`main` at `7aab3f4`); every reported check passed, but the merge is on hold for three findings ([record](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/110#issuecomment-7055631506)). Verify heads, tree and stash first; the branch head may be a later docs-only checkpoint on top of `c9a4ac6`. Preserve all work and recordings. No amend or force-push.
 
