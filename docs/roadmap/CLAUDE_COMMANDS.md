@@ -55,7 +55,20 @@ Stop for Codex review with exact head, checks, preview association, remaining li
 
 D1 (PR #72, `0381db1`), D2 (PR #75, `073049f`), D2a (PR #79, `c0ee4e9`), D3 (PR #81, `85b3910`) and **D4 (PR #82, `3738588`, 16 November 2026)** are released; the commands below the next one are historical, so do not rerun them. **D5 is in progress** (desktop-first since 18 November 2026: mobile work is deferred).
 
-### Next task: re-review PR #110 (the fixes for Codex's findings at 527407e)
+### Next task: the owner's merge decision for PR #110, then the demo pickup order
+
+Saved on 21 November 2026. [PR #110](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/110) on `feat/client-discovery-stratovell-ai`. Codex re-reviewed head **`85adf1b9654cb9ab8b83f3587b0166e1848eabe6`** (application fix `1c98ae5ae78bb5aa9ecf96c3a715d5494ed6e5c9`) and found no remaining blocker in the three fixes; its 197 focused tests and four regression probes passed, and all reported CI and Vercel checks passed on `85adf1b`. `main` is `7aab3f4bee62446a82d1d917946ae28cede72c5e`. A docs-only checkpoint may sit on top of the reviewed head. The v3 rehearsal predates the fixes; Codex did no new browser or video review. **Merge authorization and paid-run authorization are separate and neither has been given.** Verify heads, tree and stash first, and preserve newer work.
+
+1. **Tyler decides whether to authorize merging PR #110.** Before any authorized merge, verify the exact final head, its documentation-only difference from the reviewed head `85adf1b9654cb9ab8b83f3587b0166e1848eabe6`, mergeability and successful checks; pin the merge to that full SHA (`gh pr merge 110 --merge --match-head-commit <full SHA>`).
+2. **After merging:** verify main CI and the deployment, then run bounded synthetic, keyless production checks of discovery, Portfolio checks, recommendation origins, saved-workspace compatibility and the frozen brief in approved proposals.
+3. **Refresh the fake-provider rehearsal** against the final code.
+4. **Obtain separate approval** before the proposed one-run live-Claude recording. The USD 5 estimated guard is still **unapproved**.
+5. **Record the analysis-led workflow:** advisor-entered objectives and constraints → Claude's analysis and feasible alternatives → unapproved recommendation → explicit Add and approval → frozen proposal and PDF. Do not prescribe a fixed Apple trade merely to obtain predictable footage.
+6. **Assemble and review the complete cut,** then replace the temporary Windows voice. Preserve the approved import chapter, the clearer connection wording and all voiceover packages.
+
+Keep mobile work parked. Preserve all originals, recordings, the stash, worktrees, `launch.json` and browser data. Keep the publication gates and evaluation limitations recorded.
+
+### Previous task (done 21 November 2026; Codex found no remaining blocker at `85adf1b`, don't rerun): re-review PR #110 (the fixes for Codex's findings at 527407e)
 
 Saved on 21 November 2026. [PR #110](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/110) on `feat/client-discovery-stratovell-ai`, `main` at `7aab3f4`. Codex reviewed `527407e` and held the merge for three findings; they are fixed at code **`1c98ae5`** (impact note: [comment](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/110#issuecomment-7070187330)), with a docs-only checkpoint on top. Nothing on the branch is approved yet. Verify heads, tree and stash first, and preserve newer work.
 
