@@ -77,15 +77,28 @@ const STATUS_LABEL: Record<RunStatus, string> = {
  * The mode the server runs Copilot in, and in live mode this browser's view of
  * the live test session (a GET; it never starts a run). `refresh` re-reads it.
  */
+type ModeState = { mode: CopilotMode; model: string | null; live: LiveInfo | null; local: LocalInfo | null; hosted: HostedInfo | null };
+const MODE_EVENT = "stratovell-copilot-mode";
+
 export function useCopilotMode() {
-  const [mode, setMode] = React.useState<{ mode: CopilotMode; model: string | null; live: LiveInfo | null; local: LocalInfo | null; hosted: HostedInfo | null } | null>(null);
+  const [mode, setMode] = React.useState<ModeState | null>(null);
   const refresh = React.useCallback(() => {
     fetch("/api/copilot", { cache: "no-store" })
       .then((r) => r.json())
-      .then((d) => setMode({ mode: d.mode, model: d.model ?? null, live: d.live ?? null, local: d.local ?? null, hosted: d.hosted ?? null }))
+      .then((d) => {
+        const next: ModeState = { mode: d.mode, model: d.model ?? null, live: d.live ?? null, local: d.local ?? null, hosted: d.hosted ?? null };
+        setMode(next);
+        // #113: every view of the mode on the page (the header badge, the workspace, Settings) shows the same state.
+        window.dispatchEvent(new CustomEvent(MODE_EVENT, { detail: next }));
+      })
       .catch(() => setMode(null));
   }, []);
   React.useEffect(() => refresh(), [refresh]);
+  React.useEffect(() => {
+    const on = (e: Event) => setMode((e as CustomEvent<ModeState>).detail);
+    window.addEventListener(MODE_EVENT, on);
+    return () => window.removeEventListener(MODE_EVENT, on);
+  }, []);
   return mode ? { ...mode, refresh } : null;
 }
 
