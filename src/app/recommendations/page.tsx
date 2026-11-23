@@ -166,8 +166,9 @@ function Inner() {
   function newRec() {
     setEditing(newRecommendation(reportingCurrency));
   }
-  // #111: prewritten samples are labelled for what they are, above the list, whenever any are present.
-  const samples = recs.filter(isPrewrittenSample).length;
+  // #111: prewritten samples are labelled for what they are, above the list, whenever the open view shows any.
+  // Counted from the cards actually shown (the view, plus a just-saved record), so the notice never announces hidden ones.
+  const samples = shown.filter(isPrewrittenSample).length;
 
   return (
     <>

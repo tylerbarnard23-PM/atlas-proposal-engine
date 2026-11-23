@@ -287,6 +287,96 @@ describe("Recommendations page", () => {
     expect(html).not.toContain("No recommendations added yet.");
   });
 
+  // Codex review of 5b71ecd: the notice counted every sample in the workspace while the cards follow the view
+  // (Current draft / All recommendations), so a draft holding only a Claude record still announced six samples
+  // "labelled below". The notice now counts, and appears for, the samples among the cards actually shown.
+  describe("the sample notice follows the cards in the open view", () => {
+    const CLAUDE_ID = "rec_claude_synthetic";
+    /** Six prewritten samples outside the current draft, plus one synthetic Claude-origin record in it. */
+    function mixedWorkspace(m: M) {
+      loadSampleRecommendations(m.useAtlasStore);
+      const base = { ...store(m).recommendations[0], origin: undefined } as Recommendation;
+      store(m).upsertRecommendation({ ...base, id: CLAUDE_ID, title: "Claude record (synthetic)", origin: { kind: "claude", models: ["claude-opus-5-5"] } });
+      store(m).setDraftMember(CLAUDE_ID, true);
+      expect(store(m).workingDraft.memberIds).toEqual([CLAUDE_ID]);
+    }
+    const renderView = (m: M, view: "draft" | "all") => {
+      (window as unknown as { location: { search: string } }).location.search = `?view=${view}`;
+      try {
+        return render(m, m.RecommendationsPage, "/recommendations");
+      } finally {
+        (window as unknown as { location: { search: string } }).location.search = "";
+      }
+    };
+    const cards = (html: string) => [...html.matchAll(/\sid="rec-([^"]+)"/g)].map((x) => x[1]); // card ids, not data-testid="rec-…"
+    const noticeCount = (html: string) => {
+      const at = html.indexOf('data-testid="sample-recs-notice"');
+      if (at < 0) return null;
+      const n = /(\d+) (?:record is|records are) labelled/.exec(html.slice(at));
+      return n ? Number(n[1]) : NaN;
+    };
+
+    it("a current draft holding only a Claude record shows that card and no sample notice; All shows all seven and counts six samples", async () => {
+      const m = await load();
+      mixedWorkspace(m);
+      const before = JSON.stringify(store(m));
+
+      const draft = renderView(m, "draft");
+      expect(cards(draft)).toEqual([CLAUDE_ID]);
+      expect(draft).toContain("Claude draft");
+      expect(draft).not.toContain('data-testid="sample-recs-notice"');
+      expect(draft).not.toContain("Prewritten sample recommendations.");
+
+      const all = renderView(m, "all");
+      expect(cards(all)).toHaveLength(7);
+      expect(cards(all).filter((id) => m.isPrewrittenSample(store(m).recommendations.find((r) => r.id === id)!))).toHaveLength(6);
+      expect(all).toContain(SAMPLE_NOTICE);
+      expect(noticeCount(all)).toBe(6);
+      expect(all.indexOf('data-testid="sample-recs-notice"')).toBeLessThan(all.search(/\sid="rec-/));
+      expect(all.match(/Sample example \(prewritten\)/g)).toHaveLength(6 + 1); // six card labels and the notice's own mention
+
+      expect(JSON.stringify(store(m))).toBe(before); // rendering either view changes nothing stored
+    });
+
+    it("a current draft holding samples and other records counts only the samples shown in it", async () => {
+      const m = await load();
+      mixedWorkspace(m);
+      const [a, b] = store(m).recommendations;
+      store(m).setDraftMember(a.id, true);
+      store(m).setDraftMember(b.id, true);
+      store(m).upsertRecommendation({ ...store(m).recommendations.find((r) => r.id === a.id)!, approvedByAdvisor: true, status: "approved", includeInPdf: true });
+      expect(store(m).recommendations.find((r) => r.id === a.id)!.approvedByAdvisor).toBe(true);
+      const before = JSON.stringify(store(m));
+
+      const draft = renderView(m, "draft");
+      expect(new Set(cards(draft))).toEqual(new Set([a.id, b.id, CLAUDE_ID]));
+      expect(noticeCount(draft)).toBe(2);
+      expect(draft.match(/Sample example \(prewritten\)/g)).toHaveLength(2 + 1);
+
+      const all = renderView(m, "all");
+      expect(cards(all)).toHaveLength(7);
+      expect(noticeCount(all)).toBe(6);
+      expect(JSON.stringify(store(m))).toBe(before); // membership, the approval and every record unchanged
+    });
+
+    it("a sample just saved from the editor, shown in the draft view outside the draft, is counted with the cards", async () => {
+      const m = await load();
+      mixedWorkspace(m);
+      const sample = store(m).recommendations[2];
+      (window as unknown as { location: { search: string } }).location.search = `?view=draft&saved=${sample.id}`;
+      let html: string;
+      try {
+        html = render(m, m.RecommendationsPage, "/recommendations");
+      } finally {
+        (window as unknown as { location: { search: string } }).location.search = "";
+      }
+      expect(new Set(cards(html))).toEqual(new Set([CLAUDE_ID, sample.id]));
+      expect(noticeCount(html)).toBe(1);
+      expect(html).toContain("1 record is labelled");
+      expect(store(m).workingDraft.memberIds).toEqual([CLAUDE_ID]);
+    });
+  });
+
   it("no source text describes samples as AI recommendations based on the client review", () => {
     const hits = walk(SRC).filter((f) => /simulated AI recommendations|based on the client review/i.test(fs.readFileSync(f, "utf8")));
     expect(hits).toEqual([]);
