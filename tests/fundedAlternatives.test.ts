@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { loadSampleRecommendations, nothingSaved } from "./support/sampleRecommendations";
 import type { Holding, Recommendation } from "@/domain/types";
 
 vi.mock("puppeteer-core", async () => (await import("./support/fakeChromium")).puppeteerModule);
@@ -28,8 +29,12 @@ const storage = vi.hoisted(() => {
 const NOW = new Date("2026-10-24T12:00:00Z");
 
 async function load() {
+  const fresh = nothingSaved();
+  const store = await import("@/store/useStore");
+  // #111: these fixtures are the sample workspace with its prewritten recommendations, loaded explicitly on a fresh start.
+  if (fresh) loadSampleRecommendations(store.useAtlasStore);
   return {
-    ...(await import("@/store/useStore")),
+    ...store,
     ...(await import("@/engines/allocationDesk")),
     ...(await import("@/engines/workspaceBackup")),
     ...(await import("@/engines/normalizationEngine")),

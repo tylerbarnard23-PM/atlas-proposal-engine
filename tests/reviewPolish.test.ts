@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { loadSampleRecommendations } from "./support/sampleRecommendations";
 import { concentrationKind, insightKey } from "@/engines/insightEngine";
 import type { Insight } from "@/domain/types";
 
@@ -45,6 +46,7 @@ describe("rejecting recommendations and dismissing insights", () => {
     const { useAtlasStore } = await import("@/store/useStore");
     const s = useAtlasStore.getState();
     s.resetSeed();
+    loadSampleRecommendations(useAtlasStore); // #111: the sample no longer preloads them
     const [first, ...rest] = useAtlasStore.getState().recommendations;
     s.rejectRecommendation(first.id, "Client declined");
     let r = useAtlasStore.getState().recommendations.find((x) => x.id === first.id)!;

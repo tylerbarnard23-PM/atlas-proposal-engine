@@ -1,19 +1,34 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { ArrowRight } from "lucide-react";
 import { useAtlasStore } from "@/store/useStore";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Input, Label, Select, Textarea } from "@/components/ui/Input";
+import { Input, Label, Select } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/ui/Section";
 import { ClientOnly } from "@/components/layout/ClientOnly";
 import { COUNTRIES } from "@/domain/countryConfigs";
 import { CURRENCIES } from "@/domain/currencyConfigs";
 import { hasMoneyAmounts, recommendationsInOtherCurrencies } from "@/engines/recommendationAmounts";
-import { DiscoveryQuestionnaire } from "@/components/profile/DiscoveryQuestionnaire";
-import { ClientBriefPanel } from "@/components/profile/ClientBriefPanel";
+import { clientBrief } from "@/engines/clientDiscovery";
+import { movedDiscoveryLink, OBJECTIVES_PATH } from "@/components/profile/objectivesLinks";
 
 export default function ClientProfilePage() {
+  // #111: discovery moved to Client objectives; a link saved to its old anchor here still lands on it,
+  // whether it opens this page or changes only the hash of a page already open.
+  const router = useRouter();
+  React.useEffect(() => {
+    const forward = () => {
+      const moved = movedDiscoveryLink(window.location.hash);
+      if (moved) router.replace(moved);
+    };
+    forward();
+    window.addEventListener("hashchange", forward);
+    return () => window.removeEventListener("hashchange", forward);
+  }, [router]);
   return (
     <ClientOnly>
       <ClientProfileInner />
@@ -27,6 +42,7 @@ function ClientProfileInner() {
   const startNewClient = useAtlasStore((s) => s.startNewClient);
   const resetSeed = useAtlasStore((s) => s.resetSeed);
   const recommendations = useAtlasStore((s) => s.recommendations);
+  const brief = clientBrief(client);
   const elsewhere = recommendationsInOtherCurrencies(recommendations, client.proposalOutputCurrency);
 
   // Recommendation amounts keep the currency they were entered in; a new
@@ -64,10 +80,16 @@ ${affected.length} recommendation${affected.length === 1 ? " has" : "s have"} am
       <PageHeader
         eyebrow="Engagement"
         title="Client Profile"
-        description="Who this proposal is for: the client's details and jurisdiction, and what you discussed with them: objectives, needs and constraints."
+        description="Who this proposal is for: the client's identity, household, jurisdiction, tax residency and currencies. The client's objectives, needs and constraints are recorded on Client objectives."
         actions={
           <>
-            <Button variant="ghost" size="sm" onClick={() => { if (confirm("Restore the seeded Blackwell Family Office household?")) resetSeed(); }}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                if (confirm("Restore the fictional Blackwell Family Office sample?\n\nThis replaces the current workspace. The sample starts with no recommendations.")) resetSeed();
+              }}
+            >
               Restore sample data
             </Button>
             <Button variant="danger" size="sm" onClick={handleNewClient}>
@@ -162,67 +184,18 @@ ${affected.length} recommendation${affected.length === 1 ? " has" : "s have"} am
           </CardBody>
         </Card>
 
-        <DiscoveryQuestionnaire />
-
-        <ClientBriefPanel />
-
-        <Card>
+        <Card data-testid="objectives-pointer">
           <CardHeader>
-            <CardTitle>Earlier profile levels</CardTitle>
+            <CardTitle>Client objectives</CardTitle>
           </CardHeader>
-          <CardBody className="space-y-3">
-            <p className="text-2xs text-ink-500">
-              Shown on the dashboard and in the proposal’s client profile, as before. They aren’t discovery answers and aren’t sent to Stratovell AI; use the
-              questions above for what the client said.
-            </p>
-            <div className="grid grid-cols-3 gap-3">
-              <Field label="Risk tolerance">
-                <Select
-                  value={client.riskTolerance}
-                  onChange={(e) => setClient({ riskTolerance: e.target.value as typeof client.riskTolerance })}
-                >
-                  <option value="conservative">Conservative</option>
-                  <option value="moderate">Moderate</option>
-                  <option value="growth">Growth</option>
-                  <option value="aggressive">Aggressive</option>
-                </Select>
-              </Field>
-              <Field label="Liquidity needs (level)">
-                <Select value={client.liquidityNeeds} onChange={(e) => setClient({ liquidityNeeds: e.target.value as typeof client.liquidityNeeds })}>
-                  <option value="low">Low</option>
-                  <option value="moderate">Moderate</option>
-                  <option value="high">High</option>
-                </Select>
-              </Field>
-              <Field label="Income needs (level)">
-                <Select value={client.incomeNeeds} onChange={(e) => setClient({ incomeNeeds: e.target.value as typeof client.incomeNeeds })}>
-                  <option value="none">None</option>
-                  <option value="modest">Modest</option>
-                  <option value="significant">Significant</option>
-                </Select>
-              </Field>
-            </div>
-            <Field label="Investment objective (text)">
-              <Textarea rows={2} value={client.investmentObjective} onChange={(e) => setClient({ investmentObjective: e.target.value })} />
-            </Field>
-            <Field label="Special instructions">
-              <Textarea rows={2} value={client.specialInstructions ?? ""} onChange={(e) => setClient({ specialInstructions: e.target.value })} />
-            </Field>
-          </CardBody>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Advisor discovery notes (private)</CardTitle>
-          </CardHeader>
-          <CardBody>
-            <Textarea
-              rows={3}
-              aria-label="Advisor discovery notes (private)"
-              value={client.advisorDiscoveryNotes ?? ""}
-              onChange={(e) => setClient({ advisorDiscoveryNotes: e.target.value })}
-            />
-            <p className="mt-1 text-2xs text-ink-500">Private to you: never part of the client brief and never sent to Stratovell AI or Anthropic.</p>
+          <CardBody className="flex flex-wrap items-center justify-between gap-3 text-[13px] text-ink-700">
+            <span>
+              {brief.counts.answered} of {brief.counts.total} discovery questions answered · {brief.counts.reviewed} reviewed
+              {brief.counts.stale ? ` · ${brief.counts.stale} changed since review` : ""}
+            </span>
+            <Link href={OBJECTIVES_PATH} className="inline-flex items-center gap-1 font-medium text-navy-700 hover:underline">
+              Record or review client objectives <ArrowRight className="h-4 w-4" />
+            </Link>
           </CardBody>
         </Card>
       </div>

@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   UserSquare,
+  ClipboardList,
   Inbox,
   FileSearch,
   ListTree,
@@ -38,6 +39,8 @@ export const NAV: NavItem[] = [
   { label: "Firm & Branding", href: "/firm-branding", icon: <Building2 className="h-4 w-4" />, group: "Your Firm" },
   { label: "Dashboard", href: "/", icon: <LayoutDashboard className="h-4 w-4" />, group: "Overview" },
   { label: "Client Profile", href: "/client-profile", icon: <UserSquare className="h-4 w-4" />, group: "Overview" },
+  // #111: the client's objectives (discovery, review and the brief) have their own page, right after the profile.
+  { label: "Client objectives", href: "/client-objectives", icon: <ClipboardList className="h-4 w-4" />, group: "Overview" },
   { label: "Import Center", href: "/import-center", icon: <Inbox className="h-4 w-4" />, group: "Data" },
   { label: "Statement Workbench", href: "/statement-workbench", icon: <FileSearch className="h-4 w-4" />, group: "Data" },
   { label: "Accounts & Assets", href: "/accounts-assets", icon: <ListTree className="h-4 w-4" />, group: "Data" },

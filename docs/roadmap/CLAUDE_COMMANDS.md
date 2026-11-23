@@ -55,7 +55,20 @@ Stop for Codex review with exact head, checks, preview association, remaining li
 
 D1 (PR #72, `0381db1`), D2 (PR #75, `073049f`), D2a (PR #79, `c0ee4e9`), D3 (PR #81, `85b3910`) and **D4 (PR #82, `3738588`, 16 November 2026)** are released; the commands below the next one are historical, so do not rerun them. **D5 is in progress** (desktop-first since 18 November 2026: mobile work is deferred).
 
-### Next task: the owner's merge decision for PR #110, then the demo pickup order
+### Next task: Codex review of the #111 PR, then the analysis-led take
+
+Saved on 23 November 2026. PR #110 is released as `58deeb017a84c2ea357b3780bfe7028f94160b08` and production-verified; the free rehearsal passed on the released code (201 of 201). The #111 PR (branch `feat/client-objectives-empty-recommendations`, from `58deeb0`) adds the Client objectives page and stops preloading recommendations; see the handoff for its checks. **Merge authorization and paid-run authorization are separate and neither has been given.** Verify heads, tree and stash first, and preserve newer work.
+
+1. **Codex reviews the #111 PR** at its exact head: empty initialization (fresh, "Restore sample data", new client, import), preserved records and the prewritten-sample notice, accurate origins, the moved discovery state and old links, no analysis request from navigation, unchanged store/backup v11, engines, readiness rules, prompts and spending.
+2. **Only on the owner's explicit instruction:** merge pinned to the reviewed head (`gh pr merge N --merge --match-head-commit <full SHA>`), then main CI, the deployment and a keyless production check of the empty start, an existing workspace's sample notice and the Client objectives flow.
+3. **Update the recorder** (outside Git): discovery on `/client-objectives`, the imported client starting with zero recommendations, and the concise brief on Stratovell AI. Refresh the free fake-provider rehearsal on the released code.
+4. **Obtain separate approval** for the one-run, analysis-led live-Claude take (the next command in REPORT.md section 28, updated for `/client-objectives`). The USD 5 estimated guard is still **unapproved**.
+5. **Record:** the imported client with zero recommendations → the advisor's objectives and constraints → Claude's actual analysis and feasible alternatives → an unapproved draft → explicit Add and approval → frozen proposal and PDF. No fixed Apple or other predetermined trade.
+6. **Assemble and review the complete cut,** then replace the temporary Windows voice. Preserve every recording and voiceover package.
+
+Keep mobile work parked. Preserve all originals, recordings, the stash, worktrees, `launch.json` and browser data. Keep the publication gates and evaluation limitations recorded.
+
+### Previous task (done 23 November 2026; PR #110 merged as `58deeb0`, released and production-verified, don't rerun): the owner's merge decision for PR #110, then the demo pickup order
 
 Saved on 21 November 2026. [PR #110](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/110) on `feat/client-discovery-stratovell-ai`. Codex re-reviewed head **`85adf1b9654cb9ab8b83f3587b0166e1848eabe6`** (application fix `1c98ae5ae78bb5aa9ecf96c3a715d5494ed6e5c9`) and found no remaining blocker in the three fixes; its 197 focused tests and four regression probes passed, and all reported CI and Vercel checks passed on `85adf1b`. `main` is `7aab3f4bee62446a82d1d917946ae28cede72c5e`. A docs-only checkpoint may sit on top of the reviewed head. The v3 rehearsal predates the fixes; Codex did no new browser or video review. **Merge authorization and paid-run authorization are separate and neither has been given.** Verify heads, tree and stash first, and preserve newer work.
 

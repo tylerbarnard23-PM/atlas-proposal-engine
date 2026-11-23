@@ -26,7 +26,8 @@ import { cn } from "@/utils/cn";
 import { summarizePreview } from "@/components/recommendations/recEffect";
 import { RecPreview } from "@/components/recommendations/RecPreview";
 import { previewRecommendation } from "@/engines/recommendationPreview";
-import { originLabel, originOf } from "@/engines/recommendationOrigin";
+import { isPrewrittenSample, originLabel, originOf } from "@/engines/recommendationOrigin";
+import { EmptyRecommendations, SampleRecommendationsNotice } from "@/components/recommendations/EmptyRecommendations";
 import { CurrencyReviewPanel } from "@/components/recommendations/CurrencyReviewPanel";
 import { RecCurrencyField } from "@/components/recommendations/RecCurrencyField";
 import { formatCurrency, formatTimestampDate, todayIso } from "@/utils/formatting";
@@ -165,6 +166,8 @@ function Inner() {
   function newRec() {
     setEditing(newRecommendation(reportingCurrency));
   }
+  // #111: prewritten samples are labelled for what they are, above the list, whenever any are present.
+  const samples = recs.filter(isPrewrittenSample).length;
 
   return (
     <>
@@ -292,6 +295,8 @@ function Inner() {
         </div>
       )}
 
+      {samples > 0 && <SampleRecommendationsNotice count={samples} />}
+
       {recs.length > 0 && shown.length === 0 && (
         <EmptyState
           title="Nothing in the current draft yet"
@@ -305,22 +310,7 @@ function Inner() {
       )}
 
       {recs.length === 0 ? (
-        <EmptyState
-          title="No recommendations yet"
-          description="Write a recommendation yourself, or ask Stratovell AI: Claude analyzes the client brief and the portfolio and prepares drafts for your review. Portfolio checks never create recommendations by themselves."
-          action={
-            <div className="flex flex-wrap gap-2 justify-center">
-              <Button onClick={newRec} iconLeft={<Plus className="h-4 w-4" />}>
-                Write a recommendation
-              </Button>
-              <Link href="/copilot">
-                <Button variant="secondary" iconLeft={<Bot className="h-4 w-4" />}>
-                  Analyze with Stratovell AI
-                </Button>
-              </Link>
-            </div>
-          }
-        />
+        <EmptyRecommendations onWrite={newRec} />
       ) : (
         <div className="space-y-3">
           {shown.map((r) => {

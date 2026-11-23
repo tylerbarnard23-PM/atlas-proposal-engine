@@ -401,7 +401,7 @@ function BriefLine() {
     <p className="text-2xs text-ink-600" data-testid="client-brief-line">
       Client brief: {b.counts.answered} of {b.counts.total} answered, {b.counts.reviewed} reviewed
       {b.conflicts.length ? `, ${b.conflicts.length} possible conflict${b.conflicts.length === 1 ? "" : "s"}` : ""}.{" "}
-      <Link href="/client-profile#client-brief" className="text-navy-700 underline underline-offset-2">
+      <Link href="/client-objectives#client-brief" className="text-navy-700 underline underline-offset-2">
         Review the brief
       </Link>
     </p>

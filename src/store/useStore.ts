@@ -31,7 +31,6 @@ import { SEED_ACCOUNTS } from "@/data/seedAccounts";
 import { SEED_ADVISOR, SEED_CLIENT } from "@/data/seedClient";
 import { SEED_FX_RATES } from "@/data/seedFxRates";
 import { SEED_HOLDINGS } from "@/data/seedHoldings";
-import { SEED_RECOMMENDATIONS } from "@/data/seedRecommendations";
 import { SEED_MARKET_QUOTES } from "@/data/seedMarketData";
 import { DISCLOSURE_LIBRARY } from "@/domain/disclosureLibrary";
 import { safeId, todayIso } from "@/utils/formatting";
@@ -225,7 +224,11 @@ const seedState = (): AtlasState => ({
   accounts: SEED_ACCOUNTS,
   holdings: SEED_HOLDINGS,
   fxRates: SEED_FX_RATES,
-  recommendations: SEED_RECOMMENDATIONS,
+  // #111: the fictional portfolio arrives with no recommendations. The advisor
+  // reviews the client's objectives, runs an analysis and adds the drafts they
+  // choose. The prewritten samples (SEED_RECOMMENDATIONS) stay a fixture for
+  // tests that load them explicitly; a saved workspace keeps whatever it holds.
+  recommendations: [],
   insights: [],
   dismissedInsights: [],
   sourceDocuments: [],
