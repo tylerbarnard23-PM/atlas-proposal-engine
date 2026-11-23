@@ -55,16 +55,18 @@ Stop for Codex review with exact head, checks, preview association, remaining li
 
 D1 (PR #72, `0381db1`), D2 (PR #75, `073049f`), D2a (PR #79, `c0ee4e9`), D3 (PR #81, `85b3910`) and **D4 (PR #82, `3738588`, 16 November 2026)** are released; the commands below the next one are historical, so do not rerun them. **D5 is in progress** (desktop-first since 18 November 2026: mobile work is deferred).
 
-### Next task: Codex review of the #111 PR, then the analysis-led take
+### Next task: Codex re-review of PR #112, then the owner's merge decision and the analysis-led take
 
-Saved on 23 November 2026. PR #110 is released as `58deeb017a84c2ea357b3780bfe7028f94160b08` and production-verified; the free rehearsal passed on the released code (201 of 201). The #111 PR (branch `feat/client-objectives-empty-recommendations`, from `58deeb0`) adds the Client objectives page and stops preloading recommendations; see the handoff for its checks. **Merge authorization and paid-run authorization are separate and neither has been given.** Verify heads, tree and stash first, and preserve newer work.
+Saved on 23 November 2026. PR #110 is released as `58deeb017a84c2ea357b3780bfe7028f94160b08` and production-verified; the free rehearsal passed on the released code (201 of 201). PR #112 for #111 (branch `feat/client-objectives-empty-recommendations`, from `58deeb0`) adds the Client objectives page and stops preloading recommendations. Codex's review of `5b71ecd` found one issue (the prewritten-sample notice counted samples hidden by the Current draft view); it is fixed in `127f2c9`, so the sample count now follows the cards shown. See the handoff for its checks. **Merge authorization and paid-run authorization are separate and neither has been given.** Verify heads, tree and stash first, and preserve newer work.
 
-1. **Codex reviews the #111 PR** at its exact head: empty initialization (fresh, "Restore sample data", new client, import), preserved records and the prewritten-sample notice, accurate origins, the moved discovery state and old links, no analysis request from navigation, unchanged store/backup v11, engines, readiness rules, prompts and spending.
-2. **Only on the owner's explicit instruction:** merge pinned to the reviewed head (`gh pr merge N --merge --match-head-commit <full SHA>`), then main CI, the deployment and a keyless production check of the empty start, an existing workspace's sample notice and the Client objectives flow.
-3. **Update the recorder** (outside Git): discovery on `/client-objectives`, the imported client starting with zero recommendations, and the concise brief on Stratovell AI. Refresh the free fake-provider rehearsal on the released code.
-4. **Obtain separate approval** for the one-run, analysis-led live-Claude take (the next command in REPORT.md section 28, updated for `/client-objectives`). The USD 5 estimated guard is still **unapproved**.
-5. **Record:** the imported client with zero recommendations → the advisor's objectives and constraints → Claude's actual analysis and feasible alternatives → an unapproved draft → explicit Add and approval → frozen proposal and PDF. No fixed Apple or other predetermined trade.
-6. **Assemble and review the complete cut,** then replace the temporary Windows voice. Preserve every recording and voiceover package.
+1. **Codex re-reviews PR #112** at its exact head: the sample-notice fix (`127f2c9`: counted from the cards shown, in both views, with the saved-record exception) and the original scope — empty initialization (fresh, "Restore sample data", new client, import), preserved records, accurate origins, the moved discovery state and old links, no analysis request from navigation, unchanged store/backup v11, engines, readiness rules, prompts and spending.
+2. **The owner's merge decision, only on explicit instruction:** merge pinned to the reviewed head (`gh pr merge 112 --merge --match-head-commit <full SHA>`).
+3. **Release verification:** main CI, the deployment and a keyless production check of the empty start, an existing workspace's sample notice in both views and the Client objectives flow.
+4. **Update the recorder** (outside Git): discovery on `/client-objectives`, the imported client starting with zero recommendations, and the concise brief on Stratovell AI.
+5. **Refresh the free fake-provider rehearsal** on the released code.
+6. **Obtain separate approval** for the one-run, analysis-led live-Claude take (the next command in REPORT.md section 28, updated for `/client-objectives`). The USD 5 estimated guard is still **unapproved**.
+7. **Record:** the imported client with zero recommendations → the advisor's objectives and constraints → Claude's actual analysis and feasible alternatives → an unapproved draft → explicit Add and approval → frozen proposal and PDF. No fixed Apple or other predetermined trade.
+8. **Assemble and review the complete cut,** then replace the temporary Windows voice. Preserve every recording and voiceover package.
 
 Keep mobile work parked. Preserve all originals, recordings, the stash, worktrees, `launch.json` and browser data. Keep the publication gates and evaluation limitations recorded.
 
