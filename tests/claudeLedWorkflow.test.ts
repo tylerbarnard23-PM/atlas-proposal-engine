@@ -193,7 +193,7 @@ describe("2. Claude is the only source of AI recommendations", () => {
   it("the prompt and the checks tool treat a rule flag as a fact to analyze, not a recommendation", async () => {
     const m = await load();
     expect(m.PROMPT_VERSION).toBe("claude-led-2026-11-21");
-    expect(m.TOOLS_VERSION).toBe("claude-led-2026-11-21");
+    expect(m.TOOLS_VERSION).toBe("claude-led-2026-11-23-targets"); // #113 (intended): advisor-set targets labelled in the scope overview
     const tool = m.COPILOT_TOOLS.find((t: { name: string }) => t.name === "list_insights")!;
     expect(tool.description).toMatch(/product default/i);
     expect(tool.description).toMatch(/not a recommendation/i);

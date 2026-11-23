@@ -572,6 +572,9 @@ function scopeOverview(ctx: CopilotContext) {
     reporting_currency: ctx.reportingCurrency,
     scope_accounts: d.scope.accounts.map((a) => ({ account_id: a.id, name: a.name, current: money2(a.current), proposed: money2(a.proposed) })),
     ...scopeSummary(d),
+    // #113: targets are the advisor's own goals for this alternative, distinct from anything the model drafts.
+    targets_note:
+      "target_pct is the advisor's own allocation target for this alternative (set on the allocation desk), not a recommendation and not the client's stated policy; null means no target is set. A target never creates a trade, and drift_pts is the distance from it.",
     // In-scope positions; only these can be simulated or drafted here.
     positions: d.positions.map((p) => ({
       holding_id: p.id,

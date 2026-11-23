@@ -17,7 +17,8 @@
     "live-session": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/live-session.mjs",
     "local": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/atlas-local.mjs",
     "local:pair": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/atlas-local.mjs pair",
-    "local:doctor": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/atlas-local.mjs doctor"
+    "local:doctor": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/atlas-local.mjs doctor",
+    "hosted:migrate": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/hosted-migrate.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",
@@ -29,6 +30,7 @@
     "next": "^16.4.5",
     "papaparse": "^5.4.1",
     "pdfjs-dist": "^6.4.299",
+    "pg": "^8.23.1",
     "puppeteer-core": "^25.15.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
@@ -40,9 +42,11 @@
     "zustand": "^5.0.2"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.15",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^22.10.2",
     "@types/papaparse": "^5.3.15",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "postcss": "^8.4.49",

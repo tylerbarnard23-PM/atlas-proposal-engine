@@ -332,7 +332,11 @@ describe("Recommendations page", () => {
       expect(cards(all).filter((id) => m.isPrewrittenSample(store(m).recommendations.find((r) => r.id === id)!))).toHaveLength(6);
       expect(all).toContain(SAMPLE_NOTICE);
       expect(noticeCount(all)).toBe(6);
-      expect(all.indexOf('data-testid="sample-recs-notice"')).toBeLessThan(all.search(/\sid="rec-/));
+      // #113 (intended update): samples sit under a collapsed "Saved examples" section after the Claude and advisor
+      // recommendations, and the notice heads that section, above every sample card.
+      const firstSample = Math.min(...m.SEED_RECOMMENDATIONS.map((r) => all.indexOf(` id="rec-${r.id}"`)).filter((i) => i >= 0));
+      expect(all.indexOf('data-testid="sample-recs-notice"')).toBeLessThan(firstSample);
+      expect(all.indexOf('data-testid="saved-examples"')).toBeGreaterThan(all.indexOf(` id="rec-${CLAUDE_ID}"`));
       expect(all.match(/Sample example \(prewritten\)/g)).toHaveLength(6 + 1); // six card labels and the notice's own mention
 
       expect(JSON.stringify(store(m))).toBe(before); // rendering either view changes nothing stored

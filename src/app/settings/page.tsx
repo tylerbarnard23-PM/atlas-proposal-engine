@@ -7,6 +7,7 @@ import { PageHeader, SectionDivider } from "@/components/ui/Section";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { WorkspaceBackupPanel } from "@/components/settings/WorkspaceBackupPanel";
+import { AiConnectionPanel } from "@/components/settings/AiConnectionPanel";
 
 export default function SettingsPage() {
   return (
@@ -26,8 +27,11 @@ function Inner() {
       <PageHeader
         eyebrow="Workspace"
         title="Settings"
-        description="Local persistence, backups and the exchange-rate source. Environment configuration is managed at the deployment level."
+        description="The AI connection, local persistence, backups and the exchange-rate source. Environment configuration is managed at the deployment level."
       />
+
+      <SectionDivider>AI connection</SectionDivider>
+      <AiConnectionPanel />
 
       <SectionDivider>Persistence</SectionDivider>
       <Card className="mb-5">

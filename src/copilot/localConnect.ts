@@ -78,8 +78,8 @@ async function connectionView(deps: LiveDeps, provider: LiveProvider, conn?: Con
   return viewOf(c, r && !r.ok ? r : null, provider);
 }
 
-const ceilings = (): sessions.AllowanceChoice => ({ minutes: sessions.LIVE_SESSION_LIMITS.minutes, runs: sessions.LIVE_SESSION_LIMITS.runs, requests: sessions.LIVE_SESSION_LIMITS.requests, usd: sessions.LIVE_SESSION_LIMITS.usd });
-const minimumUsd = () => Math.ceil(FIRST_REQUEST_USD * 100) / 100;
+export const ceilings = (): sessions.AllowanceChoice => ({ minutes: sessions.LIVE_SESSION_LIMITS.minutes, runs: sessions.LIVE_SESSION_LIMITS.runs, requests: sessions.LIVE_SESSION_LIMITS.requests, usd: sessions.LIVE_SESSION_LIMITS.usd });
+export const minimumUsd = () => Math.ceil(FIRST_REQUEST_USD * 100) / 100;
 
 /** What this browser may know about the local connection (part of the status GET; changes nothing). */
 export async function localInfo(req: Request, deps: LiveDeps): Promise<LocalInfo | null> {
@@ -310,7 +310,12 @@ export async function disconnect(deps: LiveDeps, provider: LiveProvider): Promis
  * ceiling, never above. Nothing is sent to the provider. One atomic step: of
  * several concurrent starts, one succeeds.
  */
-export async function startSession(deps: LiveDeps, provider: LiveProvider, body: { allowance?: unknown }): Promise<{ ok: true; cookie: string; expiresAt: Date; session: sessions.SessionView } | Refusal> {
+/**
+ * The allowance the user confirmed, or why it can't start a session: every
+ * limit must be stated, each at or below its ceiling, and the USD guard must
+ * admit at least one worst-case request. Shared by the local and hosted paths.
+ */
+export function confirmedAllowance(body: { allowance?: unknown }): { ok: true; allowance: sessions.Allowance } | Refusal {
   const a = body.allowance as Partial<sessions.AllowanceChoice> | null | undefined;
   if (!a || typeof a !== "object" || !(["minutes", "runs", "requests", "usd"] as const).every((k) => typeof a[k] === "number"))
     return { ok: false, status: 400, code: "bad_allowance", error: "Confirm the session's allowance: its minutes, runs, requests and USD guard." };
@@ -318,6 +323,12 @@ export async function startSession(deps: LiveDeps, provider: LiveProvider, body:
   if (!allowance.ok) return { ok: false, status: 400, code: "bad_allowance", error: allowance.error };
   if (allowance.allowance.usd < FIRST_REQUEST_USD)
     return { ok: false, status: 400, code: "bad_allowance", error: `A USD ${allowance.allowance.usd} guard couldn't admit one request: each is reserved at its worst case first, about USD ${minimumUsd().toFixed(2)}. Choose at least that.` };
+  return { ok: true, allowance: allowance.allowance };
+}
+
+export async function startSession(deps: LiveDeps, provider: LiveProvider, body: { allowance?: unknown }): Promise<{ ok: true; cookie: string; expiresAt: Date; session: sessions.SessionView } | Refusal> {
+  const allowance = confirmedAllowance(body);
+  if (!allowance.ok) return allowance;
   const conn = await readConnection(deps.connectionFile);
   // With Anthropic the key must be readable now; the fake provider needs none and reads none.
   if (provider === "anthropic") {

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { join, resolve } from "node:path";
-import { hash, localDir, randomToken, readJson, sameHash, saveJson as save, withLock } from "./localFiles.ts";
+import { hash, localDir, randomToken, readJson, sameHash, saveJson as saveJsonFile, withLock } from "./localFiles.ts";
 
 // The local live-testing session: the one allowance every live Copilot
 // request draws on. The state is a small JSON file on this machine
@@ -20,6 +20,11 @@ import { hash, localDir, randomToken, readJson, sameHash, saveJson as save, with
 // ceilings here. Records from before these bindings (versions 1 and 2) are
 // refused until a new session is started. This file imports Node built-ins
 // only (through localFiles.ts), so that script can load it directly.
+//
+// #113: the record's storage is a backend. A path means the local file above
+// (unchanged); the hosted path passes a per-user database row instead
+// (src/server/hosted/sessionBackend.ts), locked for each operation, so the same
+// state machine and the same limits apply in both.
 
 /** The ceilings of one session, and its default allowance. USD is an estimate-based guard, not a billing ceiling. */
 export const LIVE_SESSION_LIMITS = { minutes: 30, runs: 3, requests: 10, usd: 5, activeRuns: 1 } as const;
@@ -164,17 +169,36 @@ export function parseState(raw: unknown): SessionState | null {
   return s;
 }
 
-type Loaded = { kind: "none" } | { kind: "invalid" } | { kind: "unbound" } | { kind: "ok"; state: SessionState };
+export type Loaded = { kind: "none" } | { kind: "invalid" } | { kind: "unbound" } | { kind: "ok"; state: SessionState };
 
-function load(file: string): Loaded {
-  const raw = readJson(file) as { version?: unknown } | null | undefined;
+/** What a stored record is: undefined when there is none, null when it isn't readable as JSON. */
+export function loadedFrom(raw: unknown): Loaded {
   if (raw === undefined) return { kind: "none" };
   if (raw === null) return { kind: "invalid" };
   // Armed before sessions were bound to a provider and a credential: never usable, whatever the server runs.
-  if (raw && typeof raw === "object" && (raw.version === 1 || raw.version === 2)) return { kind: "unbound" };
+  const version = raw && typeof raw === "object" ? (raw as { version?: unknown }).version : undefined;
+  if (version === 1 || version === 2) return { kind: "unbound" };
   const state = parseState(raw);
   return state ? { kind: "ok", state } : { kind: "invalid" };
 }
+
+/**
+ * Where a session record is kept. `transact` runs `fn` alone against the
+ * current record (no other operation on the same record runs in between, in
+ * this process or another), and writes what `fn` passes to `save` before
+ * returning. `readOnly` operations never write.
+ */
+export interface SessionBackend {
+  transact<T>(fn: (loaded: Loaded, save: (state: SessionState) => void) => T, readOnly?: boolean): Promise<T>;
+}
+/** A path (the local file) or a backend (the hosted per-user record). */
+export type SessionTarget = string | SessionBackend;
+
+/** The local file, under the cross-process lock: exactly the behaviour before backends existed. */
+export const fileBackend = (file: string): SessionBackend => ({
+  transact: (fn, readOnly = false) => withLock(file, () => fn(loadedFrom(readJson(file)), (s) => saveJsonFile(file, s)), readOnly),
+});
+const backendOf = (t: SessionTarget): SessionBackend => (typeof t === "string" ? fileBackend(t) : t);
 
 const HOW_TO_START = "Start a new session in Stratovell (Connect Claude on the Stratovell AI page), or arm a new session in a terminal: npm run live-session -- arm --provider anthropic (or fake).";
 const UNBOUND_ERROR = `This live session was armed before sessions were bound to a provider and a key, so it can't be used. ${HOW_TO_START}`;
@@ -333,8 +357,8 @@ export function viewOf(loaded: Loaded, now: Date, cookie: string | null, nextReq
 
 // --- Operations ---------------------------------------------------------------
 
-export async function readView(file: string, now: Date, cookie: string | null, nextRequestUsd = 0, provider?: SessionProvider, credentialRevision?: string | null): Promise<SessionView> {
-  return withLock(file, () => viewOf(load(file), now, cookie, nextRequestUsd, provider, credentialRevision), true);
+export async function readView(file: SessionTarget, now: Date, cookie: string | null, nextRequestUsd = 0, provider?: SessionProvider, credentialRevision?: string | null): Promise<SessionView> {
+  return backendOf(file).transact((l) => viewOf(l, now, cookie, nextRequestUsd, provider, credentialRevision), true);
 }
 
 export interface ArmOptions {
@@ -353,15 +377,14 @@ export interface ArmOptions {
  * is replaced. Returns the one-time claim token (terminal arming), or with
  * `claim` the session cookie of the browser that started it.
  */
-export async function armSession(file: string, now: Date, provider: SessionProvider, opts: ArmOptions = {}): Promise<Result<{ token: string; cookie: string | null; state: SessionState }>> {
+export async function armSession(file: SessionTarget, now: Date, provider: SessionProvider, opts: ArmOptions = {}): Promise<Result<{ token: string; cookie: string | null; state: SessionState }>> {
   if (!isProvider(provider)) return { ok: false, code: "bad_provider", error: `Name the provider to arm for: --provider ${SESSION_PROVIDERS.join(" or --provider ")}.` };
   const limits = allowanceFrom(opts.allowance);
   if (!limits.ok) return { ok: false, code: "bad_allowance", error: limits.error };
-  return withLock(file, () => {
-    const prev = load(file);
+  return backendOf(file).transact((prev, save) => {
     if (prev.kind === "ok") {
       const s = prev.state;
-      if (reapStale(s, now)) save(file, s);
+      if (reapStale(s, now)) save(s);
       // A run still in flight (even in a stopped session) holds reservations: replacing the record now would
       // drop them from the counters. Its run ends, or is reaped as abandoned, first.
       if (s.active)
@@ -391,15 +414,14 @@ export async function armSession(file: string, now: Date, provider: SessionProvi
       pending: [],
       history: [],
     };
-    save(file, state);
+    save(state);
     return { ok: true, token, cookie, state };
   });
 }
 
 /** Binds the armed session to one browser: the one-time claim token becomes a session cookie (only its hash is kept). */
-export async function claimSession(file: string, now: Date, token: string, provider: SessionProvider): Promise<Result<{ cookie: string; expiresAt: Date }>> {
-  return withLock(file, () => {
-    const l = load(file);
+export async function claimSession(file: SessionTarget, now: Date, token: string, provider: SessionProvider): Promise<Result<{ cookie: string; expiresAt: Date }>> {
+  return backendOf(file).transact((l, save) => {
     const unusable = notUsable(l);
     if (unusable || l.kind !== "ok") return unusable!;
     const s = l.state;
@@ -411,28 +433,26 @@ export async function claimSession(file: string, now: Date, token: string, provi
     if (!token || !sameHash(hash(token), s.claimHash)) return { ok: false, code: "bad_token", error: "The claim link isn't valid for the armed session." } as const;
     const cookie = randomToken();
     s.cookieHash = hash(cookie);
-    save(file, s);
+    save(s);
     return { ok: true, cookie, expiresAt: expiresAt(s) };
   });
 }
 
 /** Stops the session for good. In-flight reservations stay counted until they settle. */
-export async function stopSession(file: string, now: Date, reason: string): Promise<Result<{ state: SessionState }>> {
-  return withLock(file, () => {
-    const l = load(file);
+export async function stopSession(file: SessionTarget, now: Date, reason: string): Promise<Result<{ state: SessionState }>> {
+  return backendOf(file).transact((l, save) => {
     const unusable = notUsable(l);
     if (unusable || l.kind !== "ok") return unusable!;
     const s = l.state;
     if (!s.stopped) s.stopped = { at: now.toISOString(), reason: reason.slice(0, 120) };
-    save(file, s);
+    save(s);
     return { ok: true, state: s };
   });
 }
 
 /** Admits one run: this browser's claimed, unexpired, unstopped session, with no run active and allowance left. Counts the run. */
-export async function admitRun(file: string, now: Date, cookie: string | null, nextRequestUsd: number, provider: SessionProvider, credentialRevision: string | null = null): Promise<Result<{ runId: string; view: SessionView }>> {
-  return withLock(file, () => {
-    const l = load(file);
+export async function admitRun(file: SessionTarget, now: Date, cookie: string | null, nextRequestUsd: number, provider: SessionProvider, credentialRevision: string | null = null): Promise<Result<{ runId: string; view: SessionView }>> {
+  return backendOf(file).transact((l, save) => {
     const unusable = notUsable(l);
     if (unusable || l.kind !== "ok") return unusable!;
     const s = l.state;
@@ -445,20 +465,20 @@ export async function admitRun(file: string, now: Date, cookie: string | null, n
     // A run in flight holds a reservation, so "exhausted" would mislead: say it's in progress (stopped and expired still win).
     const closed = closedNow && s.active && closedNow.code === "exhausted" ? ({ ok: false, code: "run_in_progress", error: "A live run is already in progress; only one runs at a time." } as const) : closedNow;
     if (closed) {
-      if (reaped) save(file, s);
+      if (reaped) save(s);
       return closed;
     }
     if (!s.cookieHash) return { ok: false, code: "not_claimed", error: "The armed session hasn't been claimed by a browser yet." } as const;
     if (!cookie || !sameHash(hash(cookie), s.cookieHash)) return { ok: false, code: "not_this_browser", error: "This browser doesn't hold the live session." } as const;
     if (s.active) {
-      if (reaped) save(file, s);
+      if (reaped) save(s);
       return { ok: false, code: "run_in_progress", error: "A live run is already in progress; only one runs at a time." } as const;
     }
     if (s.runs >= s.limits.runs) return { ok: false, code: "exhausted", error: runsUsedUp(s) } as const;
     const runId = randomUUID();
     s.runs += 1;
     s.active = { id: runId, startedAt: now.toISOString(), requests: 0, attempts: 0, usd: 0, retainedUsd: 0, models: [] };
-    save(file, s);
+    save(s);
     return { ok: true, runId, view: viewOf({ kind: "ok", state: s }, now, cookie, nextRequestUsd, provider, credentialRevision) };
   });
 }
@@ -469,12 +489,11 @@ export async function admitRun(file: string, now: Date, cookie: string | null, n
  * the session record only: it touches no credential, so admission can do this
  * before any credential store is opened.
  */
-export async function reapAbandonedRun(file: string, now: Date): Promise<void> {
-  await withLock(file, () => {
-    const l = load(file);
+export async function reapAbandonedRun(file: SessionTarget, now: Date): Promise<void> {
+  await backendOf(file).transact((l, save) => {
     if (l.kind !== "ok") return;
     const s = l.state;
-    if (reapStale(s, now)) save(file, s);
+    if (reapStale(s, now)) save(s);
   });
 }
 
@@ -485,15 +504,14 @@ export async function reapAbandonedRun(file: string, now: Date): Promise<void> {
  * expired or out of requests or budget.
  */
 export async function reserveRequest(
-  file: string,
+  file: SessionTarget,
   now: Date,
   runId: string,
   provider: SessionProvider,
   price: (largestInput: number) => number,
   credentialRevision: string | null = null
 ): Promise<Result<{ reservationId: string; usd: number }>> {
-  return withLock(file, () => {
-    const l = load(file);
+  return backendOf(file).transact((l, save) => {
     const unusable = notUsable(l);
     if (unusable || l.kind !== "ok") return unusable!;
     const s = l.state;
@@ -507,19 +525,18 @@ export async function reserveRequest(
     s.requests += 1;
     s.active.requests += 1;
     s.pending.push({ id: reservationId, runId, usd, at: now.toISOString() });
-    save(file, s);
+    save(s);
     return { ok: true, reservationId, usd };
   });
 }
 
 /** Settles a reservation: with known usage it is replaced by the priced usage; otherwise the reservation is kept as spend. */
 export async function settleRequest(
-  file: string,
+  file: SessionTarget,
   reservationId: string,
   outcome: { known: true; usd: number; attempts: number; largestInput: number; models: string[] } | { known: false }
 ): Promise<void> {
-  await withLock(file, () => {
-    const l = load(file);
+  await backendOf(file).transact((l, save) => {
     if (l.kind !== "ok") return;
     const s = l.state;
     const r = s.pending.find((p) => p.id === reservationId);
@@ -539,19 +556,18 @@ export async function settleRequest(
       s.retainedUsd = round(s.retainedUsd + r.usd);
       if (run) run.retainedUsd = round(run.retainedUsd + r.usd);
     }
-    save(file, s);
+    save(s);
   });
 }
 
 /** Ends the run: any reservation still open is kept as spend, and a summary is recorded. Returns the run's tally. */
-export async function finishRun(file: string, now: Date, runId: string, status: string): Promise<RunSummary | null> {
-  return withLock(file, () => {
-    const l = load(file);
+export async function finishRun(file: SessionTarget, now: Date, runId: string, status: string): Promise<RunSummary | null> {
+  return backendOf(file).transact((l, save) => {
     if (l.kind !== "ok") return null;
     const s = l.state;
     if (s.active?.id !== runId) return s.history.find((h) => h.id === runId) ?? null;
     endRun(s, now, runId, status);
-    save(file, s);
+    save(s);
     return s.history[s.history.length - 1];
   });
 }
