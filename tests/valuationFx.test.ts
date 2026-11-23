@@ -464,7 +464,12 @@ describe("the sample workspace is unchanged when every rate is present", () => {
     const titles = generateInsights({ holdings, reportingCurrency: "USD" }).map((i) => i.title).sort();
     const fxTask = "5 holdings are valued with exchange rates older than 7 days";
     expect(titles).toContain(fxTask);
-    expect(titles.filter((t) => t !== fxTask)).toEqual(baseline.insightTitles);
+    // #46 removes one intended insight: the sample's three bonds (MA State GO, Apple 4.40% 2033,
+    // US Treasury 2032) are correctly priced per 100 of face value, so their quantity × price note was false.
+    const per100 = "3 holdings: Quantity × price differs from market value by more than 2%.";
+    expect(baseline.insightTitles).toContain(per100);
+    expect(titles).not.toContain(per100);
+    expect(titles.filter((t) => t !== fxTask)).toEqual(baseline.insightTitles.filter((t: string) => t !== per100));
     const readiness = evaluateWorkspaceReadiness({ sourceDocuments: [], client: SEED_CLIENT, advisor: SEED_ADVISOR, accounts: SEED_ACCOUNTS, holdings, recommendations: approved, disclosures: DISCLOSURE_LIBRARY, fxRates: SEED_FX_RATES });
     // The checks added since (holdings_valued here, imports_complete in #29,
     // recommendation_currency in #24, recommendation_links in the PR #66 review) pass; every pre-existing check is unchanged.

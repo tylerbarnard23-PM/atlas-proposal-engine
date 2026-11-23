@@ -15,7 +15,7 @@ import { newWorkingDraft } from "@/engines/allocationDesk";
 import { STORY_ACCOUNTS, STORY_HOLDINGS } from "@/data/allocationStory";
 import { SEED_ADVISOR, SEED_CLIENT } from "@/data/seedClient";
 import { DISCLOSURE_LIBRARY } from "@/domain/disclosureLibrary";
-import { copilotRequest } from "./support/copilotRequest";
+import { copilotRequest, runAsFor } from "./support/copilotRequest";
 import { currentRevision, localDeps, selectEnvironmentKey } from "./support/localDeps";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -105,7 +105,8 @@ const ask = (d: ReturnType<typeof deps>["d"], cookie: string | null, headers: Re
     new Request("http://localhost:3000/api/copilot", {
       method: "POST",
       headers: { ...headers, ...(cookie ? { cookie: `${liveCookieName(d.env)}=${cookie}` } : {}), "content-type": "application/json" },
-      body: JSON.stringify(copilotRequest(QUESTION, snap())),
+      // As the page sends it: what this server runs (PR #110: never a substitute for Claude).
+      body: JSON.stringify({ ...copilotRequest(QUESTION, snap()), runAs: runAsFor(d.env) }),
       signal,
     }),
     d

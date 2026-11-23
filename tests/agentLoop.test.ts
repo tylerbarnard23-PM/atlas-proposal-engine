@@ -294,7 +294,7 @@ describe("the real loop with an injected provider", () => {
     expect(r.figures.unsupported).toEqual(["$1,234", "7.5%"]);
     // Grouped numbers, compact amounts and fractions-as-percentages are matched to the evidence.
     // Typed: compact money and fractions-as-percentages match; a bare grouped number is unchecked.
-    expect(checkFigures(["$60.0K, 60,000 and 60.0%", "USD 1.5M"], [[{ value: 60_000, unit: "money", currency: "USD" }, { value: 0.6, unit: "ratio" }]])).toEqual({ claims: 4, matched: 2, unsupported: ["USD 1.5M"], unchecked: ["60,000"] });
+    expect(checkFigures(["$60.0K, 60,000 and 60.0%", "USD 1.5M"], [[{ value: 60_000, unit: "money", currency: "USD" }, { value: 0.6, unit: "ratio" }]])).toEqual({ claims: 4, matched: 2, unsupported: ["USD 1.5M"], unchecked: ["60,000"], clientStated: [] });
   });
 });
 
@@ -314,7 +314,7 @@ describe("authority, injection and fail-closed safeguards", () => {
       },
       (p) => {
         const r = results(p);
-        expect(r.every((x) => x.error?.startsWith("Refused: Proposal Copilot has no authority"))).toBe(true);
+        expect(r.every((x) => x.error?.startsWith("Refused: Stratovell AI has no authority"))).toBe(true);
         return msg([use("simulate_scope_change", { holding_id: "h_story_equity", change: "reduce", amount: 5_000 })], "tool_use");
       },
       (p) => {
@@ -425,7 +425,11 @@ describe("the test provider and the route", () => {
     expect(await (await get()).json()).toEqual({ mode: "test", model: TEST_PROVIDER_MODEL });
 
     const post = (body: unknown) => POST(new Request("http://localhost/api/copilot", { method: "POST", body: JSON.stringify(body) }));
-    const req = copilotRequest("Review this alternative.", storySnapshot());
+    // PR #110: the test provider answers only a request made for it, never one made for Claude.
+    const forClaude = await post(copilotRequest("Review this alternative.", storySnapshot()));
+    expect(forClaude.status).toBe(409);
+    expect(await forClaude.json()).toMatchObject({ code: "run_mode_mismatch", runs: "test_provider" });
+    const req = { ...copilotRequest("Review this alternative.", storySnapshot()), runAs: "test_provider" };
     const ok = await post(req);
     expect(ok.status).toBe(200);
     const body = await ok.json();

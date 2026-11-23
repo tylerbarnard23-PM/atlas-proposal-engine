@@ -24,6 +24,7 @@ import { normalizeHoldings } from "./normalizationEngine";
 import { recordInputBasis } from "./allocationDesk";
 import { findRevision } from "./strategyProposals";
 import { projectSnapshotInputs } from "./workspaceBackup";
+import { presentedClientBrief } from "./clientDiscovery";
 import { canonicalJson, contentHash, snapshotDraft, snapshotFingerprint, snapshotResults } from "./snapshotRecord";
 import type { ProposalPdfTemplateProps, SnapshotPresentation } from "@/pdf/templates/ProposalPdfTemplate";
 
@@ -108,6 +109,8 @@ function capture(ws: SnapshotSource, now: Date): Captured {
     sourceDocuments: ws.sourceDocuments.map(forReadiness),
     models: model ? [model] : [],
     strategies: ws.strategies.filter((s) => strategyKeys.has(`${s.id}@${s.revision}`)),
+    // #109: the brief this version presents, frozen now (its presence marks the brief rendering).
+    clientBrief: presentedClientBrief(ws.client),
   });
   const inputBasis = recordInputBasis(
     { holdings: normalizeHoldings(ws.holdings, ws.fxRates, reportingCurrency), accounts: ws.accounts, actions: approved, fxRates: ws.fxRates, reportingCurrency },
@@ -173,6 +176,7 @@ const PARTS: { key: keyof SnapshotInputs | "alternative"; label: string }[] = [
   { key: "sections", label: "sections" },
   { key: "proposal", label: "proposal" },
   { key: "client", label: "client profile" },
+  { key: "clientBrief", label: "client brief" },
   { key: "advisor", label: "advisor or firm" },
   { key: "sourceDocuments", label: "imports" },
 ];
@@ -194,6 +198,9 @@ export function snapshotStatus(s: ApprovedSnapshot, ws: SnapshotSource, now: Dat
   };
   const a = comparable(s);
   const b = comparable(live);
+  // A version approved before the brief was frozen has none: it is compared on what it holds (its client profile
+  // still covers the brief's answers), so it never reports a change it can't have.
+  if (s.inputs.clientBrief === undefined) delete (b.inputs as Partial<SnapshotInputs>).clientBrief;
   if (contentHash(a) === contentHash(b)) return { kind: "matches" };
   const parts = PARTS.filter(({ key }) =>
     key === "alternative" ? canonicalJson(a.alternative) !== canonicalJson(b.alternative) : canonicalJson(a.inputs[key]) !== canonicalJson(b.inputs[key])
@@ -221,6 +228,8 @@ export function snapshotTemplateProps(
     strategies: i.strategies,
     models: i.models,
     modelPin: s.alternative.model,
+    // #109: present the frozen brief when this version has one; a version approved before it renders as it always did.
+    clientBrief: i.clientBrief,
     variant: opts.variant,
     now: s.approvedAt,
     timeZone: opts.timeZone,

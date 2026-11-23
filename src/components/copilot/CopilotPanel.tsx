@@ -104,7 +104,7 @@ export function CopilotPanel({
       >
         <div className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-ink-100 bg-paper px-4 h-12">
           <h2 id="copilot-panel-title" ref={heading} tabIndex={-1} className="font-serif text-lg text-ink-900 focus:outline-hidden">
-            Copilot
+            Stratovell AI
           </h2>
           <button
             type="button"

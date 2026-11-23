@@ -3,13 +3,17 @@ import { ASSET_CLASS_LABELS } from "@/domain/assetTaxonomy";
 import { formatCurrency } from "@/utils/formatting";
 import type { CopilotResult } from "./agent";
 import { checkFigures } from "./evidence";
+import { runOrigin } from "@/engines/recommendationOrigin";
 import type { CopilotSnapshot } from "./snapshot";
 import { CopilotContext, executeTool, type ToolCallRecord } from "./tools";
 
-// Demo mode runs when no ANTHROPIC_API_KEY is configured, so the public
-// deployment works for anyone at no cost. It calls the exact same tools as the
-// live agent through a fixed plan; only the planning and the prose are
-// scripted. Useful as a regression baseline for the tool layer too.
+// The scripted example: demo mode's only run, and only when the advisor
+// explicitly chooses it (the request says runAs "scripted_example"), so the
+// public deployment can show the flow at no cost. It is never substituted for
+// Claude. It calls the same tools as the live agent through a fixed plan that
+// maps rule checks to drafts; that mapping is a demonstration, not an analysis
+// of the client, and every draft it prepares is labelled a scripted example.
+// Useful as a regression baseline for the tool layer too.
 
 const CONCENTRATION_TARGET = 0.075; // trim single positions to ~7.5% of investible assets
 const MAX_DEMO_DRAFTS = 3;
@@ -92,7 +96,7 @@ export function runDemoCopilot(snapshot: CopilotSnapshot, question: string): Cop
   }
 
   if (intent === "summary") {
-    lines.push(`**${insights?.count ?? 0} warning-level findings** from the insight engine:`);
+    lines.push(`**${insights?.count ?? 0} warning-level findings** from the portfolio checks:`);
     for (const i of insights?.insights.slice(0, 6) ?? []) lines.push(`- ${i.title}`);
     lines.push("", "Ask me to *draft recommendations* and I'll turn the top findings into reviewable drafts.");
     return result(ctx, trace, lines.join("\n"));
@@ -187,7 +191,8 @@ function result(ctx: CopilotContext, trace: ToolCallRecord[], answer: string): C
     mode: "demo",
     status: "completed",
     answer,
-    drafts: ctx.drafts,
+    // A scripted example, never Claude's: the drafts say so wherever they go.
+    drafts: ctx.drafts.map((d) => ({ ...d, origin: runOrigin({ provider: "scripted" }) })),
     trace,
     evidence: ctx.evidence.map(({ id, tool, summary }) => ({ id, tool, summary })),
     // The scripted prose is checked the same way as a model's.

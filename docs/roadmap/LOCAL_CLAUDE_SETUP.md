@@ -1,5 +1,7 @@
 # Local Claude setup
 
+> **Terminology (#109, 20 November 2026):** the page is now **Stratovell AI** (formerly Proposal Copilot), its connection section **AI connection**, the provider action **Connect Claude**, the main action **Analyze portfolio** and the allowance **Analysis runs**. Steps recorded below before the rename keep the names the owner saw then. Routes (`/copilot`, `/api/copilot`), environment variables, cookies and credential-store names are unchanged.
+
 How a user runs Stratovell on their own machine and connects their own Claude access, with Proposal Copilot staying inside Stratovell. Updated 11 November 2026 on PR #82. Product name: Stratovell (formerly Atlas Proposal Engine); the record below keeps the names it was written with.
 
 ## Status
@@ -38,7 +40,7 @@ How a user runs Stratovell on their own machine and connects their own Claude ac
    - Set that workspace's monthly **spend limit**. This is what actually caps charges; Stratovell's own guard is an estimate.
    - Create an **API key in that workspace**. Never use an Admin key (`sk-ant-admin…`) or a Claude subscription token from `claude setup-token`; Stratovell refuses both. Anthropic documents no format for ordinary API keys, so Stratovell can't confirm a key by looking at it: your first question settles whether it works.
 
-4. **In Stratovell, open Proposal Copilot → Connect Claude:**
+4. **In Stratovell, open Stratovell AI → AI connection → Connect Claude:**
    - Paste the key into the masked field.
    - Choose where Stratovell keeps it: **for this server session only** (memory; pasted again after a restart) or **remembered securely** in the operating system's credential store.
    - The status reads "Key saved; connection not yet verified". Stratovell has not contacted Anthropic.
@@ -54,7 +56,7 @@ How a user runs Stratovell on their own machine and connects their own Claude ac
 | Limit | Ceiling (can be lowered, never raised) |
 |---|---|
 | Duration | 30 minutes |
-| Copilot runs | 3 |
+| Analysis runs ("Copilot runs" before #109) | 3 |
 | Requests to the provider | 10, retries and failed requests included |
 | USD guard | 5, an estimate from list prices, **not a billing limit** |
 | Runs at a time | 1 |

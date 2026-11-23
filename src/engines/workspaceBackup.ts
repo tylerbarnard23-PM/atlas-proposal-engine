@@ -28,9 +28,9 @@ import { snapshotIntegrity } from "./snapshotRecord";
 export const BACKUP_FORMAT = "atlas-workspace-backup";
 export const BACKUP_SCHEMA_VERSION = 1;
 /** The saved-workspace schema (store version) the records follow. */
-export const BACKUP_WORKSPACE_VERSION = 10;
+export const BACKUP_WORKSPACE_VERSION = 11;
 /** Older workspace versions a backup may have, upgraded on restore. */
-export const SUPPORTED_OLDER_WORKSPACE_VERSIONS = [6, 7, 8, 9] as const;
+export const SUPPORTED_OLDER_WORKSPACE_VERSIONS = [6, 7, 8, 9, 10] as const;
 /** The application's backup limit (UTF-8 bytes of the file); it also bounds a file read before validation. */
 export const BACKUP_MAX_BYTES = 20 * 1024 * 1024;
 
@@ -186,7 +186,7 @@ function schemas(strict: boolean) {
     createdAt: date,
     updatedAt: date,
   });
-  const client = obj({
+  const clientV10 = obj({
     id,
     fullName: text(),
     preferredName: text().optional(),
@@ -208,6 +208,39 @@ function schemas(strict: boolean) {
     specialInstructions: text().optional(),
     advisorDiscoveryNotes: text().optional(),
   });
+  // v11 (#109): client discovery. Each question's state, and the answers no
+  // older field holds; amounts keep their own currency.
+  const level = z.enum(["low", "moderate", "high"]);
+  const objective = z.enum(["preserve_wealth", "generate_income", "grow_wealth", "reduce_concentration", "fund_spending"]);
+  const answerState = obj({
+    status: z.enum(["answered", "not_discussed"]),
+    note: text().optional(),
+    updatedAt: date,
+    review: obj({ reviewedAt: date, answerHash: text() }).optional(),
+  });
+  const discovery = obj({
+    answers: obj({
+      objectives: answerState.optional(),
+      timeHorizon: answerState.optional(),
+      liquidity: answerState.optional(),
+      income: answerState.optional(),
+      lossWillingness: answerState.optional(),
+      lossAbility: answerState.optional(),
+      taxSensitivity: answerState.optional(),
+      securitiesToRetain: answerState.optional(),
+      restrictedInvestments: answerState.optional(),
+      otherConstraints: answerState.optional(),
+    }),
+    objectives: obj({ primary: objective, secondary: z.array(objective) }).optional(),
+    liquidity: obj({ need: z.enum(["none", "planned"]), amount: finite.min(0).optional(), currency: currency.optional(), timing: z.enum(["within_1_year", "1_to_3_years", "over_3_years"]).optional() }).optional(),
+    income: obj({ need: z.enum(["none", "needed"]), amount: finite.min(0).optional(), currency: currency.optional(), frequency: z.enum(["monthly", "quarterly", "annually"]).optional() }).optional(),
+    lossWillingness: level.optional(),
+    lossAbility: level.optional(),
+    securitiesToRetain: z.array(text()).optional(),
+    otherConstraints: text().optional(),
+    analysisNote: text().optional(),
+  });
+  const client = clientV10.extend({ discovery: discovery.optional() });
   const advisor = obj({
     id,
     name: text(),
@@ -278,6 +311,20 @@ function schemas(strict: boolean) {
     createdAt: date,
     updatedAt: date,
   });
+  // v11 (PR #110, the Claude-led workflow): who prepared it. Claude names the
+  // models that answered; an example names what produced it; the other kinds
+  // carry neither. Older envelopes can't carry an origin.
+  const recommendationOrigin = obj({
+    kind: z.enum(["claude", "advisor", "example", "unrecorded"]),
+    source: z.enum(["scripted_demo", "test_provider", "sample_workspace"]).optional(),
+    models: z.array(text()).optional(),
+    promptVersion: text().optional(),
+    editedByAdvisorAt: date.optional(),
+  }).refine(
+    (o) => (o.kind === "claude" ? (o.models?.length ?? 0) > 0 && !o.source : o.kind === "example" ? !!o.source && !o.models : !o.source && !o.models),
+    "A recommendation's origin is inconsistent"
+  );
+  const recommendationV11 = recommendation.extend({ origin: recommendationOrigin.optional() });
   const fxRate = obj({
     base: currency,
     quote: currency,
@@ -385,8 +432,9 @@ function schemas(strict: boolean) {
     errorMessage: text().optional(),
     warnings: z.array(text()).optional(),
   });
+  // Versions before v11 validate the client without discovery.
   const engagement = obj({
-    client,
+    client: clientV10,
     accounts: z.array(account),
     holdings: z.array(holding),
     recommendations: z.array(recommendation),
@@ -478,7 +526,20 @@ function schemas(strict: boolean) {
     required: z.boolean(),
   });
   const classTotals = obj({ total: finite.nullable(), byClass: z.array(obj({ assetClass, value: finite })) });
-  const snapshot = obj({
+  // v11 (#109, PR #110 review): the client brief a version presents, frozen at approval. Older versions have none.
+  const questionId = z.enum(["objectives", "timeHorizon", "liquidity", "income", "lossWillingness", "lossAbility", "taxSensitivity", "securitiesToRetain", "restrictedInvestments", "otherConstraints"]);
+  const count = z.number().int().min(0);
+  const presentedBrief = obj({
+    format: z.literal("discovery-brief-v1"),
+    answers: z.array(obj({ question: questionId, label: text(), status: z.enum(["recorded", "reviewed", "review_stale"]), answer: text(), clarification: text().optional(), reviewedAt: date.optional() })),
+    notDiscussed: z.array(obj({ question: questionId, label: text() })),
+    conflicts: z.array(text()),
+    missingDetails: z.array(text()),
+    restrictionsOnFile: z.array(text()),
+    counts: obj({ answered: count, reviewed: count, stale: count, total: count }),
+    lastReviewedAt: date.nullable(),
+  });
+  const snapshotOf = (clientSchema: typeof clientV10 | typeof client, withBrief = false) => obj({
     id,
     version: z.number().int().min(1),
     approvedAt: date,
@@ -493,11 +554,11 @@ function schemas(strict: boolean) {
       inputBasis: obj({ recordedAt: date, reportingCurrency: currency, fingerprint: text(), values: z.array(inputValue), rates: z.array(inputRate) }),
     }),
     inputs: obj({
-      client,
+      client: clientSchema,
       advisor,
       accounts: z.array(account),
       holdings: z.array(holding),
-      recommendations: z.array(recommendation),
+      recommendations: z.array(withBrief ? recommendationV11 : recommendation),
       proposal,
       sections: z.array(section),
       disclosures: z.array(disclosure),
@@ -506,13 +567,18 @@ function schemas(strict: boolean) {
       sourceDocuments: z.array(sourceDocument),
       models: z.array(modelRevision),
       strategies: z.array(strategyRevision),
+      ...(withBrief ? { clientBrief: presentedBrief.optional() } : {}),
     }),
     results: obj({ reportingCurrency: currency, current: classTotals, proposed: classTotals, blocked: z.number().int().min(0), unresolved: z.number().int().min(0) }),
     fingerprint: text(),
   });
   // A document generated from a version names it.
   const pdfJobV10 = pdfJob.extend({ snapshotId: id.optional(), snapshotVersion: z.number().int().min(1).optional() });
-  const engagementV10 = engagementV9.extend({ pdfHistory: z.array(pdfJobV10), snapshots: z.array(snapshot) });
+  const snapshotV10 = snapshotOf(clientV10);
+  const engagementV10 = engagementV9.extend({ pdfHistory: z.array(pdfJobV10), snapshots: z.array(snapshotV10) });
+  // v11 (#109): the client's discovery, also frozen in versions approved from now on.
+  const snapshot = snapshotOf(client, true);
+  const engagementV11 = engagementV10.extend({ client, recommendations: z.array(recommendationV11), snapshots: z.array(snapshot) });
   const envelopeOf = <E extends z.ZodTypeAny, V extends number>(e: E, version: V) =>
     obj({
       format: z.literal(BACKUP_FORMAT),
@@ -529,12 +595,13 @@ function schemas(strict: boolean) {
   const recommendationV7 = recommendation.omit({ destination: true, linked: true });
   const olderEngagement = engagement.extend({ accounts: z.array(accountV7), recommendations: z.array(recommendationV7) });
   return {
-    envelope: envelopeOf(engagementV10, BACKUP_WORKSPACE_VERSION),
+    envelope: envelopeOf(engagementV11, BACKUP_WORKSPACE_VERSION),
+    envelopeV10: envelopeOf(engagementV10, 10),
     envelopeV9: envelopeOf(engagementV9, 9),
     envelopeV8: envelopeOf(engagementV8, 8),
     envelopeV7: envelopeOf(olderEngagement.extend({ workingDraft: workingDraftV8 }), 7),
     envelopeV6: envelopeOf(olderEngagement, 6),
-    engagement: engagementV10,
+    engagement: engagementV11,
     advisor,
     snapshot,
     snapshotInputs: snapshot.shape.inputs,
@@ -782,8 +849,13 @@ export function parseBackup(text: string, opts: { disclosureIds: string[] }): Pa
     const v8 = STRICT.envelopeV8.safeParse(raw);
     if (!v8.success) return issues(v8.error);
     backup = { ...v8.data, workspaceVersion: BACKUP_WORKSPACE_VERSION, engagement: { ...v8.data.engagement, strategies: [], models: [], snapshots: [] } } as WorkspaceBackup;
+  } else if (head.workspaceVersion === 10) {
+    // v10 → v11: no discovery recorded; every question is "Not discussed yet". Approved versions restore unchanged.
+    const v10 = STRICT.envelopeV10.safeParse(raw);
+    if (!v10.success) return issues(v10.error);
+    backup = { ...v10.data, workspaceVersion: BACKUP_WORKSPACE_VERSION } as WorkspaceBackup;
   } else if (head.workspaceVersion === 9) {
-    // v9 → v10: no approved versions yet; earlier documents name none.
+    // v9 → v11: no approved versions yet; earlier documents name none.
     const v9 = STRICT.envelopeV9.safeParse(raw);
     if (!v9.success) return issues(v9.error);
     backup = { ...v9.data, workspaceVersion: BACKUP_WORKSPACE_VERSION, engagement: { ...v9.data.engagement, snapshots: [] } } as WorkspaceBackup;

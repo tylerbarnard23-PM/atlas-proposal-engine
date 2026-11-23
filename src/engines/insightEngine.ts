@@ -1,8 +1,8 @@
-import type { Insight, Holding } from "@/domain/types";
+import type { Insight, InsightBasis, Holding } from "@/domain/types";
 import type { NormalizedHolding } from "./normalizationEngine";
 import { reportingValue, valuationTotal } from "./valuationTotals";
 import { groupBy, sumBy } from "@/utils/numbers";
-import { safeId, todayIso } from "@/utils/formatting";
+import { calendarDay, formatCalendarDate, formatCurrency, safeId, todayIso } from "@/utils/formatting";
 import { CODES_COVERED_BY_TASKS, dataTasks, isBalanceOnly, MARKET_STALE_DAYS } from "./dataTasks";
 import { STALE_FX_DAYS } from "./fxAge";
 import type { DataTaskKind } from "@/domain/types";
@@ -34,12 +34,28 @@ export interface InsightInputs {
   fx?: { now?: Date; confirmed?: boolean };
 }
 
+// Product defaults: review levels Stratovell flags at, not regulatory limits
+// and not the client's own policy. Portfolio checks say so with each figure.
 const CONCENTRATION_PCT = 8; // single-issuer warning
+const CONCENTRATION_CRITICAL_PCT = 12;
 const SINGLE_COUNTRY_NON_BASE_PCT = 30;
 const SINGLE_CURRENCY_NON_BASE_PCT = 25;
 const ILLIQUID_PCT = 25;
 const HIGH_FEE_BPS = 80;
 const CASH_DRAG_PCT = 12;
+
+const SOURCE = "Built-in Stratovell rule" as const;
+const DEFAULT = "a Stratovell product default, not a regulatory limit or the client's investment policy";
+const HOUSEHOLD = "Every account in the household: investible assets, liabilities excluded";
+
+/** The source valuation date, or the earliest to latest date across these holdings. */
+function datesOf(hs: Pick<Holding, "valuationDate">[]): string | undefined {
+  const days = hs.map((h) => calendarDay(h.valuationDate)).filter((d): d is string => !!d).sort();
+  if (days.length === 0) return undefined;
+  const first = formatCalendarDate(days[0]);
+  const last = formatCalendarDate(days[days.length - 1]);
+  return first === last ? first : `${first} to ${last}`;
+}
 
 export function generateInsights({ holdings, reportingCurrency, fx }: InsightInputs): Insight[] {
   const out: Insight[] = [];
@@ -59,6 +75,17 @@ export function generateInsights({ holdings, reportingCurrency, fx }: InsightInp
   const portfolioWide = allValued && valued.status === "complete" && total > 0;
   // Inside portfolio-wide checks every holding has a reporting value.
   const rv = (h: NormalizedHolding) => reportingValue(h)!;
+  const money = (n: number) => formatCurrency(n, reportingCurrency, { compact: true });
+  const share = (v: number) => `${((v / total) * 100).toFixed(1)}% of investible assets (${money(v)} of ${money(total)})`;
+  const portfolioBasis = (rule: string, observed: string, threshold: string, extra: string[] = []): InsightBasis => ({
+    source: SOURCE,
+    rule,
+    observed,
+    threshold,
+    scope: `${HOUSEHOLD}, valued in ${reportingCurrency}.`,
+    valuationDates: datesOf(investible),
+    limitations: [...extra, "Each holding counts at its recorded value as of its own date; this check doesn't refresh values."],
+  });
 
   if (portfolioWide) {
   // Concentration. Only positions with a single issuer or a single asset
@@ -73,13 +100,22 @@ export function generateInsights({ holdings, reportingCurrency, fx }: InsightInp
       out.push({
         id: safeId("insight"),
         category: "concentration",
-        severity: pct >= 12 ? "critical" : "warning",
+        severity: pct >= CONCENTRATION_CRITICAL_PCT ? "critical" : "warning",
         title: `${h.assetName} represents ${pct.toFixed(1)}% of investible assets`,
         detail:
           kind === "issuer"
-            ? `Single-issuer concentration above ${CONCENTRATION_PCT}% of investible assets. Consider trimming to manage idiosyncratic risk.`
-            : `A single asset above ${CONCENTRATION_PCT}% of investible assets. Review how it fits the client's liquidity needs and risk tolerance.`,
+            ? `One issuer is at or above the ${CONCENTRATION_PCT}% review level for a single issuer. Whether that matters depends on the client's objectives and constraints.`
+            : `One asset is at or above the ${CONCENTRATION_PCT}% review level for a single asset. How it fits the client's liquidity needs and objectives is for the analysis.`,
         relatedHoldingIds: [h.id],
+        basis: {
+          ...portfolioBasis(
+            kind === "issuer" ? "Single-issuer concentration" : "Single-asset concentration",
+            share(v),
+            `${CONCENTRATION_PCT}% of investible assets (${CONCENTRATION_CRITICAL_PCT}% or more is marked critical): ${DEFAULT}`,
+            ["Cash, funds, the client's own home and balance-only accounts are not tested for concentration."]
+          ),
+          valuationDates: `${h.assetName}: ${datesOf([h]) ?? "no valuation date recorded"}. Denominator: ${datesOf(investible) ?? "no dates recorded"}`,
+        },
         context: [
           { label: "Position", value: h.assetName },
           { label: "Concentration", value: `${pct.toFixed(1)}%` },
@@ -102,7 +138,8 @@ export function generateInsights({ holdings, reportingCurrency, fx }: InsightInp
         category: "currency",
         severity: "warning",
         title: `${pct.toFixed(0)}% of assets denominated in ${cur}`,
-        detail: `Non-base currency exposure to ${cur} above ${SINGLE_CURRENCY_NON_BASE_PCT}% threshold. Consider hedging or rebalancing currency mix.`,
+        detail: `Exposure to ${cur}, a currency other than the reporting currency, is at or above the ${SINGLE_CURRENCY_NON_BASE_PCT}% review level. Whether it matters depends on the currencies the client spends and owes in.`,
+        basis: portfolioBasis("Exposure to a currency other than the reporting currency", share(v), `${SINGLE_CURRENCY_NON_BASE_PCT}% of investible assets in one currency other than ${reportingCurrency}: ${DEFAULT}`, ["Uses each holding's recorded currency, converted at the workspace's exchange rates; funds aren't looked through."]),
         context: [
           { label: "Currency", value: cur },
           { label: "Exposure", value: `${pct.toFixed(1)}%` },
@@ -124,7 +161,8 @@ export function generateInsights({ holdings, reportingCurrency, fx }: InsightInp
         category: "country",
         severity: "info",
         title: `Material exposure to ${country} (${pct.toFixed(0)}%)`,
-        detail: `Cross-border tax, succession, and reporting considerations may apply.`,
+        detail: `Exposure to ${country} is at or above the ${SINGLE_COUNTRY_NON_BASE_PCT}% review level. Cross-border tax, succession and reporting considerations may apply.`,
+        basis: portfolioBasis("Country exposure outside the US", share(v), `${SINGLE_COUNTRY_NON_BASE_PCT}% of investible assets in one country other than the US: ${DEFAULT}`, ["Uses each holding's recorded country; holdings with none aren't counted, and funds aren't looked through."]),
         generatedAt: now,
       });
     }
@@ -139,8 +177,9 @@ export function generateInsights({ holdings, reportingCurrency, fx }: InsightInp
       category: "liquidity",
       severity: "warning",
       title: `${((illiquidV / total) * 100).toFixed(0)}% in illiquid or lockup assets`,
-      detail: `Confirm liquidity profile is consistent with stated needs and any near-term capital obligations.`,
+      detail: `Illiquid or locked-up assets are at or above the ${ILLIQUID_PCT}% review level. Compare with the client's stated liquidity needs and any near-term capital obligations.`,
       relatedHoldingIds: illiquid.map((h) => h.id),
+      basis: portfolioBasis("Illiquid and lockup assets", share(illiquidV), `${ILLIQUID_PCT}% of investible assets: ${DEFAULT}`, ["Uses each holding's recorded liquidity; a holding with none recorded isn't counted as illiquid."]),
       generatedAt: now,
     });
   }
@@ -154,8 +193,9 @@ export function generateInsights({ holdings, reportingCurrency, fx }: InsightInp
       category: "liquidity",
       severity: "info",
       title: `Cash represents ${((cashV / total) * 100).toFixed(0)}% of investible assets`,
-      detail: `Higher-than-target cash balance may dampen long-term return. Confirm intent.`,
+      detail: `Cash is at or above the ${CASH_DRAG_PCT}% review level. No client cash target was evaluated: compare it with the client's stated liquidity needs and planned withdrawals.`,
       relatedHoldingIds: cash.map((h) => h.id),
+      basis: portfolioBasis("Cash share", share(cashV), `${CASH_DRAG_PCT}% of investible assets: ${DEFAULT}`, ["Counts holdings classified as cash; money-market funds classified otherwise aren't counted."]),
       generatedAt: now,
     });
   }
@@ -170,8 +210,17 @@ export function generateInsights({ holdings, reportingCurrency, fx }: InsightInp
       category: "fees",
       severity: "warning",
       title: `${h.assetName} has expense ratio of ${(h.expenseRatioPct ?? 0).toFixed(2)}%`,
-      detail: `Expense ratio above ${HIGH_FEE_BPS} bps threshold. Consider whether a lower-cost alternative is appropriate.`,
+      detail: `The recorded expense ratio is at or above the ${(HIGH_FEE_BPS / 100).toFixed(2)}% review level. Whether the cost is justified for this client is for the analysis.`,
       relatedHoldingIds: [h.id],
+      basis: {
+        source: SOURCE,
+        rule: "Fund expense ratio",
+        observed: `${(h.expenseRatioPct ?? 0).toFixed(2)}% a year, as recorded for ${h.assetName}`,
+        threshold: `${(HIGH_FEE_BPS / 100).toFixed(2)}% a year: ${DEFAULT}`,
+        scope: "This holding only.",
+        valuationDates: datesOf([h]),
+        limitations: ["Uses the expense ratio on file; trading costs, advisory fees and loads aren't included. Holdings with no expense ratio recorded aren't tested."],
+      },
       generatedAt: now,
     });
   }
@@ -186,6 +235,7 @@ export function generateInsights({ holdings, reportingCurrency, fx }: InsightInp
       title: `${h.assetName} is manually valued`,
       detail: `Valuation date ${h.valuationDate ?? "n/a"} (${h.valuationSource.note ?? "advisor-entered"}). Review or update it before client delivery.`,
       relatedHoldingIds: [h.id],
+      basis: { source: SOURCE, rule: "Manual valuation", observed: "Valued by the advisor, not from a statement or market price", scope: "This holding only.", valuationDates: datesOf([h]), limitations: ["The check doesn't judge the value itself; it flags that it was entered manually."] },
       generatedAt: now,
     });
   }
@@ -202,6 +252,7 @@ export function generateInsights({ holdings, reportingCurrency, fx }: InsightInp
       detail: TASK_WHY[t.kind].replace("{ccy}", reportingCurrency),
       relatedHoldingIds: t.openIds,
       task: { kind: t.kind, openIds: t.openIds, doneIds: t.doneIds },
+      basis: { source: SOURCE, rule: "Data to complete", observed: `${n} open, ${t.doneIds.length} resolved`, scope: "The holdings listed, across every account.", valuationDates: datesOf(holdings.filter((h) => t.openIds.includes(h.id))), limitations: [] },
       generatedAt: now,
     });
   }
@@ -232,6 +283,7 @@ export function generateInsights({ holdings, reportingCurrency, fx }: InsightInp
         (hs.length === 1 ? "" : `Applies to ${shown}. `) +
         "In the value check on Accounts & Assets, click Details on each to correct it, or Confirm it if it's right.",
       relatedHoldingIds: hs.map((h) => h.id),
+      basis: { source: SOURCE, rule: "Holding data quality", observed: `${hs.length} holding${hs.length === 1 ? "" : "s"} affected`, scope: "The holdings listed, across every account.", valuationDates: datesOf(hs), limitations: [] },
       generatedAt: now,
     });
   }

@@ -15,6 +15,8 @@ import { describeImportIssue, importIssues, type ImportIssue } from "@/engines/i
 import { agentContextOf, type AgentContext } from "./context";
 import { figuresIn, type EvidenceValue } from "./evidence";
 import type { CopilotSnapshot } from "./snapshot";
+import { redactIdentity } from "./redaction";
+import { clientStatedAmounts, modelBoundClientBrief } from "@/engines/clientDiscovery";
 
 // Every tool here is a thin, read-only wrapper over the deterministic engines.
 // The model never computes a number itself; it asks the engines. The single
@@ -99,7 +101,13 @@ export class CopilotContext {
   /** Keeps a tool result as evidence and returns its reference. */
   record(tool: string, result: unknown, summary: string): string {
     const id = `ev_${this.evidence.length + 1}`;
-    this.evidence.push({ id, tool, summary, numbers: evidenceIn(result, (s) => this.withoutUntrusted(s), this.reportingCurrency) });
+    const numbers = evidenceIn(result, (s) => this.withoutUntrusted(s), this.reportingCurrency);
+    // PR #110 review: when the brief is handed over, its client-stated figures are the structured amounts the
+    // advisor recorded (with their own currency), never figures scanned from the brief's text.
+    if (holdsBrief(result)) {
+      for (const a of clientStatedAmounts(this.snapshot.client)) numbers.push({ value: a.value, unit: "money", currency: a.currency, source: "client_brief", label: a.label });
+    }
+    this.evidence.push({ id, tool, summary, numbers });
     return id;
   }
 
@@ -121,8 +129,15 @@ export class CopilotContext {
         s.client.investmentObjective,
         s.client.specialInstructions,
         ...(s.client.restrictedSecurities ?? []),
+        // #109: what the advisor typed into the discovery brief (every free-text field).
+        s.client.discovery?.analysisNote,
+        s.client.discovery?.otherConstraints,
+        ...(s.client.discovery?.securitiesToRetain ?? []),
+        ...Object.values(s.client.discovery?.answers ?? {}).map((a) => a?.note),
       ];
-      this.untrustedCache = [...new Set(texts.filter((t): t is string => typeof t === "string" && t.trim().length > 0))].sort((a, b) => b.length - a.length);
+      // PR #110 review: also as presented (trimmed, whitespace collapsed), so formatting never lets it through.
+      const forms = texts.filter((t): t is string => typeof t === "string" && t.trim().length > 0).flatMap((t) => [t, t.trim(), t.replace(/\s+/g, " ").trim()]);
+      this.untrustedCache = [...new Set(forms)].sort((a, b) => b.length - a.length);
     }
     return this.untrustedCache;
   }
@@ -141,20 +156,7 @@ export class CopilotContext {
    * JSON a tool returns, so names are matched in their escaped form.
    */
   redact(text: string, json = false): string {
-    const s = this.snapshot;
-    const pairs: [string | undefined, string][] = [
-      [s.client.householdName, "[client household]"],
-      [s.client.fullName, "[client]"],
-      [s.advisor.email, "[advisor email]"],
-      [s.advisor.name, "[advisor]"],
-      ...(s.sourceDocuments ?? []).map((d, i) => [d.fileName, `[import ${i + 1}]`] as [string, string]),
-    ];
-    let out = text;
-    for (const [raw, label] of pairs.filter(([r]) => typeof r === "string" && r.trim().length >= 3).sort((a, b) => b[0]!.length - a[0]!.length)) {
-      const needle = json ? JSON.stringify(raw).slice(1, -1) : raw!;
-      out = out.split(needle).join(label);
-    }
-    return out;
+    return redactIdentity(this.snapshot, text, json);
   }
 
   /** Age and confirmation of the rates in use (#26). Reported, never a reason to refuse a draft. */
@@ -288,16 +290,12 @@ function getPortfolioOverview(ctx: CopilotContext) {
     }));
   return {
     reporting_currency: ctx.reportingCurrency,
-    // The profile the advice depends on; the client's name and identity stay out of model-bound data (#59).
+    // #109: the advisor's discovery records, with review status, unknowns and conflicts. Older profile
+    // levels and defaults are not client answers and aren't sent. The client's name and identity and the
+    // private discovery notes stay out of model-bound data (#59).
     client: {
-      risk_tolerance: client.riskTolerance,
-      objective: client.investmentObjective,
-      time_horizon_years: client.timeHorizonYears,
-      liquidity_needs: client.liquidityNeeds,
-      income_needs: client.incomeNeeds,
-      tax_sensitivity: client.taxSensitivity,
       country_of_residence: client.countryOfResidence,
-      restricted_securities: client.restrictedSecurities ?? [],
+      client_brief: modelBoundClientBrief(client),
     },
     // status: complete | partial (valued holdings only) | unavailable (null values).
     net_worth: {
@@ -366,7 +364,12 @@ function listInsights(ctx: CopilotContext, input: z.infer<typeof ListInsightsInp
       title: i.title,
       detail: i.detail,
       related_holding_ids: i.relatedHoldingIds ?? [],
+      // What the check rests on: a product-default threshold, its scope and dates, and what it can't see.
+      basis: i.basis
+        ? { source: i.basis.source, rule: i.basis.rule, observed: i.basis.observed ?? null, threshold: i.basis.threshold ?? null, scope: i.basis.scope, valuation_dates: i.basis.valuationDates ?? null, limitations: i.basis.limitations }
+        : null,
     })),
+    note: "Portfolio checks are built-in rules with product-default thresholds: facts about the data, not recommendations. Decide what matters from the client brief.",
   };
 }
 
@@ -725,7 +728,7 @@ function draftRecommendation(ctx: CopilotContext, input: z.infer<typeof DraftInp
     riskTradeoff: input.risk_tradeoff,
     taxNote: input.tax_note,
     implementationStep: input.implementation_step,
-    complianceNote: `Drafted by Proposal Copilot for "${ctx.draft.name}" (input revision ${ctx.context.inputRevision}). Requires advisor review and approval before client use.`,
+    complianceNote: `Drafted by Stratovell AI for "${ctx.draft.name}" (input revision ${ctx.context.inputRevision}). Requires advisor review and approval before client use.`,
     priority: input.priority,
     // Hard-coded, not model-controlled: AI drafts are never approved and never
     // reach the client PDF until the advisor flips these in the UI.
@@ -771,7 +774,7 @@ const TOOLS: Record<string, ToolSpec> = {
     definition: {
       name: "get_portfolio_overview",
       description:
-        "Client profile, net worth, allocation by asset class and currency, the ten largest positions and the recommendations already on file, all valued by the Stratovell valuation and FX engines in the proposal's reporting currency. Call this first.",
+        "The client brief (the advisor's discovery records: objectives, time horizon, liquidity and income needs, loss willingness and ability, tax sensitivity and constraints, each with its review status, plus what wasn't discussed and possible conflicts), net worth, allocation by asset class and currency, the ten largest positions and the recommendations already on file, all valued by the Stratovell valuation and FX engines in the proposal's reporting currency. Call this first.",
       input_schema: { type: "object", properties: {} },
     },
     run: (ctx) => getPortfolioOverview(ctx),
@@ -780,7 +783,7 @@ const TOOLS: Record<string, ToolSpec> = {
     definition: {
       name: "list_insights",
       description:
-        "Rules-based findings from the Stratovell insight engine: concentration, currency and country exposure, liquidity, cash drag, high fees, manual valuations and data-quality problems.",
+        "Stratovell's portfolio checks: built-in rules over the recorded data (concentration, currency and country exposure, illiquid assets, cash share, fund expense ratios, manual valuations and data-quality problems). Each check gives its basis: the observed figure, its threshold (a product default, not a regulatory limit or the client's policy), the scope, valuation dates and limitations. A check is a fact to analyze, not a recommendation.",
       input_schema: {
         type: "object",
         properties: {
@@ -927,6 +930,10 @@ function classifyUnit(value: number, key: string | undefined, parent: Record<str
  * untrusted workspace text is removed (`clean`).
  */
 export function evidenceIn(value: unknown, clean: (s: string) => string, reporting: string, key?: string, parent?: Record<string, unknown>, out: EvidenceValue[] = []): EvidenceValue[] {
+  // #109, PR #110 review: the client brief is the advisor's record of what the client said, never engine evidence,
+  // and its text is never scanned for figures (constraints, clarifications, notes and labels included). Its
+  // client-stated amounts come from the structured answers instead (CopilotContext.record, clientStatedAmounts).
+  if (key === "client_brief") return out;
   if (typeof value === "number" && Number.isFinite(value)) out.push(classify(value, key, parent, reporting));
   else if (typeof value === "string") out.push(...figuresIn(clean(value)));
   else if (Array.isArray(value)) for (const v of value) evidenceIn(v, clean, reporting, key, parent, out);
@@ -934,8 +941,12 @@ export function evidenceIn(value: unknown, clean: (s: string) => string, reporti
   return out;
 }
 
+
+/** Whether a tool result hands the client brief to the model (at any depth). */
+const holdsBrief = (v: unknown): boolean => (Array.isArray(v) ? v.some(holdsBrief) : !!v && typeof v === "object" && ("client_brief" in v || Object.values(v).some(holdsBrief)));
+
 const AUTHORITY_REFUSAL =
-  "Refused: Proposal Copilot has no authority to approve, finalize, include in the PDF, share, issue or execute anything. It can investigate, simulate and save unapproved drafts; the advisor decides in Stratovell.";
+  "Refused: Stratovell AI has no authority to approve, finalize, include in the PDF, share, issue or execute anything. It can investigate, simulate and save unapproved drafts; the advisor decides in Stratovell.";
 
 // Runs one tool call and returns the JSON string handed back to the model.
 // Errors become is_error tool results instead of exceptions so the model can

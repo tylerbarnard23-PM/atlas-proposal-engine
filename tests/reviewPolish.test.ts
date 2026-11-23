@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { concentrationKind, insightKey } from "@/engines/insightEngine";
-import { recommendationFromInsight } from "@/engines/recommendationEngine";
 import type { Insight } from "@/domain/types";
 
 describe("concentration applies only to single issuers or single assets", () => {
@@ -19,7 +18,7 @@ describe("concentration applies only to single issuers or single assets", () => 
   ] as const)("%o → %s", (h, kind) => expect(concentrationKind(h as never)).toBe(kind));
 });
 
-describe("converting an insight twice", () => {
+describe("the same observation across runs", () => {
   const insight = (pct: string, id: string): Insight => ({
     id,
     category: "concentration",
@@ -32,7 +31,6 @@ describe("converting an insight twice", () => {
 
   it("gives the same observation the same key across runs, even as the percentage moves", () => {
     expect(insightKey(insight("9.1", "insight_a"))).toBe(insightKey(insight("9.4", "insight_b")));
-    expect(recommendationFromInsight(insight("9.1", "insight_a"), "USD").sourceInsightKey).toBe("concentration:h_aapl");
   });
 
   it("keys holding-less insights by their title without numbers", () => {

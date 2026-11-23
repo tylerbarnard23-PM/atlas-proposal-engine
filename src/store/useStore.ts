@@ -8,6 +8,7 @@ import type {
   ApprovedSnapshot,
   AssetClass,
   ClientProfile,
+  DiscoveryQuestionId,
   CurrencyCode,
   DismissedInsight,
   Disclosure,
@@ -41,6 +42,7 @@ import { cashBasisCurrency, markRemovedLinks } from "@/engines/recommendationLin
 import { contextMismatch, type AgentContext } from "@/copilot/context";
 import { forReadiness } from "@/engines/importCompleteness";
 import { migrateRecommendationCurrency, withApprovalRule } from "@/engines/recommendationAmounts";
+import { knownOrigin, withOrigin } from "@/engines/recommendationOrigin";
 import { candidateProblems, deskActions, draftBasisInputs, legacyWorkingDraft, needsIntentRestatement, newWorkingDraft, recordInputBasis } from "@/engines/allocationDesk";
 import { normalizeHoldings } from "@/engines/normalizationEngine";
 import { LEGACY_SAMPLE_FIRM_NAME } from "@/domain/branding";
@@ -49,10 +51,11 @@ import type { RestoredWorkspace } from "@/engines/workspaceBackup";
 import { findRevision, modelProblems, nextRevision, strategyProblems } from "@/engines/strategyProposals";
 import { UMA_MODELS, UMA_STRATEGIES } from "@/data/umaStory";
 import { buildSnapshot } from "@/engines/approvedSnapshot";
+import { markNotDiscussed, recordAnswer, recordReview, setAnalysisNote, setClarification, type DiscoveryValues } from "@/engines/clientDiscovery";
 
 /** The browser storage key every saved workspace lives under; never renamed. */
 export const STORAGE_KEY = "atlas-proposal-engine";
-export const STORE_VERSION = 10;
+export const STORE_VERSION = 11;
 
 export interface AtlasState {
   client: ClientProfile;
@@ -87,6 +90,15 @@ export interface AtlasState {
 
 export interface AtlasActions {
   setClient: (patch: Partial<ClientProfile>) => void;
+  // #109 client discovery: each answer is the advisor's explicit record; editing one leaves its review stale.
+  setDiscoveryAnswer: <Q extends DiscoveryQuestionId>(question: Q, value: DiscoveryValues[Q]) => void;
+  /** "Not discussed yet": the question is unknown again (an existing profile field keeps its value but isn't read as the answer). */
+  setDiscoveryNotDiscussed: (question: DiscoveryQuestionId) => void;
+  setDiscoveryClarification: (question: Exclude<DiscoveryQuestionId, "otherConstraints">, note: string) => void;
+  /** The advisor's review of every answered question, dated now. */
+  recordDiscoveryReview: () => void;
+  /** The advisor's note for the analysis (part of the client brief; unlike the private discovery notes, it is sent with a live question). */
+  setAnalysisNote: (note: string) => void;
   setAdvisor: (patch: Partial<AdvisorProfile>) => void;
   upsertAccount: (account: Account) => void;
   removeAccount: (id: string) => void;
@@ -374,6 +386,10 @@ export function migrateAtlasState(persisted: unknown, version: number): AtlasSta
   if (version < 10 && state && !Array.isArray(state.snapshots)) {
     state.snapshots = [];
   }
+  // v11 (#109): client discovery. Nothing is added: a profile without a
+  // discovery record has every question "Not discussed yet", and its older
+  // levels and defaults are never read as the client's answers. Approved
+  // versions are untouched. Idempotent.
   return state;
 }
 
@@ -398,6 +414,11 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
     (set, get) => ({
       ...seedState(),
       setClient: (patch) => set((s) => ({ client: { ...s.client, ...patch } })),
+      setDiscoveryAnswer: (question, value) => set((s) => ({ client: recordAnswer(s.client, question, value, new Date().toISOString()) })),
+      setDiscoveryNotDiscussed: (question) => set((s) => ({ client: markNotDiscussed(s.client, question, new Date().toISOString()) })),
+      setDiscoveryClarification: (question, note) => set((s) => ({ client: setClarification(s.client, question, note, new Date().toISOString()) })),
+      recordDiscoveryReview: () => set((s) => ({ client: recordReview(s.client, new Date().toISOString()) })),
+      setAnalysisNote: (note) => set((s) => ({ client: setAnalysisNote(s.client, note) })),
       setAdvisor: (patch) => set((s) => ({ advisor: { ...s.advisor, ...patch } })),
       upsertAccount: (account) =>
         set((s) => ({
@@ -434,8 +455,8 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
       upsertRecommendation: (rec) =>
         set((s) => ({
           recommendations: s.recommendations.some((r) => r.id === rec.id)
-            ? s.recommendations.map((r) => (r.id === rec.id ? withApprovalRule(r, guardApproval(r, { ...r, ...rec })) : r))
-            : [...s.recommendations, guardApproval(undefined, rec)],
+            ? s.recommendations.map((r) => (r.id === rec.id ? withOrigin(r, withApprovalRule(r, guardApproval(r, { ...r, ...rec })), new Date().toISOString()) : r))
+            : [...s.recommendations, withOrigin(undefined, guardApproval(undefined, rec), new Date().toISOString())],
         })),
       removeRecommendation: (id) =>
         set((s) => ({ recommendations: s.recommendations.filter((r) => r.id !== id) })),
@@ -615,7 +636,9 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
         }),
       addDraftEdit: (input) =>
         set((s) => {
-          const recs = Array.isArray(input) ? input : [input];
+          const now = new Date().toISOString();
+          // A desk edit is the advisor's own; an accepted AI draft arrives with the origin its run stamped.
+          const recs = (Array.isArray(input) ? input : [input]).map((r) => withOrigin(s.recommendations.find((x) => x.id === r.id), r, now));
           const ids = new Set(recs.map((r) => r.id));
           const next = { ...s, recommendations: [...s.recommendations.filter((r) => !ids.has(r.id)), ...recs.map((r) => guardApproval(undefined, r))] };
           return { recommendations: next.recommendations, ...draftChange(next, { memberIds: [...s.workingDraft.memberIds.filter((x) => !ids.has(x)), ...ids] }) };
@@ -641,8 +664,11 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
           fx: { reportingCurrency: ccy, rates: s.fxRates },
         });
         if (problems.length > 0) return { ok: false, error: `Not accepted: ${problems.join(" ")}` };
-        // Whatever the draft says, it joins unapproved and out of the PDF.
-        get().addDraftEdit(fresh.map((d) => ({ ...d, status: "needs_review" as const, approvedByAdvisor: false, includeInPdf: false })));
+        // Whatever the draft says, it joins unapproved and out of the PDF. Its
+        // origin is the one the server stamped from the run (Claude, a script or
+        // the test provider); one without such an origin is never Claude's or the advisor's.
+        const stamped = (d: Recommendation) => (d.origin && (d.origin.kind === "claude" || d.origin.kind === "example") ? d.origin : { kind: "unrecorded" as const });
+        get().addDraftEdit(fresh.map((d) => ({ ...d, origin: stamped(d), status: "needs_review" as const, approvedByAdvisor: false, includeInPdf: false })));
         return { ok: true, added: fresh.map((d) => d.id), skipped };
       },
       setAccountFunding: (accountId, funding) =>
@@ -674,7 +700,9 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
             // D2a: a sleeve's recorded minimum review is this alternative's decision, like approval; the copy starts without it.
             const strategy = r.destination?.strategy;
             const destination = strategy?.review ? { ...r.destination!, strategy: { id: strategy.id, revision: strategy.revision, manager: strategy.manager, name: strategy.name, minimum: strategy.minimum } } : r.destination;
-            const copy: Recommendation = { ...r, id: safeId("rec"), status: "draft", approvedByAdvisor: false, includeInPdf: false, rejectionReason: undefined, rejectedAt: undefined, createdAt: now, updatedAt: now, ...(linked ? { linked } : {}), ...(destination ? { destination } : {}) };
+            // Its known origin is resolved before the new ID (a sample's comes from its ID); an unknown one stays unknown.
+            const origin = knownOrigin(r);
+            const copy: Recommendation = { ...r, ...(origin ? { origin } : {}), id: safeId("rec"), status: "draft", approvedByAdvisor: false, includeInPdf: false, rejectionReason: undefined, rejectedAt: undefined, createdAt: now, updatedAt: now, ...(linked ? { linked } : {}), ...(destination ? { destination } : {}) };
             return copy;
           });
           const copy: WorkingDraft = { ...s.workingDraft, id: safeId("draft"), name: name.trim() || `Alternative ${s.alternatives.length + 2}`, memberIds: copies.map((r) => r.id), createdAt: now, updatedAt: now };

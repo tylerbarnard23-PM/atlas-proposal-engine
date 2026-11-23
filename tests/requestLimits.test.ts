@@ -121,7 +121,8 @@ async function copilotBody() {
   const { useAtlasStore } = await import("@/store/useStore");
   const { copilotRequest } = await import("./support/copilotRequest");
   const s = useAtlasStore.getState();
-  return copilotRequest("Summarize this client's portfolio (synthetic)", {
+  // Demo mode answers only the explicitly chosen scripted example (PR #110).
+  return { runAs: "scripted_example" as const, ...copilotRequest("Summarize this client's portfolio (synthetic)", {
     client: s.client,
     advisor: s.advisor,
     accounts: s.accounts,
@@ -133,7 +134,7 @@ async function copilotBody() {
     fxConfirmation: s.fxConfirmation,
     workingDraft: s.workingDraft,
     alternatives: s.alternatives,
-  });
+  }) };
 }
 const DEMO = { env: { COPILOT_MODE: "demo" } } as never;
 const errorOf = async (r: Response) => String(((await r.json()) as { error?: unknown }).error ?? "");
