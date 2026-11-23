@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { loadSampleRecommendations } from "./support/sampleRecommendations";
 import * as React from "react";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -179,6 +180,7 @@ describe("finding 3: duplicating an alternative keeps each action's known origin
   it("a prewritten sample, a Claude draft and an advisor record keep their origins; an unknown one stays unknown; copies start unapproved and out of the PDF", async () => {
     const m = await load();
     store(m).resetSeed();
+    loadSampleRecommendations(m.useAtlasStore); // #111: the sample no longer preloads them
     const seed = m.SEED_RECOMMENDATIONS[0];
     const claude: Recommendation = { ...seed, id: "rec_ai_claude_synthetic", title: "Claude draft (synthetic)", origin: { kind: "claude", models: ["claude-opus-5-5"], promptVersion: "claude-led-2026-11-21" } };
     const unknown: Recommendation = { ...seed, id: "rec_old_unknown", title: "Older record (synthetic)", sourceInsightKey: "fees:h_high_fee_fund" };

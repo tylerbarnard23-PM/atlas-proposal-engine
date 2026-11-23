@@ -36,7 +36,7 @@ function Inner() {
             All advisor-entered data is persisted in the browser via <code className="text-2xs bg-slatey-100 rounded px-1 py-0.5">localStorage</code>. <em>Start a new client</em> clears the engagement but keeps your firm &amp; branding; <em>Reset everything</em> also clears the firm.
           </p>
           <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" onClick={() => { if (confirm("Reset the workspace to seeded sample data? Any in-progress edits will be replaced.")) reset(); }}>
+            <Button variant="secondary" onClick={() => { if (confirm("Reset the workspace to the fictional sample? Any in-progress edits will be replaced. The sample starts with no recommendations.")) reset(); }}>
               Restore sample data
             </Button>
             <Button

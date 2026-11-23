@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { loadSampleRecommendations, nothingSaved } from "./support/sampleRecommendations";
 import type { Recommendation } from "@/domain/types";
 
 // PR #66 review: repairing a recommendation whose holding or account was
@@ -27,7 +28,10 @@ vi.mock("@/pdf/chromiumPath", async () => (await import("./support/fakeChromium"
 const NOW = new Date("2026-10-22T12:00:00Z");
 
 async function load() {
+  const fresh = nothingSaved();
   const store = await import("@/store/useStore");
+  // #111: these fixtures are the sample workspace with its prewritten recommendations, loaded explicitly on a fresh start.
+  if (fresh) loadSampleRecommendations(store.useAtlasStore);
   const backup = await import("@/engines/workspaceBackup");
   const links = await import("@/engines/recommendationLinks");
   const { normalizeHoldings } = await import("@/engines/normalizationEngine");
