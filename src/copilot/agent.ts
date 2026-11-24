@@ -17,8 +17,7 @@ export const TOOLS_VERSION = "claude-led-2026-11-23-targets";
  * deterministic test provider through the real loop (not a model), or a live
  * Claude model. The page shows it before and with every answer.
  */
-/** "hosted" (#113): the public site with signed-in users' own keys; its runs report "live" (Claude) or "test". */
-export type CopilotMode = "demo" | "test" | "live" | "hosted";
+export type CopilotMode = "demo" | "test" | "live";
 
 /** How a run ended. Anything but "completed" is shown to the advisor, with the drafts saved so far. */
 export type RunStatus =

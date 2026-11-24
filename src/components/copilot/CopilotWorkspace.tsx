@@ -16,9 +16,7 @@ import { clientBrief } from "@/engines/clientDiscovery";
 import { cn } from "@/utils/cn";
 import { LiveSessionBar, liveReady, type LiveInfo, type LiveRunInfo } from "./LiveSessionBar";
 import { ConnectClaude } from "./ConnectClaude";
-import { HostedConnection, hostedReady } from "./HostedConnection";
 import { AnalysisInputs } from "./AnalysisInputs";
-import type { HostedInfo } from "@/server/hosted/hosted";
 import { MiniMarkdown } from "./MiniMarkdown";
 import type { LocalInfo } from "@/copilot/localConnect";
 import type { Recommendation } from "@/domain/types";
@@ -52,13 +50,11 @@ export const MODE_LABEL: Record<CopilotMode, string> = {
   demo: "Scripted demo · no model",
   test: "Test provider · not a model",
   live: "Live · Claude",
-  hosted: "Claude · your own key",
 };
 export const MODE_HINT: Record<CopilotMode, string> = {
   demo: "A fixed script calls the same engine tools as the live agent. No model writes these answers.",
   test: "A deterministic test provider runs through the real agent loop and tools. It is not a model and makes no API calls.",
   live: "Portfolio calculations use shared deterministic engines. Stratovell AI checks the figures Claude states against tool results; unsupported or unchecked claims are flagged for advisor review.",
-  hosted: "Claude analysis runs only for a signed-in user, with their own API key and a session they started. The scripted example is a separate, labelled action.",
 };
 
 const STATUS_LABEL: Record<RunStatus, string> = {
@@ -77,7 +73,7 @@ const STATUS_LABEL: Record<RunStatus, string> = {
  * The mode the server runs Copilot in, and in live mode this browser's view of
  * the live test session (a GET; it never starts a run). `refresh` re-reads it.
  */
-type ModeState = { mode: CopilotMode; model: string | null; live: LiveInfo | null; local: LocalInfo | null; hosted: HostedInfo | null };
+type ModeState = { mode: CopilotMode; model: string | null; live: LiveInfo | null; local: LocalInfo | null };
 const MODE_EVENT = "stratovell-copilot-mode";
 
 export function useCopilotMode() {
@@ -86,9 +82,9 @@ export function useCopilotMode() {
     fetch("/api/copilot", { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => {
-        const next: ModeState = { mode: d.mode, model: d.model ?? null, live: d.live ?? null, local: d.local ?? null, hosted: d.hosted ?? null };
+        const next: ModeState = { mode: d.mode === "live" || d.mode === "test" ? d.mode : "demo", model: d.model ?? null, live: d.live ?? null, local: d.local ?? null };
         setMode(next);
-        // #113: every view of the mode on the page (the header badge, the workspace, Settings) shows the same state.
+        // Every view of the mode on the page (the header badge, the workspace, Settings) shows the same state.
         window.dispatchEvent(new CustomEvent(MODE_EVENT, { detail: next }));
       })
       .catch(() => setMode(null));
@@ -107,31 +103,15 @@ export function useCopilotMode() {
  * a live Anthropic session is Claude; the scripted example and the test
  * provider are separate, labelled runs the advisor chooses.
  */
-export function analysisRun(m: { mode: CopilotMode; live: Pick<LiveInfo, "provider"> | null; hosted?: HostedInfo | null } | null): { runAs: RunAs; claudeAvailable: boolean; label: string; testId: string; note: string | null; hostedSignIn?: boolean } | null {
+export function analysisRun(m: { mode: CopilotMode; live: Pick<LiveInfo, "provider"> | null } | null): { runAs: RunAs; claudeAvailable: boolean; label: string; testId: string; note: string | null } | null {
   if (!m) return null;
-  // #113: on the hosted site, Claude runs only for a signed-in user with their own key and an active session.
-  // Until then the run on offer is the labelled scripted example, never presented as Claude.
-  if (m.mode === "hosted") {
-    if (hostedReady(m.hosted))
-      return m.hosted?.provider === "fake"
-        ? { runAs: "test_provider", claudeAvailable: false, label: "Analyze with the test provider", testId: "analyze-portfolio", note: "This server answers with the deterministic test provider, not Claude. Its drafts are labelled as test examples." }
-        : { runAs: "claude", claudeAvailable: true, label: "Run Claude analysis", testId: "analyze-portfolio", note: null };
-    return {
-      runAs: "scripted_example",
-      claudeAvailable: false,
-      label: "Run the scripted example",
-      testId: "run-scripted-example",
-      hostedSignIn: true,
-      note: "Claude isn't connected for you yet: sign in and connect your own Anthropic API key to run Claude analysis. The scripted example is a fixed script over the same engine tools, labelled as an example; it isn't Claude's analysis of this client.",
-    };
-  }
   if (m.mode === "demo")
     return {
       runAs: "scripted_example",
       claudeAvailable: false,
       label: "Run the scripted example",
       testId: "run-scripted-example",
-      note: "Claude isn't connected here, so Stratovell AI generates no recommendations for this client. In local Stratovell, connect Claude to analyze the portfolio. This hosted demo can run a scripted example instead: a fixed script over the same engine tools, labelled as an example. It is not Claude's analysis of this client.",
+      note: "Claude isn't connected here, so Stratovell AI generates no recommendations for this client. In the Stratovell desktop application, connect Claude to analyze the portfolio. This scripted preview can run a scripted example instead: a fixed script over the same engine tools, labelled as an example. It is not Claude's analysis of this client.",
     };
   if (m.mode === "test" || m.live?.provider === "fake")
     return {
@@ -153,15 +133,7 @@ export function answeredQuestionNote(asked: string | null, current: string): str
   return "The answer below is to your earlier question, shown above it. Nothing has run for the question in the box; run it to analyze it.";
 }
 
-export function ModeBadge({ mode, model, live, hosted }: { mode: CopilotMode; model: string | null; live?: LiveInfo | null; hosted?: HostedInfo | null }) {
-  if (mode === "hosted") {
-    const ready = hostedReady(hosted);
-    return (
-      <Badge tone={ready ? (hosted?.provider === "fake" ? "warning" : "positive") : "gold"} className="whitespace-nowrap" title={MODE_HINT.hosted} data-testid="copilot-mode">
-        {!ready ? "Scripted demonstration · Claude is not connected" : hosted?.provider === "fake" ? `Test provider · ${model ?? ""}` : `Claude · ${model ?? ""}`}
-      </Badge>
-    );
-  }
+export function ModeBadge({ mode, model, live }: { mode: CopilotMode; model: string | null; live?: LiveInfo | null }) {
   const fake = mode === "live" && live?.provider === "fake";
   return (
     <Badge tone={mode === "live" && !fake ? "positive" : mode === "demo" ? "gold" : "warning"} className="whitespace-nowrap" title={fake ? "The live session's controls with the deterministic test provider: no API calls." : MODE_HINT[mode]} data-testid="copilot-mode">
@@ -252,7 +224,7 @@ export function CopilotWorkspace({
       abort.current = null;
       setLoading(false);
       // Live mode: the session's counters are the server's; re-read them after every request.
-      if (mode?.mode === "live" || mode?.mode === "hosted") mode.refresh();
+      if (mode?.mode === "live") mode.refresh();
     }
   }
 
@@ -274,9 +246,7 @@ export function CopilotWorkspace({
   const shownMode = result?.mode ?? mode?.mode ?? null;
   const panel = variant === "panel";
   // Live mode asks only through an active session of this browser, one run at a time.
-  const liveBlocked = (mode?.mode === "live" && !liveReady(mode.live)) || (mode?.mode === "hosted" && run?.runAs !== "scripted_example" && !hostedReady(mode.hosted));
-  // #113: on the hosted site the scripted example stays a separate action next to the user's own analysis.
-  const scriptedToo = mode?.mode === "hosted" && run?.runAs !== "scripted_example";
+  const liveBlocked = mode?.mode === "live" && !liveReady(mode.live);
 
   return (
     <div className="space-y-3">
@@ -294,7 +264,7 @@ export function CopilotWorkspace({
         </div>
         {shownMode && (
           <div className="mt-1.5 flex flex-wrap items-center gap-2 text-2xs text-ink-500">
-            {panel && mode && <ModeBadge mode={shownMode} model={mode.model} live={mode.live} hosted={mode.hosted} />}
+            {panel && mode && <ModeBadge mode={shownMode} model={mode.model} live={mode.live} />}
             <span>{shownMode === "live" && mode?.live?.provider === "fake" ? "Live session with the fake provider: the session's controls and counters are real, but the deterministic test provider answers. No model, no API calls." : MODE_HINT[shownMode]}</span>
           </div>
         )}
@@ -308,12 +278,7 @@ export function CopilotWorkspace({
         </div>
       )}
 
-      {mode?.mode === "hosted" && (
-        <div className="rounded-md ring-1 ring-inset ring-ink-100 bg-white px-3 py-3" data-testid="hosted-card">
-          <HostedConnection info={mode.hosted} onChanged={mode.refresh} lastRun={lastRun} compact={panel} />
-        </div>
-      )}
-      {!panel && <AnalysisInputs hostedOrLive={mode?.mode === "hosted" || mode?.mode === "live"} />}
+      {!panel && <AnalysisInputs live={mode?.mode === "live"} />}
       {mode?.mode === "live" && mode.live && <ConnectClaude live={mode.live} local={mode.local} onChanged={mode.refresh} />}
       {mode?.mode === "live" && <LiveSessionBar live={mode.live ?? { available: false, reasons: ["Live session status couldn't be read."], provider: null, session: null }} lastRun={lastRun} onChanged={mode.refresh} />}
 
@@ -332,11 +297,6 @@ export function CopilotWorkspace({
           <Button onClick={() => ask(question)} loading={loading} disabled={!question.trim() || liveBlocked || !run} iconLeft={<Send className="h-4 w-4" />} data-testid={run?.testId ?? "analyze-portfolio"} variant={run && !run.claudeAvailable && run.runAs === "scripted_example" ? "secondary" : undefined}>
             {run?.label ?? "Analyze portfolio"}
           </Button>
-          {scriptedToo && (
-            <Button variant="secondary" onClick={() => ask(question, "scripted_example")} disabled={!question.trim() || loading} data-testid="run-scripted-example">
-              Run the scripted example
-            </Button>
-          )}
           {loading && (
             <Button variant="secondary" onClick={() => abort.current?.abort()} iconLeft={<Square className="h-4 w-4" />}>
               Cancel

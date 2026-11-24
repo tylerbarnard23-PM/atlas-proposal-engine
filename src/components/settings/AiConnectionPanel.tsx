@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { Card, CardBody } from "@/components/ui/Card";
-import { HostedConnection, PUBLIC_PREVIEW } from "@/components/copilot/HostedConnection";
 import { ModeBadge, useCopilotMode } from "@/components/copilot/CopilotWorkspace";
 
-// #113: Settings · AI connection. On the hosted site this is where a user signs
-// in, connects or replaces their own API key, starts or stops a session and
-// disconnects. Elsewhere it says what this server runs. Reading it sends
-// nothing to a model.
+// Settings · AI connection: what this copy of Stratovell runs. In the desktop
+// application (live mode) Claude is connected under Connect Claude on the
+// Stratovell AI page, with the user's own key. The public website is a scripted
+// preview with no sign-in or key storage (hosted mode was retired in #116).
+// Reading it sends nothing to a model.
+
+export const SCRIPTED_PREVIEW = "Scripted preview · Claude is not connected.";
 
 export function AiConnectionPanel() {
   const mode = useCopilotMode();
@@ -15,8 +17,6 @@ export function AiConnectionPanel() {
       <CardBody className="space-y-3">
         {!mode ? (
           <p className="text-[13px] text-ink-500">Checking the AI connection…</p>
-        ) : mode.mode === "hosted" ? (
-          <HostedConnection info={mode.hosted} onChanged={mode.refresh} />
         ) : (
           <div className="space-y-2 text-[13px] text-ink-700">
             <div className="flex flex-wrap items-center gap-2">
@@ -24,10 +24,10 @@ export function AiConnectionPanel() {
             </div>
             <p>
               {mode.mode === "demo"
-                ? `${PUBLIC_PREVIEW} This server runs only the labelled scripted example; it has no sign-in or key storage.`
+                ? `${SCRIPTED_PREVIEW} This website runs only the labelled scripted example; it has no sign-in or key storage. Claude analysis runs in the Stratovell desktop application, with your own Anthropic API key.`
                 : mode.mode === "test"
                 ? "This server answers with the deterministic test provider: not a model, no API calls."
-                : "This is a local Stratovell: Claude is connected on this computer (Connect Claude on the Stratovell AI page)."}
+                : "Stratovell runs on this computer. Connect Claude with your own Anthropic API key under Connect Claude on the Stratovell AI page. Saving a key makes no model request; analysis starts only when you start it."}
             </p>
             <p>
               <Link className="font-medium text-navy-700 hover:underline" href="/copilot">
