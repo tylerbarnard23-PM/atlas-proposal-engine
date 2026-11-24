@@ -78,19 +78,19 @@ function Inner() {
                 Explore the fictional sample
               </Button>
             </div>
-            <p>
+            {info && (<p>
               Used Stratovell in a web browser before? Export a backup there (Settings → Backup &amp; restore), then restore it here in{" "}
               <Link href="/settings#backup" className="font-medium text-navy-700 hover:underline">
                 Settings
               </Link>
               . Stratovell never reads your browser&apos;s data by itself.
-            </p>
+            </p>)}
           </CardBody>
         </Card>
 
         <Card data-testid="welcome-how">
           <CardHeader>
-            <CardTitle>How Stratovell works</CardTitle>
+            <CardTitle>{info ? "How Stratovell works" : "How the Stratovell desktop application works"}</CardTitle>
           </CardHeader>
           <CardBody>
             <ul className="list-disc pl-5 space-y-1.5 text-[13px] text-ink-700">
