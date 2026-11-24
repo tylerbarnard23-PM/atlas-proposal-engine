@@ -26,7 +26,9 @@ import { cn } from "@/utils/cn";
 import { summarizePreview } from "@/components/recommendations/recEffect";
 import { RecPreview } from "@/components/recommendations/RecPreview";
 import { previewRecommendation } from "@/engines/recommendationPreview";
-import { isPrewrittenSample, originLabel, originOf } from "@/engines/recommendationOrigin";
+import { exampleKind, originLabel, originOf } from "@/engines/recommendationOrigin";
+import { bulkApproval } from "@/engines/bulkApproval";
+import { ActiveExamplesNotice } from "@/components/recommendations/ExampleSections";
 import { EmptyRecommendations, SampleRecommendationsNotice } from "@/components/recommendations/EmptyRecommendations";
 import { CurrencyReviewPanel } from "@/components/recommendations/CurrencyReviewPanel";
 import { RecCurrencyField } from "@/components/recommendations/RecCurrencyField";
@@ -72,7 +74,6 @@ function Inner() {
   const remove = useAtlasStore((s) => s.removeRecommendation);
   const approveAll = useAtlasStore((s) => s.approveAllRecommendations);
   const isRejected = (r: Recommendation) => r.status === "excluded";
-  const pendingCount = recs.filter((r) => !r.approvedByAdvisor && !isRejected(r)).length;
   const rejectRec = useAtlasStore((s) => s.rejectRecommendation);
   const reopenRec = useAtlasStore((s) => s.reopenRecommendation);
   const [rejecting, setRejecting] = React.useState<string | null>(null);
@@ -80,17 +81,25 @@ function Inner() {
   const ordered = React.useMemo(() => [...recs.filter((r) => !isRejected(r)), ...recs.filter(isRejected)], [recs]);
   const [approvedNotice, setApprovedNotice] = React.useState<number | null>(null);
 
+  // #113: bulk approval covers exactly the eligible records in the open view (bulkApproval: pending, a known Claude or
+  // advisor origin, sized explicitly). The same list gives the count, the confirmation and the ids submitted.
+  // Records whose origin wasn't recorded and examples (prewritten, scripted or test) are never approved in bulk.
   function onApproveAll() {
-    const fromClaude = recs.filter((r) => !r.approvedByAdvisor && !isRejected(r) && originOf(r).kind === "claude").length;
-    const examples = recs.filter((r) => !r.approvedByAdvisor && !isRejected(r) && originLabel(r).tone === "gold").length;
+    const pending = bulk.eligible;
+    if (pending.length === 0) return;
+    const fromClaude = pending.filter((r) => originOf(r).kind === "claude").length;
+    const left = [
+      bulk.unknownPending.length ? `${bulk.unknownPending.length} with origin not recorded` : "",
+      bulk.needsSize.length ? `${bulk.needsSize.length} that need${bulk.needsSize.length === 1 ? "s" : ""} an explicit size first` : "",
+    ].filter(Boolean);
     const ok = confirm(
-      `Approve ${pendingCount} recommendation${pendingCount === 1 ? "" : "s"} and include ${pendingCount === 1 ? "it" : "them"} in the PDF?` +
-        "\n\nThis covers every pending recommendation, in any alternative, not only the current view." +
-        (fromClaude ? `\n\n${fromClaude} of these are Claude drafts.` : "") +
-        (examples ? `\n\n${examples} of these are examples (scripted, test or sample), not Claude's analysis of this client.` : "") +
+      `Approve the ${pending.length} eligible pending recommendation${pending.length === 1 ? "" : "s"}${view === "draft" ? ` in "${draft.name}"` : ""} and include ${pending.length === 1 ? "it" : "them"} in the PDF?` +
+        (fromClaude === pending.length ? `\n\n${fromClaude === 1 ? "It is a Claude draft" : "They are Claude drafts"}.` : fromClaude ? `\n\n${fromClaude} of these ${fromClaude === 1 ? "is a Claude draft" : "are Claude drafts"}; the rest are advisor-authored.` : `\n\n${pending.length === 1 ? "It is" : "They are"} advisor-authored.`) +
+        (left.length ? `\n\nNot included: ${left.join(" and ")}. Review those on their own cards.` : "") +
+        "\n\nExamples (prewritten, scripted or test) are never approved in bulk: approve one on its own card if you mean to use it." +
         "\n\nApproved recommendations reshape the Before / After allocation and appear in the client proposal. You can unapprove any of them afterwards."
     );
-    if (ok) setApprovedNotice(approveAll());
+    if (ok) setApprovedNotice(approveAll(pending.map((r) => r.id)));
   }
   const [editing, setEditing] = React.useState<Recommendation | null>(null);
   // Delete straight from the list, with Undo instead of a confirm dialog.
@@ -145,6 +154,26 @@ function Inner() {
     card?.focus();
   }, [saved]);
   const shown = view === "draft" ? ordered.filter((r) => inDraft.has(r.id) || r.id === saved) : ordered;
+  // #113: Claude and advisor recommendations (and records whose origin wasn't recorded) fill the list; examples are
+  // kept apart: scripted and test examples in their own section, prewritten samples under a collapsed Saved examples.
+  const mainShown = shown.filter((r) => exampleKind(r) == null);
+  const runExamplesShown = shown.filter((r) => exampleKind(r) === "scripted" || exampleKind(r) === "test");
+  const samplesShown = shown.filter((r) => exampleKind(r) === "sample");
+  const examplesInView = runExamplesShown.length + samplesShown.length;
+  const bulk = bulkApproval(mainShown);
+  const nonSampleCount = recs.filter((r) => exampleKind(r) !== "sample").length;
+  // An approved example still shapes the proposal and the PDF wherever its card is listed.
+  const activeExamples = recs.filter((r) => exampleKind(r) != null && r.approvedByAdvisor && !isRejected(r));
+  const withdrawExamples = useAtlasStore((s) => s.withdrawExamplesFromProposal);
+  const [withdrawnNotice, setWithdrawnNotice] = React.useState<number | null>(null);
+  // Opened from the start when the record just saved or focused is a saved example, so it can be shown.
+  const [samplesOpen, setSamplesOpen] = React.useState(() => recs.some((r) => (r.id === saved || focus.has(r.id)) && exampleKind(r) === "sample"));
+  function showExamples() {
+    changeView("all");
+    if (activeExamples.some((r) => exampleKind(r) === "sample")) setSamplesOpen(true);
+    const first = activeExamples[0];
+    if (first) setTimeout(() => document.getElementById(`rec-${first.id}`)?.scrollIntoView({ block: "center" }), 0);
+  }
   const outside = recs.length - membership.current.length;
   const approvedOutside = recs.filter((r) => r.approvedByAdvisor && !inDraft.has(r.id)).length;
   const unresolvedOutside = recs.filter((r) => unresolved.has(r.id) && !inDraft.has(r.id)).length;
@@ -166,9 +195,160 @@ function Inner() {
   function newRec() {
     setEditing(newRecommendation(reportingCurrency));
   }
-  // #111: prewritten samples are labelled for what they are, above the list, whenever the open view shows any.
-  // Counted from the cards actually shown (the view, plus a just-saved record), so the notice never announces hidden ones.
-  const samples = shown.filter(isPrewrittenSample).length;
+
+  // One recommendation card (the same card in every section).
+  function renderCard(r: Recommendation) {
+    const rejected = isRejected(r);
+    const preview = previews[r.id];
+    const effect = summarizePreview(preview);
+    const focused = focus.has(r.id);
+    const justSaved = r.id === saved;
+    return (
+      <Card
+        key={r.id}
+        id={`rec-${r.id}`}
+        tabIndex={-1}
+        data-testid={justSaved ? "rec-saved" : focused ? "rec-focused" : undefined}
+        className={cn("scroll-mt-4 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-navy-500", rejected && "opacity-80 bg-slatey-50", (focused || justSaved) && "ring-2 ring-navy-300")}
+      >
+        <CardBody>
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                {justSaved ? <Badge tone="navy">Just saved</Badge> : focused && <Badge tone="navy">Just added</Badge>}
+                <Badge tone="navy">{r.type.replace(/_/g, " ")}</Badge>
+                {rejected ? (
+                  <Badge tone="negative">Rejected</Badge>
+                ) : (
+                  <Badge tone={r.approvedByAdvisor ? "positive" : "warning"}>
+                    {r.approvedByAdvisor ? "Approved" : "Not approved"}
+                  </Badge>
+                )}
+                <Badge tone="neutral">{r.priority} priority</Badge>
+                <Badge tone={originLabel(r).tone} title={originLabel(r).detail} data-testid="rec-origin">
+                  {originLabel(r).label}
+                </Badge>
+                {r.includeInPdf && <Badge tone="gold">In PDF prose</Badge>}
+                {view === "all" && <Badge tone="neutral">{inDraft.has(r.id) ? `In ${draft.name}` : alternatives.find((a) => a.memberIds.includes(r.id))?.name ? `In ${alternatives.find((a) => a.memberIds.includes(r.id))!.name}` : "In no draft"}</Badge>}
+                {r.relatedHoldingId && fromIncomplete.has(r.relatedHoldingId) && <IncompleteImportTag />}
+                {unresolved.has(r.id) && (
+                  <Badge tone="warning" title="Relink it to a current holding or account, reject it or delete it. The final PDF waits for this review.">
+                    Linked {linkTargets(unresolved.get(r.id)!)} removed: review
+                  </Badge>
+                )}
+              </div>
+              <h4 className={`font-serif text-lg mt-1.5 ${rejected ? "text-ink-500 line-through decoration-ink-300" : "text-ink-900"}`}>{r.title}</h4>
+              {!rejected && restatementMessage(r) && (
+                <p className="mt-1 text-[13px] text-warning-600">
+                  {r.approvedByAdvisor ? "Approved before amounts were required: it keeps its saved effect. " : ""}
+                  {restatementMessage(r)}
+                </p>
+              )}
+              {rejected && (
+                <p className="mt-1 text-[13px] text-negative-600">
+                  Rejected{r.rejectedAt ? ` ${formatTimestampDate(r.rejectedAt)}` : ""}
+                  {r.rejectionReason ? `: ${r.rejectionReason}` : ""}. Not applied to the Before / After and left out of the PDF.
+                </p>
+              )}
+              <p className="text-sm text-ink-600 mt-1 leading-relaxed">{r.rationale}</p>
+              {!rejected && (
+              <div
+                data-testid="rec-card-effect"
+                className={`mt-2 text-[12px] tabular px-2.5 py-1.5 rounded-md inline-block space-y-0.5 ${
+                  effect.tone === "positive"
+                    ? "bg-positive-50 text-positive-600"
+                    : effect.tone === "negative"
+                    ? "bg-negative-50 text-negative-600"
+                    : effect.tone === "warning"
+                    ? "bg-warning-50 text-warning-600"
+                    : "bg-slatey-100 text-ink-700"
+                }`}
+              >
+                <div>
+                  {r.approvedByAdvisor ? "↻ " : "○ "}
+                  {effect.position ? `This recommendation alone: ${effect.position}` : effect.headline}
+                </div>
+                {effect.position && effect.cash && <div>{effect.cash}</div>}
+                {effect.combined && <div className="text-ink-700">{effect.combined}</div>}
+              </div>
+              )}
+              {!rejected && preview.amounts && (
+                <p className="mt-1 text-2xs text-ink-500 tabular">
+                  Amount: {preview.amounts}. Any figures written in the text above are as entered, not converted.
+                </p>
+              )}
+              {!rejected && (
+                <CurrencyReviewPanel rec={r} fx={fx} onResolve={(next) => upsert({ ...next, updatedAt: todayIso() })} onEdit={() => setEditing(r)} />
+              )}
+            </div>
+            <div className="flex flex-col gap-2 shrink-0">
+              {rejected ? (
+                <Button size="sm" variant="secondary" iconLeft={<RotateCcw className="h-3.5 w-3.5" />} onClick={() => reopenRec(r.id)}>
+                  Reopen
+                </Button>
+              ) : (
+                <>
+                  <Button size="sm" variant="secondary" onClick={() => setEditing(r)}>Edit</Button>
+                  <Button
+                    size="sm"
+                    variant={r.approvedByAdvisor ? "secondary" : "primary"}
+                    disabled={!r.approvedByAdvisor && !!restatementMessage(r)}
+                    title={!r.approvedByAdvisor && restatementMessage(r) ? "Enter an explicit amount first" : undefined}
+                    onClick={() => {
+                      // A linked replacement is approved (or unapproved) as a whole (D2).
+                      const legs = r.linked ? recs.filter((x) => x.linked?.groupId === r.linked!.groupId) : [r];
+                      for (const leg of legs)
+                        upsert({
+                          ...leg,
+                          approvedByAdvisor: !r.approvedByAdvisor,
+                          status: !r.approvedByAdvisor ? "approved" : leg.status,
+                          includeInPdf: !r.approvedByAdvisor ? true : leg.includeInPdf,
+                        });
+                    }}
+                  >
+                    {r.approvedByAdvisor ? "Unapprove" : "Approve"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-negative-600 hover:bg-negative-50"
+                    aria-label={`Reject ${r.title}`}
+                    iconLeft={<Ban className="h-3.5 w-3.5" />}
+                    onClick={() => setRejecting(rejecting === r.id ? null : r.id)}
+                  >
+                    Reject
+                  </Button>
+                </>
+              )}
+              <Button
+                size="sm"
+                variant="ghost"
+                aria-label={`Delete ${r.title}`}
+                iconLeft={<Trash2 className="h-3.5 w-3.5" />}
+                onClick={() => deleteRec(r)}
+              >
+                Delete
+              </Button>
+            </div>
+          </div>
+          {rejecting === r.id && !rejected && (
+            <ReasonPicker
+              className="mt-3"
+              tone="negative"
+              prompt="Why reject this recommendation? (optional, kept for the record)"
+              reasons={REJECT_REASONS}
+              confirmLabel="Reject recommendation"
+              onConfirm={(reason) => {
+                rejectRec(r.id, reason);
+                setRejecting(null);
+              }}
+              onCancel={() => setRejecting(null)}
+            />
+          )}
+        </CardBody>
+      </Card>
+    );
+  }
 
   return (
     <>
@@ -186,14 +366,15 @@ function Inner() {
             <Button
               variant="secondary"
               onClick={onApproveAll}
-              disabled={pendingCount === 0}
+              disabled={bulk.eligible.length === 0}
               iconLeft={<CheckCheck className="h-4 w-4" />}
+              data-testid="approve-all"
             >
-              {pendingCount > 0
-                ? `Approve all (${pendingCount})`
-                : recs.some((r) => r.approvedByAdvisor)
-                ? "All approved"
-                : "Nothing to approve"}
+              {bulk.eligible.length > 0
+                ? `Approve all eligible (${bulk.eligible.length})`
+                : bulk.anyEligibleApproved
+                ? "All eligible approved"
+                : "Nothing eligible to approve"}
             </Button>
             <Button onClick={newRec} iconLeft={<Plus className="h-4 w-4" />}>
               New recommendation
@@ -201,6 +382,14 @@ function Inner() {
           </>
         }
       />
+
+      {bulk.unknownPending.length > 0 && (
+        <p className="mb-4 text-2xs text-ink-500" data-testid="bulk-approval-unknown-note">
+          {bulk.unknownPending.length === 1
+            ? "1 listed with origin not recorded isn’t approved in bulk: review it on its card."
+            : `${bulk.unknownPending.length} listed with origin not recorded aren’t approved in bulk: review each on its card.`}
+        </p>
+      )}
 
       {approvedNotice != null && approvedNotice > 0 && (
         <div role="status" className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-positive-50 ring-1 ring-inset ring-positive-500/40 px-4 py-2.5 text-[13px]">
@@ -273,6 +462,11 @@ function Inner() {
                 Showing <strong>all {recs.length} recommendations</strong>: {membership.current.length} in &ldquo;{draft.name}&rdquo;, {membership.otherAlternatives.length} in other alternatives and {membership.unassigned.length} in no draft.
               </>
             )}{" "}
+            {examplesInView > 0 && (
+              <>
+                {examplesInView} of {view === "draft" ? "them" : "these"} {examplesInView === 1 ? "is an example" : "are examples"}, listed separately below.{" "}
+              </>
+            )}
             Changing the view changes no recommendation.
             {view === "draft" && approvedOutside > 0 && (
               <span className="block text-warning-600">
@@ -296,9 +490,18 @@ function Inner() {
         </div>
       )}
 
-      {samples > 0 && <SampleRecommendationsNotice count={samples} />}
+      {withdrawnNotice != null && withdrawnNotice > 0 && (
+        <div role="status" className="mb-4 flex flex-wrap items-center gap-x-3 rounded-md bg-slatey-50 ring-1 ring-inset ring-ink-200 px-4 py-2.5 text-[13px] text-ink-800" data-testid="examples-withdrawn">
+          <span>
+            Removed {withdrawnNotice} example{withdrawnNotice === 1 ? "" : "s"} from the working proposal. The records are kept, and approved versions are unchanged.
+          </span>
+          <button className="ml-auto text-ink-500 hover:text-ink-800" onClick={() => setWithdrawnNotice(null)}>Dismiss</button>
+        </div>
+      )}
 
-      {recs.length > 0 && shown.length === 0 && (
+      {activeExamples.length > 0 && <ActiveExamplesNotice examples={activeExamples} onShow={showExamples} onWithdraw={(ids) => setWithdrawnNotice(withdrawExamples(ids))} />}
+
+      {nonSampleCount > 0 && shown.length === 0 && (
         <EmptyState
           title="Nothing in the current draft yet"
           description={`"${draft.name}" has no recommendations. Add a change on the allocation desk or from Stratovell AI, or see all recommendations.`}
@@ -310,163 +513,43 @@ function Inner() {
         />
       )}
 
-      {recs.length === 0 ? (
+      {nonSampleCount === 0 ? (
         <EmptyRecommendations onWrite={newRec} />
       ) : (
-        <div className="space-y-3">
-          {shown.map((r) => {
-            const rejected = isRejected(r);
-            const preview = previews[r.id];
-            const effect = summarizePreview(preview);
-            const focused = focus.has(r.id);
-            const justSaved = r.id === saved;
-            return (
-              <Card
-                key={r.id}
-                id={`rec-${r.id}`}
-                tabIndex={-1}
-                data-testid={justSaved ? "rec-saved" : focused ? "rec-focused" : undefined}
-                className={cn("scroll-mt-4 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-navy-500", rejected && "opacity-80 bg-slatey-50", (focused || justSaved) && "ring-2 ring-navy-300")}
-              >
-                <CardBody>
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {justSaved ? <Badge tone="navy">Just saved</Badge> : focused && <Badge tone="navy">Just added</Badge>}
-                        <Badge tone="navy">{r.type.replace(/_/g, " ")}</Badge>
-                        {rejected ? (
-                          <Badge tone="negative">Rejected</Badge>
-                        ) : (
-                          <Badge tone={r.approvedByAdvisor ? "positive" : "warning"}>
-                            {r.approvedByAdvisor ? "Approved" : "Not approved"}
-                          </Badge>
-                        )}
-                        <Badge tone="neutral">{r.priority} priority</Badge>
-                        <Badge tone={originLabel(r).tone} title={originLabel(r).detail} data-testid="rec-origin">
-                          {originLabel(r).label}
-                        </Badge>
-                        {r.includeInPdf && <Badge tone="gold">In PDF prose</Badge>}
-                        {view === "all" && <Badge tone="neutral">{inDraft.has(r.id) ? `In ${draft.name}` : alternatives.find((a) => a.memberIds.includes(r.id))?.name ? `In ${alternatives.find((a) => a.memberIds.includes(r.id))!.name}` : "In no draft"}</Badge>}
-                        {r.relatedHoldingId && fromIncomplete.has(r.relatedHoldingId) && <IncompleteImportTag />}
-                        {unresolved.has(r.id) && (
-                          <Badge tone="warning" title="Relink it to a current holding or account, reject it or delete it. The final PDF waits for this review.">
-                            Linked {linkTargets(unresolved.get(r.id)!)} removed: review
-                          </Badge>
-                        )}
-                      </div>
-                      <h4 className={`font-serif text-lg mt-1.5 ${rejected ? "text-ink-500 line-through decoration-ink-300" : "text-ink-900"}`}>{r.title}</h4>
-                      {!rejected && restatementMessage(r) && (
-                        <p className="mt-1 text-[13px] text-warning-600">
-                          {r.approvedByAdvisor ? "Approved before amounts were required: it keeps its saved effect. " : ""}
-                          {restatementMessage(r)}
-                        </p>
-                      )}
-                      {rejected && (
-                        <p className="mt-1 text-[13px] text-negative-600">
-                          Rejected{r.rejectedAt ? ` ${formatTimestampDate(r.rejectedAt)}` : ""}
-                          {r.rejectionReason ? `: ${r.rejectionReason}` : ""}. Not applied to the Before / After and left out of the PDF.
-                        </p>
-                      )}
-                      <p className="text-sm text-ink-600 mt-1 leading-relaxed">{r.rationale}</p>
-                      {!rejected && (
-                      <div
-                        data-testid="rec-card-effect"
-                        className={`mt-2 text-[12px] tabular px-2.5 py-1.5 rounded-md inline-block space-y-0.5 ${
-                          effect.tone === "positive"
-                            ? "bg-positive-50 text-positive-600"
-                            : effect.tone === "negative"
-                            ? "bg-negative-50 text-negative-600"
-                            : effect.tone === "warning"
-                            ? "bg-warning-50 text-warning-600"
-                            : "bg-slatey-100 text-ink-700"
-                        }`}
-                      >
-                        <div>
-                          {r.approvedByAdvisor ? "↻ " : "○ "}
-                          {effect.position ? `This recommendation alone: ${effect.position}` : effect.headline}
-                        </div>
-                        {effect.position && effect.cash && <div>{effect.cash}</div>}
-                        {effect.combined && <div className="text-ink-700">{effect.combined}</div>}
-                      </div>
-                      )}
-                      {!rejected && preview.amounts && (
-                        <p className="mt-1 text-2xs text-ink-500 tabular">
-                          Amount: {preview.amounts}. Any figures written in the text above are as entered, not converted.
-                        </p>
-                      )}
-                      {!rejected && (
-                        <CurrencyReviewPanel rec={r} fx={fx} onResolve={(next) => upsert({ ...next, updatedAt: todayIso() })} onEdit={() => setEditing(r)} />
-                      )}
-                    </div>
-                    <div className="flex flex-col gap-2 shrink-0">
-                      {rejected ? (
-                        <Button size="sm" variant="secondary" iconLeft={<RotateCcw className="h-3.5 w-3.5" />} onClick={() => reopenRec(r.id)}>
-                          Reopen
-                        </Button>
-                      ) : (
-                        <>
-                          <Button size="sm" variant="secondary" onClick={() => setEditing(r)}>Edit</Button>
-                          <Button
-                            size="sm"
-                            variant={r.approvedByAdvisor ? "secondary" : "primary"}
-                            disabled={!r.approvedByAdvisor && !!restatementMessage(r)}
-                            title={!r.approvedByAdvisor && restatementMessage(r) ? "Enter an explicit amount first" : undefined}
-                            onClick={() => {
-                              // A linked replacement is approved (or unapproved) as a whole (D2).
-                              const legs = r.linked ? recs.filter((x) => x.linked?.groupId === r.linked!.groupId) : [r];
-                              for (const leg of legs)
-                                upsert({
-                                  ...leg,
-                                  approvedByAdvisor: !r.approvedByAdvisor,
-                                  status: !r.approvedByAdvisor ? "approved" : leg.status,
-                                  includeInPdf: !r.approvedByAdvisor ? true : leg.includeInPdf,
-                                });
-                            }}
-                          >
-                            {r.approvedByAdvisor ? "Unapprove" : "Approve"}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-negative-600 hover:bg-negative-50"
-                            aria-label={`Reject ${r.title}`}
-                            iconLeft={<Ban className="h-3.5 w-3.5" />}
-                            onClick={() => setRejecting(rejecting === r.id ? null : r.id)}
-                          >
-                            Reject
-                          </Button>
-                        </>
-                      )}
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        aria-label={`Delete ${r.title}`}
-                        iconLeft={<Trash2 className="h-3.5 w-3.5" />}
-                        onClick={() => deleteRec(r)}
-                      >
-                        Delete
-                      </Button>
-                    </div>
-                  </div>
-                  {rejecting === r.id && !rejected && (
-                    <ReasonPicker
-                      className="mt-3"
-                      tone="negative"
-                      prompt="Why reject this recommendation? (optional, kept for the record)"
-                      reasons={REJECT_REASONS}
-                      confirmLabel="Reject recommendation"
-                      onConfirm={(reason) => {
-                        rejectRec(r.id, reason);
-                        setRejecting(null);
-                      }}
-                      onCancel={() => setRejecting(null)}
-                    />
-                  )}
-                </CardBody>
-              </Card>
-            );
-          })}
-        </div>
+        shown.length > 0 &&
+        (mainShown.length > 0 ? (
+          <div className="space-y-3" data-testid="recs-main">
+            {mainShown.map(renderCard)}
+          </div>
+        ) : (
+          <p className="rounded-md border border-dashed border-ink-200 px-4 py-3 text-[13px] text-ink-600" data-testid="recs-main-empty">
+            No Claude or advisor recommendations {view === "draft" ? "in this draft" : "yet"}. Run an analysis in Stratovell AI and add the drafts you choose, or write your own.
+          </p>
+        ))
+      )}
+
+      {runExamplesShown.length > 0 && (
+        <section className="mt-6 space-y-3" data-testid="run-examples" aria-labelledby="run-examples-heading">
+          <div>
+            <h2 id="run-examples-heading" className="text-sm font-semibold text-ink-900">
+              Scripted and test examples ({runExamplesShown.length})
+            </h2>
+            <p className="text-[13px] text-ink-600">Prepared by the scripted demonstration or the test provider, and added by you. They show the workflow; they aren&apos;t Claude&apos;s analysis of this client.</p>
+          </div>
+          {runExamplesShown.map(renderCard)}
+        </section>
+      )}
+
+      {samplesShown.length > 0 && (
+        <details className="mt-6" data-testid="saved-examples" open={samplesOpen} onToggle={(e) => setSamplesOpen((e.target as HTMLDetailsElement).open)}>
+          <summary className="cursor-pointer text-sm font-semibold text-ink-900" data-testid="saved-examples-summary">
+            Saved examples ({samplesShown.length})
+          </summary>
+          <div className="mt-3 space-y-3">
+            <SampleRecommendationsNotice count={samplesShown.length} />
+            {samplesShown.map(renderCard)}
+          </div>
+        </details>
       )}
 
       <Drawer open={!!editing} onClose={() => setEditing(null)} title="Edit recommendation">

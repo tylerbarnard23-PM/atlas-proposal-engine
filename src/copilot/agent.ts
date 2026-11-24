@@ -9,14 +9,16 @@ import { COPILOT_TOOLS, CopilotContext, executeTool, type ToolCallRecord } from 
 export const COPILOT_MODEL = "claude-opus-5-5";
 /** Versions of what the model sees, recorded with each run so a live evaluation can tell configurations apart. */
 export const PROMPT_VERSION = "claude-led-2026-11-21";
-export const TOOLS_VERSION = "claude-led-2026-11-21";
+/** #113: the scope overview labels target_pct as the advisor's own target. */
+export const TOOLS_VERSION = "claude-led-2026-11-23-targets";
 
 /**
  * Who produced an answer: the scripted demo planner (no model), the
  * deterministic test provider through the real loop (not a model), or a live
  * Claude model. The page shows it before and with every answer.
  */
-export type CopilotMode = "demo" | "test" | "live";
+/** "hosted" (#113): the public site with signed-in users' own keys; its runs report "live" (Claude) or "test". */
+export type CopilotMode = "demo" | "test" | "live" | "hosted";
 
 /** How a run ended. Anything but "completed" is shown to the advisor, with the drafts saved so far. */
 export type RunStatus =

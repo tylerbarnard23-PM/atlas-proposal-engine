@@ -155,6 +155,11 @@ export function cancelRunningRuns() {
   for (const c of running().values()) c.abort();
 }
 
+/** Cancels one run in progress in this process, if it is here (the hosted path stops one user's run, never another's). */
+export function cancelRun(runId: string | null | undefined) {
+  if (runId) running().get(runId)?.abort();
+}
+
 /**
  * The production client for live runs. Only this gate constructs it, only for
  * an admitted run, and only with the key the user connected: nothing is read
@@ -245,7 +250,7 @@ const SESSION_REFUSAL: Record<Exclude<store.SessionStatus, "active">, { status: 
   exhausted: { status: 429, code: "exhausted" },
 };
 
-function sessionRefusal(v: store.SessionView): Omit<Refusal, "session"> | null {
+export function sessionRefusal(v: store.SessionView): Omit<Refusal, "session"> | null {
   if (v.status !== "active") return { ok: false, ...SESSION_REFUSAL[v.status], error: v.message };
   if (v.runInProgress) return { ok: false, status: 409, code: "run_in_progress", error: "A live run is already in progress; only one runs at a time." };
   return null;
@@ -284,19 +289,56 @@ export async function admitLiveRun(req: Request, deps: LiveDeps): Promise<{ ok: 
     return { ok: false, status, code: admitted.code, error: admitted.error, session: await sessionNow() };
   }
 
-  const runId = admitted.runId;
+  return {
+    ok: true,
+    run: meteredRun({
+      runId: admitted.runId,
+      provider,
+      revision,
+      cookie,
+      requestSignal: req.signal,
+      inner: provider === "fake" ? createTestProvider() : deps.makeClient(cred.key!),
+      meter: {
+        session: deps.sessionFile,
+        now: deps.now,
+        currentRevision: () => currentRevision(deps),
+        recordOutcome: (rev, outcome) => markOutcome(deps.connectionFile, deps.now(), rev, outcome),
+      },
+    }),
+  };
+}
+
+/** Where an admitted run's requests are metered: the session record, and how the credential in use is read and its outcome recorded. */
+export interface RunMeter {
+  session: store.SessionTarget;
+  now: () => Date;
+  /** The credential revision in use now (re-read before every request). */
+  currentRevision: () => Promise<string | null>;
+  /** Records that the provider accepted or rejected the key under this revision. */
+  recordOutcome: (revision: string, outcome: "verified" | "rejected") => Promise<void>;
+}
+
+/**
+ * The client an admitted run uses: every provider request is reserved
+ * atomically against the session at its worst case first (counted, retries
+ * and failures included), then settled to its priced usage only when that
+ * accounting is complete; on any error, timeout or cancellation the
+ * reservation is kept as spend. Shared by the local and hosted paths (#113),
+ * so both meter exactly the same way.
+ */
+export function meteredRun(o: { runId: string; provider: LiveProvider; revision: string | null; cookie: string | null; requestSignal: AbortSignal; inner: MessagesClient; meter: RunMeter }): AdmittedRun {
+  const { runId, provider, revision, cookie, inner, meter } = o;
   const model = provider === "fake" ? TEST_PROVIDER_MODEL : COPILOT_MODEL;
-  const inner = provider === "fake" ? createTestProvider() : deps.makeClient(cred.key!);
   // Whether a real provider answer has been recorded for this key yet (once per run is enough).
   let outcomeRecorded = false;
   const recordOutcome = async (outcome: "verified" | "rejected") => {
     if (provider !== "anthropic" || !revision || outcomeRecorded) return;
     outcomeRecorded = true;
-    await markOutcome(deps.connectionFile, deps.now(), revision, outcome);
+    await meter.recordOutcome(revision, outcome);
   };
   const stop = new AbortController();
   running().set(runId, stop);
-  const signal = AbortSignal.any([req.signal, stop.signal]);
+  const signal = AbortSignal.any([o.requestSignal, stop.signal]);
   let stoppedBy: string | null = null;
 
   const client: MessagesClient = {
@@ -309,7 +351,7 @@ export async function admitLiveRun(req: Request, deps: LiveDeps): Promise<{ ok: 
           }
           const fallbacks = (params as { fallbacks?: unknown }).fallbacks != null;
           // The credential is re-checked for every request: replacing or removing the key ends this run before another request is sent.
-          const r = await store.reserveRequest(deps.sessionFile, deps.now(), runId, provider, (largest) => worstNextRequest(largest, params.max_tokens, fallbacks), await currentRevision(deps));
+          const r = await store.reserveRequest(meter.session, meter.now(), runId, provider, (largest) => worstNextRequest(largest, params.max_tokens, fallbacks), await meter.currentRevision());
           if (!r.ok) {
             stoppedBy = r.error;
             throw new LiveSessionRefused(r.error, r.code);
@@ -319,7 +361,7 @@ export async function admitLiveRun(req: Request, deps: LiveDeps): Promise<{ ok: 
             res = await inner.beta.messages.create(params, { ...options, signal: options?.signal ?? signal });
           } catch (err) {
             // An error, timeout or cancellation: the usage is unknown, so the reservation is kept as spend.
-            await store.settleRequest(deps.sessionFile, r.reservationId, { known: false });
+            await store.settleRequest(meter.session, r.reservationId, { known: false });
             if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError) await recordOutcome("rejected");
             throw err;
           }
@@ -328,11 +370,11 @@ export async function admitLiveRun(req: Request, deps: LiveDeps): Promise<{ ok: 
           // The cost counts as known only with complete accounting; otherwise it is never read as zero.
           const priced = pricedUsage(res);
           if (!priced.ok) {
-            await store.settleRequest(deps.sessionFile, r.reservationId, { known: false });
+            await store.settleRequest(meter.session, r.reservationId, { known: false });
             stoppedBy = `The provider's response had no valid usage accounting (${priced.reason}), so its USD ${r.usd.toFixed(4)} reservation is kept and the run ends.`;
             throw new LiveSessionRefused(stoppedBy, "unknown_usage");
           }
-          await store.settleRequest(deps.sessionFile, r.reservationId, { known: true, usd: priced.usd, attempts: priced.attempts, largestInput: priced.largestInput, models: priced.models });
+          await store.settleRequest(meter.session, r.reservationId, { known: true, usd: priced.usd, attempts: priced.attempts, largestInput: priced.largestInput, models: priced.models });
           return res;
         },
       },
@@ -340,24 +382,21 @@ export async function admitLiveRun(req: Request, deps: LiveDeps): Promise<{ ok: 
   };
 
   return {
-    ok: true,
-    run: {
-      id: runId,
-      provider,
-      model,
-      client,
-      signal,
-      stoppedBy: () => stoppedBy,
-      async finish(status) {
-        running().delete(runId);
-        const summary = await store.finishRun(deps.sessionFile, deps.now(), runId, status);
-        return {
-          provider,
-          run: summary ? { requests: summary.requests, attempts: summary.attempts, usd: summary.usd, retainedUsd: summary.retainedUsd, status: summary.status } : null,
-          stoppedBy,
-          session: await store.readView(deps.sessionFile, deps.now(), cookie, FIRST_REQUEST_USD, provider, await currentRevision(deps)),
-        };
-      },
+    id: runId,
+    provider,
+    model,
+    client,
+    signal,
+    stoppedBy: () => stoppedBy,
+    async finish(status) {
+      running().delete(runId);
+      const summary = await store.finishRun(meter.session, meter.now(), runId, status);
+      return {
+        provider,
+        run: summary ? { requests: summary.requests, attempts: summary.attempts, usd: summary.usd, retainedUsd: summary.retainedUsd, status: summary.status } : null,
+        stoppedBy,
+        session: await store.readView(meter.session, meter.now(), cookie, FIRST_REQUEST_USD, provider, await meter.currentRevision()),
+      };
     },
   };
 }

@@ -29,6 +29,18 @@ export function isPrewrittenSample(r: Pick<Recommendation, "id" | "origin">): bo
   return o?.kind === "example" && o.source === "sample_workspace";
 }
 
+/**
+ * #113: which kind of example a record reliably is (a prewritten sample, the
+ * scripted demonstration or the test provider), or null for Claude drafts,
+ * advisor-authored records and records whose origin wasn't recorded. Only
+ * reliable evidence counts (knownOrigin): nothing is inferred.
+ */
+export function exampleKind(r: Pick<Recommendation, "id" | "origin">): "sample" | "scripted" | "test" | null {
+  const o = knownOrigin(r);
+  if (o?.kind !== "example") return null;
+  return o.source === "sample_workspace" ? "sample" : o.source === "scripted_demo" ? "scripted" : "test";
+}
+
 /** The origin of an AI run's drafts, from the provider that actually answered. */
 export function runOrigin(run: { provider: "anthropic" | "test" | "scripted"; models?: string[]; promptVersion?: string }): RecommendationOrigin {
   if (run.provider === "anthropic") return { kind: "claude", models: [...(run.models ?? [])], promptVersion: run.promptVersion };

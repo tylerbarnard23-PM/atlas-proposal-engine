@@ -41,7 +41,7 @@ import { cashBasisCurrency, markRemovedLinks } from "@/engines/recommendationLin
 import { contextMismatch, type AgentContext } from "@/copilot/context";
 import { forReadiness } from "@/engines/importCompleteness";
 import { migrateRecommendationCurrency, withApprovalRule } from "@/engines/recommendationAmounts";
-import { knownOrigin, withOrigin } from "@/engines/recommendationOrigin";
+import { exampleKind, knownOrigin, withOrigin } from "@/engines/recommendationOrigin";
 import { candidateProblems, deskActions, draftBasisInputs, legacyWorkingDraft, needsIntentRestatement, newWorkingDraft, recordInputBasis } from "@/engines/allocationDesk";
 import { normalizeHoldings } from "@/engines/normalizationEngine";
 import { LEGACY_SAMPLE_FIRM_NAME } from "@/domain/branding";
@@ -134,7 +134,17 @@ export interface AtlasActions {
   // Optional disclosures only; required ones always stay in the proposal.
   toggleDisclosure: (id: string) => void;
   // Approves every recommendation not yet approved and includes it in the PDF.
-  approveAllRecommendations: () => number;
+  /** Approves every pending recommendation, or (#113) only those among `ids` (the records in view). Returns how many. */
+  approveAllRecommendations: (ids?: string[]) => number;
+  /**
+   * #113: takes examples (prewritten samples, scripted or test-provider
+   * examples) out of the working proposal: withdraws their approval and PDF
+   * inclusion and removes them from the working draft. Records, origins,
+   * other alternatives and approved versions are unchanged. Non-examples
+   * among `ids` are ignored; a linked replacement is withdrawn as a whole.
+   * Returns how many records changed.
+   */
+  withdrawExamplesFromProposal: (ids: string[]) => number;
   recordPdfJob: (job: PdfGenerationJob) => void;
   resetSeed: () => void;
   // Clears the client, accounts, holdings and recommendations but keeps the
@@ -562,10 +572,11 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
             },
           };
         }),
-      approveAllRecommendations: () => {
+      approveAllRecommendations: (ids) => {
         // Rejected recommendations are a decision already made: not "pending".
         // One saved without an amount needs an explicit size first (R07).
-        const skip = (r: Recommendation) => r.approvedByAdvisor || r.status === "excluded" || needsIntentRestatement(r);
+        const only = ids ? new Set(ids) : null;
+        const skip = (r: Recommendation) => (only != null && !only.has(r.id)) || r.approvedByAdvisor || r.status === "excluded" || needsIntentRestatement(r);
         const pending = get().recommendations.filter((r) => !skip(r));
         const now = new Date().toISOString();
         set((s) => ({
@@ -629,6 +640,21 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
           const others = s.workingDraft.memberIds.filter((x) => !ids.includes(x));
           return draftChange(s, { memberIds: member ? [...others, ...ids] : others });
         }),
+      withdrawExamplesFromProposal: (ids) => {
+        const s = get();
+        const chosen = s.recommendations.filter((r) => ids.includes(r.id) && exampleKind(r) != null);
+        const groups = new Set(chosen.map((r) => r.linked?.groupId).filter(Boolean));
+        const affected = new Set(s.recommendations.filter((r) => chosen.includes(r) || (r.linked && groups.has(r.linked.groupId))).map((r) => r.id));
+        const changing = s.recommendations.filter((r) => affected.has(r.id) && (r.approvedByAdvisor || r.includeInPdf || s.workingDraft.memberIds.includes(r.id)));
+        if (changing.length === 0) return 0;
+        const now = new Date().toISOString();
+        set((st) => {
+          // Not a content edit: the origin is untouched, exactly like Unapprove.
+          const recommendations = st.recommendations.map((r) => (affected.has(r.id) ? { ...r, approvedByAdvisor: false, includeInPdf: false, status: r.status === "excluded" ? r.status : ("draft" as const), updatedAt: now } : r));
+          return { recommendations, ...draftChange({ ...st, recommendations }, { memberIds: st.workingDraft.memberIds.filter((x) => !affected.has(x)) }) };
+        });
+        return changing.length;
+      },
       setDraftTarget: (assetClass, pct) =>
         set((s) => {
           const targets = { ...s.workingDraft.targets };
