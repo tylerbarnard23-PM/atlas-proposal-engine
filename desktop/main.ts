@@ -38,6 +38,7 @@ const flags: DesktopFlags = parseFlags(process.argv);
 app.disableHardwareAcceleration();
 // Automated checks only: keep the window off screen.
 const hiddenForChecks = process.env.STRATOVELL_E2E === "1" && process.argv.includes("--stratovell-hidden-window");
+const checkDownloads = process.env.STRATOVELL_E2E === "1" ? (process.argv.find((a) => a.startsWith("--stratovell-check-downloads=")) ?? "").slice("--stratovell-check-downloads=".length) || null : null;
 // Isolated data folder for tests and UAT (never the default profile when given).
 if (flags.dataDir) app.setPath("userData", flags.dataDir);
 // Remote debugging is for automated checks of a build only: it is ignored unless explicitly allowed.
@@ -286,6 +287,13 @@ function lockDownSession() {
     cb({ cancel: !allowed });
   });
   ses.setPermissionRequestHandler((_wc, permission, cb) => cb(permission === "clipboard-sanitized-write"));
+  // Downloads (PDFs, backups) are saved where the advisor chooses, starting in Documents.
+  ses.on("will-download", (_e, item) => {
+    const name = item.getFilename().replace(/[\\/:*?"<>|]/g, "_");
+    if (checkDownloads) item.setSavePath(join(checkDownloads, name));
+    else item.setSaveDialogOptions({ title: "Save from Stratovell", defaultPath: join(app.getPath("documents"), name) });
+    item.once("done", (_ev, state) => log(`download ${state}: ${name}`));
+  });
   ses.setPermissionCheckHandler((_wc, permission) => permission === "clipboard-sanitized-write");
 }
 
