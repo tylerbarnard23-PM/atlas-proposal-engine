@@ -47,7 +47,11 @@ export async function currentUser(req: Request, cfg: HostedConfig, deps: AuthDep
       [sha256(token), deps.now().toISOString()]
     )
   ).rows;
-  return rows[0] ? { id: String(rows[0].id), login: rows[0].login, provider: rows[0].provider } : null;
+  const row = rows[0];
+  if (!row) return null;
+  // The allow-list applies to every request, not only at sign-in: removing a login ends its sign-ins at once.
+  if (row.provider === "github" && cfg.allowedLogins && !cfg.allowedLogins.has(row.login.toLowerCase())) return null;
+  return { id: String(row.id), login: row.login, provider: row.provider };
 }
 
 /**

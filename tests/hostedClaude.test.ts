@@ -162,6 +162,9 @@ describe("configuration fails closed", () => {
       ["http origin", { STRATOVELL_PUBLIC_ORIGIN: "http://stratovell.test" }],
       ["no database", { DATABASE_URL: undefined }],
       ["pglite on Vercel", { DATABASE_URL: "pglite:", VERCEL: "1" }],
+      // Review hardening: test-only infrastructure is never accepted on a public origin, on Vercel or not.
+      ["pglite on a public origin", { DATABASE_URL: "pglite:" }],
+      ["test provider on a public origin", { COPILOT_LIVE_PROVIDER: "fake" }],
       ["no encryption keys", { STRATOVELL_CREDENTIAL_KEYS: undefined }],
       ["short encryption key", { STRATOVELL_CREDENTIAL_KEYS: `k1:${Buffer.alloc(16).toString("base64")}` }],
       ["no sign-in", { GITHUB_CLIENT_ID: undefined }],
@@ -188,6 +191,18 @@ describe("configuration fails closed", () => {
   it("dev sign-in exists only for a local *.localhost origin off Vercel", () => {
     expect(hostedReadiness(baseEnv({ STRATOVELL_PUBLIC_ORIGIN: "http://hosted.localhost:3975", STRATOVELL_DEV_SIGNIN: "1", GITHUB_CLIENT_ID: undefined })).ok).toBe(true);
     expect(hostedReadiness(baseEnv({ STRATOVELL_PUBLIC_ORIGIN: "http://hosted.localhost:3975", STRATOVELL_DEV_SIGNIN: "1", GITHUB_CLIENT_ID: undefined, VERCEL: "1" })).ok).toBe(false);
+  });
+
+  it("the test provider and PGlite are accepted only for a local *.localhost origin off Vercel", () => {
+    const local = { STRATOVELL_PUBLIC_ORIGIN: "http://hosted.localhost:3975", COPILOT_LIVE_PROVIDER: "fake", DATABASE_URL: "pglite:" };
+    expect(hostedReadiness(baseEnv(local)).ok).toBe(true);
+    expect(hostedReadiness(baseEnv({ ...local, VERCEL_ENV: "preview" })).ok).toBe(false);
+    for (const over of [{ COPILOT_LIVE_PROVIDER: "fake" }, { DATABASE_URL: "pglite:" }, { COPILOT_LIVE_PROVIDER: "fake", DATABASE_URL: "pglite:" }]) {
+      const r = hostedReadiness(baseEnv({ STRATOVELL_PUBLIC_ORIGIN: "https://stratovell.example", ...over }));
+      expect(r.ok, JSON.stringify(over)).toBe(false);
+      // Reasons name the setting, never a value.
+      if (!r.ok) expect(r.reasons.join(" ")).not.toContain("synthetic-client-secret");
+    }
   });
 
   it("an unmigrated database refuses live analysis (503) without touching a key", async () => {
@@ -237,6 +252,23 @@ describe("sign-in", () => {
     const res = await handleSignInCallback(new Request(`${ORIGIN}/api/auth/github/callback?code=code-b&state=${new URL(start.headers.get("location")!).searchParams.get("state")}`, { headers: { cookie: cookieValue(start, "stratovell_oauth")! } }), deps());
     expect(res.status).toBe(403);
     expect((await sql.query("select login from stratovell_users")).rows).toEqual([{ login: "advisor-a" }]);
+  });
+
+  it("the allow-list applies to existing sign-ins on every request, not only at sign-in", async () => {
+    const a = await signIn("code-a");
+    await handleHostedConnection(post("/api/copilot/hosted/connection", { action: "save", key: KEY_A }, { cookie: a }), deps());
+    const live = await startSession(a);
+    // The owner restricts the site after advisor-a signed in: that sign-in stops working at once.
+    env = baseEnv({ STRATOVELL_ALLOWED_GITHUB_LOGINS: "advisor-b" });
+    expect((await status(a)).hosted.user).toBeNull();
+    expect((await analyze(await analysisBody("claude"), cookieHeader(a, live))).status).toBe(401);
+    expect((await handleHostedConnection(post("/api/copilot/hosted/connection", { action: "disconnect" }, { cookie: a }), deps())).status).toBe(401);
+    expect((await handleHostedSession(post("/api/copilot/hosted/session", { action: "stop" }, { cookie: a }), deps())).status).toBe(401);
+    expect(keysUsed).toEqual([]);
+    expect(providerCalls).toEqual([]);
+    // Listed again (case-insensitively): the same sign-in works until it expires.
+    env = baseEnv({ STRATOVELL_ALLOWED_GITHUB_LOGINS: " Advisor-A ,advisor-b" });
+    expect((await status(a)).hosted.user).toEqual({ login: "advisor-a", provider: "github" });
   });
 
   it("a sign-in expires after 12 hours", async () => {
@@ -476,7 +508,8 @@ describe("sessions and spending", () => {
     const asTest = await analyze(await analysisBody("test_provider"), cookieHeader(a, live));
     expect(asTest.status).toBe(409);
     expect(((await asTest.json()) as { code: string }).code).toBe("run_mode_mismatch");
-    env = baseEnv({ COPILOT_LIVE_PROVIDER: "fake" });
+    // The test provider is accepted only for a local origin, so the reverse case runs on one.
+    env = baseEnv({ COPILOT_LIVE_PROVIDER: "fake", STRATOVELL_PUBLIC_ORIGIN: "http://hosted.localhost:3975" });
     const asClaude = await analyze(await analysisBody("claude"), cookieHeader(a, live));
     expect(asClaude.status).toBe(409);
     expect(((await asClaude.json()) as { code: string }).code).toBe("run_mode_mismatch");

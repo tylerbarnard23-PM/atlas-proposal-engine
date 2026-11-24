@@ -47,21 +47,27 @@ export function hostedReadiness(env: Env): { ok: true; config: HostedConfig } | 
     reasons.push("STRATOVELL_PUBLIC_ORIGIN must be the site's https origin (http only for a local *.localhost check).");
   }
 
+  // Test-only infrastructure (PGlite, the test provider, dev sign-in) is accepted only for a local check: a
+  // *.localhost origin, off Vercel. A public deployment, on Vercel or elsewhere, refuses it.
+  const localCheck = localOrigin && !onVercel(env);
+
   const db = env.DATABASE_URL ?? "";
-  if (!/^postgres(ql)?:\/\//.test(db) && !(db.startsWith("pglite:") && !onVercel(env))) reasons.push("DATABASE_URL must be a Postgres connection string.");
+  if (!/^postgres(ql)?:\/\//.test(db) && !(db.startsWith("pglite:") && localCheck)) reasons.push("DATABASE_URL must be a Postgres connection string (pglite: only for a local *.localhost check).");
 
   const keys = credentialKeysProblem(env.STRATOVELL_CREDENTIAL_KEYS);
   if (keys) reasons.push(keys);
 
   const github = env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET ? { clientId: env.GITHUB_CLIENT_ID, clientSecret: env.GITHUB_CLIENT_SECRET } : null;
   // Dev sign-in exists for local checks only: never on Vercel, never on a non-local origin.
-  const devSignIn = env.STRATOVELL_DEV_SIGNIN === "1" && !onVercel(env) && localOrigin;
+  const devSignIn = env.STRATOVELL_DEV_SIGNIN === "1" && localCheck;
   if (env.STRATOVELL_DEV_SIGNIN === "1" && !devSignIn) reasons.push("STRATOVELL_DEV_SIGNIN is for local *.localhost checks only; remove it from this deployment.");
   if (!github && !devSignIn) reasons.push("Sign-in isn't configured: set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET.");
 
   if (env.ANTHROPIC_BASE_URL) reasons.push("ANTHROPIC_BASE_URL is set; hosted analysis only calls the default Anthropic endpoint.");
   const provider = env.COPILOT_LIVE_PROVIDER ?? "anthropic";
   if (provider !== "anthropic" && provider !== "fake") reasons.push('COPILOT_LIVE_PROVIDER must be "anthropic" or "fake".');
+  // The test provider needs no key: on a public site it would let any signed-in user run it, so it is local only.
+  if (provider === "fake" && !localCheck) reasons.push("COPILOT_LIVE_PROVIDER=fake is for local *.localhost checks only; remove it from this deployment.");
 
   const allowed = (env.STRATOVELL_ALLOWED_GITHUB_LOGINS ?? "")
     .split(",")

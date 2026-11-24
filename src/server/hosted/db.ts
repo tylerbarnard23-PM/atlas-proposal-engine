@@ -18,20 +18,28 @@ export interface Sql extends SqlTx {
 export async function pgSql(connectionString: string): Promise<Sql> {
   const { Pool } = await import("pg");
   const pool = new Pool({ connectionString, max: 3, idleTimeoutMillis: 10_000, connectionTimeoutMillis: 8_000 });
+  // An idle pooled connection that drops (a network reset, the database closing it) is reported on the pool. Without
+  // a listener that event would crash the server instance and every run in flight on it. The pool discards that
+  // connection itself; the next query opens a new one. Logged without the error's text, which can hold the URL.
+  pool.on("error", () => console.warn("[stratovell hosted] an idle database connection closed; it was discarded."));
   return {
     query: async (text, params) => ({ rows: (await pool.query(text, params as unknown[])).rows }),
     async transaction(fn) {
       const client = await pool.connect();
+      // A connection whose rollback failed is in an unknown state: destroyed, never returned to the pool.
+      let broken = false;
       try {
         await client.query("begin");
         const out = await fn({ query: async (text, params) => ({ rows: (await client.query(text, params as unknown[])).rows }) });
         await client.query("commit");
         return out;
       } catch (err) {
-        await client.query("rollback").catch(() => {});
+        await client.query("rollback").catch(() => {
+          broken = true;
+        });
         throw err;
       } finally {
-        client.release();
+        client.release(broken || undefined);
       }
     },
     end: () => pool.end(),
