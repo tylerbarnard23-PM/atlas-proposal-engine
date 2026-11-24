@@ -271,6 +271,62 @@ describe("sign-in", () => {
     expect((await status(a)).hosted.user).toEqual({ login: "advisor-a", provider: "github" });
   });
 
+  it("a development identity works only while the current configuration allows dev sign-in (Codex finding on 780c099)", async () => {
+    const LOCAL = "https://hosted.localhost";
+    const localEnv = (over: Record<string, string | undefined> = {}) => baseEnv({ STRATOVELL_PUBLIC_ORIGIN: LOCAL, STRATOVELL_DEV_SIGNIN: "1", ...over });
+    env = localEnv();
+    const signedIn = await record(await handleDevSignIn(post("/api/auth/dev-signin", { login: "test-advisor" }, { origin: LOCAL }), deps()));
+    expect(signedIn.status).toBe(200);
+    // The local https origin uses the same __Host- cookie name as a public one.
+    const dev = cookieValue(signedIn, "__Host-stratovell_auth")!;
+    expect(dev).toBeTruthy();
+    // Before any configuration change: the dev cookie authenticates and can save a key and start a session.
+    expect((await status(dev)).hosted.user).toEqual({ login: "test-advisor", provider: "dev" });
+    expect((await handleHostedConnection(post("/api/copilot/hosted/connection", { action: "save", key: KEY_A }, { cookie: dev, origin: LOCAL }), deps())).status).toBe(200);
+    const live = cookieValue(await handleHostedSession(post("/api/copilot/hosted/session", { action: "start", allowance: ALLOWANCE }, { cookie: dev, origin: LOCAL }), deps()), "stratovell_live_session")!;
+    expect(live).toBeTruthy();
+    const rowsBefore = JSON.stringify((await sql.query("select user_id, revision, ciphertext from stratovell_credentials")).rows) + JSON.stringify((await sql.query("select state from stratovell_live_sessions")).rows);
+
+    // Same database, same unexpired sign-in; the site becomes a valid public configuration with a restrictive allow-list.
+    env = baseEnv({ STRATOVELL_ALLOWED_GITHUB_LOGINS: "advisor-a" });
+    expect(hostedReadiness(env).ok).toBe(true);
+    expect((await status(dev)).hosted.user).toBeNull();
+    expect((await handleHostedConnection(post("/api/copilot/hosted/connection", { action: "save", key: KEY_B }, { cookie: dev }), deps())).status).toBe(401);
+    expect((await handleHostedConnection(post("/api/copilot/hosted/connection", { action: "disconnect" }, { cookie: dev }), deps())).status).toBe(401);
+    expect((await handleHostedSession(post("/api/copilot/hosted/session", { action: "start", allowance: ALLOWANCE }, { cookie: dev }), deps())).status).toBe(401);
+    expect((await handleHostedSession(post("/api/copilot/hosted/session", { action: "stop" }, { cookie: dev }), deps())).status).toBe(401);
+    expect((await analyze(await analysisBody("claude"), cookieHeader(dev, live))).status).toBe(401);
+    // The public scripted example still runs for anyone, that cookie included.
+    const scripted = await analyze(await analysisBody("scripted_example"), cookieHeader(dev, live));
+    expect(scripted.status).toBe(200);
+    expect(((await scripted.json()) as { mode: string }).mode).toBe("demo");
+    // A legitimate, allowed GitHub sign-in still works on the public configuration.
+    const a = await signIn("code-a");
+    expect((await status(a)).hosted.user).toEqual({ login: "advisor-a", provider: "github" });
+
+    // Dev sign-in merely switched off on the same local origin: refused too (not a cookie-name or origin effect).
+    env = localEnv({ STRATOVELL_DEV_SIGNIN: undefined });
+    expect((await status(dev)).hosted.user).toBeNull();
+    expect((await handleHostedConnection(post("/api/copilot/hosted/connection", { action: "save", key: KEY_B }, { cookie: dev, origin: LOCAL }), deps())).status).toBe(401);
+
+    // Refusal deletes nothing: the key, the session and its counters are as they were.
+    expect(JSON.stringify((await sql.query("select user_id, revision, ciphertext from stratovell_credentials")).rows) + JSON.stringify((await sql.query("select state from stratovell_live_sessions")).rows)).toBe(rowsBefore);
+    // Explicitly re-enabled for the local check: the same unexpired dev sign-in works again.
+    env = localEnv();
+    expect((await status(dev)).hosted.user).toEqual({ login: "test-advisor", provider: "dev" });
+    expect(keysUsed).toEqual([]);
+    expect(providerCalls).toEqual([]);
+  });
+
+  it("a GitHub identity works only while GitHub sign-in is configured", async () => {
+    const a = await signIn("code-a");
+    expect((await status(a)).hosted.user).not.toBeNull();
+    // GitHub sign-in removed (a local check with dev sign-in only): the earlier GitHub sign-in no longer authenticates.
+    env = baseEnv({ STRATOVELL_PUBLIC_ORIGIN: "https://hosted.localhost", STRATOVELL_DEV_SIGNIN: "1", GITHUB_CLIENT_ID: undefined, GITHUB_CLIENT_SECRET: undefined });
+    expect(hostedReadiness(env).ok).toBe(true);
+    expect((await status(a)).hosted.user).toBeNull();
+  });
+
   it("a sign-in expires after 12 hours", async () => {
     const auth = await signIn("code-a");
     clock = new Date(T0.getTime() + 12 * 3_600_000 + 1000);

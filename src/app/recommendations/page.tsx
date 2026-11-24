@@ -27,6 +27,7 @@ import { summarizePreview } from "@/components/recommendations/recEffect";
 import { RecPreview } from "@/components/recommendations/RecPreview";
 import { previewRecommendation } from "@/engines/recommendationPreview";
 import { exampleKind, originLabel, originOf } from "@/engines/recommendationOrigin";
+import { bulkApproval } from "@/engines/bulkApproval";
 import { ActiveExamplesNotice } from "@/components/recommendations/ExampleSections";
 import { EmptyRecommendations, SampleRecommendationsNotice } from "@/components/recommendations/EmptyRecommendations";
 import { CurrencyReviewPanel } from "@/components/recommendations/CurrencyReviewPanel";
@@ -80,16 +81,22 @@ function Inner() {
   const ordered = React.useMemo(() => [...recs.filter((r) => !isRejected(r)), ...recs.filter(isRejected)], [recs]);
   const [approvedNotice, setApprovedNotice] = React.useState<number | null>(null);
 
-  // #113: bulk approval covers exactly the pending Claude and advisor recommendations listed in the open view.
-  // Examples (prewritten, scripted or test) are never approved in bulk.
+  // #113: bulk approval covers exactly the eligible records in the open view (bulkApproval: pending, a known Claude or
+  // advisor origin, sized explicitly). The same list gives the count, the confirmation and the ids submitted.
+  // Records whose origin wasn't recorded and examples (prewritten, scripted or test) are never approved in bulk.
   function onApproveAll() {
-    const pending = pendingInView;
+    const pending = bulk.eligible;
     if (pending.length === 0) return;
     const fromClaude = pending.filter((r) => originOf(r).kind === "claude").length;
+    const left = [
+      bulk.unknownPending.length ? `${bulk.unknownPending.length} with origin not recorded` : "",
+      bulk.needsSize.length ? `${bulk.needsSize.length} that need${bulk.needsSize.length === 1 ? "s" : ""} an explicit size first` : "",
+    ].filter(Boolean);
     const ok = confirm(
-      `Approve the ${pending.length} pending recommendation${pending.length === 1 ? "" : "s"} listed${view === "draft" ? ` in "${draft.name}"` : ""} and include ${pending.length === 1 ? "it" : "them"} in the PDF?` +
+      `Approve the ${pending.length} eligible pending recommendation${pending.length === 1 ? "" : "s"}${view === "draft" ? ` in "${draft.name}"` : ""} and include ${pending.length === 1 ? "it" : "them"} in the PDF?` +
+        (fromClaude === pending.length ? `\n\n${fromClaude === 1 ? "It is a Claude draft" : "They are Claude drafts"}.` : fromClaude ? `\n\n${fromClaude} of these ${fromClaude === 1 ? "is a Claude draft" : "are Claude drafts"}; the rest are advisor-authored.` : `\n\n${pending.length === 1 ? "It is" : "They are"} advisor-authored.`) +
+        (left.length ? `\n\nNot included: ${left.join(" and ")}. Review those on their own cards.` : "") +
         "\n\nExamples (prewritten, scripted or test) are never approved in bulk: approve one on its own card if you mean to use it." +
-        (fromClaude ? `\n\n${fromClaude} of these ${fromClaude === 1 ? "is a Claude draft" : "are Claude drafts"}.` : "") +
         "\n\nApproved recommendations reshape the Before / After allocation and appear in the client proposal. You can unapprove any of them afterwards."
     );
     if (ok) setApprovedNotice(approveAll(pending.map((r) => r.id)));
@@ -153,7 +160,7 @@ function Inner() {
   const runExamplesShown = shown.filter((r) => exampleKind(r) === "scripted" || exampleKind(r) === "test");
   const samplesShown = shown.filter((r) => exampleKind(r) === "sample");
   const examplesInView = runExamplesShown.length + samplesShown.length;
-  const pendingInView = mainShown.filter((r) => !r.approvedByAdvisor && !isRejected(r));
+  const bulk = bulkApproval(mainShown);
   const nonSampleCount = recs.filter((r) => exampleKind(r) !== "sample").length;
   // An approved example still shapes the proposal and the PDF wherever its card is listed.
   const activeExamples = recs.filter((r) => exampleKind(r) != null && r.approvedByAdvisor && !isRejected(r));
@@ -359,15 +366,15 @@ function Inner() {
             <Button
               variant="secondary"
               onClick={onApproveAll}
-              disabled={pendingInView.length === 0}
+              disabled={bulk.eligible.length === 0}
               iconLeft={<CheckCheck className="h-4 w-4" />}
               data-testid="approve-all"
             >
-              {pendingInView.length > 0
-                ? `Approve all listed (${pendingInView.length})`
-                : mainShown.some((r) => r.approvedByAdvisor)
-                ? "All listed approved"
-                : "Nothing to approve"}
+              {bulk.eligible.length > 0
+                ? `Approve all eligible (${bulk.eligible.length})`
+                : bulk.anyEligibleApproved
+                ? "All eligible approved"
+                : "Nothing eligible to approve"}
             </Button>
             <Button onClick={newRec} iconLeft={<Plus className="h-4 w-4" />}>
               New recommendation
@@ -375,6 +382,14 @@ function Inner() {
           </>
         }
       />
+
+      {bulk.unknownPending.length > 0 && (
+        <p className="mb-4 text-2xs text-ink-500" data-testid="bulk-approval-unknown-note">
+          {bulk.unknownPending.length === 1
+            ? "1 listed with origin not recorded isn’t approved in bulk: review it on its card."
+            : `${bulk.unknownPending.length} listed with origin not recorded aren’t approved in bulk: review each on its card.`}
+        </p>
+      )}
 
       {approvedNotice != null && approvedNotice > 0 && (
         <div role="status" className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-positive-50 ring-1 ring-inset ring-positive-500/40 px-4 py-2.5 text-[13px]">

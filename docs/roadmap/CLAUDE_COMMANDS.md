@@ -55,13 +55,19 @@ Stop for Codex review with exact head, checks, preview association, remaining li
 
 D1 (PR #72, `0381db1`), D2 (PR #75, `073049f`), D2a (PR #79, `c0ee4e9`), D3 (PR #81, `85b3910`) and **D4 (PR #82, `3738588`, 16 November 2026)** are released; the commands below the next one are historical, so do not rerun them. **D5 is in progress** (desktop-first since 18 November 2026: mobile work is deferred).
 
-### Next task: Codex review of the #113 PR (hosted Claude connectivity and Saved examples), then owner setup and desktop UAT
+### Next task: Codex re-review of the #113 PR (hosted Claude connectivity and Saved examples), then owner setup and desktop UAT
+
+Updated on 24 November 2026. Codex reviewed `780c099` and found two defects; both are fixed on the same PR, and the handoff names the new head.
+- **Development identities:** they are refused when the current configuration doesn't allow dev sign-in.
+- **Bulk approval:** it covers only pending, explicitly sized Claude and advisor records in view.
+
+Codex also ran the five opt-in real-Postgres concurrency cases on a disposable PostgreSQL 17.12 at `780c099`, and they passed. Step 1 below is now that re-review, at the new head.
 
 Saved on 23 November 2026. PR #112 (#111) is released as `1f17770afafaf177aae2bb1af18bb26226fed044` and production-verified (keyless smoke 62/62; the desktop UAT checklist is outside Git, owner feedback pending). The #113 PR (branch `feat/hosted-claude-and-saved-examples`, from `1f17770`) adds hosted Claude connectivity and the Saved examples workflow; see the handoff and [HOSTED_CLAUDE.md](HOSTED_CLAUDE.md). **Merge, hosted setup and any paid run are separate decisions, none given.** Verify heads, tree and stash first, and preserve newer work.
 
-1. **Codex reviews the #113 PR** at its exact head:
+1. **Codex re-reviews the #113 PR** at its exact head (first the two fixes, then the complete PR):
    - **Hosted path:** authentication (state, PKCE, hashed sign-in tokens, Origin checks); per-user isolation of keys and sessions; encryption (AAD binding, key ring); fail-closed readiness; no substitution of the script or test provider for Claude; atomic per-user session row (the unchanged state machine behind a backend); shared metering; no provider request on page load, key save or session start.
-   - **Recommendations:** Saved examples and run-example sections; Approve all listed; the approved-example notice and confirmed withdrawal (records, origins and versions unchanged).
+   - **Recommendations:** Saved examples and run-example sections; Approve all eligible (known Claude and advisor records only; unknown origins listed for individual review); the approved-example notice and confirmed withdrawal (records, origins and versions unchanged).
    - **Analysis inputs** and the `target_pct` label.
 2. **Only on the owner's explicit instruction:** merge pinned to the reviewed head (`gh pr merge <N> --merge --match-head-commit <full SHA>`), then main CI, the deployment and a keyless production check. The public site stays the scripted demonstration until step 3.
 3. **Owner setup of hosted connectivity** (HOSTED_CLAUDE.md "Owner setup"):

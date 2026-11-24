@@ -26,6 +26,8 @@ async function load() {
     ...(await import("@/data/seedRecommendations")),
     ...(await import("@/engines/recommendationOrigin")),
     ...(await import("@/engines/recommendationAmounts")),
+    ...(await import("@/engines/bulkApproval")),
+    ...(await import("@/engines/allocationDesk")),
     ...(await import("@/engines/workspaceBackup")),
     ...(await import("@/domain/disclosureLibrary")),
     RecommendationsPage: (await import("@/app/recommendations/page")).default,
@@ -125,21 +127,89 @@ describe("examples are listed apart from Claude and advisor recommendations", ()
   });
 });
 
-describe("bulk approval describes the records in view", () => {
-  it("'Approve all listed' counts and approves only the pending Claude and advisor records in view, never an example", async () => {
+describe("bulk approval covers only eligible Claude and advisor records in view (Codex finding on 780c099)", () => {
+  const UNRECORDED = "rec_unrecorded_explicit_synthetic_113";
+  const SIZELESS = "rec_claude_sizeless_synthetic_113";
+  /** Adds a record with an explicit "unrecorded" origin (as stored by #110 for some edits) next to the one with no origin. */
+  function withExplicitUnrecorded(m: M) {
+    const base = store(m).recommendations.find((r) => r.id === UNKNOWN)!;
+    m.useAtlasStore.setState({ recommendations: [...store(m).recommendations, { ...base, id: UNRECORDED, title: "Record stored as unrecorded (synthetic)", origin: { kind: "unrecorded" } }] });
+  }
+  const byId = (m: M, id: string) => store(m).recommendations.find((r) => r.id === id)!;
+  const approvedIds = (m: M) => store(m).recommendations.filter((r) => r.approvedByAdvisor).map((r) => r.id).sort();
+
+  it("mixed origins: the count, the confirmation's records and the submitted ids are the same two known records, in Current draft and in All", async () => {
     const m = await load();
-    legacyWorkspace(m, [CLAUDE, ADVISOR, SCRIPTED, m.SEED_RECOMMENDATIONS[0].id]);
+    const sample = m.SEED_RECOMMENDATIONS[0].id;
+    legacyWorkspace(m, [CLAUDE, ADVISOR, UNKNOWN, SCRIPTED, sample]);
+    withExplicitUnrecorded(m);
+    store(m).setDraftMember(UNRECORDED, true);
+    for (const view of ["draft", "all"] as const) {
+      const html = render(m, view);
+      expect(html, view).toContain("Approve all eligible (2)");
+      expect(html, view).not.toMatch(/Approve all (listed|eligible) \((3|4|5|6)\)/);
+      // Unknown-origin records stay in the list, labelled as such, for individual review.
+      const main = between(html, "recs-main", "run-examples");
+      expect(cards(main), view).toEqual(expect.arrayContaining([UNKNOWN, UNRECORDED]));
+      expect(main, view).toContain("Origin not recorded");
+      expect(html, view).toContain("2 listed with origin not recorded aren");
+      const shown = view === "draft" ? store(m).recommendations.filter((r) => store(m).workingDraft.memberIds.includes(r.id)) : store(m).recommendations;
+      const plan = m.bulkApproval(shown);
+      expect(plan.eligible.map((r) => r.id).sort(), view).toEqual([ADVISOR, CLAUDE].sort());
+      expect(plan.unknownPending.map((r) => r.id).sort(), view).toEqual([UNKNOWN, UNRECORDED].sort());
+    }
+    const untouched = [UNKNOWN, UNRECORDED, SCRIPTED, sample].map((id) => structuredClone(byId(m, id)));
+    // What the page submits: exactly the eligible ids.
+    const plan = m.bulkApproval(store(m).recommendations.filter((r) => store(m).workingDraft.memberIds.includes(r.id)));
+    expect(store(m).approveAllRecommendations(plan.eligible.map((r) => r.id))).toBe(2);
+    expect(approvedIds(m)).toEqual([ADVISOR, CLAUDE].sort());
+    for (const was of untouched) expect(byId(m, was.id), was.id).toEqual(was);
+    // Nothing relabelled or inferred.
+    expect(m.originLabel(byId(m, UNKNOWN)).label).toBe("Origin not recorded");
+    expect(m.originLabel(byId(m, UNRECORDED)).label).toBe("Origin not recorded");
+  });
+
+  it("known records approved while an unknown record is pending: 'All eligible approved', never 'All listed approved'", async () => {
+    const m = await load();
+    legacyWorkspace(m, [CLAUDE, ADVISOR, UNKNOWN]);
+    store(m).approveAllRecommendations([CLAUDE, ADVISOR]);
     const html = render(m, "draft");
-    expect(html).toContain("Approve all listed (2)");
-    expect(store(m).approveAllRecommendations([CLAUDE, ADVISOR])).toBe(2);
-    const byId = (id: string) => store(m).recommendations.find((r) => r.id === id)!;
-    expect(byId(CLAUDE).approvedByAdvisor).toBe(true);
-    expect(byId(ADVISOR).approvedByAdvisor).toBe(true);
-    expect(byId(SCRIPTED).approvedByAdvisor).toBe(false);
-    expect(byId(m.SEED_RECOMMENDATIONS[0].id).approvedByAdvisor).toBe(false);
-    expect(byId(UNKNOWN).approvedByAdvisor).toBe(false); // outside the draft: not in view
-    expect(render(m, "draft")).toContain("All listed approved");
-    // Without ids, the store action keeps its earlier meaning (every pending record).
+    expect(html).toContain("All eligible approved");
+    expect(html).not.toContain("All listed approved");
+    expect(html).toContain("1 listed with origin not recorded isn");
+    expect(byId(m, UNKNOWN).approvedByAdvisor).toBe(false);
+    expect(m.bulkApproval(store(m).recommendations).eligible).toEqual([]);
+  });
+
+  it("a view of unknown-origin records only: 'Nothing eligible to approve', disabled, and every card still listed", async () => {
+    const m = await load();
+    legacyWorkspace(m, [UNKNOWN]);
+    withExplicitUnrecorded(m);
+    store(m).setDraftMember(UNRECORDED, true);
+    const html = render(m, "draft");
+    const button = html.slice(html.lastIndexOf("<button", html.indexOf('data-testid="approve-all"')), html.indexOf("</button>", html.indexOf('data-testid="approve-all"')));
+    expect(button).toContain("Nothing eligible to approve");
+    expect(button).toMatch(/\sdisabled=""/);
+    expect(cards(between(html, "recs-main", "run-examples")).sort()).toEqual([UNKNOWN, UNRECORDED].sort());
+  });
+
+  it("a Claude record that needs an explicit size first isn't counted (the store would skip it), and examples never are", async () => {
+    const m = await load();
+    legacyWorkspace(m, [CLAUDE, SCRIPTED]);
+    const holding = store(m).holdings[0].id;
+    const base = byId(m, CLAUDE);
+    m.useAtlasStore.setState({ recommendations: [...store(m).recommendations, { ...base, id: SIZELESS, title: "Claude reduction saved without a size (synthetic)", type: "reduce", relatedHoldingId: holding, actionAmount: undefined, proposedValue: undefined }] });
+    store(m).setDraftMember(SIZELESS, true);
+    expect(m.needsIntentRestatement(byId(m, SIZELESS))).toBe(true);
+    const html = render(m, "draft");
+    expect(html).toContain("Approve all eligible (1)");
+    const plan = m.bulkApproval(store(m).recommendations.filter((r) => store(m).workingDraft.memberIds.includes(r.id)));
+    expect(plan.eligible.map((r) => r.id)).toEqual([CLAUDE]);
+    expect(plan.needsSize.map((r) => r.id)).toEqual([SIZELESS]);
+    expect(store(m).approveAllRecommendations(plan.eligible.map((r) => r.id))).toBe(1);
+    expect(byId(m, SIZELESS).approvedByAdvisor).toBe(false);
+    expect(byId(m, SCRIPTED).approvedByAdvisor).toBe(false);
+    // Without ids, the store action keeps its earlier meaning (every pending record it can approve).
     expect(store(m).approveAllRecommendations()).toBeGreaterThan(0);
   });
 });

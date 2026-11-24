@@ -48,10 +48,21 @@ export async function currentUser(req: Request, cfg: HostedConfig, deps: AuthDep
     )
   ).rows;
   const row = rows[0];
-  if (!row) return null;
-  // The allow-list applies to every request, not only at sign-in: removing a login ends its sign-ins at once.
-  if (row.provider === "github" && cfg.allowedLogins && !cfg.allowedLogins.has(row.login.toLowerCase())) return null;
+  if (!row || !signInPermitted(row, cfg)) return null;
   return { id: String(row.id), login: row.login, provider: row.provider };
+}
+
+/**
+ * Whether the current, validated configuration permits this identity's sign-in provider, checked on every request:
+ * a sign-in issued under an earlier configuration authenticates only while its provider is still allowed. Dev
+ * identities need dev sign-in enabled now (a local *.localhost check off Vercel); GitHub identities need GitHub
+ * sign-in configured and, when there is an allow-list, a login on it (removing a login ends its sign-ins at once).
+ * Nothing is deleted: a refused identity's keys, sessions and counters stay as they were.
+ */
+function signInPermitted(row: Pick<HostedUser, "login" | "provider">, cfg: HostedConfig): boolean {
+  if (row.provider === "dev") return cfg.devSignIn;
+  if (row.provider === "github") return cfg.github != null && (cfg.allowedLogins == null || cfg.allowedLogins.has(row.login.toLowerCase()));
+  return false;
 }
 
 /**
