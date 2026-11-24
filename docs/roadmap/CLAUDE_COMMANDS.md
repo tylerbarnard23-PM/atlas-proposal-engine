@@ -57,7 +57,7 @@ D1 (PR #72, `0381db1`), D2 (PR #75, `073049f`), D2a (PR #79, `c0ee4e9`), D3 (PR 
 
 ### Next task: Codex re-review of the #113 PR (hosted Claude connectivity and Saved examples), then owner setup and desktop UAT
 
-Updated on 24 November 2026. Codex reviewed `780c099` and found two defects; both are fixed on the same PR, and the handoff names the new head.
+Updated on 24 November 2026. Codex reviewed `780c099` and found two defects; both are fixed on the same PR. The PR description names the head to review.
 - **Development identities:** they are refused when the current configuration doesn't allow dev sign-in.
 - **Bulk approval:** it covers only pending, explicitly sized Claude and advisor records in view.
 
