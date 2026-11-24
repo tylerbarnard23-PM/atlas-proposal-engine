@@ -1,7 +1,8 @@
 "use client";
 
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { createJSONStorage, persist } from "zustand/middleware";
+import { strictWorkspaceStorage, workspaceStorage } from "./workspaceStorage";
 import type {
   Account,
   AdvisorProfile,
@@ -797,14 +798,15 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
         return result;
       },
       restoreWorkspace: (next) => {
-        const storage = typeof window !== "undefined" ? window.localStorage : undefined;
+        // #116: the browser's localStorage, or the desktop application's workspace file (saved at once, so a failure is known).
+        const storage = strictWorkspaceStorage(STORAGE_KEY);
         const before = get();
-        const savedBefore = storage?.getItem(STORAGE_KEY) ?? null;
+        const savedBefore = storage?.get() ?? null;
         const after = { ...before, ...next, hasHydrated: true };
         // Check the save first, with exactly what persist will write: if the
         // browser refuses it (e.g. storage full), nothing has changed yet.
         try {
-          storage?.setItem(STORAGE_KEY, JSON.stringify({ state: after, version: STORE_VERSION }));
+          storage?.set(JSON.stringify({ state: after, version: STORE_VERSION }));
         } catch (err) {
           return { ok: false, error: `The browser couldn't save the restored workspace (${(err as Error).message}). Nothing was changed.` };
         }
@@ -819,8 +821,8 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
             // the saved copy is put back below
           }
           try {
-            if (savedBefore === null) storage?.removeItem(STORAGE_KEY);
-            else storage?.setItem(STORAGE_KEY, savedBefore);
+            if (savedBefore === null) storage?.remove();
+            else storage?.set(savedBefore);
           } catch {
             // nothing more can be done; the in-memory workspace is intact
           }
@@ -830,6 +832,13 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
     }),
     {
       name: STORAGE_KEY,
+      // #116: localStorage in a browser; in the desktop application, a file in the user's application-data folder.
+      storage: createJSONStorage(() => {
+        const s = workspaceStorage(STORAGE_KEY);
+        // No storage (server rendering): throwing tells persist to keep the store in memory, as before.
+        if (!s) throw new Error("No workspace storage here.");
+        return s;
+      }),
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);
       },
