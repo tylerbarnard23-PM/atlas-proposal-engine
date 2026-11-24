@@ -18,7 +18,9 @@
     "local": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/atlas-local.mjs",
     "local:pair": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/atlas-local.mjs pair",
     "local:doctor": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/atlas-local.mjs doctor",
-    "hosted:migrate": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/hosted-migrate.mjs"
+    "hosted:migrate": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/hosted-migrate.mjs",
+    "desktop:build": "node desktop/build.mjs",
+    "desktop:start": "node desktop/build.mjs --dir"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",

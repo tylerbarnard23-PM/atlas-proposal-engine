@@ -9,6 +9,7 @@ import { sessionFilePath } from "./liveSessionStore";
 import { keychainStore, memoryStore } from "./credentialStore";
 import { connectionFilePath, pairingFilePath } from "./localFiles";
 import { COPILOT_MAX_BODY_BYTES, SHAPE_LIMITS, readBodyLimited, shapeProblem } from "../server/requestLimits";
+import { pairRedirectPath } from "./localPairing";
 import { MAX_KEY_BODY_BYTES, authorizeLocal, disconnect, localInfo, pairBrowser, pairingCookie, saveKey, startSession, useEnvironmentKey } from "./localConnect";
 
 // The Copilot API's request handling, kept out of the route files so tests
@@ -179,8 +180,9 @@ export async function handleLocalPair(req: Request, deps: LiveDeps = defaultDeps
   const token = new URL(req.url).searchParams.get("token") ?? "";
   const r = await pairBrowser(req, deps, token);
   if (!r.ok) return new NextResponse(`Stratovell wasn't paired with this browser: ${r.error}`, { status: r.status, headers: { "content-type": "text/plain; charset=utf-8", ...NO_STORE } });
-  // To the Copilot page on the same origin, without the token in the address.
-  return new NextResponse(null, { status: 303, headers: { location: "/copilot", "set-cookie": pairingCookie(deps.env, r.cookie, r.expiresAt), ...NO_STORE, "referrer-policy": "no-referrer" } });
+  // To the Copilot page (or an allowed in-app path, #116) on the same origin, without the token in the address.
+  const next = pairRedirectPath(new URL(req.url).searchParams.get("next"));
+  return new NextResponse(null, { status: 303, headers: { location: next, "set-cookie": pairingCookie(deps.env, r.cookie, r.expiresAt), ...NO_STORE, "referrer-policy": "no-referrer" } });
 }
 
 /** POST /api/copilot/local/connection {"action":"save"|"use_environment"|"disconnect"} : a paired browser manages the key. No provider request. */

@@ -41,3 +41,8 @@ agent-eval-reports/
 
 # Local live-testing session state (counters and hashes only; never committed)
 .atlas-local/
+
+# Desktop application builds (#116)
+.next-desktop/
+dist-desktop/
+desktop/build/
