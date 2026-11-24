@@ -55,7 +55,31 @@ Stop for Codex review with exact head, checks, preview association, remaining li
 
 D1 (PR #72, `0381db1`), D2 (PR #75, `073049f`), D2a (PR #79, `c0ee4e9`), D3 (PR #81, `85b3910`) and **D4 (PR #82, `3738588`, 16 November 2026)** are released; the commands below the next one are historical, so do not rerun them. **D5 is in progress** (desktop-first since 18 November 2026: mobile work is deferred).
 
-### Next task: Codex re-review of the #113 PR (hosted Claude connectivity and Saved examples), then owner setup and desktop UAT
+### Next task: production rollback, Codex review of the #116 desktop PR, then owner UAT
+
+Saved on 24 November 2026. Stratovell is now a desktop application (#116; [DESKTOP_APP.md](DESKTOP_APP.md)). PR #115 was merged as `831612cbb95bb91d528dfcb438dd612de03a41fe` and its hosted mode is retired on the #116 branch (`feat/desktop-windows-app`, from `831612c`). The PR description names the head to review. **Merge, publication of an installer, announcement, paid requests, re-recording, mobile and MCP work are separate decisions, none given.** Verify heads, tree, stash and worktrees first, and preserve newer work.
+
+1. **The owner completes the authorized production rollback:**
+   - re-verify in Vercel;
+   - set Production `COPILOT_MODE=demo`;
+   - redeploy the approved release.
+
+   Then a keyless check: the site is scripted, and hosted credential, session and analysis operations are refused, also with an existing signed-in cookie. Record it on #116 and PR #115. Neon, its integration and rows, the encryption keys, deployment secrets and the GitHub OAuth app stay as inactive infrastructure.
+2. **Codex reviews the #116 PR** at its exact head:
+   - **Persistence:** the atomic file, recovery, restore, and port independence.
+   - **Desktop boundary:** the allow-listed environment, the IPC bridge, navigation and network limits, the fuses, the build's contents check and junction handling.
+   - **The PDF print path** (same gates, Electron's Chromium).
+   - **Shutdown:** stopping the session without resetting counters.
+   - **Hosted retirement:** `hosted` now falls back to the demo.
+   - **The pages:** welcome, `/download` (no link without an approved release) and the preview banner.
+3. **Owner desktop UAT** with the private installer (checklist outside Git: `evidence/pr116-desktop-2026-11-24/DESKTOP-UAT-CHECKLIST.md`), on a second computer if possible.
+4. **Owner release decisions:** code signing, the publication location, recording an approved release, and #35.
+5. Only then: the recorder update, a free labelled rehearsal, and separate approval for any real Claude analysis. The USD 5 take is still **unapproved**.
+
+Keep [#114](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/114) and the restriction-confirmation finding as separate follow-ups. Keep mobile and MCP work parked. Preserve all originals, recordings, voiceover packages, the stash, worktrees, `launch.json` and browser data.
+
+### Previous task (done 24 November 2026; PR #115 merged as `831612c` and verified, hosted pilot then retired by #116; don't rerun): Codex re-review of the #113 PR, then owner setup and desktop UAT
+
 
 Updated on 24 November 2026. Codex reviewed `780c099` and found two defects; both are fixed on the same PR. The PR description names the head to review.
 - **Development identities:** they are refused when the current configuration doesn't allow dev sign-in.
