@@ -32,9 +32,10 @@ const SERVER_START_MS = 90_000;
 const PDF_RENDER_MS = 90_000;
 
 const flags: DesktopFlags = parseFlags(process.argv);
-// Stratovell draws forms, tables and SVG charts and prints PDFs: it needs no GPU. Hardware acceleration stays off,
-// so a graphics driver can never hang the computer through Stratovell (a GPU-composited window on an older hybrid
-// AMD/NVIDIA driver froze a Windows test machine during #116's first launch check). Rendering is done in software.
+// Stratovell draws forms, tables and SVG charts and prints PDFs: it needs no GPU, so rendering is done in software.
+// Hardware acceleration is off as a mitigation after the computer froze during the first visible desktop-window test
+// (24 November 2026). The cause is unconfirmed; a graphics-driver hang is a hypothesis. This setting reduces that risk
+// but does not prove a full-machine freeze cannot recur.
 app.disableHardwareAcceleration();
 // Automated checks only: keep the window off screen.
 const hiddenForChecks = process.env.STRATOVELL_E2E === "1" && process.argv.includes("--stratovell-hidden-window");

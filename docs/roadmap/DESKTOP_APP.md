@@ -23,7 +23,11 @@ Stratovell is a desktop application: it is downloaded and runs on the user's own
   - The print runs in a hidden window with JavaScript off, in an isolated in-memory session that may load only that one temporary file. No installed browser is used.
 - **Shutdown:** closing the window saves everything queued, stops the local service (cancelling a run in flight) and stops any live session for good, with its counters kept.
 - **Single instance:** opening Stratovell again brings the open window forward.
-- **Graphics:** hardware acceleration is off. Stratovell needs no GPU, and a GPU-composited Electron window froze a hybrid AMD/NVIDIA test laptop during development.
+- **Graphics:** hardware acceleration is off; Stratovell needs no GPU. This is a **mitigation, not a guarantee**:
+  - On 24 November 2026 the computer froze during the first visible desktop-window test of an unpacked Electron 45 build. The owner forced a restart.
+  - **The cause is unconfirmed.** A graphics-driver hang on the hybrid AMD/NVIDIA laptop (2022 NVIDIA driver) is a hypothesis only.
+  - Later automated checks ran off-screen with `--disable-gpu` and a watchdog, and nothing froze again. That does not show a full-machine freeze cannot recur, and those scripted checks are not a recovery test of the original incident.
+  - The original evidence (the app log of that run and its file list) is kept outside Git, in `evidence/pr116-desktop-2026-11-24/incident-and-run-logs/` and REPORT.md section 33.
 - **Application-service boundary for a future MCP adapter:**
   - Every capability is reached through the same server routes and engines: the copilot tools in `src/copilot/tools.ts`, readiness in `src/engines/complianceEngine.ts`, and backups in `src/engines/workspaceBackup.ts`.
   - The workspace is one documented file.
