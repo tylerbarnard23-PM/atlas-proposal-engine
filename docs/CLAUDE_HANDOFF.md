@@ -1,8 +1,18 @@
 # Handoff
 
-## Current checkpoint — 25 November 2026: PR #117 fixes Codex findings A–D (awaiting independent Codex re-review); Install as app assessed (stay with Electron); production rollback still awaits the owner's Vercel re-verification
+## Current checkpoint — 25 November 2026: PR #117 fixes Codex findings A–D and the three re-review findings (awaiting independent Codex re-review); Install as app assessed (stay with Electron); production rollback still awaits the owner's Vercel re-verification
 
-- **25 November (this batch, source work and headless tests only; Electron not launched, no installer run):**
+- **25 November, second batch: Codex's re-review of `055f99b`** (source work and headless tests only). Three more findings are fixed in `f935e84`, each with a regression that failed first (the "re-review" block of `tests/desktopReliability.test.ts`; logs in `evidence/pr117-rereview-2026-11-25/`):
+  1. **A Settings restore from a stale window bypassed the revision check:** its rollback read advanced the revision. The rollback copy is now peeked, so a stale restore is refused, the window refreshes, and the advisor retries. Tested through the real `restoreWorkspace`: newer firm details and an approved version are kept.
+  2. **A failed restore cleared the load-problem guard.** The guard now stays until the replacement is on disk, the unreadable files are kept once, and a retry succeeds. Start over remains a separate choice.
+  3. **An unlistable `backups` path blocked a healthy workspace.** The current file is now read first. A listing failure is a load problem only when a fallback is needed, and the daily copy is best-effort.
+  - The [Install as app note](roadmap/INSTALL_AS_APP_ASSESSMENT.md) is corrected:
+    - CMEK and zero-data-retention organizations start with the settings off, and apps aren't covered by zero data retention; HIPAA and hybrid deployments are separate.
+    - The shared-link limits are documented, but behaviour for installed recipients is unverified.
+    - A local MCP adapter remains possible.
+    - PDF fidelity, storage and porting effort are unverified.
+    - Electron is recommended because it is implemented and a migration is uncertain.
+- **25 November, first batch (source work and headless tests only; Electron not launched, no installer run):**
   - **Codex review of `fd2db60`: NOT approved, with four findings.** All four are now fixed on PR #117, each with regression tests that failed before the fix and pass after it (`tests/desktopReliability.test.ts`; failing-first logs outside Git in `evidence/pr117-fixes-2026-11-25/`):
     - **A:** an unreadable workspace is reported as unreadable, never as new. Nothing is changed, saving is paused until the advisor chooses, and the unreadable files are kept in `unreadable-<time>/`.
     - **B:** writes are checked against a revision, so a stale window can't overwrite newer changes or approved versions.
@@ -10,7 +20,7 @@
     - **D:** Getting started asks unless the workspace is the untouched sample, judged by content.
   - **The IPC handlers and the preload bridge now live in `desktop/shared/`**, so the tests drive the real code over an in-memory IPC.
   - **The freeze wording is corrected** (see the incident below).
-  - **Install as app:** [INSTALL_AS_APP_ASSESSMENT.md](roadmap/INSTALL_AS_APP_ASSESSMENT.md). The recommendation is to keep the Electron route; no port, second UI or MCP.
+  - **Install as app:** [INSTALL_AS_APP_ASSESSMENT.md](roadmap/INSTALL_AS_APP_ASSESSMENT.md). Keep the Electron route; no port, second UI or MCP. The note was revised in the second batch.
   - **Not covered by this batch:** the fixes are not checked in a running app (the notices are unrendered, and the cost of the synchronous save call is unmeasured). The 0.1.0 installer (built from `476e71d`) is the **pre-fix** artifact.
 
 - **Released before this checkpoint (detail in [history (24 November)](CLAUDE_HANDOFF_HISTORY_2026-11-24.md) and earlier files):** D1–D4, the D5 gates and fixes, the Stratovell rename, PR #110 (`58deeb0`), PR #112 (`1f17770`) and **PR #115 (#113), merged as `831612cbb95bb91d528dfcb438dd612de03a41fe`**, release-verified (main CI, Production deployment 8032420343, smoke 18/18). Saved examples, "Approve all eligible", the analysis-inputs summary and the `target_pct` label from #115 remain.
@@ -46,7 +56,12 @@
   - Agent: the 27-trial evaluation and real-model browser checks (budget unapproved; one owner-operated run has passed); finding 3's pairing policy; [#83](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/83); [#84](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/84).
   - Other: #76. Real-client use still requires #59.
 - **Next action (pickup order, saved 25 November 2026):**
-  1. **An independent Codex re-review of PR #117** at its new head (named in the PR description). The focus is the four fixes: the load-problem state and the kept copies; the revision check and the following between windows; save-now with a pending queue; and the content-based welcome confirmation. Address its findings, each with a regression test written first.
+  1. **An independent Codex re-review of PR #117** at its new head (named in the PR description). The focus is the A–D fixes and the three re-review fixes:
+     - the stale-restore refusal through `peek`;
+     - the load-problem guard held until a restore succeeds;
+     - the read order and listing failures.
+
+     Address its findings, each with a regression test written first.
   2. **Only after that review passes:** rebuild the installer from the reviewed commit, with a new checksum and manifest. Keep the record of the `476e71d` 0.1.0 installer.
      - The installed-app check needs the owner's explicit go-ahead because of the freeze: no GPU, an off-screen window and the watchdog.
      - Then the owner's UAT (checklist outside Git: `evidence/pr116-desktop-2026-11-24/DESKTOP-UAT-CHECKLIST.md`), ideally on a second, clean Windows computer. Record failures; fix nothing silently.

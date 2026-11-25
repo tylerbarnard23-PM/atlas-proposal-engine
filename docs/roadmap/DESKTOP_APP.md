@@ -4,9 +4,14 @@ Stratovell is a desktop application: it is downloaded and runs on the user's own
 
 **Review status (25 November 2026):**
 - Codex's review of `fd2db60` was **not approved**, with four findings: A, an unreadable workspace; B, several windows; C, a failed restore; D, the first-session confirmation.
-- All four are fixed on PR #117 with regression tests, and await an independent Codex re-review.
+- All four are fixed on PR #117 with regression tests.
+- Codex's re-review of `055f99b` found three more problems, now fixed:
+  - a stale Settings restore;
+  - a failed recovery restore that cleared the guard;
+  - an unlistable backups path.
+- Everything awaits an independent Codex re-review.
 - The 0.1.0 UAT installer was built from `476e71d`, **before** these fixes.
-- *Install as app* was assessed in [INSTALL_AS_APP_ASSESSMENT.md](INSTALL_AS_APP_ASSESSMENT.md): this Electron route stays.
+- *Install as app* was assessed in [INSTALL_AS_APP_ASSESSMENT.md](INSTALL_AS_APP_ASSESSMENT.md). This Electron route stays: it is implemented, and a migration is still uncertain.
 
 **Status (24 November 2026):** a Windows x64 build exists for **private UAT only**. It is **unsigned**, and there is **no public download**. The website states this ([`src/domain/desktopRelease.ts`](../../src/domain/desktopRelease.ts) holds no release). MCP is planned, not built.
 
@@ -24,7 +29,11 @@ Stratovell is a desktop application: it is downloaded and runs on the user's own
     - Every unreadable file met on the way is copied into `unreadable-<time>/`, or moved there when it can't even be read; nothing is deleted. The newest readable copy then opens, with a notice.
     - **When files exist but none is readable** (malformed, or reading fails), that is never treated as a new installation. Nothing on disk changes, and the main process refuses saves and removal. A blocking notice offers three choices: restore a backup, start over with the fictional sample, or quit. Restore and start over each keep the unreadable files first.
     - A failed save shows an alert and is retried every 5 seconds.
-  - **Restore:** saves at once and changes nothing if the save fails. A change still queued is written first and is never discarded by a failed restore.
+  - **Restore:** saves at once and changes nothing if the save fails.
+    - A change still queued is written first and is never discarded by a failed restore.
+    - A restore built in a window that hasn't seen a newer change is refused; that window refreshes and the advisor retries.
+    - While the workspace is unreadable, a failed restore leaves saving blocked and the notice open.
+  - **Reading:** the current file is read first. A backups folder that can't be listed never blocks a healthy workspace, and the daily copy made on save is best-effort.
   - **Several windows** (the meeting view and the template preview are Stratovell windows too): each change carries the workspace revision its window last read.
     - A change based on an older revision is refused, and that window reloads the latest workspace and says so. An unchanged save is a no-op.
     - After an accepted change, the other windows reload without saving anything back.

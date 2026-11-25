@@ -62,14 +62,20 @@ Saved on 25 November 2026. This supersedes the 24 November command below.
 ```
 Re-review Stratovell PR #117 (branch feat/desktop-windows-app) at the head named in its description.
 Verify the local and GitHub heads, the tree, the stash and the worktrees first, and preserve newer work.
-Read docs/CLAUDE_HANDOFF.md, docs/roadmap/DESKTOP_APP.md and REPORT.md section 33.
+Read docs/CLAUDE_HANDOFF.md, docs/roadmap/DESKTOP_APP.md and REPORT.md sections 33–34.
 
 Review the fixes for Codex findings A–D:
 - A: the unreadable-workspace state, refused saves, and the kept copies;
 - B: revision-checked writes and following other windows;
 - C: save-now with a pending queue;
 - D: the content-based Getting started confirmation.
-Also review the desktop/shared IPC and bridge extraction, and tests/desktopReliability.test.ts.
+
+Then review the fixes for the three re-review findings at 055f99b:
+1. a stale Settings restore, refused through peek and the real restoreWorkspace;
+2. the load-problem guard, kept until a restore succeeds, with the copies kept once;
+3. the current file read first, and backup-listing failures.
+
+Also review the desktop/shared IPC and bridge extraction, tests/desktopReliability.test.ts, and the revised docs/roadmap/INSTALL_AS_APP_ASSESSMENT.md.
 
 Record any finding with a regression test written first.
 
