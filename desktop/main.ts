@@ -19,7 +19,8 @@ import { createServer } from "node:net";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import loadingHtml from "./static/loading.html";
-import { SaveQueue, WorkspaceFileStore, type Recovery } from "./shared/workspaceFile";
+import { WorkspaceFileStore } from "./shared/workspaceFile";
+import { MAX_IPC_STRING, registerWorkspaceIpc, WorkspaceService, type IpcEventLike } from "./shared/workspaceIpc";
 import { childEnvironment, isAppUrl, parseFlags, safeNextPath, type DesktopFlags } from "./shared/policy";
 import { issuePairingToken } from "../src/copilot/localPairing";
 import { pairingFilePath } from "../src/copilot/localFiles";
@@ -29,7 +30,6 @@ const HOST = "127.0.0.1";
 const PREFERRED_PORT = 47613;
 const SERVER_START_MS = 90_000;
 const PDF_RENDER_MS = 90_000;
-const MAX_IPC_STRING = 64 * 1024 * 1024;
 
 const flags: DesktopFlags = parseFlags(process.argv);
 // Stratovell draws forms, tables and SVG charts and prints PDFs: it needs no GPU. Hardware acceleration stays off,
@@ -98,17 +98,13 @@ let mainWindow: BrowserWindow | null = null;
 let server: UtilityProcess | null = null;
 let origin: string | null = null;
 let quitting = false;
-let workspaceStore: WorkspaceFileStore;
-let saveQueue: SaveQueue;
-let workspaceValue: string | null = null;
-let recovery: Recovery | null = null;
-let firstRun = false;
+let workspace: WorkspaceService;
 let lastSaveProblem: string | null = null;
 
-function workspaceSender(e: IpcMainEvent): boolean {
+function workspaceSender(e: IpcMainEvent | IpcEventLike): boolean {
   // Only pages served by this app's own server, in a window this process created, may use the bridge.
   const url = e.senderFrame?.url ?? "";
-  const ok = !!origin && isAppUrl(url, origin) && BrowserWindow.fromWebContents(e.sender) !== null;
+  const ok = !!origin && isAppUrl(url, origin) && BrowserWindow.fromWebContents(e.sender as WebContents) !== null;
   if (!ok) log(`refused a bridge call from ${url.slice(0, 80) || "an unknown frame"}`);
   return ok;
 }
@@ -121,30 +117,7 @@ function notifySaveProblem(error: string | null) {
 }
 
 function registerBridge() {
-  ipcMain.on("stratovell:workspace:read", (e) => {
-    e.returnValue = workspaceSender(e) ? workspaceValue : null;
-  });
-  ipcMain.on("stratovell:workspace:write", (e, value: unknown) => {
-    if (!workspaceSender(e) || typeof value !== "string" || value.length > MAX_IPC_STRING) return;
-    workspaceValue = value;
-    saveQueue.save(value);
-  });
-  ipcMain.on("stratovell:workspace:write-now", (e, value: unknown) => {
-    if (!workspaceSender(e)) return void (e.returnValue = { ok: false, error: "This page can't save the workspace." });
-    if (typeof value !== "string" || value.length > MAX_IPC_STRING) return void (e.returnValue = { ok: false, error: "The workspace to save isn't valid." });
-    saveQueue.clear();
-    const r = workspaceStore.write(value);
-    if (r.ok) workspaceValue = value;
-    notifySaveProblem(r.ok ? null : r.error);
-    e.returnValue = r;
-  });
-  ipcMain.on("stratovell:workspace:remove", (e) => {
-    if (!workspaceSender(e)) return void (e.returnValue = false);
-    saveQueue.clear();
-    const r = workspaceStore.remove();
-    if (r.ok) workspaceValue = null;
-    e.returnValue = r.ok;
-  });
+  registerWorkspaceIpc(ipcMain as unknown as Parameters<typeof registerWorkspaceIpc>[0], workspace, { allowed: workspaceSender, onSaveProblem: notifySaveProblem });
   ipcMain.on("stratovell:app:info", (e) => {
     if (!workspaceSender(e)) return void (e.returnValue = null);
     const b = buildInfo();
@@ -154,8 +127,8 @@ function registerBridge() {
       build: `${b.signing}${b.commit ? ` · source ${b.commit.slice(0, 12)}` : ""}`,
       dataFolder: userData(),
       platform: `${process.platform} ${process.arch}`,
-      firstRun,
-      recovery: recovery ? { from: recovery.from, savedAt: recovery.savedAt, movedAside: recovery.movedAside } : null,
+      firstRun: workspace.firstRun,
+      recovery: workspace.recovery ? { from: workspace.recovery.from, savedAt: workspace.recovery.savedAt, movedAside: workspace.recovery.movedAside } : null,
       testProvider: flags.testProvider,
     };
   });
@@ -403,7 +376,7 @@ async function openApp() {
   const w = mainWindow!;
   const { token } = await issuePairingToken(pairingFilePath({ ATLAS_LOCAL_DIR: paths.localState() }), new Date());
   // The one-time link pairs this window (an HttpOnly cookie) and redirects without the token in the address.
-  const next = safeNextPath(firstRun ? "/welcome" : "/");
+  const next = safeNextPath(workspace.firstRun ? "/welcome" : "/");
   await w.loadURL(`${origin}/api/copilot/local/pair?token=${encodeURIComponent(token)}&next=${encodeURIComponent(next)}`);
 }
 
@@ -434,7 +407,7 @@ async function boot() {
 
 async function shutdown() {
   // 1. Every queued change is on disk before anything else stops.
-  const r = saveQueue?.flush();
+  const r = workspace?.flush();
   if (r && !r.ok) log(`final save failed: ${r.error}`);
   // 2. The local service stops; a run in flight is cancelled with it.
   const child = server;
@@ -469,16 +442,16 @@ app.whenReady().then(() => {
   if (!primaryInstance) return;
   mkdirSync(userData(), { recursive: true });
   log(`Stratovell ${buildInfo().version} starting (${process.platform} ${process.arch}, Electron ${process.versions.electron})${flags.testProvider ? " with the test provider" : ""}`);
-  workspaceStore = new WorkspaceFileStore(paths.workspace());
-  saveQueue = new SaveQueue(workspaceStore, 300, (res) => {
-    notifySaveProblem(res.ok ? null : res.error);
-    // A failed save is kept and retried, so a briefly locked file (an antivirus scan, a sync client) recovers by itself.
-    if (!res.ok && !quitting) setTimeout(() => saveQueue.dirty && saveQueue.flush(), 5_000);
+  workspace = new WorkspaceService(new WorkspaceFileStore(paths.workspace()), {
+    delayMs: 300,
+    onSaveResult: (res) => {
+      notifySaveProblem(res.ok ? null : res.error);
+      // A failed save is kept and retried, so a briefly locked file (an antivirus scan, a sync client) recovers by itself.
+      if (!res.ok && !quitting) setTimeout(() => workspace.queue.dirty && workspace.flush(), 5_000);
+    },
   });
-  const read = workspaceStore.read();
-  workspaceValue = read.value;
-  recovery = read.recovery;
-  firstRun = read.value === null;
+  workspace.load();
+  const recovery = workspace.recovery;
   if (recovery) log(`workspace recovered from ${recovery.from} copy saved ${recovery.savedAt}${recovery.movedAside ? `; unreadable file kept as ${recovery.movedAside}` : ""}`);
   log(`graphics: ${JSON.stringify(app.getGPUFeatureStatus())}`);
   registerBridge();
