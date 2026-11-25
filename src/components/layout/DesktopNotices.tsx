@@ -131,7 +131,9 @@ function LoadProblemNotice({ problem }: { problem: NonNullable<DesktopAppInfo["l
     setView("resolved");
     router.push("/welcome");
   }
-  const files = problem.files.map((f) => `${f.name} (${f.kind === "malformed" ? "not a readable workspace" : "couldn't be read"})`).join(", ");
+  const files = problem.files
+    .map((f) => `${f.name} (${f.kind === "malformed" ? "not a readable workspace" : f.kind === "list-failed" ? "the folder of daily backups couldn't be opened" : "couldn't be read"})`)
+    .join(", ");
 
   if (view === "restoring")
     return (

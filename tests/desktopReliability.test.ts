@@ -399,6 +399,7 @@ describe("the workspace bridge still answers only the app's own pages", () => {
     for (const url of ["https://example.com/", "http://127.0.0.1:47614/", "file:///C:/x.html"]) {
       const w = hub.connect(url);
       expect(w.bridge.workspace.read()).toBeNull();
+      expect(w.bridge.workspace.peek()).toBeNull();
       w.bridge.workspace.write(record(9));
       expect(w.bridge.workspace.writeNow(record(9)).ok).toBe(false);
       w.bridge.workspace.remove();
@@ -491,5 +492,155 @@ describe("D. Getting started never replaces entered work without asking, even in
     const page = readFileSync(join(__dirname, "..", "src", "app", "welcome", "page.tsx"), "utf8");
     expect(page).not.toMatch(/firstRun/);
     expect(page.match(/confirmWelcomeChoice\("(new-client|sample)"/g)?.sort()).toEqual(['confirmWelcomeChoice("new-client"', 'confirmWelcomeChoice("sample"']);
+  });
+});
+
+// Codex's re-review of 055f99b: three more findings, each reproduced first through the real paths.
+describe("re-review of 055f99b", () => {
+  async function openStore(hub: ReturnType<typeof ipcHub>) {
+    const w = hub.connect();
+    vi.resetModules();
+    (globalThis as { window?: unknown }).window = { stratovellDesktop: w.bridge };
+    const m = await import("@/store/useStore");
+    return { w, m, s: () => m.useAtlasStore.getState() };
+  }
+  /** Makes `win` the page the store's restore reads its bridge from (each Stratovell window is its own page). */
+  const inWindow = (win: { w: { bridge: unknown } }) => ((globalThis as { window?: unknown }).window = { stratovellDesktop: win.w.bridge });
+  async function backupOf(m: typeof import("@/store/useStore")) {
+    const backup = await import("@/engines/workspaceBackup");
+    const { DISCLOSURE_LIBRARY } = await import("@/domain/disclosureLibrary");
+    const ids = { disclosureIds: DISCLOSURE_LIBRARY.map((d) => d.id) };
+    const exported = backup.exportBackup(m.useAtlasStore.getState(), new Date(), ids);
+    if (!exported.ok) throw new Error(exported.errors.join("; "));
+    const parsed = backup.parseBackup(exported.text, ids);
+    if (!parsed.ok) throw new Error(parsed.errors.join("; "));
+    return { parsed: parsed.backup, restoredState: backup.restoredState };
+  }
+  const onDisk = (files: WorkspaceFileStore, service: WorkspaceService) => (service.flush(), JSON.parse(files.read().value!).state);
+
+  it("1. a Settings restore (the real restoreWorkspace) from a stale window is refused, keeping newer firm details and approved versions; the window refreshes and the advisor retries", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-26T12:00:00Z"));
+    try {
+      const files = new WorkspaceFileStore(dir);
+      const { service, hub } = desktop(files);
+      const a = await openStore(hub);
+      const b = await openStore(hub);
+      const { parsed, restoredState } = await backupOf(a.m);
+      b.w.hold(); // B hasn't processed A's changes yet
+      await approvedStory(a.m);
+      const v = a.s().approveVersion("Approved in window A (synthetic).");
+      if (!v.ok) throw new Error(v.failing.join("; "));
+      a.s().setAdvisor({ firmName: "Newer firm name, from window A" });
+
+      // Settings → Restore in B, exactly as WorkspaceBackupPanel.replace() does it, keeping the (stale) firm.
+      inWindow(b);
+      const state = b.s();
+      const r = b.s().restoreWorkspace(restoredState(parsed, { advisor: state.advisor, disclosures: state.disclosures }, { replaceFirm: false }));
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.error).toMatch(/another Stratovell window/i);
+      if (!r.ok) expect(r.error).toMatch(/try again/i);
+      let disk = onDisk(files, service);
+      expect(disk.advisor.firmName).toBe("Newer firm name, from window A");
+      expect(disk.snapshots.map((x: { id: string }) => x.id)).toEqual([v.snapshot.id]);
+      // B now shows the latest workspace, so a retry is built from it.
+      expect(b.s().advisor.firmName).toBe("Newer firm name, from window A");
+      expect(b.s().snapshots).toHaveLength(1);
+      const again = b.s().restoreWorkspace(restoredState(parsed, { advisor: b.s().advisor, disclosures: b.s().disclosures }, { replaceFirm: false }));
+      expect(again).toEqual({ ok: true });
+      disk = onDisk(files, service);
+      expect(disk.advisor.firmName).toBe("Newer firm name, from window A"); // replaceFirm=false keeps the newer firm
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("2. a failed restore while the workspace is unreadable keeps saving blocked and the problem open; ordinary saves stay refused; a retry succeeds and the kept originals stay", async () => {
+    const files = new WorkspaceFileStore(dir, () => new Date("2026-11-25T09:00:00Z"));
+    writeFileSync(files.file, "garbage A");
+    writeFileSync(files.previous, "garbage B");
+    const { disk, store } = failingDisk(files);
+    const { service, hub } = desktop(store);
+    expect(service.loadProblem).not.toBeNull();
+    const win = await openStore(hub);
+    const { parsed, restoredState } = await backupOf(win.m);
+    disk.full = true;
+    const state = win.s();
+    const r = win.s().restoreWorkspace(restoredState(parsed, { advisor: state.advisor, disclosures: state.disclosures }, { replaceFirm: false }));
+    expect(r.ok).toBe(false);
+    expect(service.loadProblem).not.toBeNull(); // still unresolved: the recovery notice stays
+    // Ordinary saves stay refused, and the unreadable originals are untouched.
+    disk.full = false;
+    win.s().setClient({ fullName: "Typed while blocked" });
+    service.flush();
+    expect(readFileSync(files.file, "utf8")).toBe("garbage A");
+    expect(readFileSync(files.previous, "utf8")).toBe("garbage B");
+    // Retry once the disk works: the restore is saved and the problem resolved.
+    const again = win.s().restoreWorkspace(restoredState(parsed, { advisor: win.s().advisor, disclosures: win.s().disclosures }, { replaceFirm: false }));
+    expect(again).toEqual({ ok: true });
+    expect(service.loadProblem).toBeNull();
+    expect(JSON.parse(files.read().value!).state.client.fullName).toBe(parsed.engagement.client.fullName);
+    const kept = readdirSync(dir).filter((n) => n.startsWith("unreadable-"));
+    expect(kept).toHaveLength(1); // kept once, not again on the retry
+    expect(readFileSync(join(dir, kept[0], "workspace.json"), "utf8")).toBe("garbage A");
+    expect(readFileSync(join(dir, kept[0], "workspace.previous.json"), "utf8")).toBe("garbage B");
+  });
+
+  it("2b. start over with the sample stays a separate, explicit choice after a failed restore", async () => {
+    const files = new WorkspaceFileStore(dir, () => new Date("2026-11-25T09:00:00Z"));
+    writeFileSync(files.file, "garbage A");
+    const { disk, store } = failingDisk(files);
+    const { service, hub } = desktop(store);
+    const w = hub.connect();
+    w.bridge.workspace.read();
+    disk.full = true;
+    expect(w.bridge.workspace.writeNow(record(7)).ok).toBe(false);
+    expect(service.loadProblem).not.toBeNull();
+    disk.full = false;
+    expect(w.bridge.workspace.continueAfterLoadProblem()).toEqual({ ok: true });
+    expect(service.loadProblem).toBeNull();
+    expect(readdirSync(dir).filter((n) => n.startsWith("unreadable-"))).toHaveLength(1);
+    w.bridge.workspace.write(record(8));
+    service.flush();
+    expect(files.read().value).toBe(record(8));
+  });
+
+  it("3. a healthy workspace opens even when the backups folder can't be listed (a regular file named backups)", () => {
+    const files = new WorkspaceFileStore(dir);
+    files.write(record(1));
+    rmSync(files.backups, { recursive: true, force: true });
+    writeFileSync(files.backups, "not a folder");
+    const r = new WorkspaceFileStore(dir).read();
+    expect(r).toMatchObject({ status: "ok", value: record(1), recovery: null });
+    // Saving still works: the daily copy is best-effort and never fails the save.
+    expect(new WorkspaceFileStore(dir).write(record(2))).toEqual({ ok: true });
+    expect(new WorkspaceFileStore(dir).read().value).toBe(record(2));
+  });
+
+  it("3b. when a fallback is needed and the backups can't be listed, that is a load problem, never a new installation or an uncaught failure", () => {
+    const files = new WorkspaceFileStore(dir);
+    files.write(record(1));
+    files.write(record(2));
+    rmSync(files.backups, { recursive: true, force: true });
+    writeFileSync(files.backups, "not a folder");
+    writeFileSync(files.file, "garbage");
+    writeFileSync(files.previous, "garbage");
+    let r: ReturnType<WorkspaceFileStore["read"]> | undefined;
+    expect(() => (r = new WorkspaceFileStore(dir).read())).not.toThrow();
+    expect(r!.status).toBe("unreadable");
+    expect(r!.problems.map((p) => p.kind)).toEqual(["malformed", "malformed", "list-failed"]);
+    // And the main process starts in the blocked state, not as a first run.
+    const { service } = desktop(new WorkspaceFileStore(dir));
+    expect(service.firstRun).toBe(false);
+    expect(service.loadProblem).not.toBeNull();
+    // Only actual workspace files are kept aside; the unlistable backups path is left where it is.
+    expect(service.continueAfterLoadProblem()).toEqual({ ok: true });
+    expect(readFileSync(files.backups, "utf8")).toBe("not a folder");
+  });
+
+  it("3c. with nothing else saved, an unlistable backups path is still not a new installation", () => {
+    writeFileSync(join(dir, "backups"), "not a folder");
+    const r = new WorkspaceFileStore(dir).read();
+    expect(r.status).toBe("unreadable");
   });
 });

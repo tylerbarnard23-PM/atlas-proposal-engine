@@ -16,6 +16,8 @@ export interface DesktopWorkspaceBridge {
   writeNow(value: string): { ok: true } | { ok: false; error: string };
   /** Removes the saved workspace (its previous copy and dated backups are kept). */
   remove(): void;
+  /** The saved workspace text without adopting its revision (a restore's rollback copy). */
+  peek(): string | null;
   /** After a load problem: keeps a copy of every unreadable file, then allows saving again. */
   continueAfterLoadProblem(): { ok: true } | { ok: false; error: string };
 }
@@ -36,7 +38,7 @@ export interface DesktopAppInfo {
    * Saved files exist but none could be read (malformed, or reading failed). Nothing was changed on disk and
    * nothing is saved until the advisor restores a backup or chooses to start over. Null when there is no problem.
    */
-  loadProblem: { folder: string; files: { name: string; kind: "malformed" | "read-failed" }[] } | null;
+  loadProblem: { folder: string; files: { name: string; kind: "malformed" | "read-failed" | "list-failed" }[] } | null;
   /** Whether this window's server answers with the labelled test provider instead of Claude. */
   testProvider: boolean;
 }
@@ -102,11 +104,14 @@ export function workspaceStorage(key: string): StateStorage | undefined {
  * restore, which checks the save before changing anything. Null outside a
  * browser or the desktop application.
  */
-export function strictWorkspaceStorage(key: string): { get(): string | null; set(value: string): void; remove(): void } | null {
+export function strictWorkspaceStorage(key: string): { get(): string | null; set(value: string): void; remove(): void; desktop: boolean } | null {
   const desktop = desktopBridge();
   if (desktop)
     return {
-      get: () => desktop.workspace.read(),
+      desktop: true,
+      // Re-review finding 1: the rollback copy is peeked, never read, so this window's revision stays tied to the
+      // state the restore was prepared from, and a restore built from older state is refused as stale.
+      get: () => (typeof desktop.workspace.peek === "function" ? desktop.workspace.peek() : null),
       set: (value) => {
         const r = desktop.workspace.writeNow(value);
         if (!r.ok) throw new Error(r.error);
@@ -115,5 +120,5 @@ export function strictWorkspaceStorage(key: string): { get(): string | null; set
     };
   if (typeof window === "undefined") return null;
   const ls = window.localStorage;
-  return { get: () => ls.getItem(key), set: (value) => ls.setItem(key, value), remove: () => ls.removeItem(key) };
+  return { desktop: false, get: () => ls.getItem(key), set: (value) => ls.setItem(key, value), remove: () => ls.removeItem(key) };
 }

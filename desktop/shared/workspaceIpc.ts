@@ -8,10 +8,11 @@
 // unchanged write is a no-op, and after an accepted change the other windows
 // are told to reload, which they do without writing anything back.
 
-import { SaveQueue, type LoadProblem, type ReadResult, type Recovery, type WorkspaceFileStore, type WriteResult } from "./workspaceFile";
+import { filesToKeep, SaveQueue, type LoadProblem, type ReadResult, type Recovery, type WorkspaceFileStore, type WriteResult } from "./workspaceFile";
 
 export const WORKSPACE_CHANNELS = {
   read: "stratovell:workspace:read",
+  peek: "stratovell:workspace:peek",
   write: "stratovell:workspace:write",
   writeNow: "stratovell:workspace:write-now",
   remove: "stratovell:workspace:remove",
@@ -49,8 +50,11 @@ export class WorkspaceService {
   revision = 0;
   recovery: Recovery | null = null;
   firstRun = false;
-  /** Set when saved files exist but none could be read (Codex finding A): saves are refused until the advisor chooses. */
-  loadProblem: { problems: LoadProblem[] } | null = null;
+  /**
+   * Set when saved files exist but none could be read (Codex finding A): saves are refused until the advisor's
+   * choice succeeds. keptIn: the folder the unreadable files were already copied to (undefined until then).
+   */
+  loadProblem: { problems: LoadProblem[]; keptIn?: string | null } | null = null;
   readonly queue: SaveQueue;
 
   constructor(
@@ -102,9 +106,19 @@ export class WorkspaceService {
    */
   continueAfterLoadProblem(): WriteResult {
     if (!this.loadProblem) return { ok: true };
-    const kept = this.store.keepAside(this.loadProblem.problems.map((p) => p.file));
+    const kept = this.keepUnreadable();
     if (!kept.ok) return kept;
     this.loadProblem = null;
+    return { ok: true };
+  }
+
+  /** Copies the unreadable files aside once; later attempts (a retried restore) reuse that folder. The problem stays open. */
+  private keepUnreadable(): WriteResult {
+    const p = this.loadProblem;
+    if (!p || p.keptIn !== undefined) return { ok: true };
+    const kept = this.store.keepAside(filesToKeep(p.problems));
+    if (!kept.ok) return kept;
+    p.keptIn = kept.folder;
     return { ok: true };
   }
 
@@ -118,14 +132,16 @@ export class WorkspaceService {
    */
   writeNow(value: string, base: unknown): WorkspaceAck {
     if (base !== this.revision && value !== this.value) return this.refused(STALE_RESTORE, true);
-    // Restoring a backup is an explicit choice too: the unreadable files are kept first.
+    // Restoring a backup is an explicit choice too: the unreadable files are kept first. Re-review finding 2: the
+    // load problem stays open (saving blocked, the recovery notice up) until the replacement is actually on disk.
     if (this.loadProblem) {
-      const c = this.continueAfterLoadProblem();
-      if (!c.ok) return this.refused(c.error);
+      const kept = this.keepUnreadable();
+      if (!kept.ok) return this.refused(kept.error);
     }
     this.queue.flush();
     const r = this.store.write(value);
     if (!r.ok) return this.refused(r.error);
+    this.loadProblem = null;
     this.queue.clear();
     const changed = value !== this.value;
     this.value = value;
@@ -174,6 +190,10 @@ export function registerWorkspaceIpc(
   const notAllowed = (error: string): WorkspaceAck => ({ ok: false, error, stale: false, revision: service.revision });
   ipc.on(WORKSPACE_CHANNELS.read, (e) => {
     e.returnValue = allowed(e) ? service.read() : null;
+  });
+  // The saved value only, for a restore's rollback copy: it never moves the window's revision (re-review finding 1).
+  ipc.on(WORKSPACE_CHANNELS.peek, (e) => {
+    e.returnValue = allowed(e) ? service.value : null;
   });
   ipc.on(WORKSPACE_CHANNELS.write, (e, value, base) => {
     if (!allowed(e)) return void (e.returnValue = notAllowed("This page can't save the workspace."));

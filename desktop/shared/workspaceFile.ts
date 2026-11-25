@@ -35,8 +35,14 @@ export const MAX_WORKSPACE_BYTES = 64 * 1024 * 1024;
 
 /** movedAside: the unreadable-<time> folder holding copies of the unreadable files met first, or null when there were none. */
 export type Recovery = { from: "previous" | "daily"; file: string; savedAt: string; movedAside: string | null };
-/** Why one saved file couldn't be used: its content isn't a workspace record, or reading it failed. */
-export type LoadProblem = { file: string; kind: "malformed" | "read-failed"; detail: string };
+/**
+ * Why one saved file couldn't be used: its content isn't a workspace record, reading it failed, or (list-failed)
+ * the backups folder couldn't be listed, so the dated copies in it couldn't be tried.
+ */
+export type LoadProblem = { file: string; kind: "malformed" | "read-failed" | "list-failed"; detail: string };
+
+/** The files a load problem names that are workspace files to keep aside (an unlistable backups path is left where it is). */
+export const filesToKeep = (problems: LoadProblem[]) => problems.filter((p) => p.kind !== "list-failed").map((p) => p.file);
 /**
  * new: nothing has been saved yet (no workspace file, previous copy or dated backup).
  * ok: a workspace was read, perhaps recovered from a copy.
@@ -98,6 +104,7 @@ export class WorkspaceFileStore {
     return problem ? { state: "bad", problem: { file, kind: "malformed", detail: problem } } : { state: "ok", text };
   }
 
+  /** The dated copies, newest first. Throws when the backups path exists but can't be listed (e.g. it is a file). */
   private dailyCopies(): string[] {
     if (!existsSync(this.backups)) return [];
     return readdirSync(this.backups)
@@ -107,30 +114,48 @@ export class WorkspaceFileStore {
       .map((n) => join(this.backups, n));
   }
 
+  /** The dated copies, or the problem listing them (re-review finding 3: never thrown out of read()). */
+  private listDailyCopies(): { files: string[]; problem: LoadProblem | null } {
+    try {
+      return { files: this.dailyCopies(), problem: null };
+    } catch (err) {
+      return { files: [], problem: { file: this.backups, kind: "list-failed", detail: (err as NodeJS.ErrnoException).code ?? (err as Error).message } };
+    }
+  }
+
   /**
    * The saved workspace. Falls back from the current file to the previous copy
    * and then to the newest readable dated copy; the unreadable files met first
    * are kept in unreadable-<time>/ before the recovered copy becomes the current
    * file. When files exist but none is readable, nothing on disk is changed and
-   * the result is "unreadable", never "new".
+   * the result is "unreadable", never "new". The current file is read first, so
+   * a backups folder that can't be listed never blocks a healthy workspace; when
+   * a fallback is needed, a listing failure is a load problem of its own.
    */
   read(): ReadResult {
-    const candidates: { from: "current" | Recovery["from"]; file: string }[] = [
-      { from: "current", file: this.file },
-      { from: "previous", file: this.previous },
-      ...this.dailyCopies().map((file) => ({ from: "daily" as const, file })),
-    ];
     const problems: LoadProblem[] = [];
+    const current = this.inspect(this.file);
+    if (current.state === "ok") return { status: "ok", value: current.text, recovery: null, problems: [] };
+    if (current.state === "bad") problems.push(current.problem);
+    const daily = this.listDailyCopies();
+    const candidates: { from: Recovery["from"] | "list-problem"; file: string }[] = [
+      { from: "previous", file: this.previous },
+      ...(daily.problem ? [{ from: "list-problem" as const, file: this.backups }] : []),
+      ...daily.files.map((file) => ({ from: "daily" as const, file })),
+    ];
     for (const c of candidates) {
+      if (c.from === "list-problem") {
+        problems.push(daily.problem!);
+        continue;
+      }
       const r = this.inspect(c.file);
       if (r.state === "missing") continue;
       if (r.state === "bad") {
         problems.push(r.problem);
         continue;
       }
-      if (c.from === "current") return { status: "ok", value: r.text, recovery: null, problems: [] };
       // Recovering: keep every unreadable file first. If that fails, nothing is replaced.
-      const kept = this.keepAside(problems.map((p) => p.file));
+      const kept = this.keepAside(filesToKeep(problems));
       if (!kept.ok) return { status: "unreadable", value: null, recovery: null, problems: [...problems, { file: c.file, kind: "read-failed", detail: kept.error }] };
       // The recovered copy becomes the current file, so the next launch reads it directly.
       try {
@@ -180,7 +205,12 @@ export class WorkspaceFileStore {
       mkdirSync(this.dir, { recursive: true });
       if (this.readValid(this.file) !== null) {
         copyFileSync(this.file, this.previous);
-        this.keepDailyCopy();
+        // The dated copy is a bonus: a backups path that can't be used (e.g. a file named backups) never fails the save.
+        try {
+          this.keepDailyCopy();
+        } catch {
+          /* the save itself, and the previous copy, still happen */
+        }
       }
       this.writeAtomic(this.file, value as string);
       return { ok: true };

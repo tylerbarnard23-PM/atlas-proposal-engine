@@ -833,6 +833,8 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
         try {
           storage?.set(JSON.stringify({ state: after, version: STORE_VERSION }));
         } catch (err) {
+          // The desktop application's own message says what happened (e.g. another window changed the workspace first, so this window was refreshed: try again).
+          if (storage?.desktop) return { ok: false, error: `Stratovell couldn't restore the backup: ${(err as Error).message} Nothing was changed.` };
           return { ok: false, error: `The browser couldn't save the restored workspace (${(err as Error).message}). Nothing was changed.` };
         }
         try {

@@ -42,6 +42,11 @@ export function createDesktopBridge(ipc: IpcRendererLike) {
         revision = r.revision;
         return r.value;
       },
+      /**
+       * The saved workspace text without adopting its revision: for a restore's rollback copy. Re-review finding 1:
+       * reading it must not let a restore built from this page's older state pass as up to date.
+       */
+      peek: (): string | null => ipc.sendSync("stratovell:workspace:peek") as string | null,
       write: (value: string): void => {
         if (typeof value === "string") settle(ipc.sendSync("stratovell:workspace:write", value, revision));
       },
