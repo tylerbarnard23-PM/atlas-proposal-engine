@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WorkspaceFileStore, type WriteResult } from "../desktop/shared/workspaceFile";
@@ -29,6 +29,7 @@ function failingDisk(files: WorkspaceFileStore) {
     read: () => files.read(),
     write: (v: unknown): WriteResult => (disk.full ? { ok: false, error: "the disk is full" } : files.write(v)),
     remove: () => files.remove(),
+    keepAside: (list: string[]) => files.keepAside(list),
   };
   return { disk, store };
 }
@@ -110,5 +111,120 @@ describe("C. a failed restore keeps the earlier unsaved workspace", () => {
     disk.full = false;
     service.flush();
     expect(JSON.parse(files.read().value!).state.client.fullName).toBe("Unsaved Edit Household");
+  });
+});
+
+describe("A. an unreadable workspace is never mistaken for a new installation", () => {
+  const snapshot = (d: string) => {
+    const out: Record<string, string> = {};
+    const walk = (p: string, rel: string) => {
+      for (const n of readdirSync(p)) {
+        const full = join(p, n);
+        if (statSync(full).isDirectory()) walk(full, `${rel}${n}/`);
+        else out[`${rel}${n}`] = readFileSync(full, "utf8");
+      }
+    };
+    walk(d, "");
+    return out;
+  };
+
+  it("a new installation is the only state with nothing saved", () => {
+    expect(new WorkspaceFileStore(dir).read()).toMatchObject({ status: "new", value: null, recovery: null });
+  });
+
+  it("a malformed workspace with no readable copy is reported as unreadable, and nothing on disk changes", () => {
+    const files = new WorkspaceFileStore(dir);
+    files.write(record(1));
+    files.write(record(2));
+    writeFileSync(files.file, '{"state": {"n": 3}, "vers');
+    writeFileSync(files.previous, "not json");
+    writeFileSync(join(files.backups, readdirSync(files.backups)[0]), JSON.stringify({ state: [], version: 11 }));
+    const before = snapshot(dir);
+    const r = new WorkspaceFileStore(dir).read();
+    expect(r.status).toBe("unreadable");
+    expect(r.value).toBeNull();
+    expect(r.problems.map((p) => [p.file.replace(dir, "").split("\\").join("/"), p.kind])).toEqual([
+      ["/workspace.json", "malformed"],
+      ["/workspace.previous.json", "malformed"],
+      [`/backups/${readdirSync(files.backups)[0]}`, "malformed"],
+    ]);
+    expect(snapshot(dir)).toEqual(before);
+  });
+
+  it("a workspace that can't be read at all (a read failure, not bad content) is unreadable too, never new", () => {
+    mkdirSync(join(dir, "workspace.json")); // reading it fails
+    const r = new WorkspaceFileStore(dir).read();
+    expect(r.status).toBe("unreadable");
+    expect(r.problems[0].kind).toBe("read-failed");
+  });
+
+  it("hydration never writes the sample over it: the store's saves are refused until the advisor chooses, and the files stay byte for byte", async () => {
+    const files = new WorkspaceFileStore(dir);
+    files.write(record(1));
+    writeFileSync(files.file, "garbage that was a workspace");
+    writeFileSync(files.previous, "garbage too");
+    const before = snapshot(dir);
+    const { service, hub } = desktop(new WorkspaceFileStore(dir));
+    expect(service.firstRun).toBe(false);
+    expect(service.loadProblem?.problems.length).toBeGreaterThan(0);
+    const w = hub.connect();
+    (globalThis as { window?: unknown }).window = { stratovellDesktop: w.bridge };
+    const m = await import("@/store/useStore");
+    expect(m.useAtlasStore.getState().hasHydrated).toBe(true);
+    m.useAtlasStore.getState().setClient({ fullName: "Typed while the notice was open" });
+    service.flush();
+    expect(snapshot(dir)).toEqual(before);
+    // Reset can't remove it either.
+    w.bridge.workspace.remove();
+    expect(snapshot(dir)).toEqual(before);
+  });
+
+  it("continuing keeps a copy of every unreadable file first; only then are saves accepted", async () => {
+    const files = new WorkspaceFileStore(dir, () => new Date("2026-11-25T09:00:00Z"));
+    files.write(record(1));
+    writeFileSync(files.file, "garbage A");
+    writeFileSync(files.previous, "garbage B");
+    const { service, hub } = desktop(new WorkspaceFileStore(dir, () => new Date("2026-11-25T09:00:00Z")));
+    const w = hub.connect();
+    expect(w.bridge.workspace.continueAfterLoadProblem()).toEqual({ ok: true });
+    expect(service.loadProblem).toBeNull();
+    const kept = join(dir, "unreadable-2026-11-25T09-00-00-000Z");
+    expect(readFileSync(join(kept, "workspace.json"), "utf8")).toBe("garbage A");
+    expect(readFileSync(join(kept, "workspace.previous.json"), "utf8")).toBe("garbage B");
+    w.bridge.workspace.write(record(5));
+    service.flush();
+    expect(files.read().value).toBe(record(5));
+    expect(readFileSync(join(kept, "workspace.json"), "utf8")).toBe("garbage A");
+  });
+
+  it("restoring a backup is an explicit choice too: the unreadable files are kept first, then the restore is saved", () => {
+    const files = new WorkspaceFileStore(dir, () => new Date("2026-11-25T09:00:00Z"));
+    writeFileSync(join(dir, "workspace.json"), "garbage A");
+    const { service, hub } = desktop(files);
+    const w = hub.connect();
+    expect(w.bridge.workspace.writeNow(record(7))).toEqual({ ok: true });
+    expect(service.loadProblem).toBeNull();
+    expect(readFileSync(join(dir, "unreadable-2026-11-25T09-00-00-000Z", "workspace.json"), "utf8")).toBe("garbage A");
+    expect(files.read().value).toBe(record(7));
+  });
+
+  it("recovering from a daily backup also keeps the unreadable previous copy, which a later save would otherwise replace", () => {
+    let now = new Date("2026-11-01T09:00:00Z");
+    const s = new WorkspaceFileStore(dir, () => now);
+    s.write(record(1));
+    s.write(record(2));
+    now = new Date("2026-11-02T09:00:00Z");
+    s.write(record(3));
+    writeFileSync(s.file, "garbage current");
+    writeFileSync(s.previous, "garbage previous");
+    const r = s.read();
+    expect(r.status).toBe("ok");
+    expect(r.value).toBe(record(2));
+    expect(r.recovery?.from).toBe("daily");
+    expect(readFileSync(join(r.recovery!.movedAside!, "workspace.json"), "utf8")).toBe("garbage current");
+    expect(readFileSync(join(r.recovery!.movedAside!, "workspace.previous.json"), "utf8")).toBe("garbage previous");
+    s.write(record(4));
+    s.write(record(5));
+    expect(readFileSync(join(r.recovery!.movedAside!, "workspace.previous.json"), "utf8")).toBe("garbage previous");
   });
 });

@@ -2,13 +2,14 @@
 // these handlers to Electron's ipcMain; the tests drive the same handlers
 // through an in-memory IPC with a real workspace file. Node built-ins only.
 
-import { SaveQueue, type ReadResult, type Recovery, type WorkspaceFileStore, type WriteResult } from "./workspaceFile";
+import { SaveQueue, type LoadProblem, type ReadResult, type Recovery, type WorkspaceFileStore, type WriteResult } from "./workspaceFile";
 
 export const WORKSPACE_CHANNELS = {
   read: "stratovell:workspace:read",
   write: "stratovell:workspace:write",
   writeNow: "stratovell:workspace:write-now",
   remove: "stratovell:workspace:remove",
+  continueAfterLoadProblem: "stratovell:workspace:continue-after-load-problem",
   saveProblem: "stratovell:workspace:save-problem",
 } as const;
 
@@ -25,13 +26,17 @@ export interface IpcMainLike {
   on(channel: string, listener: (e: IpcEventLike, ...args: unknown[]) => void): unknown;
 }
 
-type FileStore = Pick<WorkspaceFileStore, "read" | "write" | "remove">;
+type FileStore = Pick<WorkspaceFileStore, "read" | "write" | "remove" | "keepAside">;
+
+const BLOCKED = "Stratovell couldn't read your saved workspace, so it saves nothing until you choose how to continue.";
 
 /** The workspace as the main process holds it: what was read at launch, the newest value, and the save queue. */
 export class WorkspaceService {
   value: string | null = null;
   recovery: Recovery | null = null;
   firstRun = false;
+  /** Set when saved files exist but none could be read (Codex finding A): saves are refused until the advisor chooses. */
+  loadProblem: { problems: LoadProblem[] } | null = null;
   readonly queue: SaveQueue;
 
   constructor(
@@ -46,7 +51,8 @@ export class WorkspaceService {
     const r = this.store.read();
     this.value = r.value;
     this.recovery = r.recovery;
-    this.firstRun = r.value === null;
+    this.firstRun = r.status === "new";
+    this.loadProblem = r.status === "unreadable" ? { problems: r.problems } : null;
     return r;
   }
 
@@ -54,10 +60,24 @@ export class WorkspaceService {
     return this.value;
   }
 
-  /** A change from a window: kept as the newest value and saved by the queue. */
-  write(value: string) {
+  /** A change from a window: kept as the newest value and saved by the queue. Refused while the load problem is open. */
+  write(value: string): WriteResult {
+    if (this.loadProblem) return { ok: false, error: BLOCKED };
     this.value = value;
     this.queue.save(value);
+    return { ok: true };
+  }
+
+  /**
+   * The advisor's explicit choice after a load problem: every unreadable file is
+   * kept in unreadable-<time>/ first; only then are saves accepted again.
+   */
+  continueAfterLoadProblem(): WriteResult {
+    if (!this.loadProblem) return { ok: true };
+    const kept = this.store.keepAside(this.loadProblem.problems.map((p) => p.file));
+    if (!kept.ok) return kept;
+    this.loadProblem = null;
+    return { ok: true };
   }
 
   /**
@@ -68,6 +88,11 @@ export class WorkspaceService {
    * for the retry, never discarded.
    */
   writeNow(value: string): WriteResult {
+    // Restoring a backup is an explicit choice too: the unreadable files are kept first.
+    if (this.loadProblem) {
+      const c = this.continueAfterLoadProblem();
+      if (!c.ok) return c;
+    }
     this.queue.flush();
     const r = this.store.write(value);
     if (!r.ok) return r;
@@ -78,6 +103,7 @@ export class WorkspaceService {
 
   /** Removes the saved workspace; anything queued stays queued unless the removal succeeds. */
   remove(): boolean {
+    if (this.loadProblem) return false;
     const r = this.store.remove();
     if (!r.ok) return false;
     this.queue.clear();
@@ -119,5 +145,9 @@ export function registerWorkspaceIpc(
   ipc.on(WORKSPACE_CHANNELS.remove, (e) => {
     if (!allowed(e)) return void (e.returnValue = false);
     e.returnValue = service.remove();
+  });
+  ipc.on(WORKSPACE_CHANNELS.continueAfterLoadProblem, (e) => {
+    if (!allowed(e)) return void (e.returnValue = { ok: false, error: "This page can't change the workspace." });
+    e.returnValue = service.continueAfterLoadProblem();
   });
 }

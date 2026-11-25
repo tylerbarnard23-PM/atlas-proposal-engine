@@ -22,9 +22,9 @@ const record = (n: number, extra: Record<string, unknown> = {}) => JSON.stringif
 describe("the workspace file", () => {
   it("saves and reads back exactly what the store wrote; a fresh installation has none", () => {
     const s = new WorkspaceFileStore(dir);
-    expect(s.read()).toEqual({ value: null, recovery: null });
+    expect(s.read()).toEqual({ status: "new", value: null, recovery: null, problems: [] });
     expect(s.write(record(1))).toEqual({ ok: true });
-    expect(s.read()).toEqual({ value: record(1), recovery: null });
+    expect(s.read()).toEqual({ status: "ok", value: record(1), recovery: null, problems: [] });
     // Only the file and its temporary siblings' absence: no temporary file is left behind.
     expect(readdirSync(dir).filter((f) => f.endsWith(".tmp"))).toEqual([]);
   });
@@ -59,7 +59,7 @@ describe("the workspace file", () => {
     expect(kept.at(-1)).toBe("workspace-2026-11-20.json");
   });
 
-  it("recovers from an unreadable file: the previous copy is opened and restored, the unreadable file kept, not deleted", () => {
+  it("recovers from an unreadable file: the previous copy is opened and restored, the unreadable file kept (copied aside), not deleted", () => {
     const s = new WorkspaceFileStore(dir, () => new Date("2026-11-24T12:00:00Z"));
     s.write(record(1));
     s.write(record(2));
@@ -67,10 +67,10 @@ describe("the workspace file", () => {
     const r = s.read();
     expect(r.value).toBe(record(1));
     expect(r.recovery?.from).toBe("previous");
-    expect(r.recovery?.movedAside).toMatch(/workspace\.unreadable-2026-11-24T12-00-00-000Z\.json$/);
-    expect(readFileSync(r.recovery!.movedAside!, "utf8")).toContain('"vers');
+    expect(r.recovery?.movedAside).toMatch(/unreadable-2026-11-24T12-00-00-000Z$/);
+    expect(readFileSync(join(r.recovery!.movedAside!, "workspace.json"), "utf8")).toContain('"vers');
     // The recovered copy is the current file again: the next launch reads it directly.
-    expect(new WorkspaceFileStore(dir).read()).toEqual({ value: record(1), recovery: null });
+    expect(new WorkspaceFileStore(dir).read()).toEqual({ status: "ok", value: record(1), recovery: null, problems: [] });
   });
 
   it("falls back to the newest readable daily backup when the previous copy is unreadable too", () => {

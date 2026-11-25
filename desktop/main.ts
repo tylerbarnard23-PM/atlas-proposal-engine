@@ -16,7 +16,7 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell, utilityProcess, type IpcMainEvent, type UtilityProcess, type WebContents } from "electron";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { randomBytes } from "node:crypto";
 import loadingHtml from "./static/loading.html";
 import { WorkspaceFileStore } from "./shared/workspaceFile";
@@ -129,6 +129,9 @@ function registerBridge() {
       platform: `${process.platform} ${process.arch}`,
       firstRun: workspace.firstRun,
       recovery: workspace.recovery ? { from: workspace.recovery.from, savedAt: workspace.recovery.savedAt, movedAside: workspace.recovery.movedAside } : null,
+      loadProblem: workspace.loadProblem
+        ? { folder: paths.workspace(), files: workspace.loadProblem.problems.map((p) => ({ name: relative(paths.workspace(), p.file), kind: p.kind })) }
+        : null,
       testProvider: flags.testProvider,
     };
   });
@@ -451,6 +454,8 @@ app.whenReady().then(() => {
     },
   });
   workspace.load();
+  if (workspace.loadProblem)
+    log(`workspace unreadable; nothing changed, saving paused until the advisor chooses: ${workspace.loadProblem.problems.map((p) => `${relative(paths.workspace(), p.file)} (${p.kind}: ${p.detail})`).join("; ")}`);
   const recovery = workspace.recovery;
   if (recovery) log(`workspace recovered from ${recovery.from} copy saved ${recovery.savedAt}${recovery.movedAside ? `; unreadable file kept as ${recovery.movedAside}` : ""}`);
   log(`graphics: ${JSON.stringify(app.getGPUFeatureStatus())}`);

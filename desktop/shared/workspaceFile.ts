@@ -9,15 +9,21 @@
 // renamed over the current file. The copy it replaces is kept as
 // workspace.previous.json, and the first save of each day also keeps a dated
 // copy in backups/ (the newest 14 are kept). Reading falls back from the
-// current file to the previous copy and then to the newest dated copy; an
-// unreadable file is moved aside (never deleted) and the recovery is reported.
+// current file to the previous copy and then to the newest dated copy; every
+// unreadable file met on the way is first kept in unreadable-<time>/ (never
+// deleted) and the recovery is reported.
+//
+// Codex finding A: when files exist but none can be read, reading reports
+// "unreadable", not a new installation, and changes nothing on disk. The main
+// process then refuses saves until the advisor chooses how to continue
+// (desktop/shared/workspaceIpc.ts).
 //
 // Node built-ins only: the Electron main process bundles this module, and the
 // tests drive it directly. It never holds an API key: keys stay in the OS
 // credential store or in the server's memory (see src/copilot/credentialStore.ts).
 
 import { closeSync, copyFileSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { randomBytes } from "node:crypto";
 
 export const WORKSPACE_FILE = "workspace.json";
@@ -27,8 +33,20 @@ export const DAILY_BACKUPS_KEPT = 14;
 /** Far above any real workspace (the largest fixture is well under 1 MB); refuses runaway input instead of filling the disk. */
 export const MAX_WORKSPACE_BYTES = 64 * 1024 * 1024;
 
+/** movedAside: the unreadable-<time> folder holding copies of the unreadable files met first, or null when there were none. */
 export type Recovery = { from: "previous" | "daily"; file: string; savedAt: string; movedAside: string | null };
-export type ReadResult = { value: string | null; recovery: Recovery | null };
+/** Why one saved file couldn't be used: its content isn't a workspace record, or reading it failed. */
+export type LoadProblem = { file: string; kind: "malformed" | "read-failed"; detail: string };
+/**
+ * new: nothing has been saved yet (no workspace file, previous copy or dated backup).
+ * ok: a workspace was read, perhaps recovered from a copy.
+ * unreadable: saved files exist but none can be read; nothing was changed on disk.
+ */
+export type ReadResult =
+  | { status: "new"; value: null; recovery: null; problems: [] }
+  | { status: "ok"; value: string; recovery: Recovery | null; problems: LoadProblem[] }
+  | { status: "unreadable"; value: null; recovery: null; problems: LoadProblem[] };
+export type KeepResult = { ok: true; folder: string | null } | { ok: false; error: string };
 export type WriteResult = { ok: true } | { ok: false; error: string };
 
 /** Why a saved string isn't a workspace persist record, or null when it is one. */
@@ -63,13 +81,21 @@ export class WorkspaceFileStore {
 
   /** The text of `file` when it is a readable workspace record, else null. */
   private readValid(file: string): string | null {
-    if (!existsSync(file)) return null;
+    const r = this.inspect(file);
+    return r.state === "ok" ? r.text : null;
+  }
+
+  /** Whether `file` is missing, a readable workspace record, or present but unusable (and why). */
+  private inspect(file: string): { state: "missing" } | { state: "ok"; text: string } | { state: "bad"; problem: LoadProblem } {
+    if (!existsSync(file)) return { state: "missing" };
+    let text: string;
     try {
-      const text = readFileSync(file, "utf8");
-      return workspaceProblem(text) ? null : text;
-    } catch {
-      return null;
+      text = readFileSync(file, "utf8");
+    } catch (err) {
+      return { state: "bad", problem: { file, kind: "read-failed", detail: (err as NodeJS.ErrnoException).code ?? (err as Error).message } };
     }
+    const problem = workspaceProblem(text);
+    return problem ? { state: "bad", problem: { file, kind: "malformed", detail: problem } } : { state: "ok", text };
   }
 
   private dailyCopies(): string[] {
@@ -82,36 +108,68 @@ export class WorkspaceFileStore {
   }
 
   /**
-   * The saved workspace, or null when there is none yet. An unreadable current
-   * file is moved aside (workspace.unreadable-<time>.json) and the newest
-   * readable copy is returned with a description of the recovery.
+   * The saved workspace. Falls back from the current file to the previous copy
+   * and then to the newest readable dated copy; the unreadable files met first
+   * are kept in unreadable-<time>/ before the recovered copy becomes the current
+   * file. When files exist but none is readable, nothing on disk is changed and
+   * the result is "unreadable", never "new".
    */
   read(): ReadResult {
-    const current = this.readValid(this.file);
-    if (current !== null) return { value: current, recovery: null };
-    const hadFile = existsSync(this.file);
-    const candidates: { from: Recovery["from"]; file: string }[] = [{ from: "previous", file: this.previous }, ...this.dailyCopies().map((file) => ({ from: "daily" as const, file }))];
+    const candidates: { from: "current" | Recovery["from"]; file: string }[] = [
+      { from: "current", file: this.file },
+      { from: "previous", file: this.previous },
+      ...this.dailyCopies().map((file) => ({ from: "daily" as const, file })),
+    ];
+    const problems: LoadProblem[] = [];
     for (const c of candidates) {
-      const text = this.readValid(c.file);
-      if (text === null) continue;
-      let movedAside: string | null = null;
-      if (hadFile) {
-        movedAside = join(this.dir, `workspace.unreadable-${this.now().toISOString().replace(/[:.]/g, "-")}.json`);
-        try {
-          renameSync(this.file, movedAside);
-        } catch {
-          movedAside = null;
-        }
+      const r = this.inspect(c.file);
+      if (r.state === "missing") continue;
+      if (r.state === "bad") {
+        problems.push(r.problem);
+        continue;
       }
-      // Restore the recovered copy as the current file, so the next launch reads it directly.
+      if (c.from === "current") return { status: "ok", value: r.text, recovery: null, problems: [] };
+      // Recovering: keep every unreadable file first. If that fails, nothing is replaced.
+      const kept = this.keepAside(problems.map((p) => p.file));
+      if (!kept.ok) return { status: "unreadable", value: null, recovery: null, problems: [...problems, { file: c.file, kind: "read-failed", detail: kept.error }] };
+      // The recovered copy becomes the current file, so the next launch reads it directly.
       try {
-        this.writeAtomic(this.file, text);
+        this.writeAtomic(this.file, r.text);
       } catch {
         /* it is still returned; the next save writes the file */
       }
-      return { value: text, recovery: { from: c.from, file: c.file, savedAt: statSync(c.file).mtime.toISOString(), movedAside } };
+      return { status: "ok", value: r.text, recovery: { from: c.from, file: c.file, savedAt: statSync(c.file).mtime.toISOString(), movedAside: kept.folder }, problems };
     }
-    return { value: null, recovery: null };
+    return problems.length ? { status: "unreadable", value: null, recovery: null, problems } : { status: "new", value: null, recovery: null, problems: [] };
+  }
+
+  /**
+   * Keeps the given files in a new unreadable-<time>/ folder: copied, or moved
+   * when they can't even be read (moving needs no read access). Never deletes.
+   */
+  keepAside(files: string[]): KeepResult {
+    if (!files.length) return { ok: true, folder: null };
+    const stamp = this.now().toISOString().replace(/[:.]/g, "-");
+    let folder = join(this.dir, `unreadable-${stamp}`);
+    for (let i = 2; existsSync(folder); i++) folder = join(this.dir, `unreadable-${stamp}-${i}`);
+    try {
+      mkdirSync(folder, { recursive: true });
+    } catch (err) {
+      return { ok: false, error: `Stratovell couldn't create ${folder} to keep the unreadable files (${(err as Error).message}).` };
+    }
+    for (const file of files) {
+      const target = join(folder, basename(file));
+      try {
+        copyFileSync(file, target);
+      } catch {
+        try {
+          renameSync(file, target);
+        } catch (err) {
+          return { ok: false, error: `Stratovell couldn't keep a copy of ${file} (${(err as Error).message}), so it changed nothing.` };
+        }
+      }
+    }
+    return { ok: true, folder };
   }
 
   /** Saves the workspace atomically, keeping the copy it replaces. Refuses anything that isn't a workspace record. */

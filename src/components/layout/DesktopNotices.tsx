@@ -2,8 +2,11 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { desktopBridge, type DesktopAppInfo } from "@/store/workspaceStorage";
 import { useCopilotMode } from "@/components/copilot/CopilotWorkspace";
+import { useAtlasStore } from "@/store/useStore";
+import { Button } from "@/components/ui/Button";
 
 // #116: notices that depend on where Stratovell runs.
 //   - In the desktop application: a workspace recovered at launch, a save that
@@ -48,6 +51,7 @@ export function DesktopNotices() {
   if (!info) return null;
   return (
     <>
+      {info.loadProblem && <LoadProblemNotice problem={info.loadProblem} />}
       {saveProblem && (
         <div role="alert" className="border-b border-negative-500 bg-negative-50 px-6 lg:px-10 py-2 text-[12.5px] text-negative-600" data-testid="desktop-save-problem">
           <p className="max-w-[1500px] mx-auto">
@@ -76,5 +80,106 @@ export function DesktopNotices() {
         </div>
       )}
     </>
+  );
+}
+
+/**
+ * Codex finding A: saved files exist but none could be read. Nothing was changed
+ * on disk and the application saves nothing until the advisor chooses: restore a
+ * backup (Settings), start over with the fictional sample after the unreadable
+ * files are copied aside, or quit. Blocking until a choice is made.
+ */
+function LoadProblemNotice({ problem }: { problem: NonNullable<DesktopAppInfo["loadProblem"]> }) {
+  const router = useRouter();
+  const resetSeed = useAtlasStore((s) => s.resetSeed);
+  const [view, setView] = React.useState<"blocking" | "restoring" | "resolved">("blocking");
+  const [error, setError] = React.useState<string | null>(null);
+
+  // While the advisor restores a backup in Settings, watch for the restore to clear the problem.
+  React.useEffect(() => {
+    if (view !== "restoring") return;
+    const t = setInterval(() => {
+      if (!desktopBridge()?.info().loadProblem) setView("resolved");
+    }, 1500);
+    return () => clearInterval(t);
+  }, [view]);
+
+  if (view === "resolved") return null;
+
+  function startOver() {
+    const r = desktopBridge()?.workspace.continueAfterLoadProblem();
+    if (!r || !r.ok) return setError(r ? r.error : "Stratovell couldn't change the workspace.");
+    resetSeed();
+    setView("resolved");
+    router.push("/welcome");
+  }
+  const files = problem.files.map((f) => `${f.name} (${f.kind === "malformed" ? "not a readable workspace" : "couldn't be read"})`).join(", ");
+
+  if (view === "restoring")
+    return (
+      <div role="alert" className="border-b border-negative-500 bg-negative-50 px-6 lg:px-10 py-2 text-[12.5px] text-ink-800" data-testid="desktop-load-problem-banner">
+        <p className="max-w-[1500px] mx-auto">
+          Saving is paused: your saved workspace couldn&apos;t be read, and nothing has been changed. Restore a backup in{" "}
+          <Link href="/settings#backup" className="font-medium underline">
+            Settings
+          </Link>
+          , or{" "}
+          <button type="button" className="font-medium text-navy-700 hover:underline" onClick={startOver}>
+            start over with the fictional sample
+          </button>{" "}
+          (the unreadable files are kept). Nothing else you change here is saved.
+          {error && <span className="block text-negative-600">{error}</span>}
+        </p>
+      </div>
+    );
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 p-6" data-testid="desktop-load-problem">
+      <div role="alertdialog" aria-modal="true" aria-labelledby="load-problem-title" className="max-w-xl rounded-lg bg-white p-6 shadow-xl ring-1 ring-ink-100 space-y-3 text-[13px] text-ink-700">
+        <h2 id="load-problem-title" className="text-[15px] font-semibold text-ink-900">
+          Stratovell couldn&apos;t open your saved workspace
+        </h2>
+        <p>
+          None of the saved copies in <span className="font-mono text-[12px] break-all">{problem.folder}</span> could be read: {files}.
+        </p>
+        <p>
+          <strong>Nothing was changed or deleted</strong>, and Stratovell saves nothing until you choose how to continue.
+        </p>
+        <ul className="list-disc pl-5 space-y-1">
+          <li>
+            <strong>Restore a backup</strong> you exported earlier (Settings → Backup &amp; restore). The unreadable files are kept first.
+          </li>
+          <li>
+            <strong>Start over with the fictional sample.</strong> Copies of the unreadable files are kept in an &ldquo;unreadable-…&rdquo; folder beside them first.
+          </li>
+          <li>
+            <strong>Quit</strong> and keep everything as it is, for example to ask for help with the files.
+          </li>
+        </ul>
+        {error && (
+          <p role="alert" className="text-negative-600">
+            {error}
+          </p>
+        )}
+        <div className="flex flex-wrap gap-2 pt-1">
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setView("restoring");
+              router.push("/settings#backup");
+            }}
+            data-testid="load-problem-restore"
+          >
+            Restore a backup
+          </Button>
+          <Button onClick={startOver} data-testid="load-problem-start-over">
+            Start over with the fictional sample
+          </Button>
+          <Button variant="secondary" onClick={() => window.close()} data-testid="load-problem-quit">
+            Quit Stratovell
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }

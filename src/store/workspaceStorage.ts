@@ -16,6 +16,8 @@ export interface DesktopWorkspaceBridge {
   writeNow(value: string): { ok: true } | { ok: false; error: string };
   /** Removes the saved workspace (its previous copy and dated backups are kept). */
   remove(): void;
+  /** After a load problem: keeps a copy of every unreadable file, then allows saving again. */
+  continueAfterLoadProblem(): { ok: true } | { ok: false; error: string };
 }
 
 export interface DesktopAppInfo {
@@ -26,10 +28,15 @@ export interface DesktopAppInfo {
   /** Where the workspace, its backups and the local Claude connection record are kept. */
   dataFolder: string;
   platform: string;
-  /** True on the first launch of this installation (no saved workspace yet). */
+  /** True on the first launch of this installation (nothing saved yet: no workspace file, previous copy or backup). */
   firstRun: boolean;
-  /** A recovery made when the workspace was read at launch, described for the advisor; null when none. */
+  /** A recovery made when the workspace was read at launch, described for the advisor; null when none. movedAside is the folder holding copies of the unreadable files. */
   recovery: { from: "previous" | "daily"; savedAt: string; movedAside: string | null } | null;
+  /**
+   * Saved files exist but none could be read (malformed, or reading failed). Nothing was changed on disk and
+   * nothing is saved until the advisor restores a backup or chooses to start over. Null when there is no problem.
+   */
+  loadProblem: { folder: string; files: { name: string; kind: "malformed" | "read-failed" }[] } | null;
   /** Whether this window's server answers with the labelled test provider instead of Claude. */
   testProvider: boolean;
 }
