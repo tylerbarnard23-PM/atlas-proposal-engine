@@ -60,19 +60,29 @@ export class WorkspaceService {
     this.queue.save(value);
   }
 
-  /** Saves at once (restore), reporting the outcome. */
+  /**
+   * Saves at once (restore), reporting the outcome. Codex finding C: a change
+   * still queued is written first (so the workspace being replaced becomes the
+   * previous copy), and the queue is cleared only once the replacement is on
+   * disk. A failed replacement leaves the earlier change saved or still queued
+   * for the retry, never discarded.
+   */
   writeNow(value: string): WriteResult {
-    this.queue.clear();
+    this.queue.flush();
     const r = this.store.write(value);
-    if (r.ok) this.value = value;
+    if (!r.ok) return r;
+    this.queue.clear();
+    this.value = value;
     return r;
   }
 
+  /** Removes the saved workspace; anything queued stays queued unless the removal succeeds. */
   remove(): boolean {
-    this.queue.clear();
     const r = this.store.remove();
-    if (r.ok) this.value = null;
-    return r.ok;
+    if (!r.ok) return false;
+    this.queue.clear();
+    this.value = null;
+    return true;
   }
 
   /** Writes anything queued (quit, retries). */
