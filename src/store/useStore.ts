@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import { strictWorkspaceStorage, workspaceStorage } from "./workspaceStorage";
+import { followDesktopWorkspace, strictWorkspaceStorage, workspaceStorage } from "./workspaceStorage";
 import type {
   Account,
   AdvisorProfile,
@@ -850,6 +850,9 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
     }
   )
 );
+
+// #116, Codex finding B: in the desktop application, follow the workspace other Stratovell windows save.
+followDesktopWorkspace(() => useAtlasStore.persist.rehydrate());
 
 // Server-safe snapshot used by API routes that don't have access to localStorage.
 export function serverSnapshot(): AtlasState {

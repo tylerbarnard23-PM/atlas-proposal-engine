@@ -30,10 +30,18 @@ export function DesktopNotices() {
   const [saveProblem, setSaveProblem] = React.useState<string | null>(null);
   const [recoveryOpen, setRecoveryOpen] = React.useState(true);
   const [isBrowser, setIsBrowser] = React.useState(false);
+  const [staleChange, setStaleChange] = React.useState(false);
   React.useEffect(() => {
     const b = desktopBridge();
     setIsBrowser(!b);
-    return b ? b.onSaveProblem(setSaveProblem) : undefined;
+    if (!b) return undefined;
+    const offSave = b.onSaveProblem(setSaveProblem);
+    // Codex finding B: this window's change was refused because another window saved a newer workspace first.
+    const offChanged = typeof b.onWorkspaceChanged === "function" ? b.onWorkspaceChanged((reason) => reason === "stale" && setStaleChange(true)) : () => {};
+    return () => {
+      offSave();
+      offChanged();
+    };
   }, []);
   const mode = useCopilotMode();
 
@@ -60,6 +68,16 @@ export function DesktopNotices() {
               Settings
             </Link>
             .
+          </p>
+        </div>
+      )}
+      {staleChange && (
+        <div role="alert" className="border-b border-gold-200 bg-gold-50 px-6 lg:px-10 py-2 text-[12.5px] text-ink-800" data-testid="desktop-stale-change">
+          <p className="max-w-[1500px] mx-auto">
+            Another Stratovell window changed the workspace a moment earlier, so this window&apos;s last change wasn&apos;t saved. This window now shows the latest workspace; make the change again if you still need it.{" "}
+            <button type="button" className="font-medium text-navy-700 hover:underline" onClick={() => setStaleChange(false)}>
+              Dismiss
+            </button>
           </p>
         </div>
       )}

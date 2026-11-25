@@ -38,7 +38,10 @@ function desktop(store: ConstructorParameters<typeof WorkspaceService>[0]) {
   const service = new WorkspaceService(store, { delayMs: 60_000 });
   service.load();
   const hub = ipcHub();
-  registerWorkspaceIpc(hub.main, service, { allowed: () => true });
+  registerWorkspaceIpc(hub.main, service, {
+    allowed: () => true,
+    broadcast: (except, channel, ...args) => hub.windowIds().filter((id) => id !== except).forEach((id) => hub.sendTo(id, channel, ...args)),
+  });
   return { service, hub };
 }
 
@@ -49,6 +52,7 @@ describe("C. a failed restore keeps the earlier unsaved workspace", () => {
     const { disk, store } = failingDisk(files);
     const { service, hub } = desktop(store);
     const w = hub.connect();
+    w.bridge.workspace.read(); // a page reads the workspace (hydration) before changing it
     w.bridge.workspace.write(record(2)); // the advisor's latest change, not yet on disk
     expect(service.queue.dirty).toBe(true);
     disk.full = true;
@@ -66,6 +70,7 @@ describe("C. a failed restore keeps the earlier unsaved workspace", () => {
     files.write(record(1));
     const { service, hub } = desktop(files);
     const w = hub.connect();
+    w.bridge.workspace.read(); // a page reads the workspace (hydration) before changing it
     w.bridge.workspace.write(record(2));
     const r = w.bridge.workspace.writeNow(JSON.stringify({ state: [], version: 11 }));
     expect(r.ok).toBe(false);
@@ -78,6 +83,7 @@ describe("C. a failed restore keeps the earlier unsaved workspace", () => {
     files.write(record(1));
     const { service, hub } = desktop(files);
     const w = hub.connect();
+    w.bridge.workspace.read(); // a page reads the workspace (hydration) before changing it
     w.bridge.workspace.write(record(2));
     expect(w.bridge.workspace.writeNow(record(3)).ok).toBe(true);
     expect(service.queue.dirty).toBe(false);
@@ -91,6 +97,7 @@ describe("C. a failed restore keeps the earlier unsaved workspace", () => {
     const { disk, store } = failingDisk(files);
     const { service, hub } = desktop(store);
     const w = hub.connect();
+    w.bridge.workspace.read(); // a page reads the workspace (hydration) before changing it
     (globalThis as { window?: unknown }).window = { stratovellDesktop: w.bridge };
     const m = await import("@/store/useStore");
     const backup = await import("@/engines/workspaceBackup");
@@ -168,6 +175,7 @@ describe("A. an unreadable workspace is never mistaken for a new installation", 
     expect(service.firstRun).toBe(false);
     expect(service.loadProblem?.problems.length).toBeGreaterThan(0);
     const w = hub.connect();
+    w.bridge.workspace.read(); // a page reads the workspace (hydration) before changing it
     (globalThis as { window?: unknown }).window = { stratovellDesktop: w.bridge };
     const m = await import("@/store/useStore");
     expect(m.useAtlasStore.getState().hasHydrated).toBe(true);
@@ -186,6 +194,7 @@ describe("A. an unreadable workspace is never mistaken for a new installation", 
     writeFileSync(files.previous, "garbage B");
     const { service, hub } = desktop(new WorkspaceFileStore(dir, () => new Date("2026-11-25T09:00:00Z")));
     const w = hub.connect();
+    w.bridge.workspace.read(); // a page reads the workspace (hydration) before changing it
     expect(w.bridge.workspace.continueAfterLoadProblem()).toEqual({ ok: true });
     expect(service.loadProblem).toBeNull();
     const kept = join(dir, "unreadable-2026-11-25T09-00-00-000Z");
@@ -202,6 +211,7 @@ describe("A. an unreadable workspace is never mistaken for a new installation", 
     writeFileSync(join(dir, "workspace.json"), "garbage A");
     const { service, hub } = desktop(files);
     const w = hub.connect();
+    w.bridge.workspace.read(); // a page reads the workspace (hydration) before changing it
     expect(w.bridge.workspace.writeNow(record(7))).toEqual({ ok: true });
     expect(service.loadProblem).toBeNull();
     expect(readFileSync(join(dir, "unreadable-2026-11-25T09-00-00-000Z", "workspace.json"), "utf8")).toBe("garbage A");
@@ -226,5 +236,178 @@ describe("A. an unreadable workspace is never mistaken for a new installation", 
     s.write(record(4));
     s.write(record(5));
     expect(readFileSync(join(r.recovery!.movedAside!, "workspace.previous.json"), "utf8")).toBe("garbage previous");
+  });
+});
+
+describe("B. several windows can't overwrite newer changes with a stale workspace", () => {
+  /** Opens a Stratovell window (a new page with its own store) on the shared main process. */
+  async function openWindow(hub: ReturnType<typeof ipcHub>) {
+    const w = hub.connect();
+    w.bridge.workspace.read(); // a page reads the workspace (hydration) before changing it
+    vi.resetModules();
+    (globalThis as { window?: unknown }).window = { stratovellDesktop: w.bridge };
+    const m = await import("@/store/useStore");
+    return { w, m, store: m.useAtlasStore, s: () => m.useAtlasStore.getState() };
+  }
+  const onDisk = (files: WorkspaceFileStore, service: WorkspaceService) => (service.flush(), JSON.parse(files.read().value!).state);
+
+  function twoWindows() {
+    const files = new WorkspaceFileStore(dir);
+    const { service, hub } = desktop(files);
+    return { files, service, hub };
+  }
+
+  it("hydration in a second window (the meeting view) writes nothing, and the first window's next change is saved", async () => {
+    const { files, service, hub } = twoWindows();
+    const review = await openWindow(hub);
+    review.s().setClient({ fullName: "Edited in Review" });
+    const rev = service.revision;
+    service.flush();
+    const saved = files.read().value;
+    const meeting = await openWindow(hub);
+    expect(meeting.s().client.fullName).toBe("Edited in Review");
+    expect(service.revision).toBe(rev);
+    service.flush();
+    expect(files.read().value).toBe(saved);
+    review.s().setClient({ fullName: "Edited again in Review" });
+    expect(onDisk(files, service).client.fullName).toBe("Edited again in Review");
+    // The meeting view follows: it reloads the newer workspace without writing it back.
+    expect(meeting.s().client.fullName).toBe("Edited again in Review");
+    expect(service.revision).toBe(rev + 1);
+  });
+
+  it("a stale window's change is refused: the newer change stays on disk, and that window reloads the latest and says why", async () => {
+    const { files, service, hub } = twoWindows();
+    const review = await openWindow(hub);
+    const meeting = await openWindow(hub);
+    const told: string[] = [];
+    meeting.w.bridge.onWorkspaceChanged((reason) => told.push(reason));
+    meeting.w.hold(); // the meeting view hasn't processed "the workspace changed" yet
+    review.s().setClient({ fullName: "Newer, from Review" });
+    meeting.s().setAdvisor({ name: "Stale edit from the meeting view" });
+    const disk = onDisk(files, service);
+    expect(disk.client.fullName).toBe("Newer, from Review");
+    expect(disk.advisor.name).not.toBe("Stale edit from the meeting view");
+    expect(told).toEqual(["stale"]);
+    expect(meeting.s().client.fullName).toBe("Newer, from Review");
+    expect(meeting.s().advisor.name).not.toBe("Stale edit from the meeting view");
+    meeting.w.deliver(); // the late notice changes nothing more
+    expect(told).toEqual(["stale"]);
+    expect(meeting.s().client.fullName).toBe("Newer, from Review");
+    expect(onDisk(files, service).client.fullName).toBe("Newer, from Review");
+  });
+
+  it("synchronized windows keep each other's unrelated edits", async () => {
+    const { files, service, hub } = twoWindows();
+    const a = await openWindow(hub);
+    const b = await openWindow(hub);
+    a.s().setClient({ fullName: "Client edited in A" });
+    b.s().setAdvisor({ name: "Advisor edited in B" });
+    a.s().setClient({ investmentObjective: "Objective edited in A" });
+    const disk = onDisk(files, service);
+    expect([disk.client.fullName, disk.client.investmentObjective, disk.advisor.name]).toEqual(["Client edited in A", "Objective edited in A", "Advisor edited in B"]);
+    for (const w of [a, b]) expect([w.s().client.fullName, w.s().advisor.name]).toEqual(["Client edited in A", "Advisor edited in B"]);
+  });
+
+  it("an approved version made in one window survives a stale write from another, and both windows keep it afterwards", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-26T12:00:00Z"));
+    try {
+      const { files, service, hub } = twoWindows();
+      const review = await openWindow(hub);
+      const other = await openWindow(hub);
+      await approvedStory(review.m);
+      const r = review.s().approveVersion("Approved in Review (synthetic).");
+      if (!r.ok) throw new Error(r.failing.join("; "));
+      other.w.hold();
+      review.s().setClient({ fullName: "After approval" });
+      other.s().setClient({ fullName: "Stale window, before the approval" }); // refused
+      let disk = onDisk(files, service);
+      expect(disk.snapshots.map((x: { id: string }) => x.id)).toEqual([r.snapshot.id]);
+      expect(disk.client.fullName).toBe("After approval");
+      other.w.deliver();
+      other.s().setAdvisor({ name: "Later edit from the other window" });
+      disk = onDisk(files, service);
+      expect(disk.snapshots).toEqual([JSON.parse(JSON.stringify(r.snapshot))]);
+      expect(disk.advisor.name).toBe("Later edit from the other window");
+      expect(review.s().snapshots).toHaveLength(1);
+      expect(other.s().snapshots).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a restore from a stale window is refused, and changes nothing", async () => {
+    const { files, service, hub } = twoWindows();
+    const a = await openWindow(hub);
+    const b = await openWindow(hub);
+    b.w.hold();
+    a.s().setClient({ fullName: "Newer, from A" });
+    const r = b.w.bridge.workspace.writeNow(JSON.stringify({ state: { ...b.s(), client: { ...b.s().client, fullName: "Restored in stale B" } }, version: 11 }));
+    expect(r.ok).toBe(false);
+    expect(onDisk(files, service).client.fullName).toBe("Newer, from A");
+  });
+});
+
+/** The managed-account story from approvedSnapshot.test.ts: every readiness check passes, so a version can be approved. */
+async function approvedStory(m: typeof import("@/store/useStore")) {
+  const desk = await import("@/engines/allocationDesk");
+  const proposals = await import("@/engines/strategyProposals");
+  const { normalizeHoldings } = await import("@/engines/normalizationEngine");
+  const story = await import("@/data/umaStory");
+  const store = () => m.useAtlasStore.getState();
+  const ACC = "acc_uma_story";
+  store().startNewClient();
+  m.useAtlasStore.setState({
+    client: { ...store().client, fullName: "Managed Story Household", proposalOutputCurrency: "USD" },
+    accounts: [story.UMA_ACCOUNT],
+    holdings: [story.UMA_CASH],
+    recommendations: [],
+    fxRates: [],
+  });
+  store().setDraftScope([ACC]);
+  store().setAccountFunding(ACC, { cashHoldingId: "h_uma_cash", reserve: 5_000, reserveCurrency: "USD" });
+  store().addSyntheticLibrary();
+  store().pinModel({ id: "mdl_uma_core", revision: 1 });
+  const s = store();
+  const { sleevePlan, sleevePurchases, accountBasis } = { ...desk, ...proposals } as unknown as Record<string, (a: unknown) => never>;
+  const plan = sleevePlan({
+    model: story.UMA_STRATEGY_MODEL,
+    strategies: s.strategies,
+    basis: accountBasis({ account: s.accounts.find((a) => a.id === ACC), holdings: normalizeHoldings(s.holdings, s.fxRates, "USD"), fx: { reportingCurrency: "USD", rates: s.fxRates } }),
+  });
+  store().addDraftEdit(sleevePurchases({ plan, accountId: ACC, ids: { group: "grp_story", rec: (sid: string) => `rec_story_${sid}` }, now: new Date().toISOString() }));
+  for (const id of store().workingDraft.memberIds) {
+    const r = store().recommendations.find((x) => x.id === id)!;
+    store().upsertRecommendation({ ...r, approvedByAdvisor: true, status: "approved", includeInPdf: true });
+  }
+  const cRec = store().recommendations.find((r) => r.destination?.id === "sleeve_acc_uma_story_str_etf_c_r1");
+  if (cRec) store().recordSleeveReview(cRec.id, "No published minimum; reviewed with the sponsor's terms (synthetic).");
+}
+
+describe("the workspace bridge still answers only the app's own pages", () => {
+  it("a page from anywhere else reads nothing and can't save, restore, remove or continue; nothing on disk changes", async () => {
+    const { isAppUrl } = await import("../desktop/shared/policy");
+    const files = new WorkspaceFileStore(dir);
+    files.write(record(1));
+    const service = new WorkspaceService(files, { delayMs: 60_000 });
+    service.load();
+    const hub = ipcHub();
+    const origin = "http://127.0.0.1:47613";
+    registerWorkspaceIpc(hub.main, service, { allowed: (e) => isAppUrl(e.senderFrame?.url ?? "", origin) });
+    const before = readFileSync(files.file, "utf8");
+    for (const url of ["https://example.com/", "http://127.0.0.1:47614/", "file:///C:/x.html"]) {
+      const w = hub.connect(url);
+      expect(w.bridge.workspace.read()).toBeNull();
+      w.bridge.workspace.write(record(9));
+      expect(w.bridge.workspace.writeNow(record(9)).ok).toBe(false);
+      w.bridge.workspace.remove();
+      expect(w.bridge.workspace.continueAfterLoadProblem().ok).toBe(false);
+    }
+    service.flush();
+    expect(readFileSync(files.file, "utf8")).toBe(before);
+    expect(service.revision).toBe(0);
+    const own = hub.connect(`${origin}/review`);
+    expect(own.bridge.workspace.read()).toBe(record(1));
   });
 });

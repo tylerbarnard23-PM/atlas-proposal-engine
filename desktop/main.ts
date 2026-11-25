@@ -117,7 +117,14 @@ function notifySaveProblem(error: string | null) {
 }
 
 function registerBridge() {
-  registerWorkspaceIpc(ipcMain as unknown as Parameters<typeof registerWorkspaceIpc>[0], workspace, { allowed: workspaceSender, onSaveProblem: notifySaveProblem });
+  registerWorkspaceIpc(ipcMain as unknown as Parameters<typeof registerWorkspaceIpc>[0], workspace, {
+    allowed: workspaceSender,
+    onSaveProblem: notifySaveProblem,
+    // Codex finding B: after an accepted change, every other window reloads the latest workspace.
+    broadcast: (except, channel, ...args) => {
+      for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed() && w.webContents.id !== except) w.webContents.send(channel, ...args);
+    },
+  });
   ipcMain.on("stratovell:app:info", (e) => {
     if (!workspaceSender(e)) return void (e.returnValue = null);
     const b = buildInfo();

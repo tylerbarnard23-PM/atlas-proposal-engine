@@ -10,7 +10,7 @@ import type { StateStorage } from "zustand/middleware";
 export interface DesktopWorkspaceBridge {
   /** The saved workspace text, or null for a fresh installation. Synchronous, so hydration matches localStorage. */
   read(): string | null;
-  /** Queues a save (coalesced by the main process; flushed on quit). */
+  /** Queues a save (coalesced by the main process; flushed on quit). Refused when another window saved a newer workspace first. */
   write(value: string): void;
   /** Saves at once and reports the outcome (used by restore, which must know whether the save succeeded). */
   writeNow(value: string): { ok: true } | { ok: false; error: string };
@@ -46,6 +46,32 @@ export interface DesktopBridge {
   info(): DesktopAppInfo;
   /** Called when a queued save failed; returns an unsubscribe function. */
   onSaveProblem(cb: (error: string | null) => void): () => void;
+  /**
+   * Called when another Stratovell window saved a newer workspace ("other-window"), or when this page's own
+   * change was refused because of it ("stale"). Returns an unsubscribe function.
+   */
+  onWorkspaceChanged(cb: (reason: "other-window" | "stale") => void): () => void;
+}
+
+// While the store reloads a workspace another window saved, it writes nothing back (Codex finding B).
+let reloading = 0;
+
+/**
+ * In the desktop application, keeps this window's store in step with the
+ * others: when another window saves a newer workspace, or this window's change
+ * is refused as stale, `reload` reads the latest workspace without saving it back.
+ */
+export function followDesktopWorkspace(reload: () => unknown) {
+  const desktop = desktopBridge();
+  if (!desktop || typeof desktop.onWorkspaceChanged !== "function") return;
+  desktop.onWorkspaceChanged(() => {
+    reloading++;
+    try {
+      reload();
+    } finally {
+      reloading--;
+    }
+  });
 }
 
 /** The desktop bridge when running inside the Stratovell desktop application, else null. */
@@ -62,7 +88,7 @@ export function workspaceStorage(key: string): StateStorage | undefined {
     return {
       getItem: (name) => (name === key ? desktop.workspace.read() : null),
       setItem: (name, value) => {
-        if (name === key) desktop.workspace.write(value);
+        if (name === key && !reloading) desktop.workspace.write(value);
       },
       removeItem: (name) => {
         if (name === key) desktop.workspace.remove();
