@@ -2,6 +2,12 @@
 
 Stratovell is a desktop application: it is downloaded and runs on the user's own computer. Real Claude analysis runs inside it with the user's own Anthropic API key. The public website is the product and download entry, with a separately labelled scripted preview. Hosted Claude connectivity (#113) is retired ([HOSTED_CLAUDE.md](HOSTED_CLAUDE.md)).
 
+**Review status (25 November 2026):**
+- Codex's review of `fd2db60` was **not approved**, with four findings: A, an unreadable workspace; B, several windows; C, a failed restore; D, the first-session confirmation.
+- All four are fixed on PR #117 with regression tests, and await an independent Codex re-review.
+- The 0.1.0 UAT installer was built from `476e71d`, **before** these fixes.
+- *Install as app* was assessed in [INSTALL_AS_APP_ASSESSMENT.md](INSTALL_AS_APP_ASSESSMENT.md): this Electron route stays.
+
 **Status (24 November 2026):** a Windows x64 build exists for **private UAT only**. It is **unsigned**, and there is **no public download**. The website states this ([`src/domain/desktopRelease.ts`](../../src/domain/desktopRelease.ts) holds no release). MCP is planned, not built.
 
 ## How it works
@@ -14,8 +20,15 @@ Stratovell is a desktop application: it is downloaded and runs on the user's own
 - **Workspace persistence** ([`desktop/shared/workspaceFile.ts`](../../desktop/shared/workspaceFile.ts), [`src/store/workspaceStorage.ts`](../../src/store/workspaceStorage.ts)):
   - **What is saved:** the same persisted string (store v11) that the browser keeps in `localStorage`, saved by the main process in `%APPDATA%\Stratovell\workspace\workspace.json`. That is outside the installation folder and independent of the port.
   - **How:** saves are coalesced (300 ms) and atomic (temporary file, fsync, rename). The replaced copy is kept as `workspace.previous.json`, and the first save of each day goes to `backups/` (the newest 14 are kept).
-  - **Recovery:** an unreadable file is moved aside, never deleted; the newest readable copy opens, with a notice. A failed save shows an alert and is retried every 5 seconds.
-  - **Restore:** saves at once, and changes nothing if the save fails.
+  - **Recovery:**
+    - Every unreadable file met on the way is copied into `unreadable-<time>/`, or moved there when it can't even be read; nothing is deleted. The newest readable copy then opens, with a notice.
+    - **When files exist but none is readable** (malformed, or reading fails), that is never treated as a new installation. Nothing on disk changes, and the main process refuses saves and removal. A blocking notice offers three choices: restore a backup, start over with the fictional sample, or quit. Restore and start over each keep the unreadable files first.
+    - A failed save shows an alert and is retried every 5 seconds.
+  - **Restore:** saves at once and changes nothing if the save fails. A change still queued is written first and is never discarded by a failed restore.
+  - **Several windows** (the meeting view and the template preview are Stratovell windows too): each change carries the workspace revision its window last read.
+    - A change based on an older revision is refused, and that window reloads the latest workspace and says so. An unchanged save is a no-op.
+    - After an accepted change, the other windows reload without saving anything back.
+  - **Getting started** replaces the workspace without a question only while it is still the untouched fictional sample, judged by its content.
 - **Local Claude state** (pairing, connection record without the key, session counters) lives in `%APPDATA%\Stratovell\local-state`; logs are in `logs\`.
 - **PDFs:**
   - The final-PDF route builds and re-gates the proposal exactly as before, then hands the finished HTML to the main process.
@@ -35,7 +48,7 @@ Stratovell is a desktop application: it is downloaded and runs on the user's own
 
 ## Security boundary
 
-- **Renderer:** sandboxed, context-isolated, no Node integration. It reaches the main process only through the preload bridge ([`desktop/preload.ts`](../../desktop/preload.ts)), which offers read, queue, save-now and remove calls for the workspace, plus the app's own information. Every call is validated and answered only for pages served by the app's own origin.
+- **Renderer:** sandboxed, context-isolated, no Node integration. It reaches the main process only through the preload bridge ([`desktop/preload.ts`](../../desktop/preload.ts), built in [`desktop/shared/bridgeClient.ts`](../../desktop/shared/bridgeClient.ts)). The bridge offers read, save, save-now, remove and continue-after-a-load-problem calls for the workspace (handled in [`desktop/shared/workspaceIpc.ts`](../../desktop/shared/workspaceIpc.ts)), plus the app's own information. Every call is validated and answered only for pages served by the app's own origin.
 - **Navigation and network:**
   - Pages may navigate and send requests only within the app's own origin.
   - https links open in the user's browser; nothing else opens.

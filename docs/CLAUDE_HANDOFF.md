@@ -1,10 +1,21 @@
 # Handoff
 
-## Current checkpoint — 24 November 2026: Stratovell becomes a desktop application (#116, PR open for Codex review and owner UAT); hosted pilot retired; production rollback awaits the owner's Vercel re-verification
+## Current checkpoint — 25 November 2026: PR #117 fixes Codex findings A–D (awaiting independent Codex re-review); Install as app assessed (stay with Electron); production rollback still awaits the owner's Vercel re-verification
+
+- **25 November (this batch, source work and headless tests only; Electron not launched, no installer run):**
+  - **Codex review of `fd2db60`: NOT approved, with four findings.** All four are now fixed on PR #117, each with regression tests that failed before the fix and pass after it (`tests/desktopReliability.test.ts`; failing-first logs outside Git in `evidence/pr117-fixes-2026-11-25/`):
+    - **A:** an unreadable workspace is reported as unreadable, never as new. Nothing is changed, saving is paused until the advisor chooses, and the unreadable files are kept in `unreadable-<time>/`.
+    - **B:** writes are checked against a revision, so a stale window can't overwrite newer changes or approved versions.
+    - **C:** a failed restore keeps the earlier unsaved workspace.
+    - **D:** Getting started asks unless the workspace is the untouched sample, judged by content.
+  - **The IPC handlers and the preload bridge now live in `desktop/shared/`**, so the tests drive the real code over an in-memory IPC.
+  - **The freeze wording is corrected** (see the incident below).
+  - **Install as app:** [INSTALL_AS_APP_ASSESSMENT.md](roadmap/INSTALL_AS_APP_ASSESSMENT.md). The recommendation is to keep the Electron route; no port, second UI or MCP.
+  - **Not covered by this batch:** the fixes are not checked in a running app (the notices are unrendered, and the cost of the synchronous save call is unmeasured). The 0.1.0 installer (built from `476e71d`) is the **pre-fix** artifact.
 
 - **Released before this checkpoint (detail in [history (24 November)](CLAUDE_HANDOFF_HISTORY_2026-11-24.md) and earlier files):** D1–D4, the D5 gates and fixes, the Stratovell rename, PR #110 (`58deeb0`), PR #112 (`1f17770`) and **PR #115 (#113), merged as `831612cbb95bb91d528dfcb438dd612de03a41fe`**, release-verified (main CI, Production deployment 8032420343, smoke 18/18). Saved examples, "Approve all eligible", the analysis-inputs summary and the `target_pct` label from #115 remain.
 - **Hosted pilot (#113), live briefly on 24 November and now retired.** It ran owner-only on Production, with a Neon Free database, a GitHub allow-list of `tylerbarnard23-PM`, and zero provider requests; no real Claude analysis ran. The checkpoint is REPORT.md section 32 and the [PR #115 comment](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/pull/115#issuecomment-7139409869).
-  - **Retained, inactive, nothing deleted:** Neon `stratovell-hosted` and its integration and rows, `STRATOVELL_CREDENTIAL_KEYS`, the GitHub OAuth app (exactly one active secret, "Last used"; the exposed one was revoked by the owner) and the Production variables.
+  - **Retained, nothing deleted, and not inactive:** until the owner verifies the rollback, production still runs the hosted pilot (`COPILOT_MODE=hosted` at `831612c`) and uses this infrastructure. It covers Neon `stratovell-hosted` and its integration and rows, `STRATOVELL_CREDENTIAL_KEYS`, the GitHub OAuth app (exactly one active secret, "Last used"; the exposed one was revoked by the owner) and the Production variables.
   - **Production rollback:** authorized by the owner on 24 November: set `COPILOT_MODE=demo`, then redeploy the approved release. It is **not yet done**: Vercel requires the owner's own re-verification (passkey or authenticator) to edit that variable, so I cancelled the prompt and changed nothing. Until it is done, production still runs hosted mode at `831612c`. Once this PR is merged, the code itself treats `hosted` as the scripted demo.
   - The two-account hosted tests are superseded.
 - **#116 desktop application, PR open:** branch `feat/desktop-windows-app` from main `831612c`. The impact note is on [#116](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/116). Architecture, build, signing and update path: [DESKTOP_APP.md](roadmap/DESKTOP_APP.md).
@@ -15,10 +26,14 @@
     - **Window and quit:** a single instance; hardware acceleration off; closing stops the session and keeps its counters.
     - **Pages:** the welcome workflow page, the website's `/download` entry (no link until an approved release is recorded) and the preview banner.
   - **Hosted code removed:** sign-in, cloud keys, Postgres, their routes and `pg`.
-  - **Installer:** `Stratovell-Setup-0.1.0-x64-unsigned-UAT.exe`, **unsigned, for private UAT**. Its size, SHA-256 and source commit are on the PR and in REPORT.md section 33.
-  - **Tested on Windows 11 Home 10.0.26200 only (the build machine). No clean-machine test.** The installed-application results are on the PR.
-- **Incident, 24 November:** the first visible window of an Electron 45 build froze the build laptop (hybrid AMD and NVIDIA graphics with a 2022 NVIDIA driver), and the owner had to force a restart. No events were logged during the freeze. The most likely cause is a GPU-driver hang.
-  - **Fixes:** the application now runs with hardware acceleration off. Automated checks also pass `--disable-gpu`, use an off-screen window and kill the process tree through a watchdog.
+  - **Installer:** `Stratovell-Setup-0.1.0-x64-unsigned-UAT.exe`, **unsigned, for private UAT**. It was built from `476e71d`, before the A–D fixes; its size, SHA-256 and source are on the PR and in REPORT.md section 33. It isn't relabelled, and no installer has been rebuilt yet.
+  - **Tested on Windows 11 Home 10.0.26200 only (the build machine). No clean-machine test.**
+    - The 68 installed-app checks are my own reported results; Codex hasn't repeated them independently.
+    - No real Claude request was made, and no public download is approved.
+- **Incident, 24 November:** the computer froze during the first visible desktop-window test of an unpacked Electron 45 build (hybrid AMD/NVIDIA laptop, 2022 NVIDIA driver). The owner forced a restart.
+  - **The cause is unconfirmed.** A graphics-driver hang is a hypothesis only.
+  - **Mitigations, not guarantees:** hardware acceleration is off. Later automated checks ran off-screen with `--disable-gpu` and a watchdog, and nothing froze again. That doesn't show a freeze can't recur, and those scripted checks were not a recovery test of the incident.
+  - **Evidence** is kept outside Git (`evidence/pr116-desktop-2026-11-24/incident-and-run-logs/`, REPORT.md section 33).
 - **Separate follow-ups (unchanged, not in #116):**
   - [#114](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/114): final-PDF pagination. The Client Profile section overflows onto a near-blank page, and footer numbers don't match the PDF's pages.
   - **The restriction-confirmation finding:** re-entering an unchanged restricted list records nothing (`ListQuestion` in `src/components/profile/DiscoveryQuestionnaire.tsx`). It needs an explicit "Confirm existing restrictions" followed by separate review. Restrictions stay enforced throughout.
@@ -30,15 +45,17 @@
   - D5: the R25 study itself (when participants exist); deferred mobile findings [#92](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/92), [#93](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/93), [#97](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/97) (draft PR #98 parked); the secrets and exposure gate items before any publication.
   - Agent: the 27-trial evaluation and real-model browser checks (budget unapproved; one owner-operated run has passed); finding 3's pairing policy; [#83](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/83); [#84](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/84).
   - Other: #76. Real-client use still requires #59.
-- **Next action (pickup order, saved 24 November 2026):**
-  1. **The owner completes the production rollback** (already authorized): re-verify in Vercel, set Production `COPILOT_MODE=demo`, redeploy the approved release (`831612c`), then the keyless check. The site must be scripted, and hosted credential, session and analysis operations must be refused, also with an existing signed-in cookie. Record it on #116 and PR #115. Delete nothing.
-  2. **Codex reviews the #116 PR** at its exact head:
-     - persistence and recovery;
-     - the desktop boundary (environment, IPC, navigation, fuses, contents check);
-     - the PDF print path;
-     - the hosted retirement;
-     - the welcome and download pages.
-  3. **The owner's desktop UAT** with the installer (checklist in `evidence/pr116-desktop-2026-11-24/DESKTOP-UAT-CHECKLIST.md`, outside Git), ideally including a second, clean Windows computer. Record failures; fix nothing silently.
+- **Next action (pickup order, saved 25 November 2026):**
+  1. **An independent Codex re-review of PR #117** at its new head (named in the PR description). The focus is the four fixes: the load-problem state and the kept copies; the revision check and the following between windows; save-now with a pending queue; and the content-based welcome confirmation. Address its findings, each with a regression test written first.
+  2. **Only after that review passes:** rebuild the installer from the reviewed commit, with a new checksum and manifest. Keep the record of the `476e71d` 0.1.0 installer.
+     - The installed-app check needs the owner's explicit go-ahead because of the freeze: no GPU, an off-screen window and the watchdog.
+     - Then the owner's UAT (checklist outside Git: `evidence/pr116-desktop-2026-11-24/DESKTOP-UAT-CHECKLIST.md`), ideally on a second, clean Windows computer. Record failures; fix nothing silently.
+  3. **Separately, when the owner's Vercel re-verification is available:** the authorized production rollback.
+     - Set Production `COPILOT_MODE=demo` and redeploy `831612c`.
+     - Then run the keyless check: the site must be scripted, and hosted credential, session and analysis operations must be refused, also with an existing signed-in cookie.
+     - Record it on #116 and PR #115. Delete nothing.
+
+     This step doesn't block steps 1 and 2.
   4. **Release decisions (owner):** code signing (a certificate, purchased only on the owner's instruction); where installers are published; when `src/domain/desktopRelease.ts` records an approved release; counsel's clearance of the name (#35).
   5. **Only then:** the recorder update and a free labelled rehearsal on the desktop build; separate approval before any real Claude analysis (the USD 5 take is still **unapproved**); the cut review before replacing the Windows voice.
   - Merge, publication of an installer, announcement, paid requests, re-recording, mobile and MCP work all need the owner's explicit instruction. Keep #114 and the restriction finding separate. Preserve all originals, recordings, voiceover packages, the stash, worktrees, `launch.json` and browser data. See "Next task" in [CLAUDE_COMMANDS.md](roadmap/CLAUDE_COMMANDS.md).

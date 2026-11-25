@@ -55,7 +55,32 @@ Stop for Codex review with exact head, checks, preview association, remaining li
 
 D1 (PR #72, `0381db1`), D2 (PR #75, `073049f`), D2a (PR #79, `c0ee4e9`), D3 (PR #81, `85b3910`) and **D4 (PR #82, `3738588`, 16 November 2026)** are released; the commands below the next one are historical, so do not rerun them. **D5 is in progress** (desktop-first since 18 November 2026: mobile work is deferred).
 
-### Next task: production rollback, Codex review of the #116 desktop PR, then owner UAT
+### Next task: independent Codex re-review of PR #117's A–D fixes; the rollback stays a separate owner-dependent step
+
+Saved on 25 November 2026. This supersedes the 24 November command below.
+
+```
+Re-review Stratovell PR #117 (branch feat/desktop-windows-app) at the head named in its description.
+Verify the local and GitHub heads, the tree, the stash and the worktrees first, and preserve newer work.
+Read docs/CLAUDE_HANDOFF.md, docs/roadmap/DESKTOP_APP.md and REPORT.md section 33.
+
+Review the fixes for Codex findings A–D:
+- A: the unreadable-workspace state, refused saves, and the kept copies;
+- B: revision-checked writes and following other windows;
+- C: save-now with a pending queue;
+- D: the content-based Getting started confirmation.
+Also review the desktop/shared IPC and bridge extraction, and tests/desktopReliability.test.ts.
+
+Record any finding with a regression test written first.
+
+Source work and headless tests only: do not launch Electron, run installers or automate Windows dialogs. Rebuild the installer only after the review passes and the owner says so.
+
+The production rollback is separate: it waits for the owner's Vercel re-verification and preserves Neon, OAuth and secrets.
+
+Need explicit instruction: merge, deployment, publication, a paid or model request, recording, a signing purchase, mobile work or MCP work. The USD 5 take is unapproved.
+```
+
+### Superseded: production rollback, Codex review of the #116 desktop PR, then owner UAT
 
 Saved on 24 November 2026. Stratovell is now a desktop application (#116; [DESKTOP_APP.md](DESKTOP_APP.md)). PR #115 was merged as `831612cbb95bb91d528dfcb438dd612de03a41fe` and its hosted mode is retired on the #116 branch (`feat/desktop-windows-app`, from `831612c`). The PR description names the head to review. **Merge, publication of an installer, announcement, paid requests, re-recording, mobile and MCP work are separate decisions, none given.** Verify heads, tree, stash and worktrees first, and preserve newer work.
 
