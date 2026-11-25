@@ -411,3 +411,85 @@ describe("the workspace bridge still answers only the app's own pages", () => {
     expect(own.bridge.workspace.read()).toBe(record(1));
   });
 });
+
+describe("D. Getting started never replaces entered work without asking, even in the first application session", () => {
+  /** The first application session: nothing saved yet, so the app reports firstRun. */
+  async function firstSession() {
+    const files = new WorkspaceFileStore(dir);
+    const { service, hub } = desktop(files);
+    expect(service.firstRun).toBe(true);
+    const w = hub.connect();
+    (globalThis as { window?: unknown }).window = { stratovellDesktop: w.bridge };
+    const m = await import("@/store/useStore");
+    const flow = await import("@/domain/desktopWorkflow");
+    const s = () => m.useAtlasStore.getState();
+    /** What Getting started's two buttons do (src/app/welcome/page.tsx). */
+    const choose = (choice: "new-client" | "sample", answer: boolean) => {
+      const asked: string[] = [];
+      const go = flow.confirmWelcomeChoice(choice, m.isUntouchedSample(s()), (msg) => (asked.push(msg), answer));
+      if (go) (choice === "sample" ? s().resetSeed : s().startNewClient)();
+      return asked;
+    };
+    return { m, s, choose };
+  }
+
+  it("the untouched fictional sample is replaced without a question, by either choice", async () => {
+    const { m, s, choose } = await firstSession();
+    expect(m.isUntouchedSample(s())).toBe(true);
+    expect(choose("sample", false)).toEqual([]);
+    expect(choose("new-client", false)).toEqual([]);
+    expect(s().client.fullName).toBe("");
+  });
+
+  it("Create a new client asks once work has been entered; declining keeps the work", async () => {
+    const { m, s, choose } = await firstSession();
+    s().setClient({ fullName: "Entered in the first session" });
+    expect(m.isUntouchedSample(s())).toBe(false);
+    const asked = choose("new-client", false);
+    expect(asked).toHaveLength(1);
+    expect(asked[0]).toMatch(/^Start a new client\?/);
+    expect(s().client.fullName).toBe("Entered in the first session");
+    expect(choose("new-client", true)).toHaveLength(1);
+    expect(s().client.fullName).toBe("");
+  });
+
+  it("Explore the fictional sample asks once work has been entered; declining keeps the work", async () => {
+    const { s, choose } = await firstSession();
+    s().startNewClient();
+    s().setClient({ fullName: "A real-looking client, entered after Create a new client" });
+    const asked = choose("sample", false);
+    expect(asked).toHaveLength(1);
+    expect(asked[0]).toMatch(/^Open the fictional sample\?/);
+    expect(s().client.fullName).toBe("A real-looking client, entered after Create a new client");
+    choose("sample", true);
+    expect(s().client.fullName).toBe("Jonathan & Helena Blackwell");
+  });
+
+  it("work counts wherever it was entered: a discovery answer, an account, firm details or a recommendation", async () => {
+    const { m, s } = await firstSession();
+    const seed = m.useAtlasStore.getState();
+    const edits: [string, () => void][] = [
+      ["discovery answer", () => s().setDiscoveryNotDiscussed("liquidity_needs" as never)],
+      ["account", () => s().upsertAccount({ ...seed.accounts[0], id: "acc_new_by_advisor", name: "Opened by the advisor" })],
+      ["firm", () => s().setAdvisor({ firmName: "Advisor's own firm" })],
+      ["recommendation", () => m.useAtlasStore.setState({ recommendations: [{ id: "rec_x" } as never] })],
+    ];
+    for (const [what, edit] of edits) {
+      s().resetSeed();
+      expect(m.isUntouchedSample(s()), `untouched before the ${what}`).toBe(true);
+      edit();
+      expect(m.isUntouchedSample(s()), `touched after the ${what}`).toBe(false);
+    }
+    // Reloading the saved starting point (a second launch) is still untouched: timestamps don't count.
+    s().resetSeed();
+    vi.resetModules();
+    const again = await import("@/store/useStore");
+    expect(again.isUntouchedSample(again.useAtlasStore.getState())).toBe(true);
+  });
+
+  it("the welcome page decides by the workspace's content, not the launch-time first-run flag", () => {
+    const page = readFileSync(join(__dirname, "..", "src", "app", "welcome", "page.tsx"), "utf8");
+    expect(page).not.toMatch(/firstRun/);
+    expect(page.match(/confirmWelcomeChoice\("(new-client|sample)"/g)?.sort()).toEqual(['confirmWelcomeChoice("new-client"', 'confirmWelcomeChoice("sample"']);
+  });
+});

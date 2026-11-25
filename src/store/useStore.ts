@@ -315,6 +315,31 @@ const blankState = (): AtlasState => {
   };
 };
 
+/**
+ * #116, Codex finding D: whether the workspace is still the untouched fictional
+ * starting point (what the first launch opens), compared by content rather than
+ * by a launch-time flag. Only then may Getting started replace it without
+ * asking. The times stamped when the starting point was created are ignored;
+ * everything an advisor can enter or change is compared.
+ */
+export function isUntouchedSample(state: AtlasState): boolean {
+  return comparableStart(state) === comparableStart(seedState());
+}
+
+function comparableStart(s: AtlasState): string {
+  const data = JSON.parse(
+    JSON.stringify({
+      ...s,
+      hasHydrated: undefined,
+      proposal: { ...s.proposal, createdAt: undefined, updatedAt: undefined },
+      workingDraft: { ...s.workingDraft, createdAt: undefined, updatedAt: undefined },
+    })
+  );
+  const sorted = (v: unknown): unknown =>
+    Array.isArray(v) ? v.map(sorted) : v && typeof v === "object" ? Object.fromEntries(Object.keys(v as object).sort().map((k) => [k, sorted((v as Record<string, unknown>)[k])])) : v;
+  return JSON.stringify(sorted(data));
+}
+
 // Upgrades a workspace saved by an earlier version of the app. Exported so
 // each step can be unit-tested.
 export function migrateAtlasState(persisted: unknown, version: number): AtlasState {

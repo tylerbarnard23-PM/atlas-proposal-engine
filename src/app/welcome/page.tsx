@@ -7,9 +7,9 @@ import { ClientOnly } from "@/components/layout/ClientOnly";
 import { PageHeader, SectionDivider } from "@/components/ui/Section";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { useAtlasStore } from "@/store/useStore";
+import { isUntouchedSample, useAtlasStore } from "@/store/useStore";
 import { useDesktopInfo } from "@/components/layout/DesktopNotices";
-import { WORKFLOW_STEPS } from "@/domain/desktopWorkflow";
+import { confirmWelcomeChoice, WORKFLOW_STEPS } from "@/domain/desktopWorkflow";
 
 // #116: the first page of the Stratovell desktop application, and the guide to
 // its one advisor workflow. Reading it changes nothing and sends nothing.
@@ -28,15 +28,16 @@ function Inner() {
   const startNewClient = useAtlasStore((s) => s.startNewClient);
   const resetSeed = useAtlasStore((s) => s.resetSeed);
 
+  // Codex finding D: ask unless the workspace is still the untouched fictional starting point (by its content,
+  // never by the launch-time first-run flag), so work entered in the first session is never replaced silently.
+  const untouched = () => isUntouchedSample(useAtlasStore.getState());
   function newClient() {
-    if (!info?.firstRun && !confirm("Start a new client?\n\nThis clears the current client, accounts, holdings, recommendations, source documents and PDF history. Your firm & branding are kept."))
-      return;
+    if (!confirmWelcomeChoice("new-client", untouched(), (m) => window.confirm(m))) return;
     startNewClient();
     router.push("/client-profile");
   }
   function sample() {
-    if (!info?.firstRun && !confirm("Open the fictional sample?\n\nThis replaces the current workspace with the fictional Blackwell Family Office sample. It starts with no recommendations."))
-      return;
+    if (!confirmWelcomeChoice("sample", untouched(), (m) => window.confirm(m))) return;
     resetSeed();
     router.push("/");
   }

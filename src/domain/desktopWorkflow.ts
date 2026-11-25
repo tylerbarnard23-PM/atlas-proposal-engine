@@ -13,3 +13,21 @@ export const WORKFLOW_STEPS: { title: string; detail: string; href: string; plac
   { title: "Approve a version", detail: "An approved version freezes the proposal, its brief and its fingerprint.", href: "/review", place: "Review & present" },
   { title: "Issue the proposal PDF", detail: "The meeting view and the PDF show the same approved version.", href: "/review", place: "Review & present" },
 ];
+
+export type WelcomeChoice = "new-client" | "sample";
+
+/** What Getting started asks before replacing a workspace that holds entered work. */
+export const WELCOME_CONFIRMATIONS: Record<WelcomeChoice, string> = {
+  "new-client": "Start a new client?\n\nThis clears the current client, accounts, holdings, recommendations, source documents and PDF history. Your firm & branding are kept.",
+  sample: "Open the fictional sample?\n\nThis replaces the current workspace with the fictional Blackwell Family Office sample. It starts with no recommendations.",
+};
+
+/**
+ * Codex finding D: whether a Getting started choice may go ahead. It goes ahead
+ * without a question only while the workspace is still the untouched fictional
+ * starting point (by content, see isUntouchedSample in src/store/useStore.ts),
+ * never because of the launch-time first-run flag; otherwise the advisor confirms.
+ */
+export function confirmWelcomeChoice(choice: WelcomeChoice, workspaceUntouched: boolean, confirm: (message: string) => boolean): boolean {
+  return workspaceUntouched || confirm(WELCOME_CONFIRMATIONS[choice]);
+}
