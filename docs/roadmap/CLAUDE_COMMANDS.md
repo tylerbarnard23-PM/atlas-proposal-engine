@@ -55,9 +55,37 @@ Stop for Codex review with exact head, checks, preview association, remaining li
 
 D1 (PR #72, `0381db1`), D2 (PR #75, `073049f`), D2a (PR #79, `c0ee4e9`), D3 (PR #81, `85b3910`) and **D4 (PR #82, `3738588`, 16 November 2026)** are released; the commands below the next one are historical, so do not rerun them. **D5 is in progress** (desktop-first since 18 November 2026: mobile work is deferred).
 
-### Next task: independent Codex re-review of PR #117's A–D fixes; the rollback stays a separate owner-dependent step
+### Next task: Codex review of the #118 fix on PR #117; then, on the owner's instruction, 0.1.3 and the installed recovery re-run
 
-Saved on 25 November 2026. This supersedes the 24 November command below.
+Saved on 27 November 2026. This supersedes the 25 November command below.
+
+```
+Review the #118 fix on Stratovell PR #117 (branch feat/desktop-windows-app) at the head named in its description.
+Verify the local and GitHub heads, the tree, the stash and the worktrees first, and preserve newer work.
+Read docs/CLAUDE_HANDOFF.md, docs/roadmap/DESKTOP_APP.md, issue #118 and REPORT.md section 34.
+
+#118, found by the installed-app UAT of 0.1.2: a default Settings restore during a load problem kept the in-memory
+sample firm (or an edit typed while saving was paused) instead of the backup's firm. Review:
+- restoreTakesBackupFirm (src/engines/workspaceBackup.ts) and backupPreview's unreadable / fromBackup fields;
+- the store action restoreBackup and the Settings panel calling it;
+- the read-only stratovell:workspace:status IPC call and the bridge's loadProblem(), answered only for the app's own pages;
+- the "#118" block of tests/desktopReliability.test.ts;
+- that nothing changes outside a load problem.
+
+Record any finding with a regression test written first. Source work and headless tests only.
+
+Only after the review passes and the owner says so: build private UAT 0.1.3 in a new version folder (keep 0.1.0–0.1.2),
+then, with the owner's authorization for controlled launches (no GPU, watchdog, one isolated data folder), re-run the
+installed recovery stage, including a default restore during a load problem, and a short smoke test.
+
+The production rollback is separate: it waits for the owner's Vercel re-verification and preserves Neon, OAuth and secrets.
+
+Need explicit instruction: merge, deployment, publication, a paid or model request, recording, a signing purchase, mobile work or MCP work. The USD 5 take is unapproved.
+```
+
+### Previous task (done 25–27 November 2026; Codex's re-review passed at `82b7751`, 0.1.2 built and UAT-tested; don't rerun): independent Codex re-review of PR #117's A–D fixes
+
+Saved on 25 November 2026.
 
 ```
 Re-review Stratovell PR #117 (branch feat/desktop-windows-app) at the head named in its description.

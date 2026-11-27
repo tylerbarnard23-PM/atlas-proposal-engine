@@ -9,7 +9,8 @@ Stratovell is a desktop application: it is downloaded and runs on the user's own
   - a stale Settings restore;
   - a failed recovery restore that cleared the guard;
   - an unlistable backups path.
-- Everything awaits an independent Codex re-review.
+- Codex's re-review passed at `82b7751`.
+- The unsigned private-UAT build 0.1.2 was made from it and UAT-tested installed on 27 November. That test found one defect, [#118](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/118): a restore during a load problem kept the in-memory sample firm. It is fixed on the branch (not in 0.1.2) and awaits Codex review.
 - The 0.1.0 UAT installer was built from `476e71d`, **before** these fixes.
 - *Install as app* was assessed in [INSTALL_AS_APP_ASSESSMENT.md](INSTALL_AS_APP_ASSESSMENT.md). This Electron route stays: it is implemented, and a migration is still uncertain.
 
@@ -33,6 +34,7 @@ Stratovell is a desktop application: it is downloaded and runs on the user's own
     - A change still queued is written first and is never discarded by a failed restore.
     - A restore built in a window that hasn't seen a newer change is refused; that window refreshes and the advisor retries.
     - While the workspace is unreadable, a failed restore leaves saving blocked and the notice open.
+    - While the workspace is unreadable, a restore takes the backup's firm & branding. The window then holds only the fictional sample and unsaved edits, so keeping "the current firm" would keep the sample's (#118).
   - **Reading:** the current file is read first. A backups folder that can't be listed never blocks a healthy workspace, and the daily copy made on save is best-effort.
   - **Several windows** (the meeting view and the template preview are Stratovell windows too): each change carries the workspace revision its window last read.
     - A change based on an older revision is refused, and that window reloads the latest workspace and says so. An unchanged save is a no-op.
@@ -57,7 +59,7 @@ Stratovell is a desktop application: it is downloaded and runs on the user's own
 
 ## Security boundary
 
-- **Renderer:** sandboxed, context-isolated, no Node integration. It reaches the main process only through the preload bridge ([`desktop/preload.ts`](../../desktop/preload.ts), built in [`desktop/shared/bridgeClient.ts`](../../desktop/shared/bridgeClient.ts)). The bridge offers read, save, save-now, remove and continue-after-a-load-problem calls for the workspace (handled in [`desktop/shared/workspaceIpc.ts`](../../desktop/shared/workspaceIpc.ts)), plus the app's own information. Every call is validated and answered only for pages served by the app's own origin.
+- **Renderer:** sandboxed, context-isolated, no Node integration. It reaches the main process only through the preload bridge ([`desktop/preload.ts`](../../desktop/preload.ts), built in [`desktop/shared/bridgeClient.ts`](../../desktop/shared/bridgeClient.ts)). The bridge offers read, save, save-now, remove, continue-after-a-load-problem and a read-only load-problem status call for the workspace (handled in [`desktop/shared/workspaceIpc.ts`](../../desktop/shared/workspaceIpc.ts)), plus the app's own information. Every call is validated and answered only for pages served by the app's own origin.
 - **Navigation and network:**
   - Pages may navigate and send requests only within the app's own origin.
   - https links open in the user's browser; nothing else opens.

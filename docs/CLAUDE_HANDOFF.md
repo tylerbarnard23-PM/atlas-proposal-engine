@@ -1,7 +1,25 @@
 # Handoff
 
-## Current checkpoint — 25 November 2026: PR #117 fixes Codex findings A–D and the three re-review findings (awaiting independent Codex re-review); Install as app assessed (stay with Electron); production rollback still awaits the owner's Vercel re-verification
+## Current checkpoint — 27 November 2026: Codex's re-review of PR #117 passed at `82b7751`; private-UAT 0.1.2 built and UAT-tested installed; the one defect it found (#118) is fixed on the branch and awaits Codex review; production rollback still awaits the owner's Vercel re-verification
 
+- **27 November: #118 fixed on PR #117** (source work and headless tests; the 0.1.2 binary is unchanged and stays the tested artifact).
+  - **The defect:** found by the installed-app UAT. While every saved copy is unreadable, the window holds only the fictional sample, so a default Settings restore ("keep current firm & branding") saved the sample's firm, or an edit typed while saving was paused, instead of the backup's.
+  - **The fix:**
+    - One rule, `restoreTakesBackupFirm` in `src/engines/workspaceBackup.ts`: a restore takes the backup's firm when the advisor chooses it, or while the saved workspace is unreadable.
+    - A store action, `restoreBackup`, applies it; Settings calls that action.
+    - A read-only IPC call, `stratovell:workspace:status`, answered only for the app's own pages, tells the page about the load problem.
+    - During a load problem the preview says the workspace couldn't be read and that the firm comes from the backup.
+  - **Unchanged:** outside a load problem, nothing.
+  - **Evidence:** the "#118" block of `tests/desktopReliability.test.ts`, with a failing-first log outside Git in `evidence/fix-118-2026-11-27/`. The impact note is on [#118](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/118).
+- **27 November: installed-app UAT of 0.1.2**, owner-authorized. The first launch was visible, with the owner present; one isolated data folder; the test provider and dummy credentials only.
+  - **Results:** all five stages ran. Raw: 131 passed, 5 failed. Three failures were test-script faults, corrected. Two are #118.
+  - **Network:** no connection to a non-loopback address was observed.
+  - **Not reproduced manually:** the stale-restore race; it is covered headless only.
+  - **PDF:** the overflow pages are the existing #114, identical in 0.1.0.
+  - **Record:** outside Git, `evidence/pr117-uat-0.1.2-installed-2026-11-27/UAT-RESULTS.md`, and REPORT.md section 34.
+- **25 November, third batch:** Codex's source re-review passed at `82b7751b1f7bc03b7d001ee2ac859761f68f8c44` (CI: 992 tests and 2 private-fixture skips).
+  - The unsigned private-UAT installer **0.1.2** was built from it: `dist-desktop\0.1.2\…` (outside Git), 131,674,610 bytes, SHA-256 `bd14e02c18ad8b77d13340d42a39cc8b011246fb59adde86a009dc72f59d57a5`.
+  - 45 of 45 static checks passed.
 - **25 November, second batch: Codex's re-review of `055f99b`** (source work and headless tests only). Three more findings are fixed in `f935e84`, each with a regression that failed first (the "re-review" block of `tests/desktopReliability.test.ts`; logs in `evidence/pr117-rereview-2026-11-25/`):
   1. **A Settings restore from a stale window bypassed the revision check:** its rollback read advanced the revision. The rollback copy is now peeked, so a stale restore is refused, the window refreshes, and the advisor retries. Tested through the real `restoreWorkspace`: newer firm details and an approved version are kept.
   2. **A failed restore cleared the load-problem guard.** The guard now stays until the replacement is on disk, the unreadable files are kept once, and a retry succeeds. Start over remains a separate choice.
@@ -36,9 +54,12 @@
     - **Window and quit:** a single instance; hardware acceleration off; closing stops the session and keeps its counters.
     - **Pages:** the welcome workflow page, the website's `/download` entry (no link until an approved release is recorded) and the preview banner.
   - **Hosted code removed:** sign-in, cloud keys, Postgres, their routes and `pg`.
-  - **Installer:** `Stratovell-Setup-0.1.0-x64-unsigned-UAT.exe`, **unsigned, for private UAT**. It was built from `476e71d`, before the A–D fixes; its size, SHA-256 and source are on the PR and in REPORT.md section 33. It isn't relabelled, and no installer has been rebuilt yet.
+  - **Installers** (all unsigned, private UAT, outside Git):
+    - **0.1.0**, from `476e71d`: the pre-fix artifact, never relabelled. Its record is on the PR and in REPORT.md section 33.
+    - **0.1.1:** an update-path test build only.
+    - **0.1.2**, from `82b7751`: installed-app UAT done 27 November. It does **not** contain the #118 fix.
   - **Tested on Windows 11 Home 10.0.26200 only (the build machine). No clean-machine test.**
-    - The 68 installed-app checks are my own reported results; Codex hasn't repeated them independently.
+    - The 68 installed-app checks ran on 0.1.0. The 0.1.2 UAT is a separate, current record. Both are my own reported results; Codex hasn't repeated them independently.
     - No real Claude request was made, and no public download is approved.
 - **Incident, 24 November:** the computer froze during the first visible desktop-window test of an unpacked Electron 45 build (hybrid AMD/NVIDIA laptop, 2022 NVIDIA driver). The owner forced a restart.
   - **The cause is unconfirmed.** A graphics-driver hang is a hypothesis only.
@@ -55,16 +76,12 @@
   - D5: the R25 study itself (when participants exist); deferred mobile findings [#92](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/92), [#93](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/93), [#97](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/97) (draft PR #98 parked); the secrets and exposure gate items before any publication.
   - Agent: the 27-trial evaluation and real-model browser checks (budget unapproved; one owner-operated run has passed); finding 3's pairing policy; [#83](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/83); [#84](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/84).
   - Other: #76. Real-client use still requires #59.
-- **Next action (pickup order, saved 25 November 2026):**
-  1. **An independent Codex re-review of PR #117** at its new head (named in the PR description). The focus is the A–D fixes and the three re-review fixes:
-     - the stale-restore refusal through `peek`;
-     - the load-problem guard held until a restore succeeds;
-     - the read order and listing failures.
-
-     Address its findings, each with a regression test written first.
-  2. **Only after that review passes:** rebuild the installer from the reviewed commit, with a new checksum and manifest. Keep the record of the `476e71d` 0.1.0 installer.
-     - The installed-app check needs the owner's explicit go-ahead because of the freeze: no GPU, an off-screen window and the watchdog.
-     - Then the owner's UAT (checklist outside Git: `evidence/pr116-desktop-2026-11-24/DESKTOP-UAT-CHECKLIST.md`), ideally on a second, clean Windows computer. Record failures; fix nothing silently.
+- **Next action (pickup order, saved 27 November 2026):**
+  1. **Codex reviews the #118 fix on PR #117** at the head named in the PR description. Address its findings, each with a regression test written first.
+  2. **Only after that review passes, and on the owner's instruction:**
+     - Build private UAT **0.1.3** in a new version folder. Keep 0.1.0–0.1.2 and their records.
+     - Re-run the installed recovery stage (including a default restore during a load problem) and a short smoke test. The owner authorizes the controlled launches: no GPU, the watchdog, one isolated data folder.
+     - Then the owner's UAT, ideally on a second, clean Windows computer. The checklist is outside Git: `evidence/pr117-uat-0.1.2-2026-11-25/DESKTOP-UAT-CHECKLIST-0.1.2.md`. Record failures; fix nothing silently.
   3. **Separately, when the owner's Vercel re-verification is available:** the authorized production rollback.
      - Set Production `COPILOT_MODE=demo` and redeploy `831612c`.
      - Then run the keyless check: the site must be scripted, and hosted credential, session and analysis operations must be refused, also with an existing signed-in cookie.
