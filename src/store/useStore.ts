@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import { followDesktopWorkspace, strictWorkspaceStorage, workspaceStorage } from "./workspaceStorage";
+import { desktopWorkspaceUnreadable, followDesktopWorkspace, strictWorkspaceStorage, workspaceStorage } from "./workspaceStorage";
 import type {
   Account,
   AdvisorProfile,
@@ -47,7 +47,7 @@ import { candidateProblems, deskActions, draftBasisInputs, legacyWorkingDraft, n
 import { normalizeHoldings } from "@/engines/normalizationEngine";
 import { LEGACY_SAMPLE_FIRM_NAME } from "@/domain/branding";
 import type { ImportedWorkspace } from "@/ingestion/documents/toWorkspace";
-import type { RestoredWorkspace } from "@/engines/workspaceBackup";
+import { restoredState, restoreTakesBackupFirm, type RestoredWorkspace, type WorkspaceBackup } from "@/engines/workspaceBackup";
 import { findRevision, modelProblems, nextRevision, strategyProblems } from "@/engines/strategyProposals";
 import { UMA_MODELS, UMA_STRATEGIES } from "@/data/umaStory";
 import { buildSnapshot } from "@/engines/approvedSnapshot";
@@ -163,6 +163,11 @@ export interface AtlasActions {
    * if it fails the current workspace stays exactly as it was (R23a).
    */
   restoreWorkspace: (next: RestoredWorkspace) => { ok: true } | { ok: false; error: string };
+  /**
+   * Settings → Restore: the workspace a validated backup becomes, built from this
+   * window's firm settings and saved through restoreWorkspace (all or nothing).
+   */
+  restoreBackup: (backup: WorkspaceBackup, opts: { replaceFirm: boolean }) => { ok: true } | { ok: false; error: string };
   // Working draft (D1). None of these changes a holding, an approval or the
   // final-PDF inputs; each records the inputs the draft is now edited against.
   /** The accounts in the allocation scope; null goes back to "not chosen" (every non-liability account). */
@@ -821,6 +826,13 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
         const result = buildSnapshot(s, { now: new Date(fxClock.now()), id: safeId("ver"), note });
         if (result.ok) set({ snapshots: [...s.snapshots, result.snapshot] });
         return result;
+      },
+      restoreBackup: (backup, opts) => {
+        const s = get();
+        // #118: while the saved workspace is unreadable this window holds only the fictional sample (and edits that
+        // weren't saved), so "keep the current firm" would save the sample's; the backup's firm is taken instead.
+        const replaceFirm = restoreTakesBackupFirm({ chosen: opts.replaceFirm, currentUnreadable: desktopWorkspaceUnreadable() });
+        return get().restoreWorkspace(restoredState(backup, { advisor: s.advisor, disclosures: s.disclosures }, { replaceFirm }));
       },
       restoreWorkspace: (next) => {
         // #116: the browser's localStorage, or the desktop application's workspace file (saved at once, so a failure is known).

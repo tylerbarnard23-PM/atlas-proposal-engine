@@ -17,6 +17,7 @@ export const WORKSPACE_CHANNELS = {
   writeNow: "stratovell:workspace:write-now",
   remove: "stratovell:workspace:remove",
   continueAfterLoadProblem: "stratovell:workspace:continue-after-load-problem",
+  status: "stratovell:workspace:status",
   saveProblem: "stratovell:workspace:save-problem",
   changed: "stratovell:workspace:changed",
 } as const;
@@ -211,6 +212,11 @@ export function registerWorkspaceIpc(
   ipc.on(WORKSPACE_CHANNELS.remove, (e, base) => {
     if (!allowed(e)) return void (e.returnValue = notAllowed("This page can't change the workspace."));
     answer(e, service.remove(base));
+  });
+  // Read-only: whether the saved workspace is unreadable and saving is paused (#118: a restore then takes the backup's
+  // firm, because the window holds only the fictional sample). Another page learns nothing.
+  ipc.on(WORKSPACE_CHANNELS.status, (e) => {
+    e.returnValue = allowed(e) ? { loadProblem: service.loadProblem !== null } : null;
   });
   ipc.on(WORKSPACE_CHANNELS.continueAfterLoadProblem, (e) => {
     if (!allowed(e)) return void (e.returnValue = { ok: false, error: "This page can't change the workspace." });

@@ -58,6 +58,8 @@ export function createDesktopBridge(ipc: IpcRendererLike) {
       remove: (): void => {
         settle(ipc.sendSync("stratovell:workspace:remove", revision));
       },
+      /** Whether the saved workspace is unreadable and saving is paused (#118). False for a page the app doesn't serve. */
+      loadProblem: (): boolean => (ipc.sendSync("stratovell:workspace:status") as { loadProblem?: unknown } | null)?.loadProblem === true,
       /** After a load problem: keeps the unreadable files aside, then allows saving again. */
       continueAfterLoadProblem: (): SaveResult => ipc.sendSync("stratovell:workspace:continue-after-load-problem") as SaveResult,
     },

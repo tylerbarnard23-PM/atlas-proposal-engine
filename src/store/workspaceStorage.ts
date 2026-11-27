@@ -20,6 +20,8 @@ export interface DesktopWorkspaceBridge {
   peek(): string | null;
   /** After a load problem: keeps a copy of every unreadable file, then allows saving again. */
   continueAfterLoadProblem(): { ok: true } | { ok: false; error: string };
+  /** Whether the saved workspace is unreadable and saving is paused, so this window holds only the fictional sample (#118). */
+  loadProblem(): boolean;
 }
 
 export interface DesktopAppInfo {
@@ -81,6 +83,15 @@ export function desktopBridge(): DesktopBridge | null {
   if (typeof window === "undefined") return null;
   const b = (window as unknown as { stratovellDesktop?: DesktopBridge }).stratovellDesktop;
   return b && typeof b.workspace?.read === "function" ? b : null;
+}
+
+/**
+ * #118: whether this window's saved workspace couldn't be read (desktop only). While it can't, saving is paused and the
+ * store holds the fictional sample, plus any edits that weren't saved, rather than the advisor's own workspace.
+ */
+export function desktopWorkspaceUnreadable(): boolean {
+  const desktop = desktopBridge();
+  return !!desktop && typeof desktop.workspace.loadProblem === "function" && desktop.workspace.loadProblem() === true;
 }
 
 /** The storage the store persists through: the desktop file for `key`, or the browser's localStorage. */

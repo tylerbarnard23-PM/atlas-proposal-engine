@@ -644,3 +644,114 @@ describe("re-review of 055f99b", () => {
     expect(r.status).toBe("unreadable");
   });
 });
+
+describe("#118: a restore during a load problem takes the backup's firm, never the in-memory sample's", () => {
+  // Found in the installed-app UAT of 0.1.2: while every saved copy is unreadable, saving is paused and the window
+  // holds only the fictional sample (plus edits that "aren't saved"). A Settings restore that kept "the current firm"
+  // kept that sample firm, or an edit typed while paused, instead of the advisor's firm in the backup.
+  async function openStore(hub: ReturnType<typeof ipcHub>) {
+    const w = hub.connect();
+    vi.resetModules();
+    (globalThis as { window?: unknown }).window = { stratovellDesktop: w.bridge };
+    const m = await import("@/store/useStore");
+    return { w, m, s: () => m.useAtlasStore.getState() };
+  }
+  /** A validated backup of the window's engagement whose firm & branding differ from the window's. */
+  async function backupWithFirm(m: typeof import("@/store/useStore"), firmName: string) {
+    const backup = await import("@/engines/workspaceBackup");
+    const { DISCLOSURE_LIBRARY } = await import("@/domain/disclosureLibrary");
+    const ids = { disclosureIds: DISCLOSURE_LIBRARY.map((d) => d.id) };
+    const state = m.useAtlasStore.getState();
+    const exported = backup.exportBackup({ ...state, advisor: { ...state.advisor, firmName, name: "Backup Advisor (synthetic)" } }, new Date(), ids);
+    if (!exported.ok) throw new Error(exported.errors.join("; "));
+    const parsed = backup.parseBackup(exported.text, ids);
+    if (!parsed.ok) throw new Error(parsed.errors.join("; "));
+    return { parsed: parsed.backup, backup };
+  }
+  const onDisk = (files: WorkspaceFileStore, service: WorkspaceService) => (service.flush(), JSON.parse(files.read().value!).state);
+  const unreadableWorkspace = () => {
+    const files = new WorkspaceFileStore(dir, () => new Date("2026-11-27T09:00:00Z"));
+    writeFileSync(files.file, "garbage A");
+    writeFileSync(files.previous, "garbage B");
+    const { service, hub } = desktop(files);
+    expect(service.loadProblem).not.toBeNull();
+    return { files, service, hub };
+  };
+
+  it("1. the default Settings restore (keep firm unticked) takes the backup's firm & branding; the sample firm in memory is not saved", async () => {
+    const { files, service, hub } = unreadableWorkspace();
+    const win = await openStore(hub);
+    const sampleFirm = win.s().advisor.firmName; // the fictional sample, held only in memory while saving is paused
+    const { parsed } = await backupWithFirm(win.m, "Advisor's own firm (synthetic backup)");
+    expect(parsed.firm.advisor.firmName).not.toBe(sampleFirm);
+    const r = win.s().restoreBackup(parsed, { replaceFirm: false });
+    expect(r).toEqual({ ok: true });
+    expect(service.loadProblem).toBeNull();
+    const disk = onDisk(files, service);
+    expect(disk.advisor.firmName).toBe("Advisor's own firm (synthetic backup)");
+    expect(disk.advisor.name).toBe("Backup Advisor (synthetic)");
+    expect(disk.proposal.advisorId).toBe(parsed.firm.advisor.id);
+    expect(win.s().advisor.firmName).toBe("Advisor's own firm (synthetic backup)");
+    // The unreadable originals were kept first.
+    const kept = readdirSync(dir).filter((n) => n.startsWith("unreadable-"));
+    expect(kept).toHaveLength(1);
+    expect(readFileSync(join(dir, kept[0], "workspace.json"), "utf8")).toBe("garbage A");
+  });
+
+  it("2. an edit made while saving was paused ('nothing else you change here is saved') is not saved by the restore", async () => {
+    const { files, service, hub } = unreadableWorkspace();
+    const win = await openStore(hub);
+    const { parsed } = await backupWithFirm(win.m, "Advisor's own firm (synthetic backup)");
+    win.s().setAdvisor({ firmName: "Typed while saving was paused" });
+    service.flush();
+    expect(readFileSync(files.file, "utf8")).toBe("garbage A"); // the edit itself was refused
+    expect(win.s().restoreBackup(parsed, { replaceFirm: false })).toEqual({ ok: true });
+    const disk = onDisk(files, service);
+    expect(disk.advisor.firmName).toBe("Advisor's own firm (synthetic backup)");
+    expect(JSON.stringify(disk)).not.toContain("Typed while saving was paused");
+  });
+
+  it("3. outside a load problem nothing changes: a default restore keeps the current, saved firm & branding", async () => {
+    const files = new WorkspaceFileStore(dir);
+    const { service, hub } = desktop(files);
+    const win = await openStore(hub);
+    win.s().setAdvisor({ firmName: "Current saved firm (synthetic)" });
+    service.flush();
+    const { parsed } = await backupWithFirm(win.m, "Older firm in the backup (synthetic)");
+    expect(win.s().restoreBackup(parsed, { replaceFirm: false })).toEqual({ ok: true });
+    expect(onDisk(files, service).advisor.firmName).toBe("Current saved firm (synthetic)");
+    expect(win.s().restoreBackup(parsed, { replaceFirm: true })).toEqual({ ok: true });
+    expect(onDisk(files, service).advisor.firmName).toBe("Older firm in the backup (synthetic)");
+  });
+
+  it("4. the page can ask whether the saved workspace is unreadable: true while blocked, false once restored; another page learns nothing", async () => {
+    const { isAppUrl } = await import("../desktop/shared/policy");
+    const files = new WorkspaceFileStore(dir, () => new Date("2026-11-27T09:00:00Z"));
+    writeFileSync(files.file, "garbage A");
+    const service = new WorkspaceService(files, { delayMs: 60_000 });
+    service.load();
+    const hub = ipcHub();
+    const origin = "http://127.0.0.1:47613";
+    registerWorkspaceIpc(hub.main, service, { allowed: (e) => isAppUrl(e.senderFrame?.url ?? "", origin) });
+    expect(hub.connect("https://example.com/").bridge.workspace.loadProblem()).toBe(false);
+    const own = hub.connect(`${origin}/settings`);
+    expect(own.bridge.workspace.loadProblem()).toBe(true);
+    own.bridge.workspace.read();
+    expect(own.bridge.workspace.writeNow(record(5)).ok).toBe(true);
+    expect(own.bridge.workspace.loadProblem()).toBe(false);
+  });
+
+  it("5. the restore preview during a load problem says the firm comes from the backup and the saved workspace couldn't be read", async () => {
+    const { hub } = unreadableWorkspace();
+    const win = await openStore(hub);
+    const { parsed, backup } = await backupWithFirm(win.m, "Advisor's own firm (synthetic backup)");
+    const now = new Date("2026-11-27T09:00:00Z");
+    const blocked = backup.backupPreview(parsed, win.s(), now, { currentUnreadable: true });
+    expect(blocked.current.unreadable).toBe(true);
+    expect(blocked.firm.fromBackup).toBe(true);
+    expect(blocked.firm.backupFirmName).toBe("Advisor's own firm (synthetic backup)");
+    const normal = backup.backupPreview(parsed, win.s(), now);
+    expect(normal.current.unreadable).toBe(false);
+    expect(normal.firm.fromBackup).toBe(false);
+  });
+});
