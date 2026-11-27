@@ -24,6 +24,7 @@ import { applyRecommendationsToProposed, cashShortfallsOf, reserveStatus, sectio
 import { accountBasis, exposureView, feeCoverage, findRevision, label as strategyLabel, minimumStatus, sleevePlan, sleeveRefs } from "@/engines/strategyProposals";
 import { costIncomeCoverage, describeCoverage } from "@/engines/costIncome";
 import { evaluateDesk } from "@/engines/allocationDesk";
+import { strategyResultRows } from "@/engines/allocationProposal";
 import { basisBreakdown, describeBasisCounts, describeDateRange, describeValueDates, provenanceCounts, valueDateSummary, valueProvenance } from "@/engines/valuationProvenance";
 import { currentDisclosure } from "@/domain/disclosureLibrary";
 import { describeAmounts } from "@/engines/recommendationAmounts";
@@ -916,6 +917,53 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
               <span className={`pdf-pill ${r.priority === "high" ? "warn" : r.priority === "medium" ? "navy" : "neutral"}`}>{r.priority} priority</span>
             </div>
             <p className="pdf-text">{r.rationale}</p>
+            {/* #119: an allocation strategy beside what the approved actions achieve (the shared evaluator over its scope); never a target shown as achieved. */}
+            {r.allocationStrategy &&
+              (() => {
+                const st = r.allocationStrategy;
+                const result = evaluateDesk({
+                  holdings,
+                  accounts,
+                  recommendations: proposedRecs,
+                  draft: { id: `strategy_${r.id}`, name: "", scopeAccountIds: st.basis.scopeAccountIds, memberIds: [], targets: {}, inputBasis: null, createdAt: "", updatedAt: "" },
+                  fx,
+                  view: "approved",
+                });
+                const pctText = (n: number) => `${n.toFixed(1)}%`;
+                return (
+                  <div style={{ marginTop: 6 }}>
+                    <p className="pdf-text">
+                      <strong>{st.outcome === "maintain" ? "Maintain the current mix" : "Proposed mix"} (a strategy judgment approved by the advisor)</strong>
+                    </p>
+                    <table className="pdf-table">
+                      <thead>
+                        <tr>
+                          <th>Asset class</th>
+                          <th>When proposed</th>
+                          <th>Proposed mix</th>
+                          <th>Result of approved actions</th>
+                          <th>Not reached</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {strategyResultRows(st, result.rows).map((x) => (
+                          <tr key={x.assetClass}>
+                            <td>{x.label}</td>
+                            <td>{pctText(x.whenProposed)}</td>
+                            <td>{pctText(x.proposed)}</td>
+                            <td>{pctText(x.result)}</td>
+                            <td>{x.notImplementedPts === 0 ? "—" : `${Math.abs(x.notImplementedPts).toFixed(1)} pts ${x.notImplementedPts > 0 ? "short of" : "over"} the proposal`}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <p className="pdf-text" style={{ marginTop: 4 }}>
+                      Percent of the investment scope. The result is calculated from the approved actions only; a proposed weight is never shown as achieved.
+                      {result.unvalued.length > 0 ? " Some holdings in scope couldn't be valued, so the result covers valued holdings only." : ""}
+                    </p>
+                  </div>
+                );
+              })()}
             {/* Entered in another currency: the amount, its converted value and the rate used. */}
             {(() => {
               const amounts = describeAmounts(r, fx);

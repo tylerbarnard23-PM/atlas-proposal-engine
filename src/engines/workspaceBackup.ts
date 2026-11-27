@@ -324,7 +324,19 @@ function schemas(strict: boolean) {
     (o) => (o.kind === "claude" ? (o.models?.length ?? 0) > 0 && !o.source : o.kind === "example" ? !!o.source && !o.models : !o.source && !o.models),
     "A recommendation's origin is inconsistent"
   );
-  const recommendationV11 = recommendation.extend({ origin: recommendationOrigin.optional() });
+  // #119 (additive, optional, still v11): an allocation proposal's strategy record. The AI's weights are kept as
+  // its judgment beside the weights when proposed; what approved actions achieve is always recalculated.
+  const classWeight = obj({ assetClass, pct: finite.min(0).max(100) });
+  const allocationStrategy = obj({
+    outcome: z.enum(["propose", "maintain"]),
+    proposedWeights: z.array(classWeight),
+    currentWeights: z.array(classWeight),
+    objectiveRefs: z.array(z.enum(["objectives", "timeHorizon", "liquidity", "income", "lossWillingness", "lossAbility", "taxSensitivity", "securitiesToRetain", "restrictedInvestments", "otherConstraints"])),
+    alternative: obj({ summary: text(), weights: z.array(classWeight).optional() }).optional(),
+    groupIds: z.array(id),
+    basis: obj({ inputRevision: text(), scopeAccountIds: z.array(id).nullable(), reportingCurrency: currency, scopeTotal: finite }),
+  });
+  const recommendationV11 = recommendation.extend({ origin: recommendationOrigin.optional(), allocationStrategy: allocationStrategy.optional() });
   const fxRate = obj({
     base: currency,
     quote: currency,

@@ -16,7 +16,25 @@ import { agentContextOf, type AgentContext } from "./context";
 import { figuresIn, type EvidenceValue } from "./evidence";
 import type { CopilotSnapshot } from "./snapshot";
 import { redactIdentity } from "./redaction";
-import { clientStatedAmounts, modelBoundClientBrief } from "@/engines/clientDiscovery";
+import { clientStatedAmounts, modelBoundClientBrief, QUESTIONS } from "@/engines/clientDiscovery";
+import { ASSET_CLASS_LABELS } from "@/domain/assetTaxonomy";
+import type { AssetClass, ClassWeight, DiscoveryQuestionId } from "@/domain/types";
+import {
+  briefReadiness,
+  checkGroup,
+  deskWith,
+  evaluateSelection,
+  groupLegs,
+  legProblem,
+  MAX_GROUPS,
+  recordedWeights,
+  scopeExceptions,
+  strategyRecommendation,
+  weightProblems,
+  type AllocationOutcome,
+  type GroupInput,
+  type ProposalInputs,
+} from "@/engines/allocationProposal";
 
 // Every tool here is a thin, read-only wrapper over the deterministic engines.
 // The model never computes a number itself; it asks the engines. The single
@@ -34,6 +52,37 @@ export interface EvidenceRecord {
   summary: string;
   /** Typed figures (value, unit, currency, sign) for checking the figures an answer states. */
   numbers: EvidenceValue[];
+}
+
+/**
+ * #119: the allocation decision a run returned, as the page shows it. The drafts
+ * (the strategy record and each feasible group's legs) are in the run's drafts;
+ * this view names them. Nothing here is saved until the advisor adds it.
+ */
+export interface AllocationRunView {
+  outcome: AllocationOutcome;
+  headline: string;
+  rationale: string;
+  objectiveRefs: DiscoveryQuestionId[];
+  question: { text: string; decides: string } | null;
+  briefReady: boolean;
+  briefIssues: string[];
+  reportingCurrency: string;
+  scopeTotal: number;
+  currentWeights: ClassWeight[];
+  /** The AI's proposed weights (judgment); null for a question. A hold proposes the current weights. */
+  proposedWeights: ClassWeight[] | null;
+  alternative: { summary: string; weights?: ClassWeight[] } | null;
+  strategyDraftId: string | null;
+  groups: {
+    id: string;
+    title: string;
+    rationale: string;
+    legIds: string[];
+    problem: string | null;
+    legs: { holdingId: string; name: string; accountName: string; change: "reduce" | "increase"; amount: number }[];
+  }[];
+  unclassified: { id: string; name: string }[];
 }
 
 /** A scope simulation the run may draft from: the exact candidate the shared evaluator ran. */
@@ -66,6 +115,8 @@ export class CopilotContext {
   readonly simulations = new Map<string, Simulation>();
   /** Calls to tools that would approve, finalize, share or execute: refused, and counted here. */
   forbiddenAttempts = 0;
+  /** #119: the run's allocation decision (at most one). */
+  allocation: AllocationRunView | null = null;
   /** The active alternative: the scope and actions the evaluator reads. */
   readonly draft: WorkingDraft;
   /** What this run is about (client, alternative, scope, input revision). */
@@ -83,6 +134,11 @@ export class CopilotContext {
 
   get fxContext() {
     return { reportingCurrency: this.reportingCurrency, rates: this.snapshot.fxRates };
+  }
+
+  /** #119: what an allocation decision is checked against (the active alternative). */
+  get proposalInputs(): ProposalInputs {
+    return { holdings: this.holdings, accounts: this.snapshot.accounts, recommendations: this.snapshot.recommendations, draft: this.draft, fx: this.fxContext, client: this.snapshot.client };
   }
 
   /** The active alternative through the shared desk evaluator (its draft view), optionally with extra actions added last. */
@@ -123,7 +179,7 @@ export class CopilotContext {
         ...s.holdings.flatMap((h) => [h.assetName, h.identifier?.value, h.advisorNotes, h.subAssetClass]),
         ...s.accounts.flatMap((a) => [a.name, a.institution]),
         ...(s.sourceDocuments ?? []).map((d) => d.fileName),
-        ...s.recommendations.flatMap((r) => [r.title, r.rationale, r.clientBenefit, r.riskTradeoff, r.taxNote, r.implementationStep, r.complianceNote, r.destination?.name]),
+        ...s.recommendations.flatMap((r) => [r.title, r.rationale, r.clientBenefit, r.riskTradeoff, r.taxNote, r.implementationStep, r.complianceNote, r.destination?.name, r.allocationStrategy?.alternative?.summary]),
         s.client.fullName,
         s.client.householdName,
         s.client.investmentObjective,
@@ -751,6 +807,147 @@ function draftRecommendation(ctx: CopilotContext, input: z.infer<typeof DraftInp
 }
 
 // ---------------------------------------------------------------------------
+// #119: Prepare allocation proposal
+// ---------------------------------------------------------------------------
+
+const ALLOCATION_CLASSES = (Object.keys(ASSET_CLASS_LABELS) as AssetClass[]).filter((c) => c !== "liability") as [AssetClass, ...AssetClass[]];
+const QUESTION_IDS = QUESTIONS.map((q) => q.id) as [DiscoveryQuestionId, ...DiscoveryQuestionId[]];
+const WeightIn = z.object({ asset_class: z.enum(ALLOCATION_CLASSES), pct: z.number().finite() });
+const ProposeAllocationInput = z.object({
+  outcome: z.enum(["propose_changes", "maintain_current_mix", "ask_question"]),
+  headline: z.string().min(3).max(160),
+  rationale: z.string().min(10).max(3000),
+  objective_refs: z.array(z.enum(QUESTION_IDS)).max(10).optional(),
+  proposed_weights: z.array(WeightIn).max(20).optional(),
+  alternative: z.object({ summary: z.string().min(3).max(1000), weights: z.array(WeightIn).max(20).optional() }).optional(),
+  question: z.object({ text: z.string().min(5).max(600), decides: z.string().min(3).max(600) }).optional(),
+  groups: z
+    .array(
+      z.object({
+        title: z.string().min(3).max(160),
+        rationale: z.string().min(3).max(1000),
+        legs: z.array(z.object({ holding_id: z.string(), change: z.enum(["reduce", "increase"]), amount: z.number().finite().positive() })).min(1).max(4),
+      })
+    )
+    .max(MAX_GROUPS)
+    .optional(),
+});
+
+const OUTCOME: Record<z.infer<typeof ProposeAllocationInput>["outcome"], AllocationOutcome> = { propose_changes: "propose", maintain_current_mix: "maintain", ask_question: "ask" };
+const weightsOf = (w: z.infer<typeof WeightIn>[]): ClassWeight[] => w.map((x) => ({ assetClass: x.asset_class, pct: x.pct }));
+
+function proposeAllocation(ctx: CopilotContext, input: z.infer<typeof ProposeAllocationInput>) {
+  if (ctx.allocation) throw new ToolInputError("An allocation decision was already returned in this request; there is one per request.");
+  const outcome = OUTCOME[input.outcome];
+  const inp = ctx.proposalInputs;
+  const desk = deskWith(inp);
+  const current = recordedWeights(desk);
+  const { unclassified } = scopeExceptions(inp, desk);
+  const brief = briefReadiness(ctx.snapshot.client);
+  const objectiveRefs = input.objective_refs ?? [];
+  const base = {
+    headline: input.headline,
+    rationale: input.rationale,
+    objectiveRefs,
+    briefReady: brief.ready,
+    briefIssues: brief.issues,
+    reportingCurrency: ctx.reportingCurrency,
+    scopeTotal: cents(desk.totals.current),
+    currentWeights: current,
+    unclassified,
+  };
+
+  if (outcome === "ask") {
+    if (!input.question) throw new ToolInputError("ask_question needs question.text (one specific question for the advisor) and question.decides (what the answer would decide).");
+    if (input.proposed_weights?.length || input.groups?.length) throw new ToolInputError("A question carries no weights or actions: nothing is ready to approve until it is answered.");
+    ctx.allocation = { ...base, outcome, question: input.question, proposedWeights: null, alternative: null, strategyDraftId: null, groups: [] };
+    return { outcome: "ask_question", brief_ready: brief.ready, brief_issues: brief.issues, note: "No mix is proposed and nothing is drafted; the advisor answers the question first." };
+  }
+
+  // A mix or a hold is personal: it needs a reviewed brief with no open conflict, and a fully valued, complete scope.
+  if (!brief.ready) throw new ToolInputError(`The client brief doesn't support a personalized decision yet: ${brief.issues.join(" ")} Return outcome ask_question with one specific question and what its answer decides.`);
+  const blocked = sizingBlocked(ctx);
+  if (blocked) throw new ToolInputError(blocked);
+  if (!(desk.totals.current > 0)) throw new ToolInputError("Nothing in the investment scope is valued, so there is no mix to propose.");
+  if (objectiveRefs.length === 0) throw new ToolInputError("Name the client-brief questions (objective_refs) the decision relies on.");
+
+  const held = desk.rows.filter((r) => r.current > 0.005).map((r) => r.assetClass);
+  let proposed: ClassWeight[];
+  if (outcome === "maintain") {
+    if (input.groups?.length) throw new ToolInputError("maintain_current_mix keeps the current mix: it carries no actions.");
+    proposed = current;
+  } else {
+    if (!input.proposed_weights?.length) throw new ToolInputError("propose_changes needs proposed_weights: one per asset class, totalling 100 with cash.");
+    proposed = weightsOf(input.proposed_weights);
+    const problems = weightProblems(proposed, held);
+    if (problems.length) throw new ToolInputError(`Proposed weights not usable: ${problems.join(" ")}`);
+    if (!input.alternative) throw new ToolInputError("A proposed mix needs a plausible alternative considered (alternative.summary), and why it wasn't chosen.");
+    if (input.alternative.weights) {
+      const alt = weightProblems(weightsOf(input.alternative.weights), held);
+      if (alt.length) throw new ToolInputError(`Alternative weights not usable: ${alt.join(" ")}`);
+    }
+  }
+
+  const now = ctx.now.toISOString();
+  const revision = ctx.context.inputRevision;
+  const groups = (input.groups ?? []).map((g, gi) => {
+    const group: GroupInput = { title: g.title, rationale: g.rationale, legs: g.legs.map((l) => ({ holdingId: l.holding_id, change: l.change, amount: cents(l.amount) })) };
+    const gid = `grp_ai_${contentHash({ revision, gi, group })}`;
+    const first = group.legs.map((l) => legProblem(inp, desk, l)).find((p) => p != null) ?? null;
+    const legs = first ? null : groupLegs(inp, group, { group: gid, leg: (i) => `rec_ai_${contentHash({ gid, i })}` }, now);
+    const { problem } = checkGroup(inp, desk, group, legs);
+    return { gid, group, legs: problem ? null : legs, problem };
+  });
+  const feasibleLegs = groups.flatMap((g) => g.legs ?? []);
+  const selection = evaluateSelection(inp, feasibleLegs, proposed);
+  const strategyId = `rec_ai_${contentHash({ revision, outcome, headline: input.headline, proposed })}`;
+  const strategy = strategyRecommendation({
+    id: strategyId,
+    decision: { outcome, headline: input.headline, rationale: input.rationale, objectiveRefs, proposedWeights: proposed, alternative: input.alternative ? { summary: input.alternative.summary, ...(input.alternative.weights ? { weights: weightsOf(input.alternative.weights) } : {}) } : undefined },
+    currentWeights: current,
+    groupIds: groups.filter((g) => g.legs).map((g) => g.gid),
+    basis: { inputRevision: revision, scopeAccountIds: ctx.draft.scopeAccountIds, reportingCurrency: ctx.reportingCurrency, scopeTotal: cents(desk.totals.current) },
+    now,
+  });
+  for (const r of [strategy, ...feasibleLegs]) {
+    if (ctx.snapshot.recommendations.some((x) => x.id === r.id)) throw new ToolInputError("This decision was already added to the workspace.");
+  }
+  // Hard-coded, as for every AI draft: unapproved, out of the PDF, and only a preview until the advisor adds it.
+  const note = `Prepared by Stratovell AI for "${ctx.draft.name}" (input revision ${revision}). Requires advisor review and approval before client use.`;
+  for (const r of [strategy, ...feasibleLegs]) ctx.drafts.push({ ...r, complianceNote: note, status: "needs_review", approvedByAdvisor: false, includeInPdf: false });
+
+  const accountName = (hid: string) => ctx.accountName(ctx.holding(hid)?.accountId ?? "");
+  ctx.allocation = {
+    ...base,
+    outcome,
+    question: null,
+    proposedWeights: proposed,
+    alternative: input.alternative ? { summary: input.alternative.summary, ...(input.alternative.weights ? { weights: weightsOf(input.alternative.weights) } : {}) } : null,
+    strategyDraftId: strategyId,
+    groups: groups.map((g) => ({
+      id: g.gid,
+      title: g.group.title,
+      rationale: g.group.rationale,
+      legIds: (g.legs ?? []).map((l) => l.id),
+      problem: g.problem,
+      legs: g.group.legs.map((l) => ({ holdingId: l.holdingId, name: ctx.holding(l.holdingId)?.assetName ?? l.holdingId, accountName: accountName(l.holdingId), change: l.change, amount: l.amount })),
+    })),
+  };
+  return {
+    outcome: input.outcome,
+    reporting_currency: ctx.reportingCurrency,
+    scope_total: cents(desk.totals.current),
+    // The AI's weights are its judgment; current and result come from the shared evaluator (result: every feasible group selected).
+    mix: selection.rows.map((r) => ({ asset_class: r.assetClass, current_pct: r.currentPct, current_amount: r.currentAmount, ai_proposed_pct: r.proposedPct, result_pct: r.resultPct, result_amount: r.resultAmount, gap_pts: r.gapPts, gap_amount: r.gapAmount, no_eligible_candidate: r.noEligibleCandidate })),
+    groups: groups.map((g) => ({ group_id: g.gid, title: g.group.title, feasible: g.problem == null, not_feasible_reason: g.problem })),
+    combined_problems: selection.problems,
+    unclassified_in_scope: unclassified.map((u) => u.name),
+    note:
+      "Saved as unapproved previews: the strategy record and each feasible group. The advisor chooses which groups to add; nothing is approved here. A gap means the selected actions don't reach the proposed weight; no_eligible_candidate means no existing eligible holding could take it (a new security would be needed).",
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Registry
 // ---------------------------------------------------------------------------
 
@@ -874,6 +1071,45 @@ const TOOLS: Record<string, ToolSpec> = {
     },
     run: (ctx, input) => draftRecommendation(ctx, DraftInput.parse(input)),
   },
+  propose_allocation: {
+    definition: {
+      name: "propose_allocation",
+      description: [
+        "Return the allocation decision for the active alternative's investment scope (once per request).",
+        "outcome: propose_changes (a target asset-class mix), maintain_current_mix (a justified hold: no trade), or ask_question (information that would change the decision is missing or conflicting).",
+        "proposed_weights are your judgment, separate from the advisor's own desk targets: percent of the in-scope portfolio, every class held in scope listed (0 to exit it), totalling 100 with cash. Include objective_refs (the client-brief questions it rests on) and a plausible alternative.",
+        "groups: up to 4 funded implementation options using holdings already owned in scope (holding_id from get_scope_overview). A group's legs are in one account; a purchase is funded by the group's own sale or existing cash; a restricted security can't be bought and a retained one can't be sold. A group with a sale and a purchase applies whole or not at all.",
+        "The engines check everything and return the current mix, your weights, the result of every feasible group selected and the remaining gap; a class with no eligible existing holding is reported, never filled with an invented security, price, fee or tax effect.",
+        "Nothing is approved: the strategy record and feasible groups are unapproved previews the advisor may add.",
+      ].join(" "),
+      input_schema: {
+        type: "object",
+        properties: {
+          outcome: { type: "string", enum: ["propose_changes", "maintain_current_mix", "ask_question"] },
+          headline: { type: "string", description: "One line: what should change (or why the mix stays)." },
+          rationale: { type: "string", description: "Client-specific reasoning from the reviewed brief and tool figures." },
+          objective_refs: { type: "array", items: { type: "string", enum: [...QUESTION_IDS] } },
+          proposed_weights: { type: "array", items: { type: "object", properties: { asset_class: { type: "string", enum: [...ALLOCATION_CLASSES] }, pct: { type: "number" } }, required: ["asset_class", "pct"] } },
+          alternative: { type: "object", properties: { summary: { type: "string" }, weights: { type: "array", items: { type: "object", properties: { asset_class: { type: "string", enum: [...ALLOCATION_CLASSES] }, pct: { type: "number" } }, required: ["asset_class", "pct"] } } }, required: ["summary"] },
+          question: { type: "object", properties: { text: { type: "string" }, decides: { type: "string" } }, required: ["text", "decides"] },
+          groups: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                title: { type: "string" },
+                rationale: { type: "string" },
+                legs: { type: "array", items: { type: "object", properties: { holding_id: { type: "string" }, change: { type: "string", enum: ["reduce", "increase"] }, amount: { type: "number", description: "In the reporting currency." } }, required: ["holding_id", "change", "amount"] } },
+              },
+              required: ["title", "rationale", "legs"],
+            },
+          },
+        },
+        required: ["outcome", "headline", "rationale"],
+      },
+    },
+    run: (ctx, input) => proposeAllocation(ctx, ProposeAllocationInput.parse(input)),
+  },
 };
 
 export const COPILOT_TOOLS: Anthropic.Beta.BetaTool[] = Object.values(TOOLS).map((t) => t.definition);
@@ -898,14 +1134,16 @@ export interface ToolCallRecord {
 // current/proposed_pct and drift_pts (evaluateDesk rows), target_pct (draft
 // targets, 0-100), expense_ratio_pct (the holding's ratio in percent), and
 // pct_change (recommendationPreview's pctChange: 60,000 → 54,000 is -10).
-const PERCENT_KEYS = new Set(["pct", "pct_of_investible", "pct_of_investible_before", "pct_of_investible_after", "current_pct", "proposed_pct", "target_pct", "drift_pts", "expense_ratio_pct", "pct_change"]);
+// #119: ai_proposed_pct (the AI's own weight, returned as checked), result_pct and gap_pts (evaluator rows, 0-100).
+const PERCENT_KEYS = new Set(["pct", "pct_of_investible", "pct_of_investible_before", "pct_of_investible_after", "current_pct", "proposed_pct", "target_pct", "drift_pts", "expense_ratio_pct", "pct_change", "ai_proposed_pct", "result_pct", "gap_pts"]);
 /** Fractions (0.1 = 10%). No tool returns one today; the checker still reads a fraction as its percentage. */
 const RATIO_KEYS = new Set<string>();
 /** Signed changes, not levels or sizes: the only fields that support a written "+" or "-". */
-const CHANGE_KEYS = new Set(["delta", "change", "drift_pts", "pct_change"]);
+const CHANGE_KEYS = new Set(["delta", "change", "drift_pts", "pct_change", "gap_pts", "gap_amount"]);
 const MONEY_REPORTING_KEYS = new Set([
   "value", "current", "proposed", "before", "after", "delta", "change", "shortfall", "gross_assets", "liabilities", "net",
   "outside_scope_total", "liabilities_total", "reporting_value", "action_amount_in_reporting", "proposed_value_in_reporting", "amount", "position_after",
+  "scope_total", "current_amount", "result_amount", "gap_amount",
 ]);
 /** Money in its own currency, named by this sibling field. */
 const MONEY_OWN_KEYS: Record<string, string> = { native_value: "currency", action_amount: "currency", proposed_value: "currency", cost_basis: "currency", reserve: "reserve_currency", available: "currency" };

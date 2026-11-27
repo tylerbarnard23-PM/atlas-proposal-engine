@@ -92,6 +92,9 @@ export async function handleCopilotPost(req: Request, deps: LiveDeps = defaultDe
   const runs = actualRun(mode, deps.env);
   const asked = parsed.value.runAs ?? "claude";
   if (asked !== runs) return NextResponse.json({ error: RUN_MISMATCH[runs], code: "run_mode_mismatch", runs }, { status: 409 });
+  const task = parsed.value.task;
+  // #119: the scripted demo has no allocation plan; it never stands in for one.
+  if (task && mode === "demo") return NextResponse.json({ error: "Prepare allocation proposal runs with Claude or the labelled test provider, not the scripted demo.", code: "task_unavailable" }, { status: 409 });
   if (mode === "demo") {
     try {
       return NextResponse.json(runDemoCopilot(snapshot, question));
@@ -109,6 +112,7 @@ export async function handleCopilotPost(req: Request, deps: LiveDeps = defaultDe
           model: TEST_PROVIDER_MODEL,
           client: createTestProvider(),
           signal: req.signal,
+          task,
         })
       );
     } catch {
@@ -130,6 +134,7 @@ export async function handleCopilotPost(req: Request, deps: LiveDeps = defaultDe
       // The loop bounds retries itself (each one passes the gate), so the SDK's are off.
       client: run.client,
       signal: run.signal,
+      task,
     });
     status = result.status;
     report = await run.finish(status);

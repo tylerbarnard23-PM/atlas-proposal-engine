@@ -23,6 +23,12 @@ import type { Recommendation } from "@/domain/types";
 import type { CopilotMode, CopilotResult, RunStatus } from "@/copilot/agent";
 import type { RunAs } from "@/copilot/snapshot";
 import { originLabel } from "@/engines/recommendationOrigin";
+import { AllocationProposal } from "./AllocationProposal";
+import type { AllocationRunView } from "@/copilot/tools";
+import { LayoutGrid } from "lucide-react";
+
+/** #119: the request the Prepare allocation proposal action sends (the task instruction is the server's). */
+export const ALLOCATION_QUESTION = "Prepare allocation proposal";
 
 // The Copilot conversation, shared by the Copilot page and the allocation
 // desk's side panel. A question runs only when the advisor asks: mounting or
@@ -44,6 +50,7 @@ const TOOL_LABELS: Record<string, string> = {
   simulate_scope_change: "Simulated in the alternative (allocation desk)",
   check_proposal_readiness: "Ran readiness checklist",
   draft_recommendation: "Prepared a draft (preview only)",
+  propose_allocation: "Returned the allocation decision (checked by the engines; preview only)",
 };
 
 export const MODE_LABEL: Record<CopilotMode, string> = {
@@ -193,10 +200,10 @@ export function CopilotWorkspace({
 
   const run = analysisRun(mode);
 
-  async function ask(q: string, runAs: RunAs | undefined = run?.runAs) {
+  async function ask(q: string, runAs: RunAs | undefined = run?.runAs, task?: "allocation_proposal") {
     const text = q.trim();
     if (!text || loading || !run || !runAs) return;
-    setQuestion(text);
+    if (!task) setQuestion(text);
     setAsked(text);
     setLoading(true);
     setError(null);
@@ -210,7 +217,7 @@ export function CopilotWorkspace({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
-        body: JSON.stringify({ ...request, question: text, runAs }),
+        body: JSON.stringify({ ...request, question: text, runAs, ...(task ? { task } : {}) }),
       });
       const data = await res.json();
       if (data.live && "run" in data.live) setLastRun(data.live as LiveRunInfo);
@@ -228,9 +235,9 @@ export function CopilotWorkspace({
     }
   }
 
-  function addSelected() {
+  function addSelected(ids: Set<string> = selected) {
     if (!result) return;
-    const drafts = result.drafts.filter((d) => selected.has(d.id));
+    const drafts = result.drafts.filter((d) => ids.has(d.id));
     const r = accept(drafts, result.context);
     if (!r.ok) {
       setNote({ tone: "error", text: r.error });
@@ -304,6 +311,24 @@ export function CopilotWorkspace({
           )}
           <span className="text-2xs text-ink-500">Nothing runs until you choose {run?.label ?? "Analyze portfolio"}. Ctrl+Enter also runs it.</span>
         </div>
+        {/* #119: one advisor workflow from the reviewed brief and the selected accounts; not offered by the scripted demo. */}
+        {run && run.runAs !== "scripted_example" && (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="secondary"
+              onClick={() => ask(ALLOCATION_QUESTION, run.runAs, "allocation_proposal")}
+              loading={loading}
+              disabled={liveBlocked}
+              iconLeft={<LayoutGrid className="h-4 w-4" />}
+              data-testid="prepare-allocation"
+            >
+              Prepare allocation proposal
+            </Button>
+            <span className="text-2xs text-ink-500">
+              From the reviewed client objectives and this alternative&apos;s selected accounts: a proposed mix, a justified hold, or a question. {run.runAs === "test_provider" ? "Here a scripted test provider answers, not a model." : ""}
+            </span>
+          </div>
+        )}
         <div className="flex flex-wrap gap-2" aria-label="Suggested questions">
           {SUGGESTIONS.map((s) => (
             // A suggestion fills in the question; it never runs by itself.
@@ -331,7 +356,25 @@ export function CopilotWorkspace({
 
       {result && (
         <div className="space-y-3">
-          {result.drafts.length > 0 && (
+          {result.allocation ? (
+            <AllocationProposal
+              result={result as CopilotResult & { allocation: AllocationRunView }}
+              stale={stale}
+              existing={existing}
+              addedHere={addedHere}
+              onAdd={(ids) => addSelected(new Set(ids))}
+              onDiscard={() => {
+                setResult(null);
+                setNote({ tone: "info", text: "Discarded — nothing added." });
+              }}
+              note={note}
+            />
+          ) : result.task === "allocation_proposal" ? (
+            <div role="alert" className="rounded-md bg-warning-50 ring-1 ring-inset ring-warning-500/40 px-3 py-2 text-[13px] text-ink-800" data-testid="allocation-missing">
+              No allocation decision was returned, so nothing can be added. The answer below says what happened; prepare it again or ask a question.
+            </div>
+          ) : null}
+          {!result.allocation && result.drafts.length > 0 && (
             <DraftPreview
               result={result}
               stale={stale}
@@ -347,7 +390,7 @@ export function CopilotWorkspace({
                   return n;
                 })
               }
-              onAdd={addSelected}
+              onAdd={() => addSelected()}
               onDiscard={() => {
                 setResult(null);
                 setNote({ tone: "info", text: "Discarded — nothing added." });
@@ -371,7 +414,7 @@ export function CopilotWorkspace({
                   {asked}
                 </p>
               )}
-              {answeredQuestionNote(asked, question) && (
+              {!result.task && answeredQuestionNote(asked, question) && (
                 <p role="note" className="rounded bg-slatey-50 ring-1 ring-inset ring-ink-100 px-2 py-1 text-[13px] text-ink-800" data-testid="copilot-question-changed">
                   {answeredQuestionNote(asked, question)}
                 </p>

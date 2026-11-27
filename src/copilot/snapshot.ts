@@ -53,6 +53,8 @@ export type RunAs = (typeof RUN_AS)[number];
 export const CopilotRequestSchema = z.object({
   question: z.string().trim().min(1).max(2000),
   runAs: z.enum(RUN_AS).optional(),
+  // #119: Prepare allocation proposal (absent: an open question).
+  task: z.enum(["allocation_proposal"]).optional(),
   snapshot: z.object({
     client: record,
     advisor: record,
@@ -77,7 +79,7 @@ export const CopilotRequestSchema = z.object({
   }),
 });
 
-export type CopilotRequest = { question: string; runAs?: RunAs; snapshot: CopilotSnapshot & { workingDraft: WorkingDraft }; context: AgentContext };
+export type CopilotRequest = { question: string; runAs?: RunAs; task?: "allocation_proposal"; snapshot: CopilotSnapshot & { workingDraft: WorkingDraft }; context: AgentContext };
 
 export function parseCopilotRequest(body: unknown):
   | { ok: true; value: CopilotRequest }

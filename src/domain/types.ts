@@ -527,8 +527,39 @@ export interface Recommendation {
   destination?: ProposedDestination;
   /** D2: one leg of a linked replacement, applied all together or not at all. */
   linked?: { groupId: string; legs: number };
+  /** #119: an allocation proposal's strategy record (advisory; its implementation legs are separate recommendations). */
+  allocationStrategy?: AllocationStrategy;
   createdAt: string;
   updatedAt: string;
+}
+
+/** One asset class's weight, in percent of the in-scope portfolio. */
+export interface ClassWeight {
+  assetClass: AssetClass;
+  pct: number;
+}
+
+/**
+ * #119: Stratovell AI's allocation decision for an alternative's scope, kept on
+ * an advisory recommendation. The proposed weights are the AI's judgment: not
+ * the advisor's own desk targets and not a calculated result. What the
+ * approved actions actually achieve always comes from the shared evaluator.
+ */
+export interface AllocationStrategy {
+  /** "propose": change the mix. "maintain": keep the current mix (a justified hold, no trade). */
+  outcome: "propose" | "maintain";
+  /** The AI's proposed weights (every class in scope, total 100, cash included). */
+  proposedWeights: ClassWeight[];
+  /** The in-scope weights the engine reported when it was proposed. */
+  currentWeights: ClassWeight[];
+  /** The client-brief questions the rationale relies on. */
+  objectiveRefs: DiscoveryQuestionId[];
+  /** A plausible alternative the AI considered, and why it wasn't chosen. */
+  alternative?: { summary: string; weights?: ClassWeight[] };
+  /** The implementation groups prepared with it (each group's legs are separate recommendations). */
+  groupIds: string[];
+  /** What it was prepared on. */
+  basis: { inputRevision: string; scopeAccountIds: string[] | null; reportingCurrency: CurrencyCode; scopeTotal: number };
 }
 
 /**

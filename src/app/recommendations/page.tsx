@@ -22,6 +22,7 @@ import { useNormalizedHoldings } from "@/hooks/useNormalizedHoldings";
 import { useFxNow } from "@/hooks/useFxNow";
 import { hasMoneyAmounts, newRecommendation } from "@/engines/recommendationAmounts";
 import { draftMembership, restatementMessage } from "@/engines/allocationDesk";
+import { ASSET_CLASS_LABELS } from "@/domain/assetTaxonomy";
 import { cn } from "@/utils/cn";
 import { summarizePreview } from "@/components/recommendations/recEffect";
 import { RecPreview } from "@/components/recommendations/RecPreview";
@@ -251,6 +252,17 @@ function Inner() {
                 </p>
               )}
               <p className="text-sm text-ink-600 mt-1 leading-relaxed">{r.rationale}</p>
+              {/* #119: an allocation strategy's weights, labelled as a judgment; what approved actions achieve is shown with the version. */}
+              {r.allocationStrategy && (
+                <p className="mt-1 text-[13px] text-ink-700" data-testid="rec-allocation-strategy">
+                  <span className="font-medium">{r.allocationStrategy.outcome === "maintain" ? "Keeps the current mix" : "Proposed mix"} (a judgment, not a calculated result):</span>{" "}
+                  {r.allocationStrategy.proposedWeights.map((w) => `${ASSET_CLASS_LABELS[w.assetClass] ?? w.assetClass} ${w.pct}%`).join(" · ")}
+                  <span className="text-ink-500">
+                    {" "}
+                    (when proposed: {r.allocationStrategy.currentWeights.map((w) => `${ASSET_CLASS_LABELS[w.assetClass] ?? w.assetClass} ${w.pct}%`).join(" · ")}). Its implementation is the separate actions you approve; the version shows what they achieve.
+                  </span>
+                </p>
+              )}
               {!rejected && (
               <div
                 data-testid="rec-card-effect"
