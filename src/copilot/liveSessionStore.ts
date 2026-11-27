@@ -21,10 +21,10 @@ import { hash, localDir, randomToken, readJson, sameHash, saveJson as saveJsonFi
 // refused until a new session is started. This file imports Node built-ins
 // only (through localFiles.ts), so that script can load it directly.
 //
-// #113: the record's storage is a backend. A path means the local file above
-// (unchanged); the hosted path passes a per-user database row instead
-// (src/server/hosted/sessionBackend.ts), locked for each operation, so the same
-// state machine and the same limits apply in both.
+// #113: the record's storage is a backend. A path means the local file above,
+// which is what Stratovell uses; the hosted per-user database backend was
+// retired with hosted mode in #116. Every backend runs the same state machine
+// and limits.
 
 /** The ceilings of one session, and its default allowance. USD is an estimate-based guard, not a billing ceiling. */
 export const LIVE_SESSION_LIMITS = { minutes: 30, runs: 3, requests: 10, usd: 5, activeRuns: 1 } as const;

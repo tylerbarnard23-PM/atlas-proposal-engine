@@ -1,4 +1,10 @@
-# Hosted Claude connectivity (#113)
+# Hosted Claude connectivity (#113): retired
+
+> **Retired on 24 November 2026 by [#116](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/116).** Stratovell became a desktop application ([DESKTOP_APP.md](DESKTOP_APP.md)): real Claude analysis runs in the local application with the user's own key, and the website is the download entry with a labelled scripted preview. The hosted sign-in, cloud key storage, Postgres sessions and their routes are removed from the code; `COPILOT_MODE=hosted` (or any unknown value) now runs the scripted demo.
+>
+> **Retained infrastructure (nothing deleted; still serving production's hosted pilot until the rollback is verified):** the Neon Free database `stratovell-hosted` and its Vercel Marketplace integration, its rows, `STRATOVELL_CREDENTIAL_KEYS`, the GitHub OAuth application and its single active secret, and the Production variables. Deleting or rotating any of them is a separate owner decision. The production rollback (`COPILOT_MODE=demo`, redeploy) is recorded in the handoff.
+>
+> The pending two-account hosted tests are superseded. The text below is the historical design record.
 
 This is how the shared website runs real Claude analysis for a signed-in user, with that user's own Anthropic API key. It is a separate path from the local launcher ([LOCAL_CLAUDE_SETUP.md](LOCAL_CLAUDE_SETUP.md)), which is unchanged.
 

@@ -1,7 +1,8 @@
 "use client";
 
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { createJSONStorage, persist } from "zustand/middleware";
+import { desktopWorkspaceUnreadable, followDesktopWorkspace, strictWorkspaceStorage, workspaceStorage } from "./workspaceStorage";
 import type {
   Account,
   AdvisorProfile,
@@ -46,7 +47,7 @@ import { candidateProblems, deskActions, draftBasisInputs, legacyWorkingDraft, n
 import { normalizeHoldings } from "@/engines/normalizationEngine";
 import { LEGACY_SAMPLE_FIRM_NAME } from "@/domain/branding";
 import type { ImportedWorkspace } from "@/ingestion/documents/toWorkspace";
-import type { RestoredWorkspace } from "@/engines/workspaceBackup";
+import { restoredState, restoreTakesBackupFirm, type RestoredWorkspace, type WorkspaceBackup } from "@/engines/workspaceBackup";
 import { findRevision, modelProblems, nextRevision, strategyProblems } from "@/engines/strategyProposals";
 import { UMA_MODELS, UMA_STRATEGIES } from "@/data/umaStory";
 import { buildSnapshot } from "@/engines/approvedSnapshot";
@@ -162,6 +163,11 @@ export interface AtlasActions {
    * if it fails the current workspace stays exactly as it was (R23a).
    */
   restoreWorkspace: (next: RestoredWorkspace) => { ok: true } | { ok: false; error: string };
+  /**
+   * Settings → Restore: the workspace a validated backup becomes, built from this
+   * window's firm settings and saved through restoreWorkspace (all or nothing).
+   */
+  restoreBackup: (backup: WorkspaceBackup, opts: { replaceFirm: boolean }) => { ok: true } | { ok: false; error: string };
   // Working draft (D1). None of these changes a holding, an approval or the
   // final-PDF inputs; each records the inputs the draft is now edited against.
   /** The accounts in the allocation scope; null goes back to "not chosen" (every non-liability account). */
@@ -313,6 +319,31 @@ const blankState = (): AtlasState => {
     hasHydrated: true,
   };
 };
+
+/**
+ * #116, Codex finding D: whether the workspace is still the untouched fictional
+ * starting point (what the first launch opens), compared by content rather than
+ * by a launch-time flag. Only then may Getting started replace it without
+ * asking. The times stamped when the starting point was created are ignored;
+ * everything an advisor can enter or change is compared.
+ */
+export function isUntouchedSample(state: AtlasState): boolean {
+  return comparableStart(state) === comparableStart(seedState());
+}
+
+function comparableStart(s: AtlasState): string {
+  const data = JSON.parse(
+    JSON.stringify({
+      ...s,
+      hasHydrated: undefined,
+      proposal: { ...s.proposal, createdAt: undefined, updatedAt: undefined },
+      workingDraft: { ...s.workingDraft, createdAt: undefined, updatedAt: undefined },
+    })
+  );
+  const sorted = (v: unknown): unknown =>
+    Array.isArray(v) ? v.map(sorted) : v && typeof v === "object" ? Object.fromEntries(Object.keys(v as object).sort().map((k) => [k, sorted((v as Record<string, unknown>)[k])])) : v;
+  return JSON.stringify(sorted(data));
+}
 
 // Upgrades a workspace saved by an earlier version of the app. Exported so
 // each step can be unit-tested.
@@ -796,16 +827,26 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
         if (result.ok) set({ snapshots: [...s.snapshots, result.snapshot] });
         return result;
       },
+      restoreBackup: (backup, opts) => {
+        const s = get();
+        // #118: while the saved workspace is unreadable this window holds only the fictional sample (and edits that
+        // weren't saved), so "keep the current firm" would save the sample's; the backup's firm is taken instead.
+        const replaceFirm = restoreTakesBackupFirm({ chosen: opts.replaceFirm, currentUnreadable: desktopWorkspaceUnreadable() });
+        return get().restoreWorkspace(restoredState(backup, { advisor: s.advisor, disclosures: s.disclosures }, { replaceFirm }));
+      },
       restoreWorkspace: (next) => {
-        const storage = typeof window !== "undefined" ? window.localStorage : undefined;
+        // #116: the browser's localStorage, or the desktop application's workspace file (saved at once, so a failure is known).
+        const storage = strictWorkspaceStorage(STORAGE_KEY);
         const before = get();
-        const savedBefore = storage?.getItem(STORAGE_KEY) ?? null;
+        const savedBefore = storage?.get() ?? null;
         const after = { ...before, ...next, hasHydrated: true };
         // Check the save first, with exactly what persist will write: if the
         // browser refuses it (e.g. storage full), nothing has changed yet.
         try {
-          storage?.setItem(STORAGE_KEY, JSON.stringify({ state: after, version: STORE_VERSION }));
+          storage?.set(JSON.stringify({ state: after, version: STORE_VERSION }));
         } catch (err) {
+          // The desktop application's own message says what happened (e.g. another window changed the workspace first, so this window was refreshed: try again).
+          if (storage?.desktop) return { ok: false, error: `Stratovell couldn't restore the backup: ${(err as Error).message} Nothing was changed.` };
           return { ok: false, error: `The browser couldn't save the restored workspace (${(err as Error).message}). Nothing was changed.` };
         }
         try {
@@ -819,8 +860,8 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
             // the saved copy is put back below
           }
           try {
-            if (savedBefore === null) storage?.removeItem(STORAGE_KEY);
-            else storage?.setItem(STORAGE_KEY, savedBefore);
+            if (savedBefore === null) storage?.remove();
+            else storage?.set(savedBefore);
           } catch {
             // nothing more can be done; the in-memory workspace is intact
           }
@@ -830,6 +871,13 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
     }),
     {
       name: STORAGE_KEY,
+      // #116: localStorage in a browser; in the desktop application, a file in the user's application-data folder.
+      storage: createJSONStorage(() => {
+        const s = workspaceStorage(STORAGE_KEY);
+        // No storage (server rendering): throwing tells persist to keep the store in memory, as before.
+        if (!s) throw new Error("No workspace storage here.");
+        return s;
+      }),
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);
       },
@@ -841,6 +889,9 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
     }
   )
 );
+
+// #116, Codex finding B: in the desktop application, follow the workspace other Stratovell windows save.
+followDesktopWorkspace(() => useAtlasStore.persist.rehydrate());
 
 // Server-safe snapshot used by API routes that don't have access to localStorage.
 export function serverSnapshot(): AtlasState {

@@ -27,6 +27,7 @@ import { snapshotFileName, snapshotReadiness, snapshotTemplateProps } from "@/en
 import type { ProposalPdfTemplateProps } from "@/pdf/templates/ProposalPdfTemplate";
 import { presentedClientBrief } from "@/engines/clientDiscovery";
 import { PDF_PRINT_OPTIONS } from "@/pdf/printOptions";
+import { desktopPdfRenderer, isDesktopServer } from "@/pdf/desktopRenderer";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -183,6 +184,29 @@ async function renderPdf(props: ProposalPdfTemplateProps, filename: string, id: 
   const { renderToStaticMarkup } = await import("react-dom/server");
   const bodyMarkup = renderToStaticMarkup(React.createElement(ProposalPdfTemplate, props));
   const html = buildPrintableHtml(props, bodyMarkup);
+  const pdfResponse = (pdf: Uint8Array) =>
+    new Response(pdf as unknown as BodyInit, {
+      status: 200,
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="${filename}"`,
+        "X-Filename": filename,
+        "X-Proposal-Id": id,
+        "Cache-Control": "no-store",
+      },
+    });
+
+  // #116: the desktop application prints with its own Chromium; it never looks for an installed browser.
+  if (isDesktopServer()) {
+    const render = desktopPdfRenderer();
+    if (!render) return NextResponse.json({ error: "Stratovell's PDF printer isn't available in this window. Restart Stratovell and try again." }, { status: 500 });
+    try {
+      return pdfResponse(await render(html));
+    } catch (err) {
+      console.error("[generate-pdf] desktop printing failed", err);
+      return NextResponse.json({ error: (err as Error).message || "PDF generation failed" }, { status: 500 });
+    }
+  }
 
   // Lazy-load puppeteer-core so the import isn't pulled into edge bundles.
   const puppeteer = (await import("puppeteer-core")).default;
@@ -237,16 +261,7 @@ async function renderPdf(props: ProposalPdfTemplateProps, filename: string, id: 
     // so "load" is complete. puppeteer-core 25 dropped networkidle for setContent.
     await page.setContent(html, { waitUntil: "load", timeout: 60_000 });
     const pdf = await page.pdf({ ...PDF_PRINT_OPTIONS, margin: { ...PDF_PRINT_OPTIONS.margin } });
-    return new Response(pdf as unknown as BodyInit, {
-      status: 200,
-      headers: {
-        "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="${filename}"`,
-        "X-Filename": filename,
-        "X-Proposal-Id": id,
-        "Cache-Control": "no-store",
-      },
-    });
+    return pdfResponse(pdf);
   } catch (err) {
     console.error("[generate-pdf] PDF generation failed", err);
     return NextResponse.json(

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'" />
+    <title>Stratovell</title>
+    <style>
+      html, body { height: 100%; margin: 0; }
+      body { display: flex; align-items: center; justify-content: center; background: #f6f4ee; color: #1c2430; font: 15px/1.5 "Segoe UI", system-ui, sans-serif; }
+      main { max-width: 520px; padding: 32px; text-align: center; }
+      .mark { width: 56px; height: 56px; margin: 0 auto 18px; border-radius: 12px; background: #0A1628; color: #D2B45A; font: 600 28px/56px Georgia, serif; }
+      h1 { font: 400 24px/1.2 Georgia, serif; margin: 0 0 8px; }
+      p { margin: 6px 0; color: #4a5565; }
+      .bar { height: 3px; width: 160px; margin: 18px auto 0; background: #e3e6ea; border-radius: 2px; overflow: hidden; }
+      .bar::after { content: ""; display: block; height: 100%; width: 40%; background: #0A1628; animation: slide 1.2s ease-in-out infinite; }
+      @keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="mark">S</div>
+      <h1>Starting Stratovell…</h1>
+      <p>Stratovell runs on this computer. Its local service is starting; your saved work stays on this computer.</p>
+      <div class="bar" aria-hidden="true"></div>
+    </main>
+  </body>
+</html>

@@ -9,8 +9,8 @@ import { sessionFilePath } from "./liveSessionStore";
 import { keychainStore, memoryStore } from "./credentialStore";
 import { connectionFilePath, pairingFilePath } from "./localFiles";
 import { COPILOT_MAX_BODY_BYTES, SHAPE_LIMITS, readBodyLimited, shapeProblem } from "../server/requestLimits";
+import { pairRedirectPath } from "./localPairing";
 import { MAX_KEY_BODY_BYTES, authorizeLocal, disconnect, localInfo, pairBrowser, pairingCookie, saveKey, startSession, useEnvironmentKey } from "./localConnect";
-import { defaultHostedDeps, hostedAnalysis, hostedInfo, type HostedDeps } from "@/server/hosted/hosted";
 
 // The Copilot API's request handling, kept out of the route files so tests
 // can drive it with a fake provider. Modes:
@@ -22,16 +22,13 @@ import { defaultHostedDeps, hostedAnalysis, hostedInfo, type HostedDeps } from "
 //     browser with allowance left, every live request is refused before any
 //     provider call. The key and the session are managed by a paired browser
 //     (localConnect.ts); none of that contacts the provider.
-//   - hosted (COPILOT_MODE=hosted, #113): the public site. Anyone can run the
-//     labelled scripted example; Claude analysis needs a signed-in user, their
-//     own saved key and their session (src/server/hosted). The local launcher,
-//     pairing and OS credential store play no part in it.
+//   Any other value, including the retired "hosted" (#113, retired by #116
+//   when Stratovell became a desktop application), runs the scripted demo.
 
 /** What a request on this server actually runs: Claude, the scripted example or the test provider. */
 export function actualRun(mode: CopilotMode, env: Record<string, string | undefined>): RunAs {
   if (mode === "demo") return "scripted_example";
   if (mode === "test") return "test_provider";
-  if (mode === "hosted") return env.COPILOT_LIVE_PROVIDER === "fake" ? "test_provider" : "claude";
   const ready = liveReadiness(env);
   return ready.ok && ready.provider === "fake" ? "test_provider" : "claude";
 }
@@ -44,7 +41,6 @@ const RUN_MISMATCH: Record<RunAs, string> = {
 
 export function copilotMode(env: Record<string, string | undefined>): CopilotMode {
   if (env.COPILOT_MODE === "live") return "live";
-  if (env.COPILOT_MODE === "hosted") return "hosted";
   if (env.COPILOT_MODE === "test") return "test";
   return "demo";
 }
@@ -59,19 +55,15 @@ export const defaultDeps = (): LiveDeps => ({
   makeClient: anthropicClient,
 });
 
-export async function handleCopilotGet(req: Request, deps: LiveDeps = defaultDeps(), hosted: HostedDeps = { ...defaultHostedDeps(), env: deps.env }) {
+export async function handleCopilotGet(req: Request, deps: LiveDeps = defaultDeps()) {
   const mode = copilotMode(deps.env);
-  if (mode === "hosted") {
-    const info = await hostedInfo(req, hosted);
-    return NextResponse.json({ mode, model: info.model, hosted: info }, { headers: { "cache-control": "no-store" } });
-  }
   if (mode !== "live") return NextResponse.json({ mode, model: mode === "test" ? TEST_PROVIDER_MODEL : null });
   const live = await liveSessionStatus(req, deps);
   // `local` is this browser's view of the connection: the key itself is never part of it.
   return NextResponse.json({ mode, model: live.provider === "fake" ? TEST_PROVIDER_MODEL : COPILOT_MODEL, live, local: await localInfo(req, deps) }, { headers: { "cache-control": "no-store" } });
 }
 
-export async function handleCopilotPost(req: Request, deps: LiveDeps = defaultDeps(), hosted: HostedDeps = { ...defaultHostedDeps(), env: deps.env }) {
+export async function handleCopilotPost(req: Request, deps: LiveDeps = defaultDeps()) {
   const read = await readBodyLimited(req, COPILOT_MAX_BODY_BYTES);
   if (!read.ok) {
     if (read.tooLarge) return NextResponse.json({ error: "Workspace too large for one Stratovell AI request." }, { status: 413 });
@@ -94,17 +86,6 @@ export async function handleCopilotPost(req: Request, deps: LiveDeps = defaultDe
   if (mismatch) return NextResponse.json({ error: mismatch, code: "stale_context" }, { status: 409 });
 
   const mode = copilotMode(deps.env);
-  if (mode === "hosted") {
-    // The public preview: the labelled scripted example, for anyone. Everything else is the signed-in user's own
-    // analysis through the hosted gate, which never substitutes the script or the test provider for Claude.
-    const asked = parsed.value.runAs ?? "claude";
-    if (asked !== "scripted_example") return hostedAnalysis(req, hosted, parsed.value, asked);
-    try {
-      return NextResponse.json(runDemoCopilot(snapshot, question));
-    } catch {
-      return unreadable();
-    }
-  }
   // Only what the advisor chose runs: a script or the test provider never
   // answers a request made for Claude. Refused before any engine work and
   // before the live session admits a run, so nothing is spent or counted.
@@ -199,8 +180,9 @@ export async function handleLocalPair(req: Request, deps: LiveDeps = defaultDeps
   const token = new URL(req.url).searchParams.get("token") ?? "";
   const r = await pairBrowser(req, deps, token);
   if (!r.ok) return new NextResponse(`Stratovell wasn't paired with this browser: ${r.error}`, { status: r.status, headers: { "content-type": "text/plain; charset=utf-8", ...NO_STORE } });
-  // To the Copilot page on the same origin, without the token in the address.
-  return new NextResponse(null, { status: 303, headers: { location: "/copilot", "set-cookie": pairingCookie(deps.env, r.cookie, r.expiresAt), ...NO_STORE, "referrer-policy": "no-referrer" } });
+  // To the Copilot page (or an allowed in-app path, #116) on the same origin, without the token in the address.
+  const next = pairRedirectPath(new URL(req.url).searchParams.get("next"));
+  return new NextResponse(null, { status: 303, headers: { location: next, "set-cookie": pairingCookie(deps.env, r.cookie, r.expiresAt), ...NO_STORE, "referrer-policy": "no-referrer" } });
 }
 
 /** POST /api/copilot/local/connection {"action":"save"|"use_environment"|"disconnect"} : a paired browser manages the key. No provider request. */

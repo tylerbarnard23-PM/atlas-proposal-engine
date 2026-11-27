@@ -74,6 +74,15 @@ export async function isPaired(file: string, now: Date, cookie: string | null): 
   return withLock(file, () => live(load(file), now).browsers.some((b) => sameHash(hash(cookie), b.cookieHash)), true);
 }
 
+/**
+ * Where a redeemed pairing link may send the browser: a plain path in this app
+ * (the desktop application opens its welcome page or the dashboard), never
+ * another site. Anything else goes to the Stratovell AI page, as before.
+ */
+export function pairRedirectPath(next: string | null | undefined): string {
+  return typeof next === "string" && /^\/[a-z0-9-]{0,40}$/.test(next) ? next : "/copilot";
+}
+
 /** The CSRF token for a pairing cookie: page script can't read the HttpOnly cookie, so only the paired, same-origin status read can hand this out. */
 export const csrfTokenFor = (cookie: string) => hash(`atlas-local-csrf:${cookie}`);
 export const csrfMatches = (cookie: string, token: string | null) => !!token && sameHash(token, csrfTokenFor(cookie));

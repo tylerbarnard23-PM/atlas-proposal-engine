@@ -4,6 +4,7 @@ import * as React from "react";
 import { usePathname } from "next/navigation";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
+import { DesktopNotices } from "./DesktopNotices";
 import { DEMO_DISCLAIMER } from "@/domain/legal";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
@@ -18,6 +19,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <Sidebar />
       <div className="flex-1 flex flex-col min-w-0">
         <Topbar />
+        <DesktopNotices />
         <main className="flex-1 px-6 py-6 lg:px-10 lg:py-8 max-w-[1500px] w-full mx-auto">{children}</main>
         <footer
           role="contentinfo"

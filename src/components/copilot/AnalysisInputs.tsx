@@ -20,7 +20,7 @@ export function targetSummary(targets: Partial<Record<AssetClass, number>> | und
     .map(([k, v]) => `${ASSET_CLASS_LABELS[k as AssetClass] ?? k} ${Math.round((v as number) * 10) / 10}%`);
 }
 
-export function AnalysisInputs({ hostedOrLive }: { hostedOrLive: boolean }) {
+export function AnalysisInputs({ live }: { live: boolean }) {
   const client = useAtlasStore((s) => s.client);
   const accounts = useAtlasStore((s) => s.accounts);
   const holdings = useAtlasStore((s) => s.holdings);
@@ -69,7 +69,7 @@ export function AnalysisInputs({ hostedOrLive }: { hostedOrLive: boolean }) {
       </dl>
       <p className="mt-1.5 text-2xs text-ink-500">
         Never sent: your private discovery notes.{" "}
-        {hostedOrLive
+        {live
           ? "Claude analysis sends your question, the client brief and the portfolio information Claude asks for to Anthropic. Nothing runs until you choose to run it; changing an input makes earlier previews out of date."
           : "Nothing runs until you choose to run it; changing an input makes earlier previews out of date."}
       </p>

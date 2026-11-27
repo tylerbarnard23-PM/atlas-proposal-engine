@@ -55,7 +55,90 @@ Stop for Codex review with exact head, checks, preview association, remaining li
 
 D1 (PR #72, `0381db1`), D2 (PR #75, `073049f`), D2a (PR #79, `c0ee4e9`), D3 (PR #81, `85b3910`) and **D4 (PR #82, `3738588`, 16 November 2026)** are released; the commands below the next one are historical, so do not rerun them. **D5 is in progress** (desktop-first since 18 November 2026: mobile work is deferred).
 
-### Next task: Codex re-review of the #113 PR (hosted Claude connectivity and Saved examples), then owner setup and desktop UAT
+### Next task: Codex review of the #118 fix on PR #117; then, on the owner's instruction, 0.1.3 and the installed recovery re-run
+
+Saved on 27 November 2026. This supersedes the 25 November command below.
+
+```
+Review the #118 fix on Stratovell PR #117 (branch feat/desktop-windows-app) at the head named in its description.
+Verify the local and GitHub heads, the tree, the stash and the worktrees first, and preserve newer work.
+Read docs/CLAUDE_HANDOFF.md, docs/roadmap/DESKTOP_APP.md, issue #118 and REPORT.md section 34.
+
+#118, found by the installed-app UAT of 0.1.2: a default Settings restore during a load problem kept the in-memory
+sample firm (or an edit typed while saving was paused) instead of the backup's firm. Review:
+- restoreTakesBackupFirm (src/engines/workspaceBackup.ts) and backupPreview's unreadable / fromBackup fields;
+- the store action restoreBackup and the Settings panel calling it;
+- the read-only stratovell:workspace:status IPC call and the bridge's loadProblem(), answered only for the app's own pages;
+- the "#118" block of tests/desktopReliability.test.ts;
+- that nothing changes outside a load problem.
+
+Record any finding with a regression test written first. Source work and headless tests only.
+
+Only after the review passes and the owner says so: build private UAT 0.1.3 in a new version folder (keep 0.1.0–0.1.2),
+then, with the owner's authorization for controlled launches (no GPU, watchdog, one isolated data folder), re-run the
+installed recovery stage, including a default restore during a load problem, and a short smoke test.
+
+The production rollback is separate: it waits for the owner's Vercel re-verification and preserves Neon, OAuth and secrets.
+
+Need explicit instruction: merge, deployment, publication, a paid or model request, recording, a signing purchase, mobile work or MCP work. The USD 5 take is unapproved.
+```
+
+### Previous task (done 25–27 November 2026; Codex's re-review passed at `82b7751`, 0.1.2 built and UAT-tested; don't rerun): independent Codex re-review of PR #117's A–D fixes
+
+Saved on 25 November 2026.
+
+```
+Re-review Stratovell PR #117 (branch feat/desktop-windows-app) at the head named in its description.
+Verify the local and GitHub heads, the tree, the stash and the worktrees first, and preserve newer work.
+Read docs/CLAUDE_HANDOFF.md, docs/roadmap/DESKTOP_APP.md and REPORT.md sections 33–34.
+
+Review the fixes for Codex findings A–D:
+- A: the unreadable-workspace state, refused saves, and the kept copies;
+- B: revision-checked writes and following other windows;
+- C: save-now with a pending queue;
+- D: the content-based Getting started confirmation.
+
+Then review the fixes for the three re-review findings at 055f99b:
+1. a stale Settings restore, refused through peek and the real restoreWorkspace;
+2. the load-problem guard, kept until a restore succeeds, with the copies kept once;
+3. the current file read first, and backup-listing failures.
+
+Also review the desktop/shared IPC and bridge extraction, tests/desktopReliability.test.ts, and the revised docs/roadmap/INSTALL_AS_APP_ASSESSMENT.md.
+
+Record any finding with a regression test written first.
+
+Source work and headless tests only: do not launch Electron, run installers or automate Windows dialogs. Rebuild the installer only after the review passes and the owner says so.
+
+The production rollback is separate: it waits for the owner's Vercel re-verification and preserves Neon, OAuth and secrets.
+
+Need explicit instruction: merge, deployment, publication, a paid or model request, recording, a signing purchase, mobile work or MCP work. The USD 5 take is unapproved.
+```
+
+### Superseded: production rollback, Codex review of the #116 desktop PR, then owner UAT
+
+Saved on 24 November 2026. Stratovell is now a desktop application (#116; [DESKTOP_APP.md](DESKTOP_APP.md)). PR #115 was merged as `831612cbb95bb91d528dfcb438dd612de03a41fe` and its hosted mode is retired on the #116 branch (`feat/desktop-windows-app`, from `831612c`). The PR description names the head to review. **Merge, publication of an installer, announcement, paid requests, re-recording, mobile and MCP work are separate decisions, none given.** Verify heads, tree, stash and worktrees first, and preserve newer work.
+
+1. **The owner completes the authorized production rollback:**
+   - re-verify in Vercel;
+   - set Production `COPILOT_MODE=demo`;
+   - redeploy the approved release.
+
+   Then a keyless check: the site is scripted, and hosted credential, session and analysis operations are refused, also with an existing signed-in cookie. Record it on #116 and PR #115. Neon, its integration and rows, the encryption keys, deployment secrets and the GitHub OAuth app stay as inactive infrastructure.
+2. **Codex reviews the #116 PR** at its exact head:
+   - **Persistence:** the atomic file, recovery, restore, and port independence.
+   - **Desktop boundary:** the allow-listed environment, the IPC bridge, navigation and network limits, the fuses, the build's contents check and junction handling.
+   - **The PDF print path** (same gates, Electron's Chromium).
+   - **Shutdown:** stopping the session without resetting counters.
+   - **Hosted retirement:** `hosted` now falls back to the demo.
+   - **The pages:** welcome, `/download` (no link without an approved release) and the preview banner.
+3. **Owner desktop UAT** with the private installer (checklist outside Git: `evidence/pr116-desktop-2026-11-24/DESKTOP-UAT-CHECKLIST.md`), on a second computer if possible.
+4. **Owner release decisions:** code signing, the publication location, recording an approved release, and #35.
+5. Only then: the recorder update, a free labelled rehearsal, and separate approval for any real Claude analysis. The USD 5 take is still **unapproved**.
+
+Keep [#114](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/114) and the restriction-confirmation finding as separate follow-ups. Keep mobile and MCP work parked. Preserve all originals, recordings, voiceover packages, the stash, worktrees, `launch.json` and browser data.
+
+### Previous task (done 24 November 2026; PR #115 merged as `831612c` and verified, hosted pilot then retired by #116; don't rerun): Codex re-review of the #113 PR, then owner setup and desktop UAT
+
 
 Updated on 24 November 2026. Codex reviewed `780c099` and found two defects; both are fixed on the same PR. The PR description names the head to review.
 - **Development identities:** they are refused when the current configuration doesn't allow dev sign-in.

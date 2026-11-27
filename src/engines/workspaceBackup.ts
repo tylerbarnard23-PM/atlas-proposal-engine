@@ -990,6 +990,16 @@ export interface RestoredWorkspace extends WorkspaceData {
 }
 
 /**
+ * Whether a restore takes firm & branding from the backup (#118). The advisor
+ * can choose it; it is also required while the saved workspace can't be read,
+ * because the window then holds only the fictional sample (and edits that
+ * weren't saved), never the advisor's own firm.
+ */
+export function restoreTakesBackupFirm(o: { chosen: boolean; currentUnreadable: boolean }): boolean {
+  return o.chosen || o.currentUnreadable;
+}
+
+/**
  * The workspace a validated backup becomes. Firm settings are shared: the
  * current ones are kept (and the proposal linked to them) unless the advisor
  * chose the backup's. The disclosure library is the app's; required
@@ -1049,12 +1059,15 @@ export interface BackupPreview {
     /** D3: approved versions, restored exactly as approved. */
     approvedVersions: number;
   };
-  current: { clientName: string; accounts: number; holdings: number; recommendations: number; sourceDocuments: number; pdfHistory: number };
-  firm: { keptFirmName: string; backupFirmName: string; differs: boolean };
+  /** `unreadable`: the saved workspace couldn't be read (desktop load problem); the counts then describe the fictional sample held in memory, not the advisor's workspace. */
+  current: { clientName: string; accounts: number; holdings: number; recommendations: number; sourceDocuments: number; pdfHistory: number; unreadable: boolean };
+  /** `fromBackup`: the restore takes the backup's firm & branding whatever the choice (#118: while the saved workspace is unreadable). */
+  firm: { keptFirmName: string; backupFirmName: string; differs: boolean; fromBackup: boolean };
   omitted: string[];
 }
 
-export function backupPreview(backup: WorkspaceBackup, current: WorkspaceData, now: Date): BackupPreview {
+export function backupPreview(backup: WorkspaceBackup, current: WorkspaceData, now: Date, opts: { currentUnreadable?: boolean } = {}): BackupPreview {
+  const unreadable = opts.currentUnreadable === true;
   const e = backup.engagement;
   const reporting = e.client.proposalOutputCurrency;
   const holdings = normalizeHoldings(e.holdings as Holding[], e.fxRates, reporting);
@@ -1084,8 +1097,14 @@ export function backupPreview(backup: WorkspaceBackup, current: WorkspaceData, n
       recommendations: current.recommendations.length,
       sourceDocuments: current.sourceDocuments.length,
       pdfHistory: current.pdfHistory.length,
+      unreadable,
     },
-    firm: { keptFirmName: current.advisor.firmName, backupFirmName: backup.firm.advisor.firmName, differs: JSON.stringify(current.advisor) !== JSON.stringify(backup.firm.advisor) },
+    firm: {
+      keptFirmName: current.advisor.firmName,
+      backupFirmName: backup.firm.advisor.firmName,
+      differs: JSON.stringify(current.advisor) !== JSON.stringify(backup.firm.advisor),
+      fromBackup: restoreTakesBackupFirm({ chosen: false, currentUnreadable: unreadable }),
+    },
     omitted: backup.omitted,
   };
 }

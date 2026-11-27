@@ -20,6 +20,7 @@ import {
   Building2,
   PieChart,
   BadgeCheck,
+  Compass,
 } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { useAtlasStore } from "@/store/useStore";
@@ -37,6 +38,8 @@ interface NavItem {
 export const NAV: NavItem[] = [
   // Set up once, before any client work, so it leads the menu.
   { label: "Firm & Branding", href: "/firm-branding", icon: <Building2 className="h-4 w-4" />, group: "Your Firm" },
+  // #116: the getting-started guide to the one advisor workflow.
+  { label: "Getting started", href: "/welcome", icon: <Compass className="h-4 w-4" />, group: "Overview" },
   { label: "Dashboard", href: "/", icon: <LayoutDashboard className="h-4 w-4" />, group: "Overview" },
   { label: "Client Profile", href: "/client-profile", icon: <UserSquare className="h-4 w-4" />, group: "Overview" },
   // #111: the client's objectives (discovery, review and the brief) have their own page, right after the profile.

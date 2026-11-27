@@ -8,6 +8,8 @@ import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { WorkspaceBackupPanel } from "@/components/settings/WorkspaceBackupPanel";
 import { AiConnectionPanel } from "@/components/settings/AiConnectionPanel";
+import { DesktopAboutPanel } from "@/components/settings/DesktopAboutPanel";
+import { useDesktopInfo } from "@/components/layout/DesktopNotices";
 
 export default function SettingsPage() {
   return (
@@ -18,6 +20,7 @@ export default function SettingsPage() {
 }
 
 function Inner() {
+  const desktop = useDesktopInfo();
   const reset = useAtlasStore((s) => s.resetSeed);
   const clearAll = useAtlasStore((s) => s.clearAll);
   const startNewClient = useAtlasStore((s) => s.startNewClient);
@@ -27,8 +30,10 @@ function Inner() {
       <PageHeader
         eyebrow="Workspace"
         title="Settings"
-        description="The AI connection, local persistence, backups and the exchange-rate source. Environment configuration is managed at the deployment level."
+        description="The AI connection, where your data is saved, backups and the exchange-rate source."
       />
+
+      {desktop && <DesktopAboutPanel info={desktop} />}
 
       <SectionDivider>AI connection</SectionDivider>
       <AiConnectionPanel />
@@ -36,8 +41,17 @@ function Inner() {
       <SectionDivider>Persistence</SectionDivider>
       <Card className="mb-5">
         <CardBody className="space-y-3">
-          <p className="text-sm text-ink-700">
-            All advisor-entered data is persisted in the browser via <code className="text-2xs bg-slatey-100 rounded px-1 py-0.5">localStorage</code>. <em>Start a new client</em> clears the engagement but keeps your firm &amp; branding; <em>Reset everything</em> also clears the firm.
+          <p className="text-sm text-ink-700" data-testid="persistence-where">
+            {desktop ? (
+              <>
+                All advisor-entered data is saved on this computer, in <code className="text-2xs bg-slatey-100 rounded px-1 py-0.5 break-all">{desktop.dataFolder}</code>, with the previous copy and daily backups kept beside it. Installing, updating and uninstalling Stratovell never remove it.
+              </>
+            ) : (
+              <>
+                All advisor-entered data is persisted in the browser via <code className="text-2xs bg-slatey-100 rounded px-1 py-0.5">localStorage</code>.
+              </>
+            )}{" "}
+            <em>Start a new client</em> clears the engagement but keeps your firm &amp; branding; <em>Reset everything</em> also clears the firm.
           </p>
           <div className="flex flex-wrap gap-2">
             <Button variant="secondary" onClick={() => { if (confirm("Reset the workspace to the fictional sample? Any in-progress edits will be replaced. The sample starts with no recommendations.")) reset(); }}>
@@ -75,7 +89,9 @@ function Inner() {
         </CardBody>
       </Card>
 
-      <SectionDivider>Backup &amp; restore</SectionDivider>
+      <SectionDivider>
+        <span id="backup" className="scroll-mt-4">Backup &amp; restore</span>
+      </SectionDivider>
       <WorkspaceBackupPanel />
 
       <SectionDivider>Exchange rates</SectionDivider>

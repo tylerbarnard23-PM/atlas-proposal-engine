@@ -59,7 +59,7 @@ function Inner() {
         eyebrow="Advisory · AI-assisted"
         title="Stratovell AI"
         description="The advisor records the client's objectives. Stratovell checks the portfolio data and calculates possible changes. Claude analyzes that information and prepares recommendations for your review and approval: drafts are a preview until you add them, and adding never approves anything."
-        actions={mode && <ModeBadge mode={mode.mode} model={mode.model} live={mode.live} hosted={mode.hosted} />}
+        actions={mode && <ModeBadge mode={mode.mode} model={mode.model} live={mode.live} />}
       />
       <div role="tablist" aria-label="Stratovell AI views" className="mb-4 flex gap-1 border-b border-ink-100 max-w-4xl">
         {VIEWS.map((v) => (

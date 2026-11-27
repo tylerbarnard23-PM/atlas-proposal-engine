@@ -15,11 +15,8 @@ export function emptyRecommendationsCopy(run: ReturnType<typeof analysisRun>): s
   const steps =
     "Recommendations appear here only when you add them. Review the client objectives, run an analysis in Stratovell AI, inspect its draft previews and add the drafts you select; adding never approves anything. You can also write your own recommendation.";
   if (!run) return steps;
-  // #113: the hosted site, before this user has signed in and connected their own key.
-  if (run.hostedSignIn)
-    return `${steps} On this site, Claude runs only after you sign in and connect your own Anthropic API key; until then Stratovell AI runs a labelled scripted example, not Claude.`;
   if (run.runAs === "scripted_example")
-    return `${steps} On this hosted demo, Stratovell AI runs a scripted example, not Claude: its drafts are labelled as examples, not an analysis of this client.`;
+    return `${steps} In this scripted preview, Stratovell AI runs a scripted example, not Claude: its drafts are labelled as examples, not an analysis of this client.`;
   if (run.runAs === "test_provider") return `${steps} This server answers with the test provider, not Claude: its drafts are labelled as test examples.`;
   return `${steps} With Claude connected, Claude analyzes the client brief and the portfolio, and its drafts stay previews until you add them.`;
 }

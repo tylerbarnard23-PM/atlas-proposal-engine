@@ -6,7 +6,9 @@
 
 [![CI](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/actions/workflows/ci.yml)
 
-**[Live demo →](https://atlas-proposal-engine.vercel.app/)** · runs on a sample family office, no sign-up, no API key needed
+**[Scripted preview →](https://atlas-proposal-engine.vercel.app/)** · a labelled, scripted demonstration on a sample family office, no sign-up, no API key needed
+
+**Stratovell is becoming a desktop application** ([#116](https://github.com/tylerbarnard23-PM/atlas-proposal-engine/issues/116), in review). It runs on your own computer, and Claude analysis uses your own Anthropic API key. A Windows build exists for private testing only: it is unsigned and there is **no public download yet**. See [Desktop application](docs/roadmap/DESKTOP_APP.md).
 
 > **Disclaimer.** Stratovell is a demonstration project. It is not a registered investment adviser or broker-dealer and is not affiliated with, reviewed, or endorsed by the SEC, FINRA, or any regulator. Sample clients and advisors are fictional. Nothing here is investment, tax, or legal advice. Do not upload real client data.
 >
@@ -177,7 +179,15 @@ npm run dev
 
 Open http://localhost:3000. The app loads with a sample client (the Blackwell Family Office); **Settings** resets the sample or clears to a blank workspace.
 
-To use Stratovell AI with your own Claude API key on this machine:
+To build the Windows desktop application (private testing; unsigned unless a certificate is supplied):
+
+```bash
+npm run desktop:build
+```
+
+The installer lands in `dist-desktop/<version>/`. Architecture, the update path and signing are in [Desktop application](docs/roadmap/DESKTOP_APP.md).
+
+To use Stratovell AI with your own Claude API key on this machine from source:
 
 ```bash
 npm run build

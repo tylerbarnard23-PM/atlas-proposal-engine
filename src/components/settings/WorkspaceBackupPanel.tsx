@@ -3,6 +3,7 @@
 import * as React from "react";
 import { AlertTriangle, Download, Upload } from "lucide-react";
 import { useAtlasStore } from "@/store/useStore";
+import { desktopWorkspaceUnreadable } from "@/store/workspaceStorage";
 import { Card, CardBody } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import {
@@ -11,7 +12,6 @@ import {
   backupPreview,
   exportBackup,
   readBackupFile,
-  restoredState,
   type BackupPreview,
   type WorkspaceBackup,
 } from "@/engines/workspaceBackup";
@@ -35,7 +35,7 @@ const CONFIRMATION_LABEL: Record<BackupPreview["incoming"]["fxConfirmation"], st
 type Pending = { backup: WorkspaceBackup; preview: BackupPreview; fileName: string };
 
 export function WorkspaceBackupPanel() {
-  const restoreWorkspace = useAtlasStore((s) => s.restoreWorkspace);
+  const restoreBackup = useAtlasStore((s) => s.restoreBackup);
   const recommendations = useAtlasStore((s) => s.recommendations);
   const holdings = useAtlasStore((s) => s.holdings);
   const accounts = useAtlasStore((s) => s.accounts);
@@ -98,7 +98,8 @@ export function WorkspaceBackupPanel() {
         if (fileInput.current) fileInput.current.value = "";
         return;
       }
-      setPending({ backup: parsed.backup, preview: backupPreview(parsed.backup, useAtlasStore.getState(), new Date()), fileName: file.name });
+      // #118: while the saved workspace can't be read, the preview says so, and that the firm comes from the backup.
+      setPending({ backup: parsed.backup, preview: backupPreview(parsed.backup, useAtlasStore.getState(), new Date(), { currentUnreadable: desktopWorkspaceUnreadable() }), fileName: file.name });
     } catch (err) {
       setErrors([`${file.name} couldn't be checked (${(err as Error).message || "unknown error"}).`]);
       if (fileInput.current) fileInput.current.value = "";
@@ -107,8 +108,7 @@ export function WorkspaceBackupPanel() {
 
   function replace() {
     if (!pending) return;
-    const state = useAtlasStore.getState();
-    const result = restoreWorkspace(restoredState(pending.backup, { advisor: state.advisor, disclosures: state.disclosures }, { replaceFirm }));
+    const result = restoreBackup(pending.backup, { replaceFirm });
     if (result.ok) {
       setMessage(`Restored ${pending.preview.incoming.clientName} from ${pending.fileName}. Readiness checks and the FX confirmation were re-evaluated as of now.`);
       reset();
@@ -218,15 +218,31 @@ export function WorkspaceBackupPanel() {
               </div>
               <div>
                 <div className="text-2xs uppercase tracking-wide text-ink-500">Replaces the current workspace</div>
-                <div className="font-medium">{p.current.clientName}</div>
-                <div>
-                  {p.current.accounts} accounts · {p.current.holdings} holdings · {p.current.recommendations} recommendations · {p.current.sourceDocuments} source
-                  documents · {p.current.pdfHistory} PDF generations
-                </div>
-                <div className="mt-1">
-                  Firm &amp; branding: <strong>kept</strong> ({p.firm.keptFirmName || "not set"}).
-                </div>
-                {p.firm.differs && (
+                {p.current.unreadable ? (
+                  <div data-testid="backup-current-unreadable">
+                    Your saved workspace, which couldn&apos;t be read. Copies of its files are kept aside before restoring. This window shows the fictional sample,
+                    held only in memory.
+                  </div>
+                ) : (
+                  <>
+                    <div className="font-medium">{p.current.clientName}</div>
+                    <div>
+                      {p.current.accounts} accounts · {p.current.holdings} holdings · {p.current.recommendations} recommendations · {p.current.sourceDocuments}{" "}
+                      source documents · {p.current.pdfHistory} PDF generations
+                    </div>
+                  </>
+                )}
+                {p.firm.fromBackup ? (
+                  <div className="mt-1" data-testid="backup-firm-from-backup">
+                    Firm &amp; branding: <strong>from the backup</strong> ({p.firm.backupFirmName || "not set"}). Your saved firm couldn&apos;t be read, so the firm
+                    shown in this window ({p.firm.keptFirmName || "not set"}) is the fictional sample&apos;s, and isn&apos;t kept.
+                  </div>
+                ) : (
+                  <div className="mt-1">
+                    Firm &amp; branding: <strong>kept</strong> ({p.firm.keptFirmName || "not set"}).
+                  </div>
+                )}
+                {p.firm.differs && !p.firm.fromBackup && (
                   <label className="mt-1 flex items-start gap-2">
                     <input type="checkbox" checked={replaceFirm} onChange={(e) => setReplaceFirm(e.target.checked)} data-testid="backup-replace-firm" />
                     <span>Also replace firm &amp; branding with the backup&apos;s ({p.firm.backupFirmName || "not set"})</span>
