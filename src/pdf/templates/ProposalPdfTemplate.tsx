@@ -25,6 +25,7 @@ import { accountBasis, exposureView, feeCoverage, findRevision, label as strateg
 import { costIncomeCoverage, describeCoverage } from "@/engines/costIncome";
 import { evaluateDesk } from "@/engines/allocationDesk";
 import { strategyResultRows } from "@/engines/allocationProposal";
+import { describeAnswer, questionLabel } from "@/engines/clientDiscovery";
 import { basisBreakdown, describeBasisCounts, describeDateRange, describeValueDates, provenanceCounts, valueDateSummary, valueProvenance } from "@/engines/valuationProvenance";
 import { currentDisclosure } from "@/domain/disclosureLibrary";
 import { describeAmounts } from "@/engines/recommendationAmounts";
@@ -930,6 +931,8 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
                   view: "approved",
                 });
                 const pctText = (n: number) => `${n.toFixed(1)}%`;
+                // Review finding 4: the strategy is compared on its own saved scope, named here, never on a different denominator.
+                const scopeNames = result.scope.accounts.map((x) => x.name).join(", ");
                 return (
                   <div style={{ marginTop: 6 }}>
                     <p className="pdf-text">
@@ -957,8 +960,28 @@ export function ProposalPdfTemplate(props: ProposalPdfTemplateProps) {
                         ))}
                       </tbody>
                     </table>
+                    {st.clientBasis && st.clientBasis.length > 0 && (
+                      <ul className="pdf-text" style={{ marginTop: 4, paddingLeft: 16 }}>
+                        {st.clientBasis.map((b) => {
+                          // A quote is what the client said when the strategy was decided; if the brief this document
+                          // presents says something else now, both are shown, never the old answer as current.
+                          const now = describeAnswer(client, b.question);
+                          return (
+                            <li key={b.question}>
+                              <strong>{questionLabel(b.question)}:</strong> &ldquo;{b.said}&rdquo;
+                              {now && now !== b.said ? <> (when proposed; the client brief now records &ldquo;{now}&rdquo;)</> : null} — {b.supports}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                    {st.reviews && st.reviews.length > 0 && (
+                      <p className="pdf-text" style={{ marginTop: 4 }}>
+                        Re-reviewed by the advisor on {formatTimestampDate(st.reviews[st.reviews.length - 1].at, { timeZone: props.timeZone })} after facts it was decided on changed: {st.reviews[st.reviews.length - 1].note}
+                      </p>
+                    )}
                     <p className="pdf-text" style={{ marginTop: 4 }}>
-                      Percent of the investment scope. The result is calculated from the approved actions only; a proposed weight is never shown as achieved.
+                      Scope of this strategy: {scopeNames || "every investment account"}. Percent of that scope. The result is calculated from the approved actions only; a proposed weight is never shown as achieved.
                       {result.unvalued.length > 0 ? " Some holdings in scope couldn't be valued, so the result covers valued holdings only." : ""}
                     </p>
                   </div>

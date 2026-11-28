@@ -1,5 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { ALLOCATION_TASK_MARKER, type MessagesClient } from "./agent";
+import { ASSET_CLASS_LABELS } from "@/domain/assetTaxonomy";
 
 // D4: a deterministic stand-in for the model, run through the real agent loop
 // and tools. It is not a model and the page says so ("Test provider"). It
@@ -62,11 +63,14 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
 /** The scripted allocation decision for a brief and a scope (the propose_allocation input). */
 export function scriptedAllocationDecision(brief: Brief, scope: Scope): Record<string, unknown> {
   const answer = (label: string) => brief.answers?.find((a) => a.question === label);
-  const unreviewed = (brief.answers ?? []).find((a) => a.status !== "reviewed_by_advisor");
+  // The owner's materiality rule: these must be reviewed; other unknowns stay visibly unknown.
+  const MATERIAL = ["Objectives", "Time horizon", "Willingness to accept losses", "Ability to absorb losses", "Liquidity needs"];
   const ask = (text: string, decides: string) => ({ outcome: "ask_question", headline: "A question before proposing a mix", rationale: "Information that would change the allocation decision is missing, unreviewed or conflicting, so no mix is proposed yet.", question: { text, decides } });
   if (brief.possible_conflicts?.length) return ask(`${brief.possible_conflicts[0]} Which should guide the allocation?`, "Whether the mix should take more or less risk, and by how much.");
-  if (brief.not_discussed?.length) return ask(`Please discuss "${brief.not_discussed[0]}" with the client and record it.`, "How much risk and how much cash the mix should carry.");
+  const missing = MATERIAL.find((l) => brief.not_discussed?.includes(l));
+  if (missing) return ask(`Please discuss "${missing}" with the client and record it.`, "How much risk and how much cash the mix should carry.");
   if (brief.missing_details?.length) return ask(`${brief.missing_details[0]} Please record it.`, "How much cash to hold, and when.");
+  const unreviewed = (brief.answers ?? []).find((a) => MATERIAL.includes(a.question) && a.status !== "reviewed_by_advisor");
   if (unreviewed) return ask(`Please review the recorded answer to "${unreviewed.question}" with the client.`, "Whether the recorded answer can guide the mix.");
 
   const ccy = scope.reporting_currency ?? "USD";
@@ -93,8 +97,12 @@ export function scriptedAllocationDecision(brief: Brief, scope: Scope): Record<s
     return {
       outcome: "maintain_current_mix",
       headline: "Keep the current mix",
-      rationale: `The reviewed brief (${objectives}; willingness to accept losses: ${willingness}; ${liquidity}) gives no reason to change the mix: no withdrawal needs more cash than the ${ccy} ${cashNow.toLocaleString("en-US")} held, and the stated risk tolerance accepts the current equity share. No trade is proposed.`,
-      objective_refs: ["objectives", "liquidity", "lossWillingness", "lossAbility", "timeHorizon"],
+      rationale: `Nothing in the reviewed brief calls for a change: no planned withdrawal needs more cash than the ${ccy} ${cashNow.toLocaleString("en-US")} held, and the stated risk tolerance accepts the current equity share. No trade is proposed.`,
+      client_basis: [
+        { question: "objectives", supports: "The stated objective is served by the current mix, so changing it isn't justified by the brief." },
+        { question: "lossWillingness", supports: "The client's stated willingness to accept losses accepts the current equity share." },
+        { question: "liquidity", supports: "No planned withdrawal needs more cash than the portfolio already holds." },
+      ],
     };
   }
 
@@ -103,8 +111,8 @@ export function scriptedAllocationDecision(brief: Brief, scope: Scope): Record<s
   const equity = largest("equity");
   const bonds = equity ? largest("fixed_income", equity.account) : undefined;
   const groups: Record<string, unknown>[] = [];
-  if (equity && raise > 0.005) groups.push({ title: "Raise cash from the existing equity fund", rationale: `Reduce the equity fund by ${ccy} ${raise.toLocaleString("en-US")} and keep the proceeds as cash in the same account, meeting the planned withdrawal.`, legs: [{ holding_id: equity.holding_id, change: "reduce", amount: raise }] });
-  if (equity && bonds && shift > 0.005) groups.push({ title: "Shift from equities into the existing bond fund", rationale: `Reduce the equity fund by a further ${ccy} ${shift.toLocaleString("en-US")} and buy the existing core bond fund with the proceeds; the sale and the purchase form one funded group.`, legs: [{ holding_id: equity.holding_id, change: "reduce", amount: shift }, { holding_id: bonds.holding_id, change: "increase", amount: shift }] });
+  if (equity && raise > 0.005) groups.push({ title: "Raise cash from the existing equity fund", rationale: "Reduce the equity fund and keep the proceeds as cash in the same account, ready for the planned withdrawal.", legs: [{ holding_id: equity.holding_id, change: "reduce", amount: raise }] });
+  if (equity && bonds && shift > 0.005) groups.push({ title: "Shift from equities into the existing bond fund", rationale: "Reduce the equity fund further and buy the existing core bond fund with the proceeds; the sale and the purchase form one funded group.", legs: [{ holding_id: equity.holding_id, change: "reduce", amount: shift }, { holding_id: bonds.holding_id, change: "increase", amount: shift }] });
   const proposed = weights({ equity: -(raise + shift), cash: raise, ...(shift > 0.005 ? { fixed_income: shift } : {}) });
   const eq = proposed.find((w) => w.asset_class === "equity")?.pct;
   const cash = proposed.find((w) => w.asset_class === "cash")?.pct;
@@ -112,14 +120,17 @@ export function scriptedAllocationDecision(brief: Brief, scope: Scope): Record<s
     outcome: "propose_changes",
     headline: `Raise cash to ${cash}% and lower equities to ${eq}%`,
     rationale:
-      `The reviewed brief records: ${liquidity}; ${objectives}; willingness to accept losses: ${willingness}. Holding ${ccy} ${need.toLocaleString("en-US")} in cash meets the stated withdrawal.` +
+      "The withdrawal is due within a year, so the money for it is moved to cash now rather than left in equities that could fall before it is needed; a withdrawal later than that wouldn't by itself call for holding it in cash today." +
       (shift > 0.005 ? " Moving a further share from equities into bonds is a strategy judgment for the stated risk tolerance, not a figure the questionnaire dictates." : ""),
-    objective_refs: shift > 0.005 ? ["liquidity", "lossWillingness", "objectives"] : ["liquidity"],
+    client_basis: [
+      { question: "liquidity", supports: "The planned withdrawal falls within a year, so holding its amount in cash avoids selling equities after a fall just before it is needed." },
+      ...(shift > 0.005 ? [{ question: "lossWillingness", supports: "A moderate willingness to accept losses fits less equity than the portfolio holds today." }, { question: "objectives", supports: "Preserving wealth is the primary objective, which a smaller equity share supports." }] : []),
+    ],
     proposed_weights: proposed,
     alternative:
       shift > 0.005
-        ? { summary: "Raise cash only: it meets the cash preference with less selling, but leaves more equity exposure than the stated risk tolerance suggests.", weights: weights({ equity: -raise, cash: raise }) }
-        : { summary: "Keep today's mix: it leaves cash below the stated withdrawal." },
+        ? { summary: "Raise cash only: it meets the withdrawal with less selling, but leaves more equity exposure than the stated risk tolerance suggests.", weights: weights({ equity: -raise, cash: raise }) }
+        : { summary: "Keep today's mix: the withdrawal would then have to come from selling equities when it falls due." },
     groups,
   };
 }
@@ -146,13 +157,14 @@ export function createTestProvider(): MessagesClient {
             }
             if (r.tool === "get_scope_overview") return toolUse("propose_allocation", scriptedAllocationDecision(brief, d as Scope));
             if (r.tool === "propose_allocation") {
-              const groups = (d.groups as { title: string; feasible: boolean; not_feasible_reason: string | null }[] | undefined) ?? [];
+              // The tool result names groups by number, not by the model-written title (review finding 3).
+              const groups = (d.groups as { group: number; feasible: boolean; not_feasible_reason: string | null }[] | undefined) ?? [];
               const gaps = ((d.mix as { asset_class: string; gap_pts: number | null; no_eligible_candidate: boolean }[] | undefined) ?? []).filter((x) => (x.gap_pts ?? 0) > 0.05);
               return answer(
                 [
                   `**Test provider (not a model).** Allocation decision: ${String(d.outcome).replace(/_/g, " ")}.`,
-                  ...groups.map((g) => `- ${g.title}: ${g.feasible ? "feasible" : `not feasible (${g.not_feasible_reason})`}.`),
-                  ...gaps.map((g) => `- ${g.asset_class}: ${g.gap_pts} percentage points short of the proposed weight${g.no_eligible_candidate ? "; no eligible existing holding" : ""}.`),
+                  ...groups.map((g) => `- Group ${g.group}: ${g.feasible ? "feasible" : `not feasible (${String(g.not_feasible_reason).replace(/\.$/, "")})`}.`),
+                  ...gaps.map((g) => `- ${ASSET_CLASS_LABELS[g.asset_class as keyof typeof ASSET_CLASS_LABELS] ?? g.asset_class}: ${g.gap_pts} percentage points short of the proposed weight${g.no_eligible_candidate ? "; no eligible existing holding" : ""}.`),
                   "Nothing is added or approved: review the groups and add the ones you choose.",
                 ].join("\n")
               );

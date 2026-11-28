@@ -43,7 +43,8 @@ import { contextMismatch, type AgentContext } from "@/copilot/context";
 import { forReadiness } from "@/engines/importCompleteness";
 import { migrateRecommendationCurrency, withApprovalRule } from "@/engines/recommendationAmounts";
 import { exampleKind, knownOrigin, withOrigin } from "@/engines/recommendationOrigin";
-import { candidateProblems, deskActions, draftBasisInputs, legacyWorkingDraft, needsIntentRestatement, newWorkingDraft, recordInputBasis } from "@/engines/allocationDesk";
+import { candidateProblems, deskActions, draftBasisInputs, legacyWorkingDraft, needsIntentRestatement, newWorkingDraft, recordInputBasis, scopeAccountIds } from "@/engines/allocationDesk";
+import { materialBasis, strategyAlternative } from "@/engines/allocationBasis";
 import { normalizeHoldings } from "@/engines/normalizationEngine";
 import { LEGACY_SAMPLE_FIRM_NAME } from "@/domain/branding";
 import type { ImportedWorkspace } from "@/ingestion/documents/toWorkspace";
@@ -168,6 +169,12 @@ export interface AtlasActions {
    * window's firm settings and saved through restoreWorkspace (all or nothing).
    */
   restoreBackup: (backup: WorkspaceBackup, opts: { replaceFirm: boolean }) => { ok: true } | { ok: false; error: string };
+  /**
+   * #119: the advisor's explicit re-review of an allocation strategy after a material change (scope, brief,
+   * holdings or rates). Records the note and the facts as they are now; the strategy keeps its own scope and
+   * weights. Throws without a note.
+   */
+  reviewAllocationStrategy: (id: string, note: string) => void;
   // Working draft (D1). None of these changes a holding, an approval or the
   // final-PDF inputs; each records the inputs the draft is now edited against.
   /** The accounts in the allocation scope; null goes back to "not chosen" (every non-liability account). */
@@ -826,6 +833,27 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()(
         const result = buildSnapshot(s, { now: new Date(fxClock.now()), id: safeId("ver"), note });
         if (result.ok) set({ snapshots: [...s.snapshots, result.snapshot] });
         return result;
+      },
+      reviewAllocationStrategy: (id, note) => {
+        const text = note.trim();
+        if (!text) throw new Error("A re-review needs a note saying what was reviewed.");
+        const s = get();
+        const rec = s.recommendations.find((r) => r.id === id);
+        const strategy = rec?.allocationStrategy;
+        if (!rec || !strategy) throw new Error("No allocation strategy with that id.");
+        const ccy = s.client.proposalOutputCurrency;
+        const alt = strategyAlternative(id, [s.workingDraft, ...s.alternatives]);
+        // The same fallback as readiness (strategiesNeedingReview), so a recorded review matches what it's checked against.
+        const alternativeScope = alt ? scopeAccountIds(s.accounts, alt) : s.accounts.filter((a) => !a.isLiabilityAccount).map((a) => a.id);
+        const strategyScope = strategy.basis.scopeAccountIds ?? alternativeScope;
+        const material = materialBasis({ client: s.client, accounts: s.accounts, holdings: s.holdings, fxRates: s.fxRates, reportingCurrency: ccy }, strategyScope, alternativeScope);
+        const now = new Date().toISOString();
+        const reviewed = {
+          ...strategy,
+          basis: { ...strategy.basis, scopeAccountIds: strategyScope },
+          reviews: [...(strategy.reviews ?? []), { at: now, note: text, alternativeScope, material }],
+        };
+        set({ recommendations: s.recommendations.map((r) => (r.id === id ? { ...r, allocationStrategy: reviewed, updatedAt: now } : r)) });
       },
       restoreBackup: (backup, opts) => {
         const s = get();

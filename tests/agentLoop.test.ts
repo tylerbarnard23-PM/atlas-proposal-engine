@@ -294,7 +294,7 @@ describe("the real loop with an injected provider", () => {
     expect(r.figures.unsupported).toEqual(["$1,234", "7.5%"]);
     // Grouped numbers, compact amounts and fractions-as-percentages are matched to the evidence.
     // Typed: compact money and fractions-as-percentages match; a bare grouped number is unchecked.
-    expect(checkFigures(["$60.0K, 60,000 and 60.0%", "USD 1.5M"], [[{ value: 60_000, unit: "money", currency: "USD" }, { value: 0.6, unit: "ratio" }]])).toEqual({ claims: 4, matched: 2, unsupported: ["USD 1.5M"], unchecked: ["60,000"], clientStated: [] });
+    expect(checkFigures(["$60.0K, 60,000 and 60.0%", "USD 1.5M"], [[{ value: 60_000, unit: "money", currency: "USD" }, { value: 0.6, unit: "ratio" }]])).toEqual({ claims: 4, matched: 2, unsupported: ["USD 1.5M"], unchecked: ["60,000"], clientStated: [], proposal: [] }); // #119 (intended): claims only the model's own proposal supports are listed separately
   });
 });
 

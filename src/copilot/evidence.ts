@@ -24,7 +24,7 @@ export interface EvidenceValue {
    * withdrawal, an income need): a client instruction, not an engine result.
    * A claim it alone supports is reported as client-stated, never matched.
    */
-  source?: "client_brief";
+  source?: "client_brief" | "ai_proposal";
   /** For a client-stated amount: what it is (e.g. "planned withdrawal (within 1 year)"). Not used in matching. */
   label?: string;
 }
@@ -40,6 +40,11 @@ export interface FigureCheck {
   unchecked: string[];
   /** #109: claims that only restate a figure from the client brief (the advisor's records, not an engine result), as written. */
   clientStated: string[];
+  /**
+   * #119: claims that only restate the model's own proposal (its proposed weights, or a gap measured against
+   * them): its judgment, never evidence for itself. Absent from older results.
+   */
+  proposal?: string[];
 }
 
 // A currency amount ($1,234.56, USD 1,234, €1.2M, -$50.0K, +CHF 300, $250k,
@@ -112,14 +117,15 @@ export function figuresIn(text: string): EvidenceValue[] {
   );
 }
 
-type Verdict = "matched" | "unsupported" | "unchecked" | "client_stated";
+type Verdict = "matched" | "unsupported" | "unchecked" | "client_stated" | "proposal";
 
-// Engine evidence decides first; a claim only client-stated figures support is reported as such.
+// Engine evidence decides first; a claim only client-stated figures support is reported as such, and one only the
+// model's own proposal supports (#119) as its proposal, never as matched.
 function verdict(f: Figure, evidence: EvidenceValue[]): Verdict {
-  const engine = engineVerdict(f, evidence.filter((e) => e.source !== "client_brief"));
+  const engine = engineVerdict(f, evidence.filter((e) => e.source == null));
   if (engine !== "unsupported") return engine;
-  const stated = engineVerdict(f, evidence.filter((e) => e.source === "client_brief"));
-  return stated === "matched" ? "client_stated" : "unsupported";
+  if (engineVerdict(f, evidence.filter((e) => e.source === "client_brief")) === "matched") return "client_stated";
+  return engineVerdict(f, evidence.filter((e) => e.source === "ai_proposal")) === "matched" ? "proposal" : "unsupported";
 }
 
 function engineVerdict(f: Figure, evidence: EvidenceValue[]): Exclude<Verdict, "client_stated"> {
@@ -144,6 +150,7 @@ export function checkFigures(texts: string[], evidence: EvidenceValue[][]): Figu
   const unsupported: string[] = [];
   const unchecked: string[] = [];
   const clientStated: string[] = [];
+  const proposal: string[] = [];
   let claims = 0;
   let matched = 0;
   for (const text of texts) {
@@ -153,8 +160,9 @@ export function checkFigures(texts: string[], evidence: EvidenceValue[][]): Figu
       if (v === "matched") matched += 1;
       else if (v === "unsupported") unsupported.push(f.text);
       else if (v === "client_stated") clientStated.push(f.text);
+      else if (v === "proposal") proposal.push(f.text);
       else unchecked.push(f.text);
     }
   }
-  return { claims, matched, unsupported: [...new Set(unsupported)], unchecked: [...new Set(unchecked)], clientStated: [...new Set(clientStated)] };
+  return { claims, matched, unsupported: [...new Set(unsupported)], unchecked: [...new Set(unchecked)], clientStated: [...new Set(clientStated)], proposal: [...new Set(proposal)] };
 }

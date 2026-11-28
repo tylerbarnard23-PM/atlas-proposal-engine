@@ -22,6 +22,7 @@ import { useNormalizedHoldings } from "@/hooks/useNormalizedHoldings";
 import { useFxNow } from "@/hooks/useFxNow";
 import { hasMoneyAmounts, newRecommendation } from "@/engines/recommendationAmounts";
 import { draftMembership, restatementMessage } from "@/engines/allocationDesk";
+import { strategiesNeedingReview } from "@/engines/allocationBasis";
 import { ASSET_CLASS_LABELS } from "@/domain/assetTaxonomy";
 import { cn } from "@/utils/cn";
 import { summarizePreview } from "@/components/recommendations/recEffect";
@@ -73,6 +74,18 @@ function Inner() {
     [normalized, recs, accounts, fx]
   );
   const remove = useAtlasStore((s) => s.removeRecommendation);
+  // #119 (review finding 4): approved strategies whose material facts changed since the decision or the last re-review.
+  const client = useAtlasStore((s) => s.client);
+  const rawHoldings = useAtlasStore((s) => s.holdings);
+  const activeDraft = useAtlasStore((s) => s.workingDraft);
+  const otherDrafts = useAtlasStore((s) => s.alternatives);
+  const staleStrategies = React.useMemo(
+    () =>
+      new Map(
+        strategiesNeedingReview({ client, accounts, holdings: rawHoldings, fxRates, reportingCurrency: client.proposalOutputCurrency, recommendations: recs, drafts: [activeDraft, ...otherDrafts] }).map((x) => [x.id, x.changes])
+      ),
+    [client, accounts, rawHoldings, fxRates, recs, activeDraft, otherDrafts]
+  );
   const approveAll = useAtlasStore((s) => s.approveAllRecommendations);
   const isRejected = (r: Recommendation) => r.status === "excluded";
   const rejectRec = useAtlasStore((s) => s.rejectRecommendation);
@@ -263,6 +276,12 @@ function Inner() {
                   </span>
                 </p>
               )}
+              {r.allocationStrategy && staleStrategies.has(r.id) && <StrategyReReview id={r.id} changes={staleStrategies.get(r.id)!} />}
+              {r.allocationStrategy?.reviews?.length ? (
+                <p className="mt-1 text-[12px] text-ink-500" data-testid="rec-allocation-reviews">
+                  Re-reviewed {r.allocationStrategy.reviews.length === 1 ? "once" : `${r.allocationStrategy.reviews.length} times`}; last {formatTimestampDate(r.allocationStrategy.reviews[r.allocationStrategy.reviews.length - 1].at)}: {r.allocationStrategy.reviews[r.allocationStrategy.reviews.length - 1].note}
+                </p>
+              ) : null}
               {!rejected && (
               <div
                 data-testid="rec-card-effect"
@@ -772,6 +791,28 @@ function RecForm({
         <Button onClick={onSave}>Save</Button>
         <Button variant="ghost" onClick={onRemove}>Delete</Button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * #119 (review finding 4): an approved strategy whose scope, brief, holdings or rates changed since it was decided
+ * blocks a new version and the final PDF until the advisor re-reviews it with a note (or prepares a new proposal).
+ * Recording a re-review never runs the Copilot or changes the strategy's weights; earlier versions keep their frozen copy.
+ */
+function StrategyReReview({ id, changes }: { id: string; changes: string[] }) {
+  const review = useAtlasStore((s) => s.reviewAllocationStrategy);
+  const [note, setNote] = React.useState("");
+  return (
+    <div className="mt-2 rounded-md bg-warning-50 ring-1 ring-inset ring-warning-500/30 px-3 py-2 text-[13px]" data-testid="rec-allocation-stale">
+      <p className="text-warning-600">
+        Since this strategy was decided: {changes.join(", ")} changed. Re-review it against the current facts before a new version or the final PDF, or prepare a new allocation proposal.
+      </p>
+      <Label htmlFor={`rereview-${id}`} className="mt-2 block">What you reviewed</Label>
+      <Textarea id={`rereview-${id}`} rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="For example: the client's objectives changed; the proposed mix still fits because…" />
+      <Button size="sm" className="mt-2" disabled={!note.trim()} onClick={() => { review(id, note); setNote(""); }} data-testid="rec-allocation-rereview">
+        Record re-review
+      </Button>
     </div>
   );
 }

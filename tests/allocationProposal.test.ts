@@ -1,6 +1,7 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import * as React from "react";
 import type { Recommendation } from "@/domain/types";
+import { runScripted, scripted } from "./support/allocationFixture";
 
 // #119 — Prepare allocation proposal. Through the real store, route handler,
 // agent loop (the labelled test provider, not a model), tools, engines, backup
@@ -234,15 +235,18 @@ describe("#119 material information missing", () => {
     const r = await prepare(m);
     expect(r.allocation.outcome).toBe("ask");
     expect(r.allocation.question?.text).toMatch(/ability to absorb losses is recorded as low/);
-    // The engine-level guard, whatever a model would return.
-    const s = store(m);
-    const ctx = new m.CopilotContext({ ...s, sourceDocuments: [] } as never, NOW);
-    const out = m.executeTool(ctx, "propose_allocation", { outcome: "maintain_current_mix", headline: "Keep the mix", rationale: "The client accepts the current risk.", objective_refs: ["lossWillingness"] });
-    expect(out.isError).toBe(true);
-    expect(out.content).toMatch(/doesn't support a personalized decision yet.*ask_question/);
-    expect(ctx.drafts).toEqual([]);
+    // The engine-level guard, whatever a model would return (the inputs read first, the decision on a later turn).
+    const offered = { outcome: "maintain_current_mix", headline: "Keep the mix", rationale: "The client accepts the current risk.", client_basis: [{ question: "lossWillingness", supports: "The client accepts large losses, which the current mix carries." }] };
+    const g = await runScripted(m as never, scripted(m as never, [() => READ, () => ({ tools: [{ name: "propose_allocation", input: offered }] }), () => ({ text: "Done." })]));
+    expect(g.trace[2]).toMatchObject({ name: "propose_allocation", ok: false });
+    expect(g.trace[2].summary).toMatch(/doesn't support a personalized decision yet/); // the trace keeps the first 200 characters
+    expect(g.drafts).toEqual([]);
   });
 });
+
+const READ = { tools: [{ name: "get_portfolio_overview", input: {} }, { name: "get_scope_overview", input: {} }] };
+const decideWith = (m: M, decision: object) => runScripted(m as never, scripted(m as never, [() => READ, () => ({ tools: [{ name: "propose_allocation", input: decision }] }), () => ({ text: "Decision returned." })]));
+const BASIS = [{ question: "liquidity", supports: "Fictional check of the engine's rules: the planned withdrawal is the basis." }];
 
 describe("#119 funding and eligibility", () => {
   it("a restricted bond fund: the bond group is refused with its reason, the cash group still works, and bonds show the gap with no eligible candidate", async () => {
@@ -262,54 +266,44 @@ describe("#119 funding and eligibility", () => {
   it("two purchases that would spend the same cash: each works alone, together they are refused (no double counting)", async () => {
     const m = await load();
     portfolio(m, "cash_and_caution");
-    const s = store(m);
-    const ctx = new m.CopilotContext({ ...s, sourceDocuments: [] } as never, NOW);
-    const out = m.executeTool(ctx, "propose_allocation", {
+    const r = (await decideWith(m, {
       outcome: "propose_changes",
       headline: "Spend the cash on both funds",
       rationale: "Fictional check of funding: both purchases draw on the same cash.",
-      objective_refs: ["liquidity"],
+      client_basis: BASIS,
       proposed_weights: [{ asset_class: "equity", pct: 74 }, { asset_class: "fixed_income", pct: 26 }, { asset_class: "cash", pct: 0 }],
       alternative: { summary: "Buy only one fund." },
       groups: [
         { title: "Buy more of the equity fund from cash", rationale: "From existing cash.", legs: [{ holding_id: EQUITY, change: "increase", amount: 20_000 }] },
         { title: "Buy more of the bond fund from cash", rationale: "From existing cash.", legs: [{ holding_id: BONDS, change: "increase", amount: 20_000 }] },
       ],
-    });
-    expect(out.isError).toBe(false);
-    const result = JSON.parse(out.content);
-    expect(result.groups.map((g: { feasible: boolean }) => g.feasible)).toEqual([true, true]);
-    expect(result.combined_problems.join(" ")).toMatch(/cash shortfall in Fictional Taxable Account/);
+    })) as unknown as Awaited<ReturnType<typeof prepare>>;
+    expect(r.allocation.groups.map((g) => g.problem)).toEqual([null, null]);
+    expect(m.evaluateSelection(inputs(m), [...legsOf(r, 0), ...legsOf(r, 1)], r.allocation.proposedWeights).problems.join(" ")).toMatch(/cash shortfall in Fictional Taxable Account/);
     // The store refuses the pair together; either one alone is accepted.
-    const r = { drafts: ctx.drafts, allocation: ctx.allocation! };
-    const both = store(m).acceptAgentDrafts([...legsOf(r, 0), ...legsOf(r, 1)], ctx.context);
-    expect(both.ok).toBe(false);
+    expect(store(m).acceptAgentDrafts([...legsOf(r, 0), ...legsOf(r, 1)], r.context).ok).toBe(false);
     expect(store(m).recommendations).toEqual([]);
-    expect(store(m).acceptAgentDrafts(legsOf(r, 0), ctx.context)).toMatchObject({ ok: true });
+    expect(store(m).acceptAgentDrafts(legsOf(r, 0), r.context)).toMatchObject({ ok: true });
   });
 
   it("no invented security, and weights must be a whole mix: an unknown holding, a sale of a retained security, a mix not totalling 100 or missing a held class are refused", async () => {
     const m = await load();
     portfolio(m, "cash_and_caution", (s) => s.setDiscoveryAnswer("securitiesToRetain", { securities: ["Fictional Equity Fund"] }));
-    const s = store(m);
-    const call = (input: object) => m.executeTool(new m.CopilotContext({ ...s, sourceDocuments: [] } as never, NOW), "propose_allocation", input);
-    const base = { outcome: "propose_changes", headline: "A mix", rationale: "Fictional checks of the engine's rules.", objective_refs: ["liquidity"], alternative: { summary: "Keep today's mix." } };
+    const base = { outcome: "propose_changes", headline: "A mix", rationale: "Fictional checks of the engine's rules.", client_basis: BASIS, alternative: { summary: "Keep today's mix." } };
     const w = [{ asset_class: "equity", pct: 60 }, { asset_class: "fixed_income", pct: 30 }, { asset_class: "cash", pct: 10 }];
-    expect(call({ ...base, proposed_weights: w.slice(0, 2) }).content).toMatch(/total 90%.*missing Cash & Equivalents/);
-    expect(call({ ...base, proposed_weights: [{ asset_class: "equity", pct: 70 }, { asset_class: "cash", pct: 30 }] }).content).toMatch(/missing Fixed Income/);
-    const ok = JSON.parse(
-      call({
-        ...base,
-        proposed_weights: w,
-        groups: [
-          { title: "Buy a new fund", rationale: "Not owned.", legs: [{ holding_id: "h_new_global_fund", change: "increase", amount: 10_000 }] },
-          { title: "Sell the retained fund", rationale: "Retained.", legs: [{ holding_id: EQUITY, change: "reduce", amount: 10_000 }] },
-        ],
-      }).content
-    );
-    expect(ok.groups.map((g: { not_feasible_reason: string }) => g.not_feasible_reason)).toEqual([
+    expect((await decideWith(m, { ...base, proposed_weights: w.slice(0, 2) })).trace[2].summary).toMatch(/total 90%.*missing Cash & Equivalents/);
+    expect((await decideWith(m, { ...base, proposed_weights: [{ asset_class: "equity", pct: 70 }, { asset_class: "cash", pct: 30 }] })).trace[2].summary).toMatch(/missing Fixed Income/);
+    const ok = await decideWith(m, {
+      ...base,
+      proposed_weights: w,
+      groups: [
+        { title: "Buy a new fund", rationale: "Not owned.", legs: [{ holding_id: "h_new_global_fund", change: "increase", amount: 10_000 }] },
+        { title: "Sell the retained fund", rationale: "Retained.", legs: [{ holding_id: EQUITY, change: "reduce", amount: 10_000 }] },
+      ],
+    });
+    expect(ok.allocation.groups.map((g) => g.problem)).toEqual([
       "No holding h_new_global_fund: this version implements with holdings already owned; a new security isn't proposed.",
-      "Fictional Equity Fund is a security the client wants to retain.",
+      "Fictional Equity Fund is a security the client wants to retain, so it can't fund a sale.",
     ]);
   });
 });
@@ -343,6 +337,9 @@ describe("#119 approval and evidence", () => {
     expect(store(m).acceptAgentDrafts(legsOf(r, 1), r.context).ok).toBe(false);
     store(m).setDiscoveryAnswer("timeHorizon", { years: 12 });
     store(m).recordDiscoveryReview();
+    // #119 review (intended): a reviewed brief changed after approval blocks a new version until the advisor re-reviews the strategy.
+    expect(store(m).approveVersion("Before re-review.").ok).toBe(false);
+    store(m).reviewAllocationStrategy(strategy.id, "Fictional re-review: a twelve-year horizon does not change the mix.");
     const v2 = store(m).approveVersion("Fictional second version.");
     if (!v2.ok) throw new Error(v2.failing.join("; "));
     expect(v2.snapshot.fingerprint).not.toBe(v.snapshot.fingerprint);

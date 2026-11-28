@@ -5,6 +5,7 @@ import type { FxContext } from "./proposalEngine";
 import { reportingValue } from "./valuationTotals";
 import { candidateProblems, evaluateDesk, positionEditRecommendation, type DeskResult } from "./allocationDesk";
 import { conflictsOf, missingDetailsOf, QUESTIONS, questionLabel, questionStatus } from "./clientDiscovery";
+export { weightProblems, strategyRecordProblems } from "./allocationBasis";
 
 // #119 — Prepare allocation proposal. Stratovell AI returns one structured
 // decision for the active alternative's investment scope: propose a mix,
@@ -48,29 +49,50 @@ export interface DecisionInput {
 
 export const MAX_GROUPS = 4;
 const label = (c: AssetClass) => ASSET_CLASS_LABELS[c] ?? c;
-const round1 = (n: number) => Math.round(n * 10) / 10;
-const cents = (n: number) => Math.round(n * 100) / 100;
+// "+ 0" turns a negative zero into zero, so a $0 change is never shown as "-$0.00".
+const round1 = (n: number) => Math.round(n * 10) / 10 + 0;
+const cents = (n: number) => Math.round(n * 100) / 100 + 0;
 
 // ---------------------------------------------------------------------------
 // Brief readiness
 // ---------------------------------------------------------------------------
 
 /**
- * Whether the client brief supports a personalized mix (or a justified hold):
- * every question answered and reviewed by the advisor, with no unresolved
- * conflict or missing detail. Otherwise the decision must be a question.
+ * The questions whose answers can reverse any allocation decision (the owner's
+ * materiality rule): objectives, time horizon, willingness and ability to take
+ * losses, and planned spending. Restrictions and securities to retain decide
+ * whether a particular purchase or sale is eligible (see legProblem); the rest
+ * stay visibly unknown unless they matter (an unanswered income need is a
+ * missing detail when income is an objective).
  */
-export function briefReadiness(c: ClientProfile): { ready: boolean; issues: string[] } {
+export const MATERIAL_QUESTIONS: DiscoveryQuestionId[] = ["objectives", "timeHorizon", "lossWillingness", "lossAbility", "liquidity"];
+
+const statusIssue = (c: ClientProfile, id: DiscoveryQuestionId): string | null => {
+  const s = questionStatus(c, id);
+  if (s === "not_discussed") return `${questionLabel(id)}: not discussed.`;
+  if (s === "recorded") return `${questionLabel(id)}: recorded but not reviewed by the advisor.`;
+  if (s === "review_stale") return `${questionLabel(id)}: changed since the advisor's review.`;
+  return null;
+};
+
+/**
+ * Whether the client brief supports a personalized mix (or a justified hold):
+ * the material questions answered and reviewed, with no conflict or missing
+ * detail. Otherwise the decision must be one specific question. Other
+ * questions not reviewed are returned as `unknowns`: shown, never assumed.
+ */
+export function briefReadiness(c: ClientProfile): { ready: boolean; issues: string[]; unknowns: string[] } {
   const issues: string[] = [];
-  for (const { id } of QUESTIONS) {
-    const s = questionStatus(c, id);
-    if (s === "not_discussed") issues.push(`${questionLabel(id)}: not discussed.`);
-    else if (s === "recorded") issues.push(`${questionLabel(id)}: recorded but not reviewed by the advisor.`);
-    else if (s === "review_stale") issues.push(`${questionLabel(id)}: changed since the advisor's review.`);
+  for (const id of MATERIAL_QUESTIONS) {
+    const x = statusIssue(c, id);
+    if (x) issues.push(x);
   }
   for (const x of conflictsOf(c)) issues.push(`Possible conflict: ${x}`);
   for (const x of missingDetailsOf(c)) issues.push(`Missing detail: ${x}`);
-  return { ready: issues.length === 0, issues };
+  const unknowns = QUESTIONS.filter((q) => !MATERIAL_QUESTIONS.includes(q.id))
+    .map((q) => statusIssue(c, q.id))
+    .filter((x): x is string => x != null);
+  return { ready: issues.length === 0, issues, unknowns };
 }
 
 // ---------------------------------------------------------------------------
@@ -90,9 +112,9 @@ export function deskWith(inp: ProposalInputs, extra: Recommendation[] = []): Des
   });
 }
 
-/** Weights of the recorded holdings in scope (the evaluator's current column), largest first. */
+/** Weights of the recorded holdings in scope (the evaluator's current column), largest first. Exact: round only for display. */
 export function recordedWeights(desk: DeskResult): ClassWeight[] {
-  return desk.rows.filter((r) => r.current > 0.005 && r.currentPct != null).map((r) => ({ assetClass: r.assetClass, pct: round1(r.currentPct!) }));
+  return desk.rows.filter((r) => r.current > 0.005 && r.currentPct != null).map((r) => ({ assetClass: r.assetClass, pct: r.currentPct! }));
 }
 
 /** In-scope holdings the decision can't value or classify: listed, never normalized away. */
@@ -105,32 +127,6 @@ export function scopeExceptions(inp: ProposalInputs, desk: DeskResult) {
 }
 
 // ---------------------------------------------------------------------------
-// Weights
-// ---------------------------------------------------------------------------
-
-/**
- * Why a set of proposed weights can't be used, or an empty list. They must be
- * percentages of the same in-scope portfolio: one per class, 0–100, totalling
- * 100 (cash included), and every class held in scope must be listed, even at
- * 0, so nothing (an unclassified holding included) is silently dropped.
- */
-export function weightProblems(weights: ClassWeight[], held: AssetClass[]): string[] {
-  const out: string[] = [];
-  const seen = new Set<AssetClass>();
-  for (const w of weights) {
-    if (!(w.assetClass in ASSET_CLASS_LABELS) || w.assetClass === "liability") out.push(`${w.assetClass} isn't an investment asset class.`);
-    if (seen.has(w.assetClass)) out.push(`${label(w.assetClass)} is listed twice.`);
-    seen.add(w.assetClass);
-    if (!Number.isFinite(w.pct) || w.pct < 0 || w.pct > 100) out.push(`${label(w.assetClass)}: ${w.pct} isn't a percentage between 0 and 100.`);
-  }
-  const total = weights.reduce((a, w) => a + (Number.isFinite(w.pct) ? w.pct : 0), 0);
-  if (Math.abs(total - 100) > 0.1) out.push(`The weights total ${round1(total)}%, not 100% (cash included).`);
-  const missing = held.filter((c) => !seen.has(c));
-  if (missing.length) out.push(`Every class held in scope needs a weight (0 to exit it): missing ${missing.map(label).join(", ")}.`);
-  return out;
-}
-
-// ---------------------------------------------------------------------------
 // Implementation groups
 // ---------------------------------------------------------------------------
 
@@ -139,8 +135,15 @@ const namedIn = (h: NormalizedHolding, list: string[]) => {
   const names = new Set(list.map(norm).filter(Boolean));
   return names.has(norm(h.assetName)) || (!!h.identifier?.value && names.has(norm(h.identifier.value)));
 };
+const reviewed = (c: ClientProfile, q: DiscoveryQuestionId) => questionStatus(c, q) === "reviewed";
 
-/** Why one leg can't be used, or null. Only holdings already owned, in scope, valued and eligible. */
+/**
+ * Why one leg can't be used, or null. Only holdings already owned, in scope and
+ * valued; restrictions are checked in the trade's direction (finding 2): a
+ * retained, locked-up or illiquid holding, or one with recorded restrictions,
+ * can't fund a sale; a restricted security or recorded restrictions block a
+ * purchase. Where eligibility is unclear the reason says what to confirm.
+ */
 export function legProblem(inp: ProposalInputs, desk: DeskResult, leg: GroupInput["legs"][number]): string | null {
   const h = inp.holdings.find((x) => x.id === leg.holdingId);
   if (!h) return `No holding ${leg.holdingId}: this version implements with holdings already owned; a new security isn't proposed.`;
@@ -149,10 +152,19 @@ export function legProblem(inp: ProposalInputs, desk: DeskResult, leg: GroupInpu
   if (h.assetClass === "cash") return `${h.assetName} is cash: cash moves only as the other legs' offset.`;
   if (reportingValue(h) == null) return `${h.assetName} has no usable value in ${inp.fx.reportingCurrency}.`;
   if (!Number.isFinite(leg.amount) || leg.amount <= 0) return `The amount for ${h.assetName} must be positive.`;
-  if (leg.change === "reduce" && namedIn(h, inp.client.discovery?.securitiesToRetain ?? [])) return `${h.assetName} is a security the client wants to retain.`;
-  if (leg.change === "increase") {
-    if (namedIn(h, inp.client.restrictedSecurities ?? [])) return `${h.assetName} is a restricted investment for this client, so it can't be bought.`;
-    if (h.restrictions?.trim()) return `${h.assetName} has recorded restrictions ("${h.restrictions.trim()}"), so it isn't eligible to buy until the advisor resolves them.`;
+  const restriction = h.restrictions?.trim();
+  const c = inp.client;
+  if (leg.change === "reduce") {
+    if (namedIn(h, c.discovery?.securitiesToRetain ?? [])) return `${h.assetName} is a security the client wants to retain, so it can't fund a sale.`;
+    if (h.liquidity === "lockup" || h.liquidity === "illiquid")
+      return `${h.assetName} is recorded as ${h.liquidity === "lockup" ? "a lock-up" : "illiquid"}${restriction ? ` ("${restriction}")` : ""}, so it can't fund a sale now. Confirm with the client and custodian when it can be sold before using it.`;
+    if (restriction) return `${h.assetName} has recorded restrictions ("${restriction}"): confirm it can be sold now before using it to fund this.`;
+    if (!reviewed(c, "securitiesToRetain")) return `Securities to retain weren't reviewed with the client: confirm ${h.assetName} may be sold before using it.`;
+  } else {
+    if (namedIn(h, c.restrictedSecurities ?? [])) return `${h.assetName} is a restricted investment for this client, so it can't be bought.`;
+    if (restriction) return `${h.assetName} has recorded restrictions ("${restriction}"): confirm it can be bought before using it here.`;
+    if (h.liquidity === "lockup" || h.liquidity === "illiquid") return `${h.assetName} is recorded as ${h.liquidity === "lockup" ? "a lock-up" : "illiquid"}: confirm it accepts new investment before using it here.`;
+    if (!reviewed(c, "restrictedInvestments")) return `Restricted investments weren't reviewed with the client: confirm ${h.assetName} may be bought before using it.`;
   }
   return null;
 }
@@ -273,6 +285,7 @@ export function strategyRecommendation(input: {
   currentWeights: ClassWeight[];
   groupIds: string[];
   basis: AllocationStrategy["basis"];
+  clientBasis: NonNullable<AllocationStrategy["clientBasis"]>;
   now: string;
 }): Recommendation {
   const { decision: d } = input;
@@ -292,6 +305,7 @@ export function strategyRecommendation(input: {
       proposedWeights,
       currentWeights: input.currentWeights,
       objectiveRefs: d.objectiveRefs,
+      clientBasis: input.clientBasis,
       ...(d.alternative ? { alternative: d.alternative } : {}),
       groupIds: input.groupIds,
       basis: input.basis,

@@ -487,6 +487,7 @@ export function previewDraftEdit(input: {
 }
 
 const PURCHASE_TYPES = new Set<Recommendation["type"]>(["buy", "increase"]);
+const EXPLICIT_SALE = new Set<Recommendation["type"]>(["sell", "raise_cash", "reduce", "reduce_concentration"]);
 
 /**
  * D4: why adding these actions to the draft (last, in the given order) isn't
@@ -521,6 +522,27 @@ export function candidateProblems(input: {
   for (const u of after.unresolved) if (ids.has(u.recommendationId)) problems.push(`An exchange rate is missing (${u.currency}/${u.reportingCurrency}), so it can't be applied.`);
   const shortBefore = new Map(before.shortfalls.map((s) => [s.accountId, s.shortfall] as const));
   for (const s of after.shortfalls) if (s.shortfall > (shortBefore.get(s.accountId) ?? 0) + 0.005) problems.push(`It would leave a cash shortfall in ${s.accountName}.`);
+  // #119 (review, finding 2): an explicit amount must be what the evaluator can carry out. The engine clamps an
+  // ordinary sale at the position's value; an instruction for more than that (alone, or with the other actions of
+  // the draft and the selection, in the order they run) is reported, never saved as if it could be implemented.
+  const requested = new Map<string, number>();
+  for (const c of candidates) {
+    if (!c.relatedHoldingId || c.proposedValue != null || c.actionAmount == null || c.currency !== fx.reportingCurrency || (c.actionAmountUnit ?? "amount") !== "amount") continue;
+    const sign = EXPLICIT_SALE.has(c.type) ? -1 : PURCHASE_TYPES.has(c.type) ? 1 : 0;
+    if (sign) requested.set(c.relatedHoldingId, (requested.get(c.relatedHoldingId) ?? 0) + sign * Math.abs(c.actionAmount));
+  }
+  const ccy = fx.reportingCurrency;
+  const amount = (n: number) => `${ccy} ${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+  const notApplied = new Set([...after.blocked.flatMap((b) => b.recommendationIds), ...after.unresolved.map((u) => u.recommendationId)]);
+  for (const [hid, want] of requested) {
+    const b = before.positions.find((p) => p.id === hid);
+    const a = after.positions.find((p) => p.id === hid);
+    if (!b || b.proposed == null || !a || a.proposed == null) continue;
+    const got = a.proposed - b.proposed;
+    if (Math.abs(got - want) <= 0.005) continue;
+    if (want < 0 && -want > b.proposed + 0.005) problems.push(`Selling ${amount(-want)} of ${b.name} is more than the ${amount(Math.max(0, b.proposed))} it holds in this alternative after its other actions, so it can't be carried out as entered.`);
+    else if (!candidates.some((c) => c.relatedHoldingId === hid && notApplied.has(c.id))) problems.push(`The change to ${b.name} can't be applied as entered: ${amount(Math.abs(want))} was requested, the evaluator applies ${amount(Math.abs(got))}.`);
+  }
   const holdingAccount = new Map(holdings.map((h) => [h.id, h.accountId] as const));
   const buysInto = new Set(
     candidates.filter((c) => PURCHASE_TYPES.has(c.type)).map((c) => (c.destination && !c.relatedHoldingId ? c.destination.accountId : c.relatedHoldingId ? holdingAccount.get(c.relatedHoldingId) : c.relatedAccountId))

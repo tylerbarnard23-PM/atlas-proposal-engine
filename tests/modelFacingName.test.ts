@@ -68,7 +68,7 @@ describe("model-facing product name (owner-approved substitution)", () => {
   it("keeps the tool names and authority rules, and records the new versions", async () => {
     const { calls, result } = await run();
     expect((calls[0].tools ?? []).map((t) => (t as { name: string }).name).sort()).toEqual(
-      ["check_proposal_readiness", "draft_recommendation", "get_holding", "get_portfolio_overview", "get_scope_overview", "list_insights", "propose_allocation", "simulate_recommendation", "simulate_scope_change"].sort() // #119 (intended): propose_allocation
+      ["check_proposal_readiness", "draft_recommendation", "get_holding", "get_portfolio_overview", "get_scope_overview", "list_insights", "simulate_recommendation", "simulate_scope_change"].sort() // #119 review (intended): propose_allocation is only in the allocation task
     );
     expect((calls[0].tools ?? []).every((t) => typeof (t as { input_schema?: unknown }).input_schema === "object")).toBe(true);
     expect(JSON.stringify(calls[0].system)).toContain("You cannot approve, finalize, include in the PDF, share, issue or execute anything");

@@ -6,7 +6,6 @@ import { Check, CircleAlert, CircleCheck, Eye, HelpCircle, X } from "lucide-reac
 import { useAtlasStore } from "@/store/useStore";
 import { normalizeHoldings } from "@/engines/normalizationEngine";
 import { evaluateSelection, type MixRow } from "@/engines/allocationProposal";
-import { questionLabel } from "@/engines/clientDiscovery";
 import { ADDED, ADDED_EARLIER, PREVIEW_ONLY, previewPhase, reviewHref } from "@/copilot/request";
 import type { CopilotResult } from "@/copilot/agent";
 import type { AllocationRunView } from "@/copilot/tools";
@@ -71,8 +70,15 @@ export function AllocationProposal(props: {
       <CardBody className="space-y-4">
         <p className="text-[13px] text-ink-600" data-testid="allocation-inputs">
           <span className="font-medium text-ink-800">Reviewed inputs:</span> {money(a.scopeTotal)} in &ldquo;{result.context.alternativeName}&rdquo;&apos;s scope · client brief{" "}
-          {a.briefReady ? "fully reviewed" : "not ready"} · {targets ? "your desk targets are separate and unchanged" : "no advisor-set target"}.
+          {a.briefReady ? "material answers reviewed" : "not ready"} · {targets ? "your desk targets are separate and unchanged" : "no advisor-set target"}
+          {a.scopeAccounts.length > 0 && <> · accounts: {a.scopeAccounts.join(", ")}</>}.
         </p>
+        {a.unknowns.length > 0 && (
+          <p className="text-[13px] text-ink-700" data-testid="allocation-unknowns">
+            <span className="font-medium text-ink-800">Still unknown:</span> {a.unknowns.join(" ")} Nothing is assumed for these; tax and cost-basis effects aren&apos;t estimated.
+          </p>
+        )}
+        <FigureFlags figures={result.figures} />
 
         {a.outcome === "ask" ? (
           <div className="space-y-2" data-testid="allocation-question">
@@ -102,12 +108,19 @@ export function AllocationProposal(props: {
                 {a.headline}
               </h3>
               <p className="text-sm text-ink-700 mt-1 leading-relaxed">{a.rationale}</p>
-              {a.objectiveRefs.length > 0 && (
-                <p className="text-[13px] text-ink-600 mt-1">
-                  <span className="text-ink-500">From the reviewed brief: </span>
-                  {a.objectiveRefs.map(questionLabel).join(", ")}
-                </p>
+              {a.clientBasis.length > 0 && (
+                <ul className="mt-2 space-y-1 text-[13px] text-ink-700" data-testid="allocation-client-basis">
+                  {a.clientBasis.map((b) => (
+                    <li key={b.question}>
+                      <span className="font-medium text-ink-800">
+                        {b.label}: &ldquo;{b.said}&rdquo;
+                      </span>{" "}
+                      — {b.supports}
+                    </li>
+                  ))}
+                </ul>
               )}
+              <p className="text-2xs text-ink-500 mt-1">The quoted answers are the client&apos;s, as you recorded and reviewed them; how they support the decision is {judgment}.</p>
             </div>
             <MixTable rows={unselected.rows} money={money} judgment={judgment} hold={a.outcome === "maintain"} />
             {a.alternative && (
@@ -123,9 +136,17 @@ export function AllocationProposal(props: {
               </p>
             )}
 
-            {a.groups.length > 0 && (
+            {a.outcome === "maintain" && (
+              <p className="text-[13px] text-ink-700" data-testid="allocation-hold-note">
+                This hold adds no action: it keeps the recorded mix.
+                {selection.existingActions > 0 &&
+                  ` ${selection.existingActions} action${selection.existingActions === 1 ? "" : "s"} already in this alternative (not part of this hold) would change the mix to ${selection.rows.map((r) => `${r.label} ${pct(r.resultPct)}`).join(", ")}.`}
+              </p>
+            )}
+            {a.outcome === "propose" && (
               <div className="space-y-2">
                 <h4 className="text-[13px] font-semibold uppercase tracking-wide text-ink-500">How could it be implemented?</h4>
+                {a.groups.length === 0 && <p className="text-[13px] text-ink-700">No funded group was proposed from the holdings already owned; the mix below is what is achievable now.</p>}
                 {a.groups.map((g, i) => (
                   <label key={g.id} className={cn("block rounded-md border p-3", g.problem ? "border-negative-500/30 bg-negative-50" : "border-ink-100")} data-testid="allocation-group">
                     <div className="flex items-start gap-2">
@@ -175,8 +196,15 @@ export function AllocationProposal(props: {
               </div>
             )}
 
-            <div role="status" data-testid="allocation-phase" data-phase={phase} className="text-[13px]">
-              {phase === "added" ? (
+            <div role="status" data-testid="allocation-phase" data-phase={a.addable ? phase : "not_addable"} className="text-[13px]">
+              {!a.addable ? (
+                <span role="alert" className="flex items-start gap-2 text-ink-800">
+                  <CircleAlert className="h-4 w-4 mt-0.5 shrink-0 text-warning-600" />
+                  <span>
+                    <strong>{PREVIEW_ONLY}</strong> The run didn&apos;t complete ({result.status.replace(/_/g, " ")}), so nothing from it can be added. Prepare the proposal again.
+                  </span>
+                </span>
+              ) : phase === "added" ? (
                 <span className="flex items-center gap-2 font-semibold text-positive-600">
                   <CircleCheck className="h-4 w-4" />
                   {added.some((id) => addedHere.has(id)) ? ADDED : ADDED_EARLIER}{" "}
@@ -195,14 +223,18 @@ export function AllocationProposal(props: {
                 <span className="flex items-center gap-2 text-warning-600">
                   <Eye className="h-4 w-4" />
                   <strong>{PREVIEW_ONLY}</strong>
-                  <span className="text-ink-700">A preview is not an order. Adding puts the strategy record{a.groups.length ? " and the selected groups" : ""} in &ldquo;{result.context.alternativeName}&rdquo;, unapproved.</span>
+                  <span className="text-ink-700">A preview is not an order. Adding puts the strategy record{chosen.size ? " and the selected groups" : ""} in &ldquo;{result.context.alternativeName}&rdquo;, unapproved.</span>
                 </span>
               )}
             </div>
-            {phase === "preview" && (
+            {a.addable && phase === "preview" && (
               <div className="flex flex-wrap gap-2">
                 <Button size="sm" onClick={() => props.onAdd(toAdd)} disabled={!canAdd} iconLeft={<Check className="h-4 w-4" />} data-testid="allocation-add">
-                  {a.outcome === "maintain" ? "Add as a no-trade recommendation" : `Add the strategy and ${legsOf(chosen).length ? `${chosen.size} selected group${chosen.size === 1 ? "" : "s"}` : "no groups"}`}
+                  {a.outcome === "maintain"
+                    ? "Add as a no-trade recommendation"
+                    : legsOf(chosen).length
+                    ? `Add the strategy and ${chosen.size} selected group${chosen.size === 1 ? "" : "s"}`
+                    : "Add the strategy only (no trades)"}
                 </Button>
                 <Button size="sm" variant="secondary" onClick={props.onDiscard} iconLeft={<X className="h-4 w-4" />}>
                   Discard
@@ -264,7 +296,7 @@ function SelectionTable({ rows, money, existingActions }: { rows: MixRow[]; mone
             <th className="py-1 pr-3 font-medium">Recorded</th>
             <th className="py-1 pr-3 font-medium">Proposed</th>
             <th className="py-1 pr-3 font-medium">Selected result</th>
-            <th className="py-1 font-medium">Still to reach</th>
+            <th className="py-1 font-medium">Still to reach (against the proposed weight)</th>
           </tr>
         </thead>
         <tbody className="tabular">
@@ -285,6 +317,19 @@ function SelectionTable({ rows, money, existingActions }: { rows: MixRow[]; mone
       <p className="text-2xs text-ink-500 mt-1">
         Calculated by Stratovell&apos;s engines for the selected groups{existingActions ? `, together with the ${existingActions} action${existingActions === 1 ? "" : "s"} already in this alternative` : ""}. A gap is shown as a gap, never as achieved. Missing cost basis means any tax effect is unknown; none is estimated.
       </p>
+    </div>
+  );
+}
+
+/** #119 (review finding 3): figures shown on the card or in the answer that no engine result supports, and those that are only the proposal itself. */
+function FigureFlags({ figures }: { figures: CopilotResult["figures"] }) {
+  const unsupported = figures.unsupported ?? [];
+  const proposal = figures.proposal ?? [];
+  if (unsupported.length === 0 && proposal.length === 0) return null;
+  return (
+    <div role="note" className="rounded-md bg-warning-50 ring-1 ring-inset ring-warning-500/40 px-3 py-2 text-[13px] text-ink-800 space-y-0.5" data-testid="allocation-figure-flags">
+      {unsupported.length > 0 && <p>Figures not supported by Stratovell&apos;s engine results: {unsupported.join(", ")}. Check them before relying on this proposal.</p>}
+      {proposal.length > 0 && <p>Figures that are the proposal itself (a judgment, or a gap measured against it), not engine results: {proposal.join(", ")}.</p>}
     </div>
   );
 }

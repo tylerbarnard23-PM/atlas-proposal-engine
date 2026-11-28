@@ -16,7 +16,8 @@ import { agentContextOf, type AgentContext } from "./context";
 import { figuresIn, type EvidenceValue } from "./evidence";
 import type { CopilotSnapshot } from "./snapshot";
 import { redactIdentity } from "./redaction";
-import { clientStatedAmounts, modelBoundClientBrief, QUESTIONS } from "@/engines/clientDiscovery";
+import { clientStatedAmounts, describeAnswer, modelBoundClientBrief, QUESTIONS, questionLabel } from "@/engines/clientDiscovery";
+import { materialBasis } from "@/engines/allocationBasis";
 import { ASSET_CLASS_LABELS } from "@/domain/assetTaxonomy";
 import type { AssetClass, ClassWeight, DiscoveryQuestionId } from "@/domain/types";
 import {
@@ -30,6 +31,7 @@ import {
   recordedWeights,
   scopeExceptions,
   strategyRecommendation,
+  strategyRecordProblems,
   weightProblems,
   type AllocationOutcome,
   type GroupInput,
@@ -64,11 +66,22 @@ export interface AllocationRunView {
   headline: string;
   rationale: string;
   objectiveRefs: DiscoveryQuestionId[];
+  /** What the client said (the recorded answer, quoted by Stratovell) and how it supports the decision (the model's words). */
+  clientBasis: { question: DiscoveryQuestionId; label: string; said: string; supports: string }[];
   question: { text: string; decides: string } | null;
   briefReady: boolean;
   briefIssues: string[];
+  /** Questions outside the materiality rule that aren't reviewed: shown as unknown, never assumed. */
+  unknowns: string[];
   reportingCurrency: string;
   scopeTotal: number;
+  /** The accounts in the decision's scope. */
+  scopeAccounts: string[];
+  /**
+   * Whether its records can be added: only a completed run's one validated decision (a mix or a hold).
+   * A question, or a cancelled, truncated or failed run, has none (review finding 1).
+   */
+  addable: boolean;
   currentWeights: ClassWeight[];
   /** The AI's proposed weights (judgment); null for a question. A hold proposes the current weights. */
   proposedWeights: ClassWeight[] | null;
@@ -117,6 +130,18 @@ export class CopilotContext {
   forbiddenAttempts = 0;
   /** #119: the run's allocation decision (at most one). */
   allocation: AllocationRunView | null = null;
+  /** #119: the run's task; the allocation task has its own tool set. */
+  task: "allocation_proposal" | null = null;
+  /** The agent loop's current turn (the response whose tool calls are running). */
+  turn = 0;
+  private delivered = new Map<string, number>();
+  /** The turn on which a tool first returned a result (that result reaches the model on the next turn); Infinity when never. */
+  deliveredTurn(tool: string): number {
+    return this.delivered.get(tool) ?? Infinity;
+  }
+  markDelivered(tool: string) {
+    if (!this.delivered.has(tool)) this.delivered.set(tool, this.turn);
+  }
   /** The active alternative: the scope and actions the evaluator reads. */
   readonly draft: WorkingDraft;
   /** What this run is about (client, alternative, scope, input revision). */
@@ -817,7 +842,8 @@ const ProposeAllocationInput = z.object({
   outcome: z.enum(["propose_changes", "maintain_current_mix", "ask_question"]),
   headline: z.string().min(3).max(160),
   rationale: z.string().min(10).max(3000),
-  objective_refs: z.array(z.enum(QUESTION_IDS)).max(10).optional(),
+  // The client's recorded answers the decision rests on (Stratovell quotes them) and how each supports it.
+  client_basis: z.array(z.object({ question: z.enum(QUESTION_IDS), supports: z.string().min(10).max(600) })).max(10).optional(),
   proposed_weights: z.array(WeightIn).max(20).optional(),
   alternative: z.object({ summary: z.string().min(3).max(1000), weights: z.array(WeightIn).max(20).optional() }).optional(),
   question: z.object({ text: z.string().min(5).max(600), decides: z.string().min(3).max(600) }).optional(),
@@ -835,47 +861,62 @@ const ProposeAllocationInput = z.object({
 
 const OUTCOME: Record<z.infer<typeof ProposeAllocationInput>["outcome"], AllocationOutcome> = { propose_changes: "propose", maintain_current_mix: "maintain", ask_question: "ask" };
 const weightsOf = (w: z.infer<typeof WeightIn>[]): ClassWeight[] => w.map((x) => ({ assetClass: x.asset_class, pct: x.pct }));
+/** The tools whose results must reach the model, on an earlier turn, before it decides (review finding 1). */
+const DECISION_INPUTS = ["get_portfolio_overview", "get_scope_overview"] as const;
 
 function proposeAllocation(ctx: CopilotContext, input: z.infer<typeof ProposeAllocationInput>) {
   if (ctx.allocation) throw new ToolInputError("An allocation decision was already returned in this request; there is one per request.");
+  // The decision must be made on inputs the model has actually received: tool results delivered on an earlier turn.
+  const unseen = DECISION_INPUTS.filter((t) => !(ctx.deliveredTurn(t) < ctx.turn));
+  if (unseen.length)
+    throw new ToolInputError(`The client brief (get_portfolio_overview) and the investment scope (get_scope_overview) must reach you before you decide: call ${unseen.join(" and ")} first, read the results, then decide on a later turn.`);
   const outcome = OUTCOME[input.outcome];
   const inp = ctx.proposalInputs;
   const desk = deskWith(inp);
   const current = recordedWeights(desk);
   const { unclassified } = scopeExceptions(inp, desk);
-  const brief = briefReadiness(ctx.snapshot.client);
-  const objectiveRefs = input.objective_refs ?? [];
+  const client = ctx.snapshot.client;
+  const brief = briefReadiness(client);
   const base = {
     headline: input.headline,
     rationale: input.rationale,
-    objectiveRefs,
     briefReady: brief.ready,
     briefIssues: brief.issues,
+    unknowns: brief.unknowns,
     reportingCurrency: ctx.reportingCurrency,
     scopeTotal: cents(desk.totals.current),
+    scopeAccounts: desk.scope.accounts.map((a) => a.name),
     currentWeights: current,
     unclassified,
+    addable: false,
   };
 
   if (outcome === "ask") {
     if (!input.question) throw new ToolInputError("ask_question needs question.text (one specific question for the advisor) and question.decides (what the answer would decide).");
     if (input.proposed_weights?.length || input.groups?.length) throw new ToolInputError("A question carries no weights or actions: nothing is ready to approve until it is answered.");
-    ctx.allocation = { ...base, outcome, question: input.question, proposedWeights: null, alternative: null, strategyDraftId: null, groups: [] };
+    ctx.allocation = { ...base, outcome, objectiveRefs: [], clientBasis: [], question: input.question, proposedWeights: null, alternative: null, strategyDraftId: null, groups: [] };
     return { outcome: "ask_question", brief_ready: brief.ready, brief_issues: brief.issues, note: "No mix is proposed and nothing is drafted; the advisor answers the question first." };
   }
 
-  // A mix or a hold is personal: it needs a reviewed brief with no open conflict, and a fully valued, complete scope.
+  // A mix or a hold is personal: it needs the material questions reviewed with no open conflict, and a fully valued, complete scope.
   if (!brief.ready) throw new ToolInputError(`The client brief doesn't support a personalized decision yet: ${brief.issues.join(" ")} Return outcome ask_question with one specific question and what its answer decides.`);
   const blocked = sizingBlocked(ctx);
   if (blocked) throw new ToolInputError(blocked);
   if (!(desk.totals.current > 0)) throw new ToolInputError("Nothing in the investment scope is valued, so there is no mix to propose.");
-  if (objectiveRefs.length === 0) throw new ToolInputError("Name the client-brief questions (objective_refs) the decision relies on.");
+  // Why, in the client's terms: each basis quotes a recorded answer; naming a question isn't enough.
+  if (!input.client_basis?.length) throw new ToolInputError("Give client_basis: the recorded answers the decision rests on (question), and how each supports it (supports).");
+  const clientBasis = input.client_basis.map((b) => {
+    const said = describeAnswer(client, b.question);
+    if (said == null) throw new ToolInputError(`${questionLabel(b.question)} wasn't answered, so it can't be cited as what the client said.`);
+    return { question: b.question, said, supports: b.supports };
+  });
+  const objectiveRefs = [...new Set(clientBasis.map((b) => b.question))];
 
   const held = desk.rows.filter((r) => r.current > 0.005).map((r) => r.assetClass);
   let proposed: ClassWeight[];
   if (outcome === "maintain") {
     if (input.groups?.length) throw new ToolInputError("maintain_current_mix keeps the current mix: it carries no actions.");
-    proposed = current;
+    proposed = current; // exact, as recorded: a hold proposes no action
   } else {
     if (!input.proposed_weights?.length) throw new ToolInputError("propose_changes needs proposed_weights: one per asset class, totalling 100 with cash.");
     proposed = weightsOf(input.proposed_weights);
@@ -887,6 +928,10 @@ function proposeAllocation(ctx: CopilotContext, input: z.infer<typeof ProposeAll
       if (alt.length) throw new ToolInputError(`Alternative weights not usable: ${alt.join(" ")}`);
     }
   }
+  // The five-record limit covers the strategy and every leg: a decision over it is refused whole, never trimmed.
+  const legCount = (input.groups ?? []).reduce((n, g) => n + g.legs.length, 0);
+  if (1 + legCount > MAX_DRAFTS_PER_RUN)
+    throw new ToolInputError(`A decision can carry at most ${MAX_DRAFTS_PER_RUN} records: the strategy plus ${MAX_DRAFTS_PER_RUN - 1} trade legs. This one has ${1 + legCount}; propose fewer groups (a funded group's legs stay together).`);
 
   const now = ctx.now.toISOString();
   const revision = ctx.context.inputRevision;
@@ -900,15 +945,26 @@ function proposeAllocation(ctx: CopilotContext, input: z.infer<typeof ProposeAll
   });
   const feasibleLegs = groups.flatMap((g) => g.legs ?? []);
   const selection = evaluateSelection(inp, feasibleLegs, proposed);
+  const strategyScope = desk.scope.accountIds;
   const strategyId = `rec_ai_${contentHash({ revision, outcome, headline: input.headline, proposed })}`;
   const strategy = strategyRecommendation({
     id: strategyId,
     decision: { outcome, headline: input.headline, rationale: input.rationale, objectiveRefs, proposedWeights: proposed, alternative: input.alternative ? { summary: input.alternative.summary, ...(input.alternative.weights ? { weights: weightsOf(input.alternative.weights) } : {}) } : undefined },
     currentWeights: current,
     groupIds: groups.filter((g) => g.legs).map((g) => g.gid),
-    basis: { inputRevision: revision, scopeAccountIds: ctx.draft.scopeAccountIds, reportingCurrency: ctx.reportingCurrency, scopeTotal: cents(desk.totals.current) },
+    clientBasis,
+    basis: {
+      inputRevision: revision,
+      // The accounts actually in scope at decision time (review finding 4), and what a material change is measured against.
+      scopeAccountIds: [...strategyScope],
+      reportingCurrency: ctx.reportingCurrency,
+      scopeTotal: cents(desk.totals.current),
+      material: materialBasis({ client, accounts: ctx.snapshot.accounts, holdings: ctx.snapshot.holdings, fxRates: ctx.snapshot.fxRates, reportingCurrency: ctx.reportingCurrency }, strategyScope, strategyScope),
+    },
     now,
   });
+  const consistency = strategyRecordProblems(strategy.allocationStrategy!);
+  if (consistency.length) throw new ToolInputError(`The decision isn't consistent: ${consistency.join(" ")}`);
   for (const r of [strategy, ...feasibleLegs]) {
     if (ctx.snapshot.recommendations.some((x) => x.id === r.id)) throw new ToolInputError("This decision was already added to the workspace.");
   }
@@ -920,10 +976,14 @@ function proposeAllocation(ctx: CopilotContext, input: z.infer<typeof ProposeAll
   ctx.allocation = {
     ...base,
     outcome,
+    objectiveRefs,
+    clientBasis: clientBasis.map((b) => ({ ...b, label: questionLabel(b.question) })),
     question: null,
     proposedWeights: proposed,
     alternative: input.alternative ? { summary: input.alternative.summary, ...(input.alternative.weights ? { weights: weightsOf(input.alternative.weights) } : {}) } : null,
     strategyDraftId: strategyId,
+    // Addable only once the run completes (set by the agent loop).
+    addable: false,
     groups: groups.map((g) => ({
       id: g.gid,
       title: g.group.title,
@@ -933,17 +993,29 @@ function proposeAllocation(ctx: CopilotContext, input: z.infer<typeof ProposeAll
       legs: g.group.legs.map((l) => ({ holdingId: l.holdingId, name: ctx.holding(l.holdingId)?.assetName ?? l.holdingId, accountName: accountName(l.holdingId), change: l.change, amount: l.amount })),
     })),
   };
+  // Review finding 3: nothing the model wrote is echoed back (titles, headline, rationale), and its own weights and the
+  // gaps measured against them are kept apart from engine results (claude_* and gap_* below are its proposal, not evidence).
   return {
     outcome: input.outcome,
     reporting_currency: ctx.reportingCurrency,
     scope_total: cents(desk.totals.current),
-    // The AI's weights are its judgment; current and result come from the shared evaluator (result: every feasible group selected).
-    mix: selection.rows.map((r) => ({ asset_class: r.assetClass, current_pct: r.currentPct, current_amount: r.currentAmount, ai_proposed_pct: r.proposedPct, result_pct: r.resultPct, result_amount: r.resultAmount, gap_pts: r.gapPts, gap_amount: r.gapAmount, no_eligible_candidate: r.noEligibleCandidate })),
-    groups: groups.map((g) => ({ group_id: g.gid, title: g.group.title, feasible: g.problem == null, not_feasible_reason: g.problem })),
+    mix: selection.rows.map((r) => ({
+      asset_class: r.assetClass,
+      current_pct: Math.round(r.currentPct * 10) / 10,
+      current_amount: r.currentAmount,
+      claude_proposed_pct: r.proposedPct,
+      result_pct: r.resultPct,
+      result_amount: r.resultAmount,
+      gap_pts: r.gapPts,
+      gap_amount: r.gapAmount,
+      no_eligible_candidate: r.noEligibleCandidate,
+    })),
+    groups: groups.map((g, i) => ({ group: i + 1, feasible: g.problem == null, not_feasible_reason: g.problem })),
     combined_problems: selection.problems,
+    still_unknown: brief.unknowns,
     unclassified_in_scope: unclassified.map((u) => u.name),
     note:
-      "Saved as unapproved previews: the strategy record and each feasible group. The advisor chooses which groups to add; nothing is approved here. A gap means the selected actions don't reach the proposed weight; no_eligible_candidate means no existing eligible holding could take it (a new security would be needed).",
+      "claude_proposed_pct is your judgment, not a calculation; gap_pts and gap_amount are measured against it. current_* and result_* are engine results (result: every feasible group selected). Saved as unapproved previews: the strategy record and each feasible group. The advisor chooses which groups to add; nothing is approved here. no_eligible_candidate means no existing eligible holding could take it (a new security would be needed).",
   };
 }
 
@@ -1112,7 +1184,20 @@ const TOOLS: Record<string, ToolSpec> = {
   },
 };
 
-export const COPILOT_TOOLS: Anthropic.Beta.BetaTool[] = Object.values(TOOLS).map((t) => t.definition);
+/**
+ * #119 (review finding 1): each task has its own tools. An ordinary question gets every tool but the
+ * allocation decision; Prepare allocation proposal gets the read and simulation tools and the decision,
+ * never the generic draft tool, so only a validated decision can supply its records.
+ */
+const ALLOCATION_ONLY = new Set(["propose_allocation"]);
+const NOT_IN_ALLOCATION = new Set(["draft_recommendation"]);
+export function copilotToolsFor(task: "allocation_proposal" | null | undefined): Anthropic.Beta.BetaTool[] {
+  return Object.entries(TOOLS)
+    .filter(([name]) => (task === "allocation_proposal" ? !NOT_IN_ALLOCATION.has(name) : !ALLOCATION_ONLY.has(name)))
+    .map(([, t]) => t.definition);
+}
+/** The tools of an ordinary question. */
+export const COPILOT_TOOLS: Anthropic.Beta.BetaTool[] = copilotToolsFor(null);
 
 export interface ToolCallRecord {
   name: string;
@@ -1135,7 +1220,14 @@ export interface ToolCallRecord {
 // targets, 0-100), expense_ratio_pct (the holding's ratio in percent), and
 // pct_change (recommendationPreview's pctChange: 60,000 → 54,000 is -10).
 // #119: ai_proposed_pct (the AI's own weight, returned as checked), result_pct and gap_pts (evaluator rows, 0-100).
-const PERCENT_KEYS = new Set(["pct", "pct_of_investible", "pct_of_investible_before", "pct_of_investible_after", "current_pct", "proposed_pct", "target_pct", "drift_pts", "expense_ratio_pct", "pct_change", "ai_proposed_pct", "result_pct", "gap_pts"]);
+const PERCENT_KEYS = new Set(["pct", "pct_of_investible", "pct_of_investible_before", "pct_of_investible_after", "current_pct", "proposed_pct", "target_pct", "drift_pts", "expense_ratio_pct", "pct_change", "claude_proposed_pct", "result_pct", "gap_pts"]);
+/**
+ * #119 (review finding 3): the model's own proposal as a tool echoes it back: its weights, the gaps measured
+ * against them, and reasons that restate its requested amounts. Kept as the model's proposal (source
+ * "ai_proposal"), never as engine evidence for itself.
+ */
+const AI_PROPOSAL_KEYS = new Set(["claude_proposed_pct", "gap_pts", "gap_amount", "not_feasible_reason", "combined_problems"]);
+const AI_MARK = "__ai_proposal__";
 /** Fractions (0.1 = 10%). No tool returns one today; the checker still reads a fraction as its percentage. */
 const RATIO_KEYS = new Set<string>();
 /** Signed changes, not levels or sizes: the only fields that support a written "+" or "-". */
@@ -1175,6 +1267,13 @@ export function evidenceIn(value: unknown, clean: (s: string) => string, reporti
   // and its text is never scanned for figures (constraints, clarifications, notes and labels included). Its
   // client-stated amounts come from the structured answers instead (CopilotContext.record, clientStatedAmounts).
   if (key === "client_brief") return out;
+  // #119: the model's own proposal, echoed back, is kept apart from engine results (never evidence for itself).
+  if (key && AI_PROPOSAL_KEYS.has(key) && !(parent && AI_MARK in parent)) {
+    const inner: EvidenceValue[] = [];
+    evidenceIn(value, clean, reporting, key, { ...(parent ?? {}), [AI_MARK]: true }, inner);
+    for (const e of inner) out.push({ ...e, source: "ai_proposal" });
+    return out;
+  }
   if (typeof value === "number" && Number.isFinite(value)) out.push(classify(value, key, parent, reporting));
   else if (typeof value === "string") out.push(...figuresIn(clean(value)));
   else if (Array.isArray(value)) for (const v of value) evidenceIn(v, clean, reporting, key, parent, out);
@@ -1202,10 +1301,14 @@ export function executeTool(ctx: CopilotContext, name: string, input: unknown): 
     }
     return { content: `Unknown tool: ${name}`, isError: true };
   }
+  if (ALLOCATION_ONLY.has(name) && ctx.task !== "allocation_proposal") return { content: `${name} is available only in Prepare allocation proposal.`, isError: true };
+  if (NOT_IN_ALLOCATION.has(name) && ctx.task === "allocation_proposal")
+    return { content: `${name} isn't available in Prepare allocation proposal: return the decision with propose_allocation (its records are the only ones the advisor can add).`, isError: true };
   try {
     const result = spec.run(ctx, input ?? {});
     const content = JSON.stringify(result);
     const evidenceId = ctx.record(name, result, `${content.length.toLocaleString()} chars of engine output`);
+    ctx.markDelivered(name);
     return { content, isError: false, evidenceId };
   } catch (err) {
     if (err instanceof z.ZodError) {
