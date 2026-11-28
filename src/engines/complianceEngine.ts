@@ -19,6 +19,7 @@ import { describeImportIssue, importIssues, type ImportIssue } from "./importCom
 import { openCurrencyReviews } from "./recommendationAmounts";
 import { describeFreshness, fxFreshness, type FxFreshness } from "./fxPolicy";
 import { unreviewedSleeveTerms } from "./strategyProposals";
+import { strategiesNeedingReview } from "./allocationBasis";
 
 export interface ReadinessInputs {
   client: ClientProfile;
@@ -49,6 +50,8 @@ export interface ReadinessInputs {
   approvedAlternatives?: string[];
   /** D2a: approved sleeve purchases whose minimum wasn't supplied and has no recorded advisor review. */
   unreviewedSleeveTerms?: { title: string; manager: string; name: string }[];
+  /** #119: approved allocation strategies, and those whose material facts changed since the decision or last re-review. */
+  allocationReview?: { approved: number; stale: { title: string; changes: string[] }[] };
 }
 
 export function evaluateReadiness(inp: ReadinessInputs): ComplianceCheck[] {
@@ -191,6 +194,20 @@ export function evaluateReadiness(inp: ReadinessInputs): ComplianceCheck[] {
   });
   // D2a: an unsupplied strategy minimum is reviewed by the advisor before the
   // final PDF; the review is recorded as such, never as verified eligibility.
+  // #119 (review finding 4): an approved allocation strategy is current only while the facts it was decided on
+  // (its scope, the reviewed brief, its holdings and values, the rates) are; otherwise the advisor re-reviews it.
+  if (inp.allocationReview && inp.allocationReview.approved > 0) {
+    const stale = inp.allocationReview.stale;
+    checks.push({
+      code: "allocation_current",
+      label: "Allocation strategies reviewed against current facts",
+      passed: stale.length === 0,
+      detail:
+        stale.length > 0
+          ? `${stale.map((s) => `"${s.title}": ${s.changes.join(", ")} changed since it was decided`).join("; ")}. Re-review it on Recommendations (with a note), or prepare a new allocation proposal.`
+          : undefined,
+    });
+  }
   const terms = inp.unreviewedSleeveTerms ?? [];
   checks.push({
     code: "strategy_terms",
@@ -297,6 +314,10 @@ export function evaluateWorkspaceReadiness(ws: WorkspaceReadinessInputs): Compli
     reserveBreaches: reserveStatus(proposed.holdings, ws.accounts).filter((r) => r.breached),
     approvedAlternatives,
     unreviewedSleeveTerms: unreviewedSleeveTerms(approved),
+    allocationReview: {
+      approved: approved.filter((r) => r.allocationStrategy).length,
+      stale: strategiesNeedingReview({ client: ws.client, accounts: ws.accounts, holdings: ws.holdings, fxRates: ws.fxRates, reportingCurrency: fx.reportingCurrency, recommendations: ws.recommendations, drafts: ws.drafts ?? [] }),
+    },
     cashShortfalls: cashShortfallsOf(proposed.holdings, ws.accounts, fx),
     unresolvedConversions: proposed.unresolved,
     valuation: valuationSummary(holdings),

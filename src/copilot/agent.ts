@@ -4,13 +4,29 @@ import type { AgentContext } from "./context";
 import { checkFigures, type FigureCheck } from "./evidence";
 import { runOrigin } from "@/engines/recommendationOrigin";
 import type { CopilotSnapshot } from "./snapshot";
-import { COPILOT_TOOLS, CopilotContext, executeTool, type ToolCallRecord } from "./tools";
+import { CopilotContext, copilotToolsFor, executeTool, type AllocationRunView, type ToolCallRecord } from "./tools";
 
 export const COPILOT_MODEL = "claude-opus-5-5";
 /** Versions of what the model sees, recorded with each run so a live evaluation can tell configurations apart. */
 export const PROMPT_VERSION = "claude-led-2026-11-21";
-/** #113: the scope overview labels target_pct as the advisor's own target. */
-export const TOOLS_VERSION = "claude-led-2026-11-23-targets";
+/** #119: the system prompt is unchanged; an allocation run adds its task instruction to the user turn, recorded as PROMPT_VERSION+this. */
+export const ALLOCATION_TASK_VERSION = "allocation-task-2026-11-27";
+/** #113: the scope overview labels target_pct as the advisor's own target. #119: propose_allocation. */
+export const TOOLS_VERSION = "claude-led-2026-11-27-allocation";
+
+/** A run's task: an open question (absent), or Prepare allocation proposal (#119). */
+export type CopilotTask = "allocation_proposal";
+/** Marks the allocation task in the user turn; the test provider keys its scripted plan off it. */
+export const ALLOCATION_TASK_MARKER = "[Task: Prepare allocation proposal]";
+const ALLOCATION_TASK = `${ALLOCATION_TASK_MARKER}
+Prepare one allocation decision for the active alternative's investment scope and return it with propose_allocation, exactly once.
+1. Read get_portfolio_overview (the client brief) and get_scope_overview (the scope's recorded mix and positions).
+2. Decide from the reviewed brief, not from portfolio checks alone:
+   - propose_changes: a target asset-class mix that the brief justifies, with objective_refs, a plausible alternative and why it wasn't chosen, and up to four funded implementation groups that use holdings already owned in scope;
+   - maintain_current_mix: when the current mix already fits the brief, explain the justified hold; never invent a trade;
+   - ask_question: when information that would change the decision is missing, unreviewed or conflicting, ask one specific question and say what its answer decides; propose no weights.
+3. Your weights are your judgment, separate from the advisor's own targets; the engines calculate what the actions achieve and any gap. Never invent a security, price, fee or tax result.
+Then answer the advisor briefly: the decision, the figures the tool returned, any infeasible group or gap, and what the advisor should review next.`;
 
 /**
  * Who produced an answer: the scripted demo planner (no model), the
@@ -54,6 +70,9 @@ export interface CopilotResult {
   context: AgentContext;
   /** Refused calls to tools that would approve, finalize, share or execute. */
   forbiddenAttempts: number;
+  /** #119: the run's task, and its allocation decision when one was returned (a preview; its drafts are in `drafts`). */
+  task?: CopilotTask;
+  allocation?: AllocationRunView;
   provider?: { name: "anthropic" | "test"; requestedModel: string; actualModels: string[]; fallbackUsed: boolean; promptVersion: string; toolsVersion: string };
   usage?: CopilotUsage;
   stopReason?: string;
@@ -109,6 +128,8 @@ export interface AgentRunOptions {
   clock?: () => number;
   sleep?: (ms: number) => Promise<void>;
   now?: Date;
+  /** #119: Prepare allocation proposal; its instruction is added to the user turn. */
+  task?: CopilotTask;
 }
 
 // Kept byte-stable so it caches across requests; per-request data goes in the
@@ -150,33 +171,53 @@ export async function runAgent(snapshot: CopilotSnapshot, question: string, opts
   const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const started = clock();
   const ctx = new CopilotContext(snapshot, opts.now);
+  ctx.task = opts.task ?? null;
+  const tools = copilotToolsFor(ctx.task);
   const trace: ToolCallRecord[] = [];
   const usage: CopilotUsage = { requests: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
   const requestedModel = opts.model ?? COPILOT_MODEL;
   const actualModels = new Set<string>();
   // Identity is removed from everything the model receives, the question included (#59).
-  const messages: Anthropic.Beta.BetaMessageParam[] = [{ role: "user", content: ctx.redact(question) }];
+  const asked = opts.task === "allocation_proposal" ? `${ALLOCATION_TASK}\n\nThe advisor's note: ${question}` : question;
+  const messages: Anthropic.Beta.BetaMessageParam[] = [{ role: "user", content: ctx.redact(asked) }];
   let toolCalls = 0;
   let lastText = "";
 
   const finish = (status: RunStatus, text: string, stopReason?: string): CopilotResult => {
     const note = status === "completed" ? "" : STATUS_NOTE[status];
-    const partial = status !== "completed" && ctx.drafts.length > 0 ? " Drafts saved so far are listed below, still unapproved." : "";
+    const partial =
+      status === "completed" || ctx.drafts.length === 0
+        ? ""
+        : ctx.task === "allocation_proposal"
+        ? " Because the run didn't complete, nothing from it can be added."
+        : " Drafts saved so far are listed below, still unapproved.";
     const body = [note && `**${note}${partial}**`, text].filter(Boolean).join("\n\n") || "No answer was produced.";
     const answer = body.length > limits.maxAnswerChars ? `${body.slice(0, limits.maxAnswerChars)}…\n\n(Answer shortened to ${limits.maxAnswerChars.toLocaleString()} characters.)` : body;
     // Each draft's origin comes from the provider that actually ran: Claude only for the Anthropic provider.
-    const origin = runOrigin({ provider: opts.provider, models: [...actualModels], promptVersion: PROMPT_VERSION });
+    const promptVersion = opts.task ? `${PROMPT_VERSION}+${ALLOCATION_TASK_VERSION}` : PROMPT_VERSION;
+    const origin = runOrigin({ provider: opts.provider, models: [...actualModels], promptVersion });
+    // #119 (review finding 1): in the allocation task only a completed run's one validated decision supplies
+    // records the advisor can add; a question, or a cancelled, truncated or failed run, supplies none.
+    const a = ctx.allocation;
+    const addable = !!a && a.outcome !== "ask" && status === "completed";
+    const drafts = ctx.task === "allocation_proposal" && !addable ? [] : ctx.drafts;
+    // Finding 3: every figure the advisor is shown is checked, the proposal card's texts as well as the answer.
+    const cardTexts = a
+      ? [a.headline, a.rationale, ...a.clientBasis.map((b) => b.supports), a.alternative?.summary ?? "", ...a.groups.flatMap((g) => [g.title, g.rationale]), a.question?.text ?? "", a.question?.decides ?? ""]
+      : [];
     return {
       mode: opts.mode,
       status,
       answer,
-      drafts: ctx.drafts.map((d) => ({ ...d, origin })),
+      drafts: drafts.map((d) => ({ ...d, origin })),
       trace,
       evidence: ctx.evidence.map(({ id, tool, summary }) => ({ id, tool, summary })),
-      figures: checkFigures([answer, ...ctx.drafts.map((d) => d.rationale)].map((t) => ctx.withoutUntrusted(t)), ctx.evidence.map((e) => e.numbers)),
+      figures: checkFigures([answer, ...drafts.map((d) => d.rationale), ...cardTexts].map((t) => ctx.withoutUntrusted(t)), ctx.evidence.map((e) => e.numbers)),
       context: ctx.context,
       forbiddenAttempts: ctx.forbiddenAttempts,
-      provider: { name: opts.provider, requestedModel, actualModels: [...actualModels], fallbackUsed: [...actualModels].some((m) => m !== requestedModel), promptVersion: PROMPT_VERSION, toolsVersion: TOOLS_VERSION },
+      ...(opts.task ? { task: opts.task } : {}),
+      ...(a ? { allocation: { ...a, addable } } : {}),
+      provider: { name: opts.provider, requestedModel, actualModels: [...actualModels], fallbackUsed: [...actualModels].some((m) => m !== requestedModel), promptVersion, toolsVersion: TOOLS_VERSION },
       usage,
       stopReason,
     };
@@ -204,7 +245,7 @@ export async function runAgent(snapshot: CopilotSnapshot, question: string, opts
             fallbacks: "default",
             cache_control: { type: "ephemeral" },
             system: SYSTEM_PROMPT,
-            tools: COPILOT_TOOLS,
+            tools,
             messages,
           },
           { signal: opts.signal, timeout: Math.max(1, limits.deadlineMs - (clock() - started)) }
@@ -261,6 +302,8 @@ export async function runAgent(snapshot: CopilotSnapshot, question: string, opts
     if (toolCalls + toolUses.length > limits.maxToolCalls) return finish("tool_limit", text, stop);
 
     messages.push({ role: "assistant", content: response.content });
+    // A tool result reaches the model on the next turn: the decision tool checks which inputs it has already received.
+    ctx.turn = turn;
     const results: Anthropic.Beta.BetaToolResultBlockParam[] = toolUses.map((tu) => {
       toolCalls += 1;
       const { content, isError, evidenceId, forbidden } = executeTool(ctx, tu.name, tu.input);

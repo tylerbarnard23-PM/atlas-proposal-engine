@@ -527,8 +527,58 @@ export interface Recommendation {
   destination?: ProposedDestination;
   /** D2: one leg of a linked replacement, applied all together or not at all. */
   linked?: { groupId: string; legs: number };
+  /** #119: an allocation proposal's strategy record (advisory; its implementation legs are separate recommendations). */
+  allocationStrategy?: AllocationStrategy;
   createdAt: string;
   updatedAt: string;
+}
+
+/** One asset class's weight, in percent of the in-scope portfolio. */
+export interface ClassWeight {
+  assetClass: AssetClass;
+  pct: number;
+}
+
+/**
+ * #119: Stratovell AI's allocation decision for an alternative's scope, kept on
+ * an advisory recommendation. The proposed weights are the AI's judgment: not
+ * the advisor's own desk targets and not a calculated result. What the
+ * approved actions actually achieve always comes from the shared evaluator.
+ */
+export interface AllocationStrategy {
+  /** "propose": change the mix. "maintain": keep the current mix (a justified hold, no trade). */
+  outcome: "propose" | "maintain";
+  /** The AI's proposed weights (every class in scope, total 100, cash included). */
+  proposedWeights: ClassWeight[];
+  /** The in-scope weights the engine reported when it was proposed. */
+  currentWeights: ClassWeight[];
+  /** The client-brief questions the rationale relies on. */
+  objectiveRefs: DiscoveryQuestionId[];
+  /** What the client said (the recorded answer, quoted by Stratovell) and how it supports the decision (the AI's words). */
+  clientBasis?: { question: DiscoveryQuestionId; said: string; supports: string }[];
+  /** A plausible alternative the AI considered, and why it wasn't chosen. */
+  alternative?: { summary: string; weights?: ClassWeight[] };
+  /** The implementation groups prepared with it (each group's legs are separate recommendations). */
+  groupIds: string[];
+  /**
+   * What it was prepared on. `scopeAccountIds`: the accounts actually in scope (null only on records from
+   * before #119's review). `material`: fingerprints of the facts a change of which needs the advisor's re-review.
+   */
+  basis: { inputRevision: string; scopeAccountIds: string[] | null; reportingCurrency: CurrencyCode; scopeTotal: number; material?: MaterialBasis };
+  /** The advisor's explicit re-reviews after a material change, oldest first. */
+  reviews?: { at: string; note: string; alternativeScope: string[]; material: MaterialBasis }[];
+}
+
+/** #119: fingerprints of an allocation strategy's material facts (not a security measure). */
+export interface MaterialBasis {
+  /** The accounts in the alternative's scope. */
+  scope: string;
+  /** The reviewed client brief: every answer, its review status, conflicts and restrictions on file. */
+  brief: string;
+  /** The strategy's in-scope holdings: class, amount, currency, date, liquidity and restrictions. */
+  holdings: string;
+  /** The exchange rates those holdings and the reporting currency use. */
+  fx: string;
 }
 
 /**

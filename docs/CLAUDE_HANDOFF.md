@@ -1,6 +1,20 @@
 # Handoff
 
-## Current checkpoint — 27 November 2026: Codex's re-review of PR #117 passed at `82b7751`; private-UAT 0.1.2 built and UAT-tested installed; the one defect it found (#118) is fixed on the branch and awaits Codex review; production rollback still awaits the owner's Vercel re-verification
+## Current checkpoint — 28 November 2026: #119 "Prepare allocation proposal" (draft PR #120, stacked on PR #117) — the independent review's findings 1–6 are fixed and await re-review
+
+- **Correction to the earlier #119 description:** Claude supplies the **proposed weights**. The engines calculate the current weights, check whether the trades can be funded and executed, and calculate the resulting allocation. Matching those calculations does not establish that the proposal is appropriate for the client.
+- **Fixed (review of `d004791`), each with failing-first regressions** in `tests/allocationProposalReview.test.ts` (fixture `tests/support/allocationFixture.ts`):
+  1. The brief and scope must reach the model on an earlier turn; only one completed, validated decision is addable; the decision tool exists only for the allocation task; the five-record limit counts strategy + legs.
+  2. Executable amounts per holding, group and selection (after existing actions, in run order), shared by preview and Add; restrictions apply in the trade's direction.
+  3. Claude's weights and gaps are reported as the proposal, never as engine evidence; the card's texts are checked too.
+  4. Actual scope account IDs and a material basis (brief, holdings and values, FX, scope) are saved; a change blocks approving or issuing a new version until **Record re-review** (Recommendations card, with a note); prior versions stay frozen. The PDF and meeting view quote the client "when proposed" and show the brief's answer now and the re-review note.
+  5. Zero-group / no-eligible-holding proposals show the achievable mix, gap and reason with an explicit strategy-only Add; a hold is exact, $0 of action, with existing actions shown apart.
+  6. One validation for creation and backup restore.
+- **Not done / limits:** test provider and scripted stand-ins only (not evidence of advice quality); no live Claude run; tax effects unknown; public preview out of scope; no new-security proposals.
+- **Evidence (outside Git):** `evidence/allocation-review-2026-11-27/` (logs, browser screenshots, rendered final PDFs v1/v2). Impact note on PR #120.
+- **Next:** independent re-review of PR #120. No merge; PR #117 is unchanged.
+
+## Previous checkpoint — 27 November 2026: Codex's re-review of PR #117 passed at `82b7751`; private-UAT 0.1.2 built and UAT-tested installed; the one defect it found (#118) is fixed on the branch and awaits Codex review; production rollback still awaits the owner's Vercel re-verification
 
 - **27 November: #118 fixed on PR #117** (source work and headless tests; the 0.1.2 binary is unchanged and stays the tested artifact).
   - **The defect:** found by the installed-app UAT. While every saved copy is unreadable, the window holds only the fictional sample, so a default Settings restore ("keep current firm & branding") saved the sample's firm, or an edit typed while saving was paused, instead of the backup's.

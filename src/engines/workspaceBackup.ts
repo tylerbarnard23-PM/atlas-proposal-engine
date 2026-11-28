@@ -1,6 +1,7 @@
 import { z } from "zod";
-import type { AdvisorProfile, ApprovedSnapshot, Disclosure, Holding, ModelRevision, Recommendation, SnapshotInputs, SourceDocument, StrategyRevision, WorkingDraft } from "@/domain/types";
+import type { AdvisorProfile, AllocationStrategy, ApprovedSnapshot, Disclosure, Holding, ModelRevision, Recommendation, SnapshotInputs, SourceDocument, StrategyRevision, WorkingDraft } from "@/domain/types";
 import { checkLogoDataUrl, isValidAccentColor } from "@/domain/branding";
+import { strategyRecordProblems } from "./allocationBasis";
 import { normalizeHoldings } from "./normalizationEngine";
 import { valuationSummary } from "./valuationTotals";
 import { fxFreshness } from "./fxPolicy";
@@ -324,7 +325,27 @@ function schemas(strict: boolean) {
     (o) => (o.kind === "claude" ? (o.models?.length ?? 0) > 0 && !o.source : o.kind === "example" ? !!o.source && !o.models : !o.source && !o.models),
     "A recommendation's origin is inconsistent"
   );
-  const recommendationV11 = recommendation.extend({ origin: recommendationOrigin.optional() });
+  // #119 (additive, optional, still v11): an allocation proposal's strategy record. The AI's weights are kept as
+  // its judgment beside the weights when proposed; what approved actions achieve is always recalculated.
+  const classWeight = obj({ assetClass, pct: finite.min(0).max(100) });
+  const strategyQuestion = z.enum(["objectives", "timeHorizon", "liquidity", "income", "lossWillingness", "lossAbility", "taxSensitivity", "securitiesToRetain", "restrictedInvestments", "otherConstraints"]);
+  const materialBasisSchema = obj({ scope: text(), brief: text(), holdings: text(), fx: text() });
+  // #119 review (finding 6): the same whole-record rules as creation (allowed and unique classes, coverage,
+  // totals, a hold consistent with its weights, the alternative's mix); refused with the reason, before restore.
+  const allocationStrategy = obj({
+    outcome: z.enum(["propose", "maintain"]),
+    proposedWeights: z.array(classWeight),
+    currentWeights: z.array(classWeight),
+    objectiveRefs: z.array(strategyQuestion),
+    clientBasis: z.array(obj({ question: strategyQuestion, said: text(), supports: text() })).optional(),
+    alternative: obj({ summary: text(), weights: z.array(classWeight).optional() }).optional(),
+    groupIds: z.array(id),
+    basis: obj({ inputRevision: text(), scopeAccountIds: z.array(id).nullable(), reportingCurrency: currency, scopeTotal: finite, material: materialBasisSchema.optional() }),
+    reviews: z.array(obj({ at: date, note: text(), alternativeScope: z.array(id), material: materialBasisSchema })).optional(),
+  }).superRefine((s, ctx) => {
+    for (const problem of strategyRecordProblems(s as AllocationStrategy)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Allocation strategy: ${problem}` });
+  });
+  const recommendationV11 = recommendation.extend({ origin: recommendationOrigin.optional(), allocationStrategy: allocationStrategy.optional() });
   const fxRate = obj({
     base: currency,
     quote: currency,

@@ -68,13 +68,13 @@ describe("model-facing product name (owner-approved substitution)", () => {
   it("keeps the tool names and authority rules, and records the new versions", async () => {
     const { calls, result } = await run();
     expect((calls[0].tools ?? []).map((t) => (t as { name: string }).name).sort()).toEqual(
-      ["check_proposal_readiness", "draft_recommendation", "get_holding", "get_portfolio_overview", "get_scope_overview", "list_insights", "simulate_recommendation", "simulate_scope_change"].sort()
+      ["check_proposal_readiness", "draft_recommendation", "get_holding", "get_portfolio_overview", "get_scope_overview", "list_insights", "simulate_recommendation", "simulate_scope_change"].sort() // #119 review (intended): propose_allocation is only in the allocation task
     );
     expect((calls[0].tools ?? []).every((t) => typeof (t as { input_schema?: unknown }).input_schema === "object")).toBe(true);
     expect(JSON.stringify(calls[0].system)).toContain("You cannot approve, finalize, include in the PDF, share, issue or execute anything");
     expect(result.forbiddenAttempts).toBe(1);
-    expect(result.provider).toMatchObject({ requestedModel: COPILOT_MODEL, promptVersion: "claude-led-2026-11-21", toolsVersion: "claude-led-2026-11-23-targets" });
-    expect([PROMPT_VERSION, TOOLS_VERSION]).toEqual(["claude-led-2026-11-21", "claude-led-2026-11-23-targets"]); // PR #110: Claude-led workflow; #113 (intended): targets labelled in the scope overview
+    expect(result.provider).toMatchObject({ requestedModel: COPILOT_MODEL, promptVersion: "claude-led-2026-11-21", toolsVersion: "claude-led-2026-11-27-allocation" });
+    expect([PROMPT_VERSION, TOOLS_VERSION]).toEqual(["claude-led-2026-11-21", "claude-led-2026-11-27-allocation"]); // PR #110: Claude-led workflow; #113: targets labelled; #119 (intended): propose_allocation (the system prompt is unchanged)
   });
 
   it("#109: the product name is Stratovell AI; drafts saved before the rename are still recognized; the model and settings are unchanged", async () => {
